@@ -6,49 +6,83 @@ https://github.com/dazuiba/CCNotify
 
 import os
 import sys
+import re
 import json
 import shlex
 import shutil
 import sqlite3
 import subprocess
 import logging
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 
 
 # the plugin's data dir survives updates, unlike the plugin root
 DATA_DIR = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.dirname(os.path.abspath(__file__))
+ICON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
+HAS_ICON = os.path.exists(ICON)
 
-# Windows PowerShell 5.1 toast; title/body come from env vars so nothing needs quoting
+# Windows PowerShell 5.1 toast; the XML comes from an env var so nothing needs quoting
 PS_TOAST = (
     "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;"
-    "$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
-    "$t = $x.GetElementsByTagName('text');"
-    "[void]$t[0].AppendChild($x.CreateTextNode($env:CCNOTIFY_TITLE));"
-    "[void]$t[1].AppendChild($x.CreateTextNode($env:CCNOTIFY_BODY));"
+    "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null;"
+    "$x = New-Object Windows.Data.Xml.Dom.XmlDocument;"
+    "$x.LoadXml($env:CCNOTIFY_TOAST);"
     "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe')"
     ".Show([Windows.UI.Notifications.ToastNotification]::new($x))"
 )
 
 
-def notification_commands(title, body, cwd):
+def excerpt(text, limit):
+    """One line, light markdown stripped, cut to limit chars"""
+    text = " ".join(re.sub(r"[*`#]", "", text or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def project_name(cwd):
+    """Folder name, or a generic label when Claude runs from the home dir"""
+    if not cwd or os.path.normcase(os.path.abspath(cwd)) == os.path.normcase(os.path.expanduser("~")):
+        return "Claude Code"
+    return os.path.basename(os.path.normpath(cwd))
+
+
+def toast_xml(title, subtitle, message):
+    """ToastGeneric payload: one <text> per line, Claude logo instead of the PowerShell icon"""
+    toast = ET.Element("toast")
+    binding = ET.SubElement(ET.SubElement(toast, "visual"), "binding", template="ToastGeneric")
+    for text in (title, subtitle, message):
+        if text:
+            ET.SubElement(binding, "text").text = text
+    # a Linux path (WSL) isn't readable by Windows, so the logo is native Windows only
+    if sys.platform == "win32" and HAS_ICON:
+        ET.SubElement(binding, "image", placement="appLogoOverride", src=Path(ICON).as_uri())
+    return ET.tostring(toast, encoding="unicode")
+
+
+def notification_commands(title, subtitle, message, cwd):
     """Candidate notifiers for this OS, in order of preference"""
     if sys.platform == "darwin":
-        notifier = ["terminal-notifier", "-sound", "default", "-title", title, "-subtitle", body]
+        notifier = ["terminal-notifier", "-sound", "default", "-title", title, "-message", message]
+        if subtitle:
+            notifier += ["-subtitle", subtitle]
+        if HAS_ICON:
+            notifier += ["-contentImage", ICON]
         code = shutil.which("code")
         if cwd and code:
             notifier += ["-execute", f"{shlex.quote(code)} {shlex.quote(cwd)}"]
         osascript = [
             "osascript",
             "-e", "on run argv",
-            "-e", 'display notification (item 2 of argv) with title (item 1 of argv) sound name "default"',
+            "-e", 'display notification (item 3 of argv) with title (item 1 of argv) subtitle (item 2 of argv) sound name "default"',
             "-e", "end run",
-            title, body,
+            title, subtitle, message,
         ]
         return [notifier, osascript]
     # Linux, then Windows / WSL
     return [
-        ["notify-send", title, body],
+        ["notify-send", *(["-i", ICON] if HAS_ICON else []), title, "\n".join(filter(None, [subtitle, message]))],
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", PS_TOAST],
     ]
 
@@ -147,7 +181,7 @@ class ClaudePromptTracker:
             # Find the latest unfinished record for this session
             cursor = conn.execute(
                 """
-                SELECT id, created_at, cwd
+                SELECT id, created_at, cwd, prompt
                 FROM prompt
                 WHERE session_id = ? AND stoped_at IS NULL
                 ORDER BY created_at DESC
@@ -158,7 +192,7 @@ class ClaudePromptTracker:
 
             row = cursor.fetchone()
             if row:
-                record_id, created_at, cwd = row
+                record_id, created_at, cwd, prompt = row
 
                 # Update completion time
                 conn.execute(
@@ -179,9 +213,11 @@ class ClaudePromptTracker:
                 seq = seq_row[0] if seq_row else 1
 
                 duration = self.calculate_duration_from_db(record_id)
+                # terminal-notifier requires a non-empty message
                 self.send_notification(
-                    title=os.path.basename(cwd) if cwd else "Claude Task",
-                    subtitle=f"job#{seq} done, duration: {duration}",
+                    title=f"{project_name(cwd)} · job#{seq} ✓ {duration}",
+                    subtitle="› " + excerpt(prompt, 80) if prompt else "",
+                    message=excerpt(data.get("last_assistant_message"), 150) or "Done",
                     cwd=cwd,
                 )
 
@@ -244,8 +280,9 @@ class ClaudePromptTracker:
         # Send notification only if should_notify is True
         if should_notify:
             self.send_notification(
-                title=os.path.basename(cwd) if cwd else "Claude Task",
-                subtitle=subtitle,
+                title=f"{project_name(cwd)} · {data.get('title') or subtitle}",
+                subtitle="",
+                message=excerpt(message, 150) or subtitle,
                 cwd=cwd,
             )
             logging.info(f"Notification sent for session {session_id}: {subtitle}")
@@ -308,36 +345,40 @@ class ClaudePromptTracker:
             logging.error(f"Error calculating duration: {e}")
             return "Unknown"
 
-    def send_notification(self, title, subtitle, cwd=None):
-        """Send a desktop notification with the first notifier found on this OS"""
-        current_time = datetime.now().strftime("%B %d, %Y at %H:%M")
-        body = f"{subtitle}\n{current_time}"
+    def send_notification(self, title, subtitle, message, cwd=None):
+        """Send a desktop notification with the first notifier that works on this OS"""
         env = {
             **os.environ,
-            "CCNOTIFY_TITLE": title,
-            "CCNOTIFY_BODY": body,
-            # forwards the vars to powershell.exe when running under WSL
-            "WSLENV": ":".join(filter(None, [os.environ.get("WSLENV"), "CCNOTIFY_TITLE", "CCNOTIFY_BODY"])),
+            "CCNOTIFY_TOAST": toast_xml(title, subtitle, message),
+            # forwards the var to powershell.exe when running under WSL
+            "WSLENV": ":".join(filter(None, [os.environ.get("WSLENV"), "CCNOTIFY_TOAST"])),
         }
 
-        for cmd in notification_commands(title, body, cwd):
+        for cmd in notification_commands(title, subtitle, message, cwd):
             if not shutil.which(cmd[0]):
                 continue
             try:
-                subprocess.run(
+                result = subprocess.run(
                     cmd,
-                    check=False,
                     capture_output=True,
+                    text=True,
+                    errors="replace",
                     env=env,
                     timeout=10,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
-                logging.info(f"Notification sent via {cmd[0]}: {title} - {subtitle}")
             except Exception as e:
-                logging.error(f"Error sending notification: {e}")
-            return
+                logging.error(f"{cmd[0]} failed: {e}")
+                continue
+            if result.stderr.strip():
+                logging.warning(f"{cmd[0]} stderr: {result.stderr.strip()}")
+            if result.returncode == 0:
+                logging.info(f"Notification sent via {cmd[0]}: {title} | {subtitle} | {message}")
+                return
+            # e.g. an Intel-only terminal-notifier on Apple Silicon: try the next one
+            logging.warning(f"{cmd[0]} exited {result.returncode}, trying next notifier")
 
-        logging.warning("No notifier found, notification skipped")
+        logging.warning("No working notifier, notification skipped")
 
 
 def validate_input_data(data, expected_event_name):
