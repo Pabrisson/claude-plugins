@@ -1,0 +1,8 @@
+{
+  "name": "command-review",
+  "version": "1.0.0",
+  "description": "Commands code-review and refactor-code",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  }
+}

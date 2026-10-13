@@ -1,0 +1,8 @@
+{
+  "name": "skill-shadcn",
+  "version": "1.0.0",
+  "description": "Skill shadcn: add, search, fix, style and compose shadcn/ui components",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  }
+}

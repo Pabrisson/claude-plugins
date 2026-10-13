@@ -1,0 +1,8 @@
+{
+  "name": "command-toolbox",
+  "version": "1.0.0",
+  "description": "Commands ultra-think (deep multi-dimensional analysis) and fork-sync (sync a fork with upstream)",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  }
+}

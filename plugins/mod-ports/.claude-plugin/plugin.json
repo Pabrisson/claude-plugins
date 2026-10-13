@@ -1,0 +1,9 @@
+{
+  "name": "mod-ports",
+  "version": "0.3.1",
+  "description": "Right pane listing what runs for the project (Docker swarm and containers, Kubernetes, local processes) with its state, links and restart, toggled from the hud's icon",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  },
+  "types": "./types/index.d.ts"
+}

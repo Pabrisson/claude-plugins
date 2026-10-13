@@ -1,0 +1,8 @@
+{
+  "name": "hook-notify",
+  "version": "1.0.0",
+  "description": "macOS notification when Claude finishes or waits for input, with each prompt's duration logged to SQLite (ccnotify)",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  }
+}

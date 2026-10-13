@@ -1,0 +1,79 @@
+{
+  "name": "pabrisson",
+  "description": "Claude Code plugins from Pabrisson's config: mods, hooks, agents, commands and skills",
+  "owner": {
+    "name": "Pierre Alain BRISSON"
+  },
+  "plugins": [
+    {
+      "name": "mod-hud",
+      "source": "./plugins/mod-hud",
+      "description": "Band above the prompt: model, effort, folder, branch, tool activity, usage bars, context, cost and updates"
+    },
+    {
+      "name": "mod-ports",
+      "source": "./plugins/mod-ports",
+      "description": "Right pane listing what runs for the project (Docker swarm and containers, Kubernetes, local processes) with its state, links and restart, toggled from the hud's icon"
+    },
+    {
+      "name": "mod-code-fence",
+      "source": "./plugins/mod-code-fence",
+      "description": "Wraps code pasted into the prompt in a ```lang fence, so md-prompt draws it as a code card"
+    },
+    {
+      "name": "hook-notify",
+      "source": "./plugins/hook-notify",
+      "description": "macOS notification when Claude finishes or waits for input, with each prompt's duration logged to SQLite (ccnotify)"
+    },
+    {
+      "name": "agent-frontend",
+      "source": "./plugins/agent-frontend",
+      "description": "Agents frontend-developer (React, responsive, accessibility) and ui-ux-designer (user research, wireframes, design systems)"
+    },
+    {
+      "name": "agent-backend",
+      "source": "./plugins/agent-backend",
+      "description": "Agents backend-architect (APIs, microservices, DB schemas) and api-documenter (OpenAPI, SDKs, developer docs)"
+    },
+    {
+      "name": "agent-review",
+      "source": "./plugins/agent-review",
+      "description": "Agent code-reviewer: quality, security and maintainability review"
+    },
+    {
+      "name": "agent-prompt",
+      "source": "./plugins/agent-prompt",
+      "description": "Agent prompt-engineer: prompt optimization for LLMs and AI features"
+    },
+    {
+      "name": "command-docs",
+      "source": "./plugins/command-docs",
+      "description": "Commands add-readme, add-changelog, update-docs, create-architecture-documentation, summarize-implementation"
+    },
+    {
+      "name": "command-review",
+      "source": "./plugins/command-review",
+      "description": "Commands code-review and refactor-code"
+    },
+    {
+      "name": "command-toolbox",
+      "source": "./plugins/command-toolbox",
+      "description": "Commands ultra-think (deep multi-dimensional analysis) and fork-sync (sync a fork with upstream)"
+    },
+    {
+      "name": "skill-shadcn",
+      "source": "./plugins/skill-shadcn",
+      "description": "Skill shadcn: add, search, fix, style and compose shadcn/ui components"
+    },
+    {
+      "name": "skill-laravel",
+      "source": "./plugins/skill-laravel",
+      "description": "Skill laravel-upgrade: upgrade Laravel one major version at a time with test pauses"
+    },
+    {
+      "name": "skill-find-skills",
+      "source": "./plugins/skill-find-skills",
+      "description": "Skill find-skills: discover and install agent skills"
+    }
+  ]
+}

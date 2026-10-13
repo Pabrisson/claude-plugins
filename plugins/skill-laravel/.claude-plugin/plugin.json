@@ -1,0 +1,8 @@
+{
+  "name": "skill-laravel",
+  "version": "1.0.0",
+  "description": "Skill laravel-upgrade: upgrade Laravel one major version at a time with test pauses",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  }
+}

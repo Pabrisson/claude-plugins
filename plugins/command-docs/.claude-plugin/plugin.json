@@ -1,0 +1,8 @@
+{
+  "name": "command-docs",
+  "version": "1.0.0",
+  "description": "Commands add-readme, add-changelog, update-docs, create-architecture-documentation, summarize-implementation",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "mod-code-fence",
+  "version": "0.1.0",
+  "description": "Wraps code pasted into the prompt in a ```lang fence, so md-prompt draws it as a code card",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  }
+}
