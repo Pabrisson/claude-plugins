@@ -32,6 +32,7 @@ claude plugin install command-docs@pabrisson
 
 ## Développement
 
-- Les plugins installés depuis le marketplace sont **copiés** dans `~/.claude/plugins/cache/pabrisson/<plugin>/<version>/`. Après une modification, incrémenter `version` dans `plugins/<plugin>/.claude-plugin/plugin.json`, puis lancer `claude plugin update <plugin>@pabrisson` et redémarrer la session.
+- Les plugins installés depuis le marketplace sont **copiés** dans `~/.claude/plugins/cache/pabrisson/<plugin>/<version>/`. Après une modification, incrémenter `version` dans `plugins/<plugin>/.claude-plugin/plugin.json`, pousser sur `main`, puis lancer `claude plugin marketplace update pabrisson && claude plugin update <plugin>@pabrisson` et redémarrer la session.
+- Essayer une modification sans la publier : `claude --plugin-dir plugins/<plugin>` (session seulement, remplace la version installée du même nom).
 - Valider : `claude plugin validate .` (marketplace) ou `claude plugin validate plugins/<plugin>`.
 - Tester un mod : `claude plugin test plugins/mod-hud`.
