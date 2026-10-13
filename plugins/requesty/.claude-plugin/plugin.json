@@ -1,0 +1,26 @@
+{
+  "name": "requesty",
+  "version": "1.0.0",
+  "description": "MCP server Requesty (router.requesty.ai): Sentry tools through the Requesty router",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  },
+  "userConfig": {
+    "api_key": {
+      "type": "string",
+      "title": "Requesty API key",
+      "description": "Requesty API key (rqsty-sk-...), sent as Bearer token",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "mcpServers": {
+    "requesty": {
+      "type": "http",
+      "url": "https://router.requesty.ai/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer ${user_config.api_key}"
+      }
+    }
+  }
+}

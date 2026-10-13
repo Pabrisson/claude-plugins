@@ -74,6 +74,16 @@
       "name": "skill-find-skills",
       "source": "./plugins/skill-find-skills",
       "description": "Skill find-skills: discover and install agent skills"
+    },
+    {
+      "name": "requesty",
+      "source": "./plugins/requesty",
+      "description": "MCP server Requesty (router.requesty.ai): Sentry tools through the Requesty router"
+    },
+    {
+      "name": "dbeaver",
+      "source": "./plugins/dbeaver",
+      "description": "MCP server DBeaver (omnisql-mcp): query the connections of the local DBeaver workspace"
     }
   ]
 }

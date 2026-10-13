@@ -1,0 +1,45 @@
+{
+  "name": "dbeaver",
+  "version": "1.0.0",
+  "description": "MCP server DBeaver (omnisql-mcp): query the connections of the local DBeaver workspace",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  },
+  "userConfig": {
+    "read_only": {
+      "type": "boolean",
+      "title": "Read only",
+      "description": "Disable all write operations",
+      "default": true
+    },
+    "allowed_connections": {
+      "type": "string",
+      "title": "Allowed connections",
+      "description": "Comma-separated DBeaver connection IDs or names. Empty = all"
+    },
+    "timeout": {
+      "type": "number",
+      "title": "Query timeout (ms)",
+      "description": "Query timeout in milliseconds",
+      "default": 30000,
+      "min": 1000
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Debug",
+      "description": "Enable debug logging",
+      "default": false
+    }
+  },
+  "mcpServers": {
+    "dbeaver": {
+      "command": "omnisql-mcp",
+      "env": {
+        "OMNISQL_READ_ONLY": "${user_config.read_only}",
+        "OMNISQL_ALLOWED_CONNECTIONS": "${user_config.allowed_connections}",
+        "OMNISQL_TIMEOUT": "${user_config.timeout}",
+        "OMNISQL_DEBUG": "${user_config.debug}"
+      }
+    }
+  }
+}

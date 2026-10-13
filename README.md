@@ -20,8 +20,10 @@ Marketplace **`pabrisson`** pour Claude Code : un plugin par type de composant e
 | `skill-shadcn` | `shadcn` | `skill-shadcn:shadcn` |
 | `skill-laravel` | `laravel-upgrade` | `skill-laravel:laravel-upgrade` |
 | `skill-find-skills` | `find-skills` | `skill-find-skills:find-skills` |
+| `requesty` | Serveur MCP Requesty (`router.requesty.ai`) | outils `mcp__plugin_requesty_requesty__*` |
+| `dbeaver` | Serveur MCP DBeaver (`omnisql-mcp`, installé avec `npm install -g omnisql-mcp`) | outils `mcp__plugin_dbeaver_dbeaver__*` |
 
-Préfixes utilisés : `mod-`, `hook-`, `agent-`, `command-` et `skill-`. Pour un futur thème, output style, monitor ou exécutable : `theme-*` (`themes/*.json`), `output-style-*` (`output-styles/*.md`), `monitor-*` (`monitors/monitors.json`) ou `bin/` dans le plugin concerné.
+Préfixes utilisés : `mod-`, `hook-`, `agent-`, `command-` et `skill-`. Les serveurs MCP n'ont pas de préfixe. Leurs réglages (clé API, connexions autorisées, lecture seule…) sont demandés à l'installation et se modifient ensuite dans `/config` ; la clé API est rangée dans le Keychain, jamais dans le repo. Pour un futur thème, output style, monitor ou exécutable : `theme-*` (`themes/*.json`), `output-style-*` (`output-styles/*.md`), `monitor-*` (`monitors/monitors.json`) ou `bin/` dans le plugin concerné.
 
 ## Installation
 
