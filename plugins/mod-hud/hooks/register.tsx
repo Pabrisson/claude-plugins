@@ -13,8 +13,10 @@ const upgrade = atom({ plugin: 'mod-hud', key: 'upgrade' } as const, 'idle')
 let effortSeen: string | null = null
 let branchSeen: string | null = null
 
-const BREW_API = 'https://formulae.brew.sh/api/cask/claude-code@latest.json'
-const BREW_RB = 'https://raw.githubusercontent.com/Homebrew/homebrew-cask/HEAD/Casks/c/claude-code%40latest.rb'
+const BREW_API = 'https://formulae.brew.sh/api/cask/'
+const BREW_RB = 'https://raw.githubusercontent.com/Homebrew/homebrew-cask/HEAD/Casks/c/'
+// Claude's own release channels (latest, stable): the version as plain text, the same as npm's
+const RELEASES = 'https://downloads.claude.ai/claude-code-releases/'
 const HOUR = 3_600_000
 // rows that may quote another row's words: the model's replies, tool output, compaction summaries
 const QUOTING_DOORS: readonly string[] = ['response', 'tool-result', 'tool-message', 'compaction']
@@ -137,26 +139,60 @@ const refreshBranch = async ($: EngineInterface) => {
   await update($, branch, () => name)
 }
 
+// the `claude` the next launch runs (the PATH's), told apart as Claude Code tells its own install: by its
+// resolved path. brew, winget and mise upgrade it; native and npm update themselves through `claude update`,
+// which for any other package manager (apk, deb, rpm, pacman, asdf) only prints the command to run
+const detect = async ($: EngineInterface) => {
+  const r = await $.process.run(['sh', '-c', 'p=$(command -v claude) && echo "$p" && realpath "$p"']).catch(() => null)
+  const [bin = 'claude', real = ''] = r?.exitCode === 0 ? r.stdout.trim().split('\n') : []
+  const cask = real.match(/\/Caskroom\/([^/]+)\//)?.[1]
+  const argv = cask
+    ? ['brew', 'upgrade', '--cask', cask]
+    : /[/\\]WinGet[/\\]/i.test(real)
+      ? ['winget', 'upgrade', '--id', 'Anthropic.ClaudeCode', '--exact', '--silent', '--disable-interactivity']
+      : /[/\\]mise[/\\]installs[/\\]/i.test(real)
+        ? ['mise', 'upgrade', 'claude']
+        : [bin, 'update']
+  return { bin, cask, argv }
+}
+
+const semver = (s: unknown) => (typeof s === 'string' ? s.trim().match(/^\d+\.\d+\.\d+/)?.[0] : undefined)
+
 const fetchLatest = async ($: EngineInterface) => {
   const get = (url: string) => $.http.fetch(url).then(r => (r.ok ? r.text : ''), () => '')
-  let version: unknown
-  try {
-    version = JSON.parse(await get(BREW_API)).version
-  } catch {}
-  // fallback in case the brew API changes again
-  if (typeof version !== 'string') version = (await get(BREW_RB)).match(/version "([^"]+)"/)?.[1]
-  if (typeof version === 'string') await update($, latest, () => version as string)
+  const { cask } = await detect($)
+  let version: string | undefined
+  if (cask) {
+    // brew ships each release later than Claude does: the cask's own version is the one brew can install
+    try {
+      version = semver(JSON.parse(await get(`${BREW_API}${cask}.json`)).version)
+    } catch {}
+    // fallback in case the brew API changes again
+    version ??= semver((await get(`${BREW_RB}${encodeURIComponent(cask)}.rb`)).match(/version "([^"]+)"/)?.[1])
+  } else {
+    const { autoUpdatesChannel } = (await $.settings.read()) as { autoUpdatesChannel?: unknown }
+    version = semver(await get(`${RELEASES}${autoUpdatesChannel === 'stable' ? 'stable' : 'latest'}`))
+  }
+  if (version) await update($, latest, () => version)
 }
 
 const runUpgrade = async ($: EngineInterface) => {
   await update($, upgrade, () => 'running')
-  const r = await $.process.run(['brew', 'upgrade', 'claude-code@latest'], { timeoutMs: 600_000 }).catch(
-    (err: unknown) => ({ exitCode: 1, stderr: String(err) }),
+  const { bin, argv } = await detect($)
+  const r = await $.process.run(argv, { timeoutMs: 600_000 }).catch(
+    (err: unknown) => ({ exitCode: 1, stdout: '', stderr: String(err) }),
   )
-  if (r.exitCode !== 0) {
-    $.ui.toast(`brew upgrade failed: ${r.stderr.trim().split('\n').pop() ?? ''}`, { timeoutMs: 8000 })
+  // `claude update` exits 0 when it only prints a package manager's command: the version installed tells
+  const [v, lat] = await Promise.all([
+    $.process.run([bin, '--version']).then(o => semver(o.stdout), () => undefined),
+    read($, latest),
+  ])
+  const done = r.exitCode === 0 && !!v && !!lat && !isNewer(lat, v)
+  if (!done) {
+    const why = (r.stderr.trim() || r.stdout.trim()).split('\n').pop()?.trim()
+    $.ui.toast(`Update not installed: ${why || `${argv.join(' ')} exited ${r.exitCode}`}`, { timeoutMs: 8000 })
   }
-  await update($, upgrade, () => (r.exitCode === 0 ? 'done' : 'idle'))
+  await update($, upgrade, () => (done ? 'done' : 'idle'))
 }
 
 const patch = ($: EngineInterface, id: string, fn: (l: HudLoop) => HudLoop) =>

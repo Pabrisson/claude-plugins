@@ -20,7 +20,11 @@ const USAGE: SessionUsage = {
 
 const runs: string[][] = []
 
-const engine = (on: On, usage: SessionUsage = USAGE) => {
+// the `claude` on PATH, then its resolved path: what the hud's install detection reads
+const BREW = ['/opt/homebrew/bin/claude', '/opt/homebrew/Caskroom/claude-code@latest/2.1.294/claude']
+const NATIVE = ['/Users/pab/.local/bin/claude', '/Users/pab/.local/share/claude/versions/2.1.294']
+
+const engine = (on: On, usage: SessionUsage = USAGE, install = BREW, installed = '2.1.300') => {
   const clock = mock.clock(on, { now: Date.parse('2026-10-10T12:00:00Z') })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
@@ -30,7 +34,11 @@ const engine = (on: On, usage: SessionUsage = USAGE) => {
   on('settings.read', () => ({ value: { effortLevel: 'xhigh' } as never }))
   // the engine's own band, empty: the hud draws over it
   on('ui.render', () => ({ type: 'Box', children: [] }))
-  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: '{"version":"2.1.300"}' } }))
+  // Claude's release channel answers plain text, the brew API json
+  on('http.fetch', ($, e) => {
+    const text = e.url.startsWith('https://downloads.claude.ai/') ? '2.1.300\n' : '{"version":"2.1.300"}'
+    return { value: { status: 200, ok: true, headers: {}, text } }
+  })
   // the branch is read from .git/HEAD (no git process: $.process is CLI only); /work/wt is an agent's worktree
   const heads: Record<string, string> = {
     '/Users/pab/.claude/.git/HEAD': 'ref: refs/heads/master\n',
@@ -42,7 +50,15 @@ const engine = (on: On, usage: SessionUsage = USAGE) => {
   })
   on('process.run', ($, e) => {
     runs.push([...e.argv])
-    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const stdout =
+      e.argv[0] === 'sh'
+        ? `${install.join('\n')}\n`
+        : e.argv[1] === '--version'
+          ? `${installed} (Claude Code)\n`
+          : e.argv[1] === 'update'
+            ? 'Claude is managed by a package manager.\nPlease use your package manager to update.\n'
+            : ''
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   return clock
 }
@@ -50,8 +66,10 @@ const engine = (on: On, usage: SessionUsage = USAGE) => {
 const START = { cwd: '/Users/pab/.claude', surface: 'terminal', isInteractive: true } as const
 
 test('terminal: one rule above, the 3 lines with theme colors, 1M tokens, cost, and the update', async ($, on) => {
-  engine(on)
+  const clock = engine(on)
   await $.session.start(START)
+  // the update check runs in the background: the install's detection, then its release channel
+  await clock.advance(0)
 
   const ui = await $.ui.mount(BAND)
   // the rule leaves 4 cells at its end for the ports toggle, beside the engine's [-]
@@ -79,10 +97,30 @@ test('terminal: one rule above, the 3 lines with theme colors, 1M tokens, cost, 
   expect((await ui.findAll({ type: 'Text' })).filter(t => t.props.backgroundColor)).toEqual([])
 
   await ui.press({ key: 'upgrade' })
-  expect(runs).toContainEqual(['brew', 'upgrade', 'claude-code@latest'])
+  expect(runs).toContainEqual(['brew', 'upgrade', '--cask', 'claude-code@latest'])
   expect(await ui.find({ text: /2\.1\.300 installed/ })).toBeDefined()
   await ui.unmount()
 })
+
+// native and npm update themselves through `claude update`; a package manager's install only gets the command
+// printed, and the version still installed tells the press failed
+for (const updated of [true, false]) {
+  test(`a native install updates through claude update: ${updated ? 'installed' : 'still old, a toast'}`, async ($, on) => {
+    const clock = engine(on, USAGE, NATIVE, updated ? '2.1.300' : '2.1.294')
+    const toasts: string[] = []
+    on('ui.toast', ($, e) => (toasts.push(e.text), { value: undefined }))
+    await $.session.start(START)
+    await clock.advance(0)
+    const ui = await $.ui.mount(BAND)
+    expect(await ui.find({ text: /2\.1\.294 → 2\.1\.300/ })).toBeDefined()
+
+    await ui.press({ key: 'upgrade' })
+    expect(runs).toContainEqual([NATIVE[0], 'update'])
+    expect(Boolean(await ui.find({ text: /2\.1\.300 installed/ }))).toBe(updated)
+    expect(toasts).toEqual(updated ? [] : ['Update not installed: Please use your package manager to update.'])
+    await ui.unmount()
+  })
+}
 
 test('terminal fullscreen and narrow: folder and branch stay, line 2 drops resets then cost', async ($, on) => {
   engine(on)
