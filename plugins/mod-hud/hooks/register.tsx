@@ -1,8 +1,9 @@
 import { atom, read, update } from 'claude-code'
-import type { Elements, EngineInterface, Register } from 'claude-code'
+import type { AgentStatus, Elements, EngineInterface, Register } from 'claude-code'
+import type { HudLoop } from '../types'
 
-const tools = atom({ plugin: 'mod-hud', key: 'tools' } as const, null)
-const active = atom({ plugin: 'mod-hud', key: 'active' } as const, null)
+// keyed by loop: '' the main conversation, else the agent's id
+const loops = atom({ plugin: 'mod-hud', key: 'loops' } as const, {})
 const effort = atom({ plugin: 'mod-hud', key: 'effort' } as const, null)
 const branch = atom({ plugin: 'mod-hud', key: 'branch' } as const, null)
 const latest = atom({ plugin: 'mod-hud', key: 'latest' } as const, null)
@@ -44,6 +45,17 @@ const EFFORT: Record<string, [string, string]> = {
   max: ['◈', 'Max'],
 }
 
+// plain Unicode, no emoji: drawn by any font
+const STATUS: Record<AgentStatus, [string, string]> = {
+  pending: ['○', C.muted],
+  running: ['●', C.bolt],
+  waiting: ['◌', C.muted],
+  idle: ['◌', C.muted],
+  completed: ['✓', 'success'],
+  failed: ['✗', 'error'],
+  killed: ['⊘', 'error'],
+}
+
 const ago = (ms: number) => {
   const s = Math.max(0, Math.round(ms / 1000))
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`
@@ -59,8 +71,8 @@ const until = (iso: string | undefined, now: number) => {
   return days ? `${days}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`
 }
 
-// 323000 → 323k, 1000000 → 1M, 1500000 → 1.5M
-const tokens = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.floor(n / 1000)}k`)
+// 840 → 840, 323000 → 323k, 1000000 → 1M, 1500000 → 1.5M
+const tokens = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.floor(n / 1000)}k` : `${n}`)
 
 // a true pill for the desktop, which draws SVG: continuous fill, label centered
 const PILL = { w: 84, h: 16 }
@@ -112,15 +124,16 @@ const readHead = async ($: EngineInterface, dir: string) => {
   return gitdir ? $.fs.read(`${gitdir.startsWith('/') ? gitdir : `${dir}/${gitdir}`}/HEAD`).catch(() => null) : null
 }
 
-const refreshBranch = async ($: EngineInterface) => {
-  let name: string | null = null
-  for (let dir = await $.session.cwd(); dir; dir = dir.slice(0, dir.lastIndexOf('/'))) {
+const branchAt = async ($: EngineInterface, start: string) => {
+  for (let dir = start; dir; dir = dir.slice(0, dir.lastIndexOf('/'))) {
     const head = await readHead($, dir)
-    if (head !== null) {
-      name = head.match(/^ref: refs\/heads\/(.+)$/m)?.[1] ?? head.trim().slice(0, 7)
-      break
-    }
+    if (head !== null) return head.match(/^ref: refs\/heads\/(.+)$/m)?.[1] ?? head.trim().slice(0, 7)
   }
+  return null
+}
+
+const refreshBranch = async ($: EngineInterface) => {
+  const name = await branchAt($, await $.session.cwd())
   await update($, branch, () => name)
 }
 
@@ -146,6 +159,9 @@ const runUpgrade = async ($: EngineInterface) => {
   await update($, upgrade, () => (r.exitCode === 0 ? 'done' : 'idle'))
 }
 
+const patch = ($: EngineInterface, id: string, fn: (l: HudLoop) => HudLoop) =>
+  update($, loops, all => ({ ...all, [id]: fn(all[id] ?? {}) }))
+
 // one toast when a figure crosses its threshold, re-armed once it falls back under
 const alerted = new Set<string>()
 const alert = ($: EngineInterface, key: string, pct: number, threshold: number, text: string) => {
@@ -167,6 +183,13 @@ const checkAlerts = async ($: EngineInterface) => {
   }
 }
 
+// an agent's context, shaped as the session's: its last request's tokens over its model's window
+const agentContext = (loop: HudLoop, sessionModel: string, sessionWindow: number) => {
+  // ponytail: the window is guessed for a model other than the session's; read it if the API ever gives an agent's
+  const window = loop.model === sessionModel ? sessionWindow : /\[1m\]/.test(loop.model ?? '') ? 1_000_000 : 200_000
+  return { tokens: loop.ctx, window, percent: loop.ctx === undefined ? undefined : (loop.ctx / window) * 100 }
+}
+
 type Fit = { resets: boolean; cost: boolean; tokens: boolean }
 // widest first: line 2 drops the reset times, then the cost, then the ctx tokens, until it fits
 const FITS: readonly Fit[] = [
@@ -180,29 +203,38 @@ const FITS: readonly Fit[] = [
 const hudLines = async (
   $: EngineInterface,
   els: Elements[keyof Elements],
-  view: { isCli: boolean; columns: number },
+  view: { isCli: boolean; columns: number; agentId?: string },
 ) => {
   const { Box, Text, Button } = els
   const Svg = 'Svg' in els ? els.Svg : undefined
-  const { isCli } = view
+  const { isCli, agentId } = view
 
-  const [model, cwd, usage, version, now, t, act, effNow, brNow, lat, up] = await Promise.all([
+  const [sessionModel, cwd, usage, version, now, all, effNow, brNow, lat, up, agents] = await Promise.all([
     $.session.model(),
     $.session.cwd(),
     $.session.usage(),
     $.session.version(),
     $.clock.now(),
-    read($, tools),
-    read($, active),
+    read($, loops),
     read($, effort),
     read($, branch),
     read($, latest),
     read($, upgrade),
+    agentId ? $.agent.list() : [],
   ])
   effortSeen = effNow ?? effortSeen
   branchSeen = brNow ?? branchSeen
-  const eff = effortSeen
-  const br = branchSeen
+  // the agent in view, its transcript opened from the tasks list: its own model, effort, tools and context
+  const loop = all[agentId ?? ''] ?? {}
+  const place = agents.findIndex(a => a.id === agentId)
+  const agent = agents[place]
+  const model = agentId ? loop.model : sessionModel
+  const eff = agentId ? loop.effort : effortSeen
+  const t = loop.tools
+  const act = loop.active
+  // an agent spawned in a directory of its own shows that one and its branch
+  const dir = (agentId && loop.cwd) || cwd
+  const br = agentId && loop.cwd ? loop.branch : branchSeen
   // the desktop drops spaces at the edges of each element and they read tight there: double them, non-breaking
   const gap = (s: string) => (isCli ? s : s.replace(/^ | $/g, '  '))
   const sep = (s: string) => <Text color={C.sep}>{gap(s)}</Text>
@@ -218,18 +250,34 @@ const hudLines = async (
           <Text color={C.muted} dimColor>{ago(now - (act ?? t)!.at)}</Text>,
         ]
       : []
-  const dirText = <Text color={C.dir} bold>{cwd.split('/').pop()}</Text>
+  // the agent line: ▸ name ● status • ◷ time since spawned • Σ tokens generated • ⧉ its place • ✎ its task (last: truncated first)
+  const [icon, color] = agent ? STATUS[agent.status] : []
+  const end = agent?.status === 'running' ? now : (loop.ended ?? now)
+  const facts = [
+    loop.started === undefined ? '' : `◷ ${ago(end - loop.started)}`,
+    loop.out === undefined ? '' : `Σ ${tokens(loop.out)} tok`,
+    agent ? `⧉ ${place + 1}/${agents.length}` : '',
+    agent?.description ? `✎ ${agent.description}` : '',
+  ].filter(Boolean)
+  const who = agentId
+    ? [
+        <Text color={C.accent} bold>{`▸ ${agent?.name ?? agent?.type ?? 'agent'}`}</Text>,
+        agent ? <Text color={color}>{gap(` ${icon} ${agent.status}`)}</Text> : null,
+        ...facts.flatMap(f => [sep(' • '), <Text color={C.muted}>{f}</Text>]),
+      ]
+    : []
+  const dirText = <Text color={C.dir} bold>{dir.split('/').pop()}</Text>
   const branchText = br ? <Text color={C.branch} bold>{br}</Text> : null
   // the desktop shows model and effort itself: folder • branch • tools there, flat like line 2
   const info = !isCli ? (
     <Box alignItems="center">{[dirText, br ? sep(' • ') : null, branchText, work.length ? sep(' • ') : null, ...work]}</Box>
   ) : (
     <Text wrap="truncate">
-      <Text color={C.accent} bold>{modelLabel(model)}</Text>
-      {eff ? sep(' • ') : null}
+      {model ? <Text color={C.accent} bold>{modelLabel(model)}</Text> : null}
+      {model && eff ? sep(' • ') : null}
       {eff ? <Text color={C.accent}>{`${glyph} `}</Text> : null}
       {eff ? <Text color={C.muted}>{label}</Text> : null}
-      {sep(' | ')}
+      {model || eff ? sep(' | ') : null}
       {dirText}
       {br ? sep(' • ') : null}
       {branchText}
@@ -245,6 +293,8 @@ const hudLines = async (
       {isCli ? `[${PORTS}]` : <Text color={C.muted}>{PORTS}</Text>}
     </Button>
   )
+  // the agent in view, on a line of its own above line 1
+  const line0 = who.length ? isCli ? <Text wrap="truncate">{who}</Text> : <Box alignItems="center">{who}</Box> : null
   const line1 = isCli ? (
     info
   ) : (
@@ -264,7 +314,7 @@ const hudLines = async (
     const q = usage.rateLimits.find(r => r.kind === kind)
     return q && name ? [{ name, pct: q.percentUsed, detail: until(q.resetsAt, now) }] : []
   })
-  const ctx = usage.context
+  const ctx = agentId ? agentContext(loop, sessionModel, usage.context.window) : usage.context
   const ctxTokens = ctx.tokens === undefined ? '' : `${tokens(ctx.tokens)}/${tokens(ctx.window)}`
   // hidden until it rounds above $0.00
   const usd = usage.cost?.usd ?? 0
@@ -328,7 +378,7 @@ const hudLines = async (
       )
     ) : null
 
-  return { line1, line2, line3, ports }
+  return { line0, line1, line2, line3, ports }
 }
 
 export const register: Register = on => {
@@ -347,9 +397,22 @@ export const register: Register = on => {
   })
 
   on('turn.step', async function* ($, e, next) {
-    if (e.agentId === undefined && e.effort !== undefined) await update($, effort, () => String(e.effort))
+    const id = e.agentId
+    if (id === undefined) {
+      if (e.effort !== undefined) await update($, effort, () => String(e.effort))
+      return yield* next(e)
+    }
+    const step = yield* next(e)
+    const u = step.usage
+    await patch($, id, l => ({
+      ...l,
+      model: e.model,
+      effort: e.effort === undefined ? undefined : String(e.effort),
+      ctx: u ? u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens + u.output_tokens : l.ctx,
+      out: (l.out ?? 0) + (u?.output_tokens ?? 0),
+    }))
 
-    return yield* next(e)
+    return step
   })
 
   // /effort sends no model request and its picker returns no text to command.run:
@@ -365,23 +428,42 @@ export const register: Register = on => {
     return stored
   }).catch(($, e, next) => next(e))
 
-  // the running tool shows live ("Bash running 3s"); once done it counts and stays as the last one
+  // ponytail: only an explicit cwd is known; a worktree-isolated agent's path is not given while it runs
+  on('agent.spawn', async ($, e, next) => {
+    const spawned = await next(e)
+    const id = spawned.agentId
+    const { cwd } = e
+    if (id) {
+      const [started, br] = await Promise.all([$.clock.now(), cwd ? branchAt($, cwd) : null])
+      await patch($, id, l => ({ ...l, started, ...(cwd ? { cwd, branch: br ?? undefined } : {}) }))
+    }
+
+    return spawned
+  }).catch(($, e, next) => next(e))
+
+  // the running tool shows live ("Bash running 3s"); once done it counts and stays as the last one, per loop
   on('tool.call', async ($, e, next) => {
+    const id = e.agentId ?? ''
     const at = await $.clock.now()
-    await update($, active, a => ({ name: e.tool, at, n: (a?.n ?? 0) + 1 }))
+    await patch($, id, l => ({ ...l, active: { name: e.tool, at, n: (l.active?.n ?? 0) + 1 } }))
     try {
       const ran = await next(e)
       const done = await $.clock.now()
-      await update($, tools, t => ({ count: (t?.count ?? 0) + 1, name: e.tool, at: done }))
+      await patch($, id, l => ({ ...l, tools: { count: (l.tools?.count ?? 0) + 1, name: e.tool, at: done } }))
 
       return ran
     } finally {
-      await update($, active, a => (a && a.n > 1 ? { ...a, n: a.n - 1 } : null))
+      await patch($, id, ({ active: a, ...l }) => (a && a.n > 1 ? { ...l, active: { ...a, n: a.n - 1 } } : l))
     }
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
     await refreshBranch($)
+    const id = e.agentId
+    if (id !== undefined) {
+      const ended = await $.clock.now()
+      await patch($, id, l => ({ ...l, ended }))
+    }
 
     return next(e)
   })
@@ -392,8 +474,8 @@ export const register: Register = on => {
     const els = $.ui.resolve(e)
     const { Box, Text } = els
     const isCli = e.surface === 'terminal'
-    const view = { isCli, columns: e.props.bodyColumns }
-    const { line1, line2, line3, ports } = await hudLines($, els, view)
+    const view = { isCli, columns: e.props.bodyColumns, agentId: e.props.view.agentId }
+    const { line0, line1, line2, line3, ports } = await hudLines($, els, view)
     // what other mods draw in the band (savvy-progress's bar) stays, under the hud
     const below = await next(e)
 
@@ -401,6 +483,7 @@ export const register: Register = on => {
     if (!isCli) {
       return (
         <Box flexDirection="column">
+          {line0}
           {line1}
           {line2}
           {below}
@@ -415,6 +498,7 @@ export const register: Register = on => {
           <Text color={C.sep}>{'─'.repeat(Math.max(0, e.props.bodyColumns - 4))}</Text>
           {ports}
         </Box>
+        {line0}
         {line1}
         {line2}
         {line3}

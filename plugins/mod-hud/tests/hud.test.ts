@@ -31,8 +31,15 @@ const engine = (on: On, usage: SessionUsage = USAGE) => {
   // the engine's own band, empty: the hud draws over it
   on('ui.render', () => ({ type: 'Box', children: [] }))
   on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: '{"version":"2.1.300"}' } }))
-  // the branch is read from .git/HEAD (no git process: $.process is CLI only)
-  on('fs.read', ($, e) => (e.path === '/Users/pab/.claude/.git/HEAD' ? { value: 'ref: refs/heads/master\n' } : { deny: 'ENOENT' }))
+  // the branch is read from .git/HEAD (no git process: $.process is CLI only); /work/wt is an agent's worktree
+  const heads: Record<string, string> = {
+    '/Users/pab/.claude/.git/HEAD': 'ref: refs/heads/master\n',
+    '/work/wt/.git/HEAD': 'ref: refs/heads/agent-fix\n',
+  }
+  on('fs.read', ($, e) => {
+    const head = heads[e.path]
+    return head ? { value: head } : { deny: 'ENOENT' }
+  })
   on('process.run', ($, e) => {
     runs.push([...e.argv])
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -234,4 +241,64 @@ test('the band keeps what other mods draw under it', { plugins: [BAR] }, async (
     expect(await ui.find({ text: 'savvy-bar' })).toBeDefined()
     await ui.unmount()
   }
+})
+
+
+test('an agent in view: its line, model, effort, folder, branch, tools and context; main keeps its own', async ($, on) => {
+  const clock = engine(on)
+  on('agent.spawn', ($, e) => ({ model: 'claude-haiku-5-5', agentId: e.cwd ? 'a1' : 'a2' }))
+  on('agent.list', () => ({
+    value: [
+      { id: 'a1', type: 'Explore', description: 'scan', status: 'running' },
+      { id: 'a2', type: 'general-purpose', name: 'helper', description: 'help', status: 'completed' },
+    ],
+  }))
+  // the model answers each step over 40k input tokens and writes 5k
+  on('turn.step', async function* () {
+    const usage = { model: 'm', input_tokens: 1_000, cache_read_input_tokens: 39_000, cache_creation_input_tokens: 0, output_tokens: 5_000 }
+    return { turnId: 't1', index: 0, answer: '', toolUses: [], stopReason: 'end_turn', usage }
+  })
+  on('tool.call', () => ({ result: 'ok' }) as never)
+  on('turn.complete', () => ({ text: '' }))
+  await $.session.start(START)
+
+  await $.agent.spawn({ prompt: 'scan', subagentType: 'Explore', cwd: '/work/wt' } as never)
+  await $.agent.spawn({ prompt: 'help', subagentType: 'general-purpose' } as never)
+  for (const [agentId, model] of [['a1', 'claude-haiku-5-5'], ['a2', 'claude-opus-5-5']] as const) {
+    // a stream: read to its end, as the query loop does
+    for await (const _ of $.turn.step({ turnId: 't1', index: 0, model, effort: 'low', messageCount: 3, agentId }));
+  }
+  await $.tool.call({ tool: 'Grep', agentId: 'a1' } as never)
+  await $.tool.call({ tool: 'Bash' } as never)
+  await $.tool.call({ tool: 'Read' } as never)
+  // a2 ends a minute in, a1 runs on: a2's time stops there
+  await clock.advance(60_000)
+  await $.turn.complete({ answer: '', durationMs: 0, isAborted: false, turnId: 't1', agentId: 'a2', reason: 'answer' } as never)
+  await clock.advance(120_000)
+
+  const view = (agentId?: string) => $.ui.mount({ ...BAND, props: { ...BAND.props, view: agentId ? { agentId } : {} } })
+
+  // a model other than the session's: its window is guessed (200k)
+  const a1 = await view('a1')
+  expect((await a1.find({ type: 'Text', text: /^ ● running$/ }))?.props.color).toBe('warning')
+  for (const text of [/^▸ Explore ● running • ◷ 3m • Σ 5k tok • ⧉ 1\/2 • ✎ scan$/, /^Haiku 5\.5 • ○ Low \| wt • agent-fix • ⚡ 1 Grep/, /ctx ━{2}─{8} 23% \(45k\/200k\)/, /5h ━{4}/]) {
+    expect(await a1.find({ text })).toBeDefined()
+  }
+  await a1.unmount()
+
+  // the session's model: the session's window; no cwd of its own: the session's folder and branch
+  const a2 = await view('a2')
+  expect((await a2.find({ type: 'Text', text: /^ ✓ completed$/ }))?.props.color).toBe('success')
+  for (const text of [/^▸ helper ✓ completed • ◷ 1m • Σ 5k tok • ⧉ 2\/2 • ✎ help$/, /^Opus 5\.5 • ○ Low \| \.claude • master$/, /ctx ─{10} 5% \(45k\/1M\)/]) {
+    expect(await a2.find({ text })).toBeDefined()
+  }
+  await a2.unmount()
+
+  // main: the session's figures, and only its own tools
+  const main = await view()
+  for (const text of [/^Opus 5\.5 • ◉ xHigh \| \.claude • master • ⚡ 2 Read/, /ctx ━{3}─{7} 32% \(323k\/1M\)/]) {
+    expect(await main.find({ text })).toBeDefined()
+  }
+  expect(await main.find({ text: /▸/ })).toBeUndefined()
+  await main.unmount()
 })
