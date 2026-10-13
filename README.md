@@ -9,7 +9,7 @@ Marketplace **`pabrisson`** pour Claude Code : un plugin par type de composant e
 | `mod-hud` | Bandeau au-dessus du prompt (modèle, effort, branche, outils, usage, contexte, coût, mise à jour) | — |
 | `mod-ports` | Panneau à droite listant ce qui tourne pour le projet (Docker, Kubernetes, process) | icône ⇄ du HUD |
 | `mod-code-fence` | Entoure d'un bloc ```` ```lang ```` le code collé dans le prompt | — |
-| `hook-notify` | Notification macOS à la fin d'une tâche ou en attente d'une saisie, durée de chaque prompt en SQLite | — |
+| `hook-notify` | Notification desktop (macOS, Linux, Windows) à la fin d'une tâche ou en attente d'une saisie, durée de chaque prompt en SQLite | — |
 | `agent-frontend` | `frontend-developer`, `ui-ux-designer` | `agent-frontend:frontend-developer` |
 | `agent-backend` | `backend-architect`, `api-documenter` | `agent-backend:backend-architect` |
 | `agent-review` | `code-reviewer` | `agent-review:code-reviewer` |

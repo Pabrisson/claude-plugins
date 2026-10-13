@@ -7,6 +7,8 @@ https://github.com/dazuiba/CCNotify
 import os
 import sys
 import json
+import shlex
+import shutil
 import sqlite3
 import subprocess
 import logging
@@ -16,6 +18,39 @@ from datetime import datetime
 
 # the plugin's data dir survives updates, unlike the plugin root
 DATA_DIR = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.dirname(os.path.abspath(__file__))
+
+# Windows PowerShell 5.1 toast; title/body come from env vars so nothing needs quoting
+PS_TOAST = (
+    "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;"
+    "$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+    "$t = $x.GetElementsByTagName('text');"
+    "[void]$t[0].AppendChild($x.CreateTextNode($env:CCNOTIFY_TITLE));"
+    "[void]$t[1].AppendChild($x.CreateTextNode($env:CCNOTIFY_BODY));"
+    "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe')"
+    ".Show([Windows.UI.Notifications.ToastNotification]::new($x))"
+)
+
+
+def notification_commands(title, body, cwd):
+    """Candidate notifiers for this OS, in order of preference"""
+    if sys.platform == "darwin":
+        notifier = ["terminal-notifier", "-sound", "default", "-title", title, "-subtitle", body]
+        code = shutil.which("code")
+        if cwd and code:
+            notifier += ["-execute", f"{shlex.quote(code)} {shlex.quote(cwd)}"]
+        osascript = [
+            "osascript",
+            "-e", "on run argv",
+            "-e", 'display notification (item 2 of argv) with title (item 1 of argv) sound name "default"',
+            "-e", "end run",
+            title, body,
+        ]
+        return [notifier, osascript]
+    # Linux, then Windows / WSL
+    return [
+        ["notify-send", title, body],
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", PS_TOAST],
+    ]
 
 
 class ClaudePromptTracker:
@@ -274,31 +309,35 @@ class ClaudePromptTracker:
             return "Unknown"
 
     def send_notification(self, title, subtitle, cwd=None):
-        """Send macOS notification using terminal-notifier"""
-        from datetime import datetime
-
+        """Send a desktop notification with the first notifier found on this OS"""
         current_time = datetime.now().strftime("%B %d, %Y at %H:%M")
+        body = f"{subtitle}\n{current_time}"
+        env = {
+            **os.environ,
+            "CCNOTIFY_TITLE": title,
+            "CCNOTIFY_BODY": body,
+            # forwards the vars to powershell.exe when running under WSL
+            "WSLENV": ":".join(filter(None, [os.environ.get("WSLENV"), "CCNOTIFY_TITLE", "CCNOTIFY_BODY"])),
+        }
 
-        try:
-            cmd = [
-                "terminal-notifier",
-                "-sound",
-                "default",
-                "-title",
-                title,
-                "-subtitle",
-                f"{subtitle}\n{current_time}",
-            ]
+        for cmd in notification_commands(title, body, cwd):
+            if not shutil.which(cmd[0]):
+                continue
+            try:
+                subprocess.run(
+                    cmd,
+                    check=False,
+                    capture_output=True,
+                    env=env,
+                    timeout=10,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                logging.info(f"Notification sent via {cmd[0]}: {title} - {subtitle}")
+            except Exception as e:
+                logging.error(f"Error sending notification: {e}")
+            return
 
-            if cwd:
-                cmd.extend(["-execute", f'/usr/local/bin/code "{cwd}"'])
-
-            subprocess.run(cmd, check=False, capture_output=True)
-            logging.info(f"Notification sent: {title} - {subtitle}")
-        except FileNotFoundError:
-            logging.warning("terminal-notifier not found, notification skipped")
-        except Exception as e:
-            logging.error(f"Error sending notification: {e}")
+        logging.warning("No notifier found, notification skipped")
 
 
 def validate_input_data(data, expected_event_name):
@@ -348,8 +387,8 @@ def main():
             logging.error(f"Valid hook types: {', '.join(valid_events)}")
             sys.exit(1)
 
-        # Read JSON data from stdin
-        input_data = sys.stdin.read().strip()
+        # Read raw bytes: Windows' default stdin encoding isn't UTF-8
+        input_data = sys.stdin.buffer.read().strip()
         if not input_data:
             logging.warning("No input data received")
             return
