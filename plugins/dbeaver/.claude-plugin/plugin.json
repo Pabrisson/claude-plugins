@@ -1,6 +1,6 @@
 {
   "name": "dbeaver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server DBeaver (omnisql-mcp): query the connections of the local DBeaver workspace",
   "author": {
     "name": "Pierre Alain BRISSON"
@@ -33,7 +33,8 @@
   },
   "mcpServers": {
     "dbeaver": {
-      "command": "omnisql-mcp",
+      "command": "npx",
+      "args": ["-y", "omnisql-mcp@2.0.1"],
       "env": {
         "OMNISQL_READ_ONLY": "${user_config.read_only}",
         "OMNISQL_ALLOWED_CONNECTIONS": "${user_config.allowed_connections}",
