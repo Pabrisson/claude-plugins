@@ -241,26 +241,6 @@ test('desktop shows the folder, branch and tools, then the usage bars', async ($
   await desktop.unmount()
 })
 
-const effortRow = (level: string) => ({
-  type: 'user' as const,
-  role: 'user' as const,
-  content: [{ type: 'text' as const, text: `<local-command-stdout>Set effort level to ${level} (this session only): …</local-command-stdout>` }],
-})
-
-test('/effort output updates the effort shown, quotes elsewhere do not', async ($, on) => {
-  engine(on)
-  await $.session.start(START)
-
-  const ui = await $.ui.mount(BAND)
-  expect(await ui.find({ text: /xHigh/ })).toBeDefined()
-  await $.session.append({ message: effortRow('max'), door: 'command', origin: { kind: 'composer' }, uuid: 'row-1' })
-  expect(await ui.find({ text: /◈ Max/ })).toBeDefined()
-  // the same words in a tool result (a grep of the transcript) change nothing
-  await $.session.append({ message: effortRow('low'), door: 'tool-result', origin: { kind: 'tool', tool: 'Bash' }, uuid: 'row-2' })
-  expect(await ui.find({ text: /◈ Max/ })).toBeDefined()
-  await ui.unmount()
-})
-
 // a stand-in band mod that draws its own row without next (savvy-progress's bar does)
 const BAR = {
   name: 'bar',

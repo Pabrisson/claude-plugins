@@ -18,8 +18,6 @@ const BREW_RB = 'https://raw.githubusercontent.com/Homebrew/homebrew-cask/HEAD/C
 // Claude's own release channels (latest, stable): the version as plain text, the same as npm's
 const RELEASES = 'https://downloads.claude.ai/claude-code-releases/'
 const HOUR = 3_600_000
-// rows that may quote another row's words: the model's replies, tool output, compaction summaries
-const QUOTING_DOORS: readonly string[] = ['response', 'tool-result', 'tool-message', 'compaction']
 const BAR = 10
 // the ports mod's pane toggle: plain Unicode, drawn by any font (VS Code's terminal has no Nerd Font icons)
 const PORTS = '⇄'
@@ -451,18 +449,8 @@ export const register: Register = on => {
     return step
   })
 
-  // /effort sends no model request and its picker returns no text to command.run:
-  // read the output row it appends ("Set effort level to max …"), skipping rows that may quote it
-  on('session.append', async ($, e, next) => {
-    const stored = await next(e)
-    if (!QUOTING_DOORS.includes(e.door)) {
-      const text = e.message.content.map(b => (b.type === 'text' ? b.text : '')).join('\n')
-      const level = text.match(/Set effort level to (\w+)/)?.[1]
-      if (level) await update($, effort, () => level)
-    }
-
-    return stored
-  }).catch(($, e, next) => next(e))
+  // no session.append hook for /effort's output row: cc-plugin-sec-default continues that event past user mods
+  // on a Team plan, so a new /effort level shows from the next turn.step
 
   // ponytail: only an explicit cwd is known; a worktree-isolated agent's path is not given while it runs
   on('agent.spawn', async ($, e, next) => {
