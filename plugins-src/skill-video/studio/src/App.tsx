@@ -105,7 +105,9 @@ export default function App() {
       type: kind,
       t0: r3(t0),
       t1: r3(t1),
-      ...(project.source ? { s0: r3(tl.toSource(t0)), s1: r3(tl.toSource(t1)) } : {}),
+      // the source's seconds, or the scene's own seconds without a source (they differ once something is cut)
+      s0: r3(tl.toSource(t0)),
+      s1: r3(tl.toSource(t1)),
       text: text.trim(),
       words: words ? wordsIn(words, { t0, t1 }) : "",
       images,
@@ -167,7 +169,7 @@ export default function App() {
       if (e.key === " ") toggle(video.current)
       else if (e.key === "c") composer.current?.focus()
       else if (e.key === "p") setDrawing((d) => !d)
-      else if ((e.key === "Backspace" || e.key === "Delete") && project?.source && range) add("cut", "")
+      else if ((e.key === "Backspace" || e.key === "Delete") && range) add("cut", "")
       else return
       e.preventDefault()
     }
@@ -314,7 +316,6 @@ export default function App() {
                 time={time}
                 range={range}
                 marked={comments.filter((c) => c.t1 > c.t0)}
-                canCut={project.source}
                 onSeek={seek}
                 onRange={setRange}
                 onCut={() => add("cut", "")}
@@ -333,7 +334,6 @@ export default function App() {
                 .map((v) => ({ v: v.v, comments: reviews[v.v] ?? [] }))
                 .filter((p) => p.comments.length)}
               multiFormat={project.formats.length > 1}
-              canCut={project.source}
               time={time}
               range={range}
               rangeWords={range && words ? wordsIn(words, range) : ""}

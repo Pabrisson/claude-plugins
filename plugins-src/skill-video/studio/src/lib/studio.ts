@@ -1,6 +1,7 @@
 import { makeTimeline } from "@engine/timeline.js"
 
-export type Word = { w: string; t0: number; t1: number }
+// screen: a line of what the video shows (no speech), one per moment
+export type Word = { w: string; t0: number; t1: number; screen?: boolean }
 // a transcript word placed on one version's video time
 export type VWord = Word & { v0: number; v1: number }
 export type VideoFile = { file: string; url: string; size: number; mtime: string }
@@ -97,7 +98,7 @@ export function wordsIn(words: VWord[], { t0, t1 }: Range) {
   return words
     .filter((w) => w.v1 > a && w.v0 < b)
     .map((w) => w.w)
-    .join(" ")
+    .join(words[0]?.screen ? " / " : " ")
 }
 
 const secs = (t: number) => `${t.toFixed(2)} s`
@@ -116,15 +117,17 @@ export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
     const where = range
       ? `from ${clock(c.t0)} to ${clock(c.t1)} (VIDEO ${secs(c.t0)} → ${secs(c.t1)}, ${secs(c.t1 - c.t0)})`
       : `at ${clock(c.t0)} (VIDEO ${secs(c.t0)})`
+    // SCENE: the scene's own seconds without a source, which a cut moves away from the video's
+    const own = p.source ? "SOURCE" : "SCENE"
     const source =
       c.s0 === undefined
         ? ""
         : range && c.s1 !== undefined
-          ? ` · SOURCE ${secs(c.s0)} → ${secs(c.s1)}`
-          : ` · SOURCE ${secs(c.s0)}`
+          ? ` · ${own} ${secs(c.s0)} → ${secs(c.s1)}`
+          : ` · ${own} ${secs(c.s0)}`
     const format = p.formats.length > 1 && c.format ? ` [format ${c.format}]` : ""
     lines.push(`${i + 1}. ${c.type.toUpperCase()} ${where}${source} [id ${c.id}]${format}`)
-    if (c.words) lines.push(`   Words: "${c.words}"`)
+    if (c.words) lines.push(`   ${p.words?.[0]?.screen ? "On screen" : "Words"}: "${c.words}"`)
     if (c.text) lines.push(`   Request: ${c.text}`)
     for (const img of c.images) lines.push(`   Image: ${p.dir}/${img}`)
   })
@@ -134,10 +137,10 @@ export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
     "Times: mm:ss.cc = minutes:seconds.hundredths (00:12.50 = 12.50 s), the same value as the seconds in parentheses.",
     p.source
       ? "Types: CUT = remove the range (it goes in `cut`, in SOURCE time); COMMENT = any other request (visual, text, caption, sound, pace), at a moment or over a range."
-      : "Types: COMMENT = any request (visual, text, sound, pace), at a moment or over a range.",
+      : "Types: CUT = remove the range from the video (it goes in `cut` in source/edit.json, in SCENE time: the scene's own seconds); COMMENT = any other request (visual, text, sound, pace), at a moment or over a range.",
     "",
     `Feedback file: ${p.dir}/files/reviews/v${ver.v}.json (video version v${ver.v}, same ids). For each change applied, set "resolved": true and write what you did in one sentence in "reply", the studio shows it.`,
-    `Change only these points and keep the rest of the edit identical. Times are VIDEO time${p.source ? " (or SOURCE when stated)" : ""}. Rerun the steps needed (${p.source ? "prepare, rough, " : ""}stills, render, audio, final): the new render opens the next version, reloading the studio shows it.`
+    `Change only these points and keep the rest of the edit identical. Times are VIDEO time (or ${p.source ? "SOURCE" : "SCENE"} when stated). Rerun the steps needed (${p.source ? "prepare, rough, " : ""}stills, render, audio, final): the new render opens the next version, reloading the studio shows it.`
   )
   return lines.join("\n")
 }

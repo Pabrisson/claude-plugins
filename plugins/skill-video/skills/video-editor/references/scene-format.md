@@ -62,11 +62,12 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
   `pick(landscape, portrait, tall)` (portrait = 4:5 and up, tall = 9:16), and CSS on
   `#stage.landscape | .square | .portrait | .tall` or `#stage[data-format="9:16"]`. Same timings everywhere (one
   soundtrack). Compose the main format first, then give each other format its own pass.
-- **Style first.** Follow STYLE.md (look, notes). Its palette is on the stage as CSS variables `var(--ink)`,
-  `var(--accent)`, `var(--paper)`, `var(--muted)`, `var(--card)`, the font as `var(--font)`; `style` holds the rest
-  (creator name, CTA texts, language). Use the palette as material, not as one background: sequences can switch
-  between light, dark and accent fields. A font of the style is already loaded; another one goes in `scene.css`
-  with `@font-face` pointing at a file in `assets/fonts/` (no remote fonts: the render is offline).
+- **The style is material.** Follow STYLE.md's notes; take its palette, fonts and symbols. Every color of the palette
+  is on the stage as a CSS variable (`var(--paper)`, `var(--ink)`, `var(--accent)`, and the brand's others such as
+  `var(--coal)`), the font as `var(--font)`; `style` holds the rest (creator name, CTA texts, language). Use the
+  palette as fields, not as one background: they switch on the Direction's color story. The style's fonts are
+  already loaded; another one goes in `scene.css` with `@font-face` pointing at a file in `assets/fonts/` (no remote
+  fonts: the render is offline).
 - **Assets**: `asset('logos/x.png')` is the URL of `assets/logos/x.png`. Fetch logos and images into `assets/`
   first (PNG, JPEG, WebP, SVG).
 
@@ -87,6 +88,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 | `captions(opts)` | Word-by-word sticker captions of the speech (below) |
 | `paper()` | `Promise<string>`: a paper texture as a CSS background, only when the style asks for a paper look |
 | `cue(kind, t, data)` | A named sound moment at video time `t`, for sound.py: any kind and data (`{ dur, x, … }`) |
+| `say(text, from, to)` | What the viewer reads from `from` to `to` (video seconds): one line of the transcript (below) |
 | `tick(fn)` | `fn(t)` runs at every frame (and sub-frame), after the timeline |
 | `num(n, decimals)` | A number in the creator's language (`11 726`, `106,3`) |
 | `rng(seed)` | A seeded random generator |
@@ -121,9 +123,34 @@ it with CSS (`.ve-captions span` is a word). Only for speech.
 { "duration": 45, "cut": [[12.4, 14.1]], "poster": 2.5, "media": { "arc": { "src": "assets/clips/arc.mp4", "from": 2, "dur": 6, "width": 720 } } }
 ```
 
-`duration` (seconds) is required without a source; with one, the timeline gives it. `cut` holds source ranges to
-remove (the studio's cuts), `poster` the source time of the poster frame, `media` the clips `clip()` and media actors
+`duration` (seconds) is required without a source; with one, the timeline gives it. `cut` holds ranges to remove
+(the studio's cuts): source seconds with a source; without one, seconds of the scene's own time. The scene keeps
+its timings and the engine skips the cut ranges, along with the cues and `say()` lines inside them. `duration` in
+the scene stays the scene's full length. `poster` is the source time of the poster frame, `media` the clips `clip()` and media actors
 play (extracted as frames at the project's rate).
+
+## The transcript of a video without speech
+
+Without speech, the transcript is what the video shows, one line per moment. It feeds `files/words.md`, the studio's
+Transcript panel and the `On screen:` lines of the Copy prompt, so it has to read like what a viewer reads.
+
+**Declare it with `say()`**, next to the tweens that show the text: you know what each moment means, the page does
+not. One call per moment, in plain words, without the decoration:
+
+```js
+say("Vous êtes e-commerçant, une marketplace, logisticien, transporteur ou expéditeur", at(6.25), at(9))
+say("Des relances clients dans toutes les langues : « Où est mon colis ? », « Where is my parcel? »…", at(19.25), at(21.25))
+```
+
+With one `say()` or more, the transcript is exactly these lines. Without any, the engine samples the readable texts
+4 times a second, and that guess has limits:
+- it reads a block's own text, in reading order;
+- it skips text clipped by a mask or a window, faint text (opacity under 0.4) and small text (under about 24 px
+  at 1080);
+- it groups each moment's texts on one line.
+
+Rolling words, split letters and mock interfaces still come out rough. Correct a group with `data-say="…"` (its
+text replaces what is inside), and leave decoration out with `data-say=""`.
 
 ## Sound
 

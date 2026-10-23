@@ -145,7 +145,6 @@ export function Feedback({
   comments,
   previous,
   multiFormat,
-  canCut,
   time,
   range,
   rangeWords,
@@ -161,7 +160,6 @@ export function Feedback({
   comments: Comment[]
   previous: { v: number; comments: Comment[] }[]
   multiFormat: boolean
-  canCut: boolean
   time: number
   range: Range | null
   rangeWords: string
@@ -216,7 +214,7 @@ export function Feedback({
                 <EmptyTitle className="text-sm">No feedback on this version (v{version})</EmptyTitle>
                 <EmptyDescription className="text-xs">
                   Play the video, press <Kbd>C</Kbd> and write what you want to change.
-                  {canCut && <> To cut, select words in the transcript then press <Kbd>⌫</Kbd>.</>} Drop an image anywhere to attach it.
+                  To cut, select a range in the transcript or on the timeline, then press <Kbd>⌫</Kbd>. Drop an image anywhere to attach it.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -243,20 +241,18 @@ export function Feedback({
       </ScrollArea>
 
       <div className="flex flex-col gap-2.5 border-t p-3">
-        {canCut && (
-          <Tabs value={kind} onValueChange={(v) => setKind(v as Kind)}>
-            <TabsList>
-              <TabsTrigger value="comment" className="text-xs">
-                <MessageSquareTextIcon data-icon="inline-start" />
-                Comment
-              </TabsTrigger>
-              <TabsTrigger value="cut" className="text-xs">
-                <ScissorsIcon data-icon="inline-start" />
-                Cut
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
+        <Tabs value={kind} onValueChange={(v) => setKind(v as Kind)}>
+          <TabsList>
+            <TabsTrigger value="comment" className="text-xs">
+              <MessageSquareTextIcon data-icon="inline-start" />
+              Comment
+            </TabsTrigger>
+            <TabsTrigger value="cut" className="text-xs">
+              <ScissorsIcon data-icon="inline-start" />
+              Cut
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           {!isRange && "At"}
           <Badge variant="outline" className="h-6 rounded-md font-mono text-xs text-foreground">

@@ -22,7 +22,7 @@ then **Copy prompt** gives the text to paste into Claude.
 |---|---|
 | `type` | `comment` (any request) or `cut` (remove the range; only with a source) |
 | `t0`, `t1` | VIDEO seconds of **that version**; `t1 === t0` for a single moment |
-| `s0`, `s1` | SOURCE seconds (absent without a source): use them for `cut` and to find the words in `files/words.md` |
+| `s0`, `s1` | SOURCE seconds, or SCENE seconds (the scene's own time) without a source: use them for `cut`, to find the words in `files/words.md`, and to find the moment in the scene |
 | `words` | What is said, or shown on screen, in the range |
 | `format` | The format the user was looking at. Only a request about that format's composition (placement, size, framing) stays in it; content, text, timing and sound changes apply to every format |
 | `images` | Frames the user drew on (`assets/review/frame-<id>.png`): read them |
@@ -51,12 +51,13 @@ Change only these points and keep the rest of the edit identical. …
 ```
 
 `[format …]` appears only for a project with several formats, `SOURCE` only with a source, `Words:` only with a
-transcript, `Image:` once per attached drawing.
+transcript (`On screen:` for a video without speech: the lines of what it shows, joined by « / »), `Image:` once per
+attached drawing.
 
 ## Applying it
 
-- **CUT**: add `[s0, s1]` to `cut` in `source/edit.json` (SOURCE seconds), then `prepare` is not needed: the
-  timeline applies `cut` itself. Check the words around the cut in `files/words.md` so it lands between words.
+- **CUT**: add `[s0, s1]` to `cut` in `source/edit.json` (SOURCE seconds, or SCENE seconds without a source); no
+  `prepare` needed: the timeline applies `cut` itself. Check the words around the cut in `files/words.md` so it lands between words.
 - **COMMENT**: change the scene (`source/scene.js`, `scene.css`, `edit.json`, assets) at that moment. Anchor the
   change with `at(source seconds)`; the video times of the prompt only say where the user was looking. A request
   about one format's composition changes that format only (`format === '16:9'`, `pick()`, or CSS on

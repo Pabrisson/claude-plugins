@@ -12,8 +12,8 @@ params: {"max_static": 2, "sfx": true}
 - Proof on screen: every number said or written appears, animated, with its unit.
 - Motion with intent: expo/back eases on entrances, staggered letters (SplitText), strokes drawn on (DrawSVG),
   a slow drift on what stays. Exits as designed as entrances.
-- The look comes from STYLE.md (its notes first) and the brand: this pack sets the density and the pace, not the
-  aesthetic.
+- The look comes from the Direction, built on the brand's material (STYLE.md, its notes first): this pack sets the
+  density and the pace, not the aesthetic.
 - A `cue()` on each key entrance and transition: `sound.py` gives each kind of event its own designed sound.
 - Without speech, the beats of About.md drive the scenes, and the on-screen text is the transcript:
   keep each text up long enough to be read (about 0.3 s per word, 1.2 s minimum).
@@ -23,6 +23,7 @@ params: {"max_static": 2, "sfx": true}
 ## Self-review checklist (stills/contact.jpg)
 - [ ] No stretch longer than `max_static` s without a visual change
 - [ ] Every number said or written appears on screen
-- [ ] No frame mostly empty, every transition designed; STYLE.md's look and notes followed
+- [ ] No frame mostly empty, every transition designed; the brand's motif and color story held; STYLE.md's notes
+  followed
 - [ ] Each text is readable at phone size and stays up long enough to be read
 - [ ] Every format is composed for itself, nothing cut by the frame

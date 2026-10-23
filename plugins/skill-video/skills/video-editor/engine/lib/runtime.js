@@ -19,6 +19,8 @@ export const STYLE = {
     palette: { paper: '#f2ede3', ink: '#171512', accent: '#2563eb', muted: '#857e72', card: '#fffdf8' },
     font: 'Inter',
     fonts: {},
+    // the brand's recurring graphic devices, in words: material for each video's motif
+    symbols: [],
     paper: { grain: 1.2, relief: 1, depth: 1.7 },
     captions: { size: 84 },
   },

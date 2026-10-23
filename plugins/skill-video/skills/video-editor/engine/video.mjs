@@ -223,28 +223,38 @@ function wordsMd(words, slug) {
     lines.filter(l => l.length).map(l => `- **${clock(l[0].t0)}** ${l.map(w => w.w).join(' ')}`).join('\n') + '\n'
 }
 
-// Without speech the transcript is what the video shows: the scene's readable texts (sampled 4 times a second)
-// and the actors' texts, with their times. Rewritten by stills and render, so the studio and the Copy prompt follow.
+// Without speech the transcript is what the video shows, one line per moment, in SOURCE seconds: the lines the scene
+// declares with say(), else the readable texts sampled 4 times a second, plus the actors' texts. Rewritten by stills
+// and render, so the studio and the Copy prompt follow.
 async function screenTranscript(dir, page, base, j) {
   const f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), cur = fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : []
   if (!j.params.transcribe || cur.some(w => !w.screen)) return
-  const step = 0.25, tl = makeTimeline(j.timeline), seen = new Map()
+  const tl = makeTimeline(j.timeline)
   await openPage(page, `${base}render?format=${encodeURIComponent(j.format)}&type=`, j)
-  for (const [v, texts] of await page.evaluate(st => window.sampleTexts(st), step)) {
-    for (const t of texts) {
-      const runs = seen.get(t) ?? seen.set(t, []).get(t), last = runs.at(-1)
-      if (last && v - last[1] <= step * 1.5) last[1] = v + step
-      else runs.push([v, v + step])
+  let lines = (await page.evaluate(() => window.says())).map(x => [x.v0, x.v1, x.w])
+  if (!lines.length) {
+    // each sample's texts, in reading order, are the screen's line; texts coming in one by one, or leaving, keep it
+    // one moment
+    const step = 0.25, runs = []
+    for (const [v, texts] of await page.evaluate(st => window.sampleTexts(st), step)) {
+      const last = runs.at(-1)
+      if (!texts.length) continue
+      if (last && v - last[1] <= step * 1.5 && (texts.every(x => last[2].includes(x)) || last[2].every(x => texts.includes(x)))) {
+        last[1] = v + step
+        if (texts.length > last[2].length) last[2] = texts
+      } else runs.push([v, v + step, texts])
     }
+    // a moment up less than half a second is a passing state (a counter counting), not something to read
+    lines = runs.filter(([a, b]) => b - a >= 0.5).map(([a, b, texts]) => [a, b, texts.join(' · ')])
   }
   const fmt = {}, num = (n, d) => (fmt[d] ??= new Intl.NumberFormat(j.style.creator.lang, { minimumFractionDigits: d, maximumFractionDigits: d })).format(n)
   const end = p.source?.duration ?? j.duration
-  // a text up less than half a second is a passing state (a counter counting), not something to read
-  const words = [...seen].flatMap(([w, runs]) => runs.filter(([a, b]) => b - a >= 0.5).map(([a, b]) => ({ w, t0: ms(tl.toSource(a)), t1: ms(tl.toSource(Math.min(b, j.duration))), screen: true })))
+  // the end of a line just before a cut is the cut's start, not its end (both are the same video instant)
+  const words = lines.map(([a, b, w]) => ({ w, t0: ms(tl.toSource(a)), t1: ms(tl.toSource(Math.min(b, j.duration) - 0.001) + 0.001), screen: true }))
     .concat((j.actors ?? []).flatMap(a => shownTexts(a, j.style.creator, num).map(w => ({ w, t0: a.from ?? 0, t1: a.to ?? end, screen: true }))))
     .sort((a, b) => a.t0 - b.t0)
   writeJson(f('assets/words.json'), words)
-  fs.writeFileSync(f('files/words.md'), `# Transcript: ${p.slug}\n\nNo speech: this is the video's on-screen content, in order (SOURCE seconds).\n\n` +
+  fs.writeFileSync(f('files/words.md'), `# Transcript: ${p.slug}\n\nNo speech: what the video shows, moment by moment (SOURCE seconds).\n\n` +
     words.map(w => `- **${clock(w.t0)} → ${clock(w.t1)}** ${w.w}`).join('\n') + '\n')
 }
 
@@ -351,6 +361,11 @@ function buildJob(dir, format, type) {
     const tl = makeTimeline(readJson(f('assets/timeline.json')), edit.cut)
     timeline = { speed: tl.speed, segments: tl.segments }
     duration = tl.duration
+  } else if (duration > 0 && edit.cut?.length) {
+    // no source: the scene's own time plays the source's part, and a cut removes a range of it
+    const tl = makeTimeline({ fps: p.fps, speed: 1, segments: [[0, duration]] }, edit.cut)
+    timeline = { speed: 1, segments: tl.segments }
+    duration = tl.duration
   }
   if (!(duration > 0)) throw new Error('set "duration" (seconds) in source/edit.json: without a source video, it gives the length')
   const frames = src && fs.existsSync(f('frames/cam')) ? fs.readdirSync(f('frames/cam')).filter(x => x.endsWith('.jpg')).length : 0
@@ -361,7 +376,7 @@ function buildJob(dir, format, type) {
     timeline, source: src && { width: src.width, height: src.height, fps: src.fps, frames },
     words: params.transcribe && fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : [],
     faces: params.face_framing && fs.existsSync(f('assets/frames.json')) ? readJson(f('assets/frames.json')).faces : null,
-    style, params, media: readMedia(dir), actors: loadActors(dir), scene: { css: fs.existsSync(css), mtime: Math.round(mtime) },
+    style, params, media: readMedia(dir), actors: loadActors(dir), scene: { css: fs.existsSync(css), mtime: Math.round(mtime), duration: src ? null : edit.duration },
     encoder: type ? encoderFor(p, type, size) : null,
     // motion blur: sub-frames averaged per frame (render --blur N), 1 = sharp
     blur: type ? Math.max(1, Math.min(16, Math.round(+opt.blur || 1))) : 1,
@@ -390,8 +405,10 @@ async function playwright() {
 
 // Headless system Chrome (it has the H.264 encoder Chromium lacks) with the HTML-in-canvas API, no frame rate cap;
 // one context per worker, pages served by a private server that also takes their output.
+const needChrome = () => process.platform === 'darwin' && !fs.existsSync('/Applications/Google Chrome.app') && die('Google Chrome is needed in /Applications: https://www.google.com/chrome/')
+
 async function withChrome(slug, n, fn) {
-  if (process.platform === 'darwin' && !fs.existsSync('/Applications/Google Chrome.app')) die('Google Chrome is needed in /Applications: https://www.google.com/chrome/')
+  needChrome()
   const { chromium } = await playwright()
   const server = http.createServer((req, res) => handle(req, res, true).catch(e => reply(res, 500, { error: e.message })))
   await new Promise(ok => server.listen(0, '127.0.0.1', ok))
@@ -480,7 +497,8 @@ function init(slug) {
   // frozen copies: a later change of style or pack never touches this project
   // the whole style folder: style.json, fonts/, the avatar… (their paths in style.json are relative to it, then to source/)
   const style = path.join(HOME, '.style')
-  if (fs.existsSync(path.join(style, 'style.json'))) fs.cpSync(style, path.join(dir, 'source'), { recursive: true })
+  // (not site/, the screenshots of the brand's site: they stay in .style/)
+  if (fs.existsSync(path.join(style, 'style.json'))) fs.cpSync(style, path.join(dir, 'source'), { recursive: true, filter: f => f !== path.join(style, 'site') })
   else { writeJson(path.join(dir, 'source/style.json'), {}); console.warn(`warning: no style yet (${style}/style.json): run the setup interview; engine defaults used`) }
   fs.writeFileSync(path.join(dir, 'source/STYLE.md'), styleMd(readJson(path.join(dir, 'source/style.json'))))
   writeJson(path.join(dir, 'source/rules.json'), { active, params, overrides: {} })
@@ -939,17 +957,16 @@ A project keeps the copy taken at its init (source/style.json, source/STYLE.md).
 - CTA: ${c.cta.sub || '-'} · button "${c.cta.button}", then "${c.cta.done}"${c.avatar ? ` · avatar ${c.avatar}` : ''}
 
 ## Look
-- Palette: ${Object.entries(l.palette).map(([k, v]) => `${k} \`${v}\``).join(', ')} (the scene's \`var(--${Object.keys(l.palette)[0]})\`…)
-- Font: ${l.font}${Object.keys(l.fonts).length ? ` (files: ${Object.values(l.fonts).join(', ')})` : ''}
-- Paper: grain ${l.paper.grain}, relief ${l.paper.relief}, depth ${l.paper.depth}
-- Captions: ${l.captions.size} px
+- Palette: ${Object.entries(l.palette).map(([k, v]) => `${k} \`${v}\``).join(', ')} (each one is \`var(--name)\` in the scene)
+- Font: ${l.font}${Object.keys(l.fonts).length ? ` (files: ${Object.entries(l.fonts).map(([f, file]) => `${f} ${file}`).join(', ')})` : ''}
+${l.symbols.length ? `- Symbols of the brand:\n${l.symbols.map(x => `  - ${x}\n`).join('')}` : ''}${raw?.look?.paper ? `- Paper look: grain ${l.paper.grain}, relief ${l.paper.relief}, depth ${l.paper.depth}\n` : ''}- Captions: ${l.captions.size} px
 
 ## Sound
 - Under a voice: music bed at ${snd.music} LUFS, ×${snd.duck} while it speaks; effects at ${snd.sfx} LUFS
 - Without a voice, source/sound.py sets its own balance; every mix ends at -14 LUFS
 - The mood and the sound identity are in the notes
 
-## Notes (follow them in every video)
+## Notes: what the user asked for, in every video
 ${s.notes.length ? s.notes.map(n => `- ${n}`).join('\n') : '- (none yet)'}
 `
 }
@@ -988,6 +1005,130 @@ function probeSource(src) {
   console.log(JSON.stringify({ ...s, format }))
 }
 
+// runs in the page: what it paints, weighted by how much of it, and every inline SVG with its colors computed
+// (classes and currentColor do not survive in a file of its own)
+async function seeLook() {
+  const hex = c => {
+    const m = c?.match(/[\d.]+/g)
+    return m?.length >= 3 && (m[3] === undefined || +m[3] >= 0.5) ? '#' + m.slice(0, 3).map(x => Math.round(+x).toString(16).padStart(2, '0')).join('') : null
+  }
+  const add = (m, k, w) => k && (m[k] = (m[k] ?? 0) + w)
+  const share = m => {
+    const all = Object.values(m).reduce((a, b) => a + b, 0)
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 16).map(([k, v]) => [k, Math.round((1000 * v) / all) / 10])
+  }
+  const H = document.documentElement.scrollHeight, bg = {}, text = {}, shapes = {}, fonts = {}, images = []
+  // the backgrounds as seen: a grid of points on every screen, each one taking the first painted box under it
+  const page = hex(getComputedStyle(document.body).backgroundColor) ?? hex(getComputedStyle(document.documentElement).backgroundColor) ?? '#ffffff'
+  const under = e => {
+    for (; e; e = e.parentElement) {
+      const cs = getComputedStyle(e)
+      if (/^(IMG|VIDEO|CANVAS|PICTURE)$/.test(e.tagName) || /url\(/.test(cs.backgroundImage)) return 'image'
+      const c = hex(cs.backgroundColor) ?? hex(cs.backgroundImage.match(/rgba?\([^)]+\)/)?.[0])
+      if (c) return c
+    }
+    return page
+  }
+  for (let y = 0; y < H; y += innerHeight) {
+    scrollTo(0, y)
+    await new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(ok)))
+    for (let i = 0; i < 24; i++) for (let j = 0; j < 15; j++) add(bg, under(document.elementFromPoint(((i + 0.5) * innerWidth) / 24, ((j + 0.5) * innerHeight) / 15)), 1)
+  }
+  scrollTo(0, 0)
+  for (const el of document.body.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el), area = r.width * r.height
+    if (!area || cs.visibility === 'hidden' || +cs.opacity < 0.1) continue
+    if (el instanceof SVGElement) {
+      if (el instanceof SVGGeometryElement) add(shapes, hex(cs.fill), 1), add(shapes, hex(cs.stroke), 1)
+      continue
+    }
+    const chars = [...el.childNodes].reduce((n, x) => n + (x.nodeType === 3 ? x.textContent.trim().length : 0), 0)
+    if (chars) add(text, hex(cs.color), chars), add(fonts, `${cs.fontFamily.split(',')[0].replace(/["']/g, '').trim()} ${cs.fontWeight}`, chars)
+    const img = el.tagName === 'IMG' ? el.currentSrc : cs.backgroundImage.match(/url\("?([^")]+)"?\)/)?.[1]
+    if (img && area > 40000) images.push({ src: new URL(img, location.href).href, w: Math.round(r.width), h: Math.round(r.height) })
+  }
+  const svgs = []
+  for (const s of document.querySelectorAll('svg')) {
+    const r = s.getBoundingClientRect()
+    if (r.width < 8 || r.height < 8 || s.parentElement.closest('svg')) continue
+    const c = s.cloneNode(true), from = [...s.querySelectorAll('*')], to = [...c.querySelectorAll('*')]
+    from.forEach((e, i) => {
+      if (!(e instanceof SVGGeometryElement || e.tagName === 'text')) return
+      const cs = getComputedStyle(e)
+      to[i].setAttribute('style', `fill:${cs.fill};stroke:${cs.stroke};stroke-width:${cs.strokeWidth};opacity:${cs.opacity}`)
+    })
+    // a sprite: <use> points at a symbol elsewhere in the page
+    for (const u of c.querySelectorAll('use')) {
+      const ref = u.getAttribute('href') ?? u.getAttribute('xlink:href'), t = ref?.startsWith('#') && document.querySelector(ref)
+      if (t && !c.querySelector(ref)) c.prepend(t.cloneNode(true))
+    }
+    c.querySelectorAll('script').forEach(e => e.remove())
+    for (const e of [c, ...c.querySelectorAll('*')]) for (const a of [...e.attributes]) if (/^on/i.test(a.name)) e.removeAttribute(a.name)
+    c.removeAttribute('class')
+    c.removeAttribute('style')
+    c.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    if (!c.getAttribute('viewBox')) c.setAttribute('viewBox', `0 0 ${r.width} ${r.height}`)
+    c.setAttribute('width', Math.round(r.width))
+    c.setAttribute('height', Math.round(r.height))
+    if (!svgs.some(x => x.html === c.outerHTML)) svgs.push({ html: c.outerHTML, w: Math.round(r.width), h: Math.round(r.height) })
+  }
+  return { title: document.title, height: H, backgrounds: share(bg), text: share(text), shapes: share(shapes), fonts: share(fonts), images: images.slice(0, 30), svgs: svgs.slice(0, 80) }
+}
+
+// a site's look, seen rather than read: one screenshot per screen, the colors it paints (backgrounds by area, text by
+// characters, SVG shapes by count), its fonts, and its inline SVGs as files plus svgs.jpg to see them. Into .style/site/
+// (the style's brand), or the project's assets/site/ with -p
+async function site(url) {
+  if (!/^(https?|file):\/\//.test(url ?? '')) die('usage: site <url> [-p <slug>]')
+  const dir = opt.project ? path.join(projectDir(), 'assets/site') : path.join(HOME, '.style/site')
+  needChrome()
+  const { chromium } = await playwright()
+  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+    await page.goto(url, { waitUntil: 'load', timeout: 60000 })
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
+    // a cookie banner hides the first screen
+    await page.evaluate(() => [...document.querySelectorAll('button, a, [role=button]')]
+      .find(b => /^(tout accepter|accepter( tout)?|accept( all)?|j'accepte|i agree|agree|ok|got it)$/i.test(b.textContent.trim().replace(/^[^\p{L}]+/u, '')))?.click())
+    // one scroll down the page: lazy images load and scroll animations play
+    await page.evaluate(async () => {
+      for (let y = 0; y < document.documentElement.scrollHeight; y += 450) scrollTo(0, y), await new Promise(ok => setTimeout(ok, 150))
+      scrollTo(0, 0)
+    })
+    await page.waitForTimeout(800)
+    const seen = await page.evaluate(seeLook)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const screens = [], end = Math.min(seen.height, 900 * 12)
+    for (let y = 0; y < end; y += 900) {
+      screens.push(`screen-${String(screens.length + 1).padStart(2, '0')}.jpg`)
+      await page.screenshot({ path: path.join(dir, screens.at(-1)), type: 'jpeg', quality: 80, fullPage: true, clip: { x: 0, y, width: 1440, height: Math.min(900, end - y) } })
+    }
+    const svgs = seen.svgs.map((s, i) => {
+      const file = `svg-${String(i + 1).padStart(2, '0')}.svg`
+      fs.writeFileSync(path.join(dir, file), s.html)
+      return { file, w: s.w, h: s.h }
+    })
+    if (svgs.length) {
+      // on grey, so white and black marks both show
+      await page.setContent(`<!doctype html><style>body{margin:0;padding:8px;display:flex;flex-wrap:wrap;gap:8px;font:600 12px sans-serif}
+        div{position:relative;width:168px;height:128px;background:#808080}div:nth-child(even){background:#9a9a9a}
+        svg{position:absolute;left:14px;top:12px;width:140px;height:92px}b{position:absolute;left:5px;bottom:3px;color:#fff}</style>
+        ${seen.svgs.map((s, i) => `<div>${s.html}<b>${String(i + 1).padStart(2, '0')}</b></div>`).join('')}`)
+      await page.screenshot({ path: path.join(dir, 'svgs.jpg'), type: 'jpeg', quality: 85, fullPage: true })
+    }
+    const { title, backgrounds, text, shapes, fonts, images } = seen
+    writeJson(path.join(dir, 'site.json'), { url, title, screens, backgrounds, text, shapes, fonts, images, svgs })
+    const top = l => l.slice(0, 8).map(([k, v]) => `${k} ${v}%`).join(' · ') || '-'
+    console.log(`site: ${dir}\n${title}\nscreens: ${screens.length} (${screens[0]}…), svgs: ${svgs.length}${svgs.length ? ' (svgs.jpg, svg-01.svg…)' : ''}`)
+    console.log(`backgrounds: ${top(backgrounds)}\ntext: ${top(text)}\nshapes: ${top(shapes)}\nfonts: ${top(fonts)}`)
+    console.log('Read the screenshots and svgs.jpg: the look is in them, these numbers only rank its colors.')
+  } finally {
+    await browser.close()
+  }
+}
+
 // the tools the engine needs, with the command that installs a missing one; the projects folder and its style
 function doctor() {
   const has = bin => { try { return !!out('which', [bin]).trim() } catch { return false } }
@@ -1019,6 +1160,6 @@ function rules(sub, arg) {
   } else die('usage: rules [list] | rules use <a,b|none>')
 }
 
-const commands = { doctor, probe: () => probeSource(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs, style: () => style(...args), serve, rules: () => rules(...args) }
+const commands = { doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs, style: () => style(...args), serve, rules: () => rules(...args) }
 if (!commands[cmd]) die(`usage: video.mjs <${Object.keys(commands).join(' | ')}> [--project <slug>]`)
 await commands[cmd]()

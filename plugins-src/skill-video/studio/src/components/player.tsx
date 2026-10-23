@@ -193,7 +193,7 @@ export function Player({
 // a nice tick step for ~10 to 20 ticks
 const step = (d: number) => [1, 2, 5, 10, 15, 30, 60, 120, 300].find((s) => d / s <= 20) ?? 600
 
-// Commented ranges ride above the track; a click seeks, a drag selects a range.
+// Commented ranges ride above the track; a click seeks, a drag selects a range. Grabbing the playhead itself drags it.
 function Timeline({
   time,
   duration,
@@ -210,7 +210,8 @@ function Timeline({
   onRange: (r: Range | null) => void
 }) {
   const track = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ x: number; t: number } | null>(null)
+  const drag = useRef<{ x: number; t: number; scrub: boolean } | null>(null)
+  const [scrubbing, setScrubbing] = useState(false)
   const pct = (t: number) => `${(duration ? Math.min(Math.max(t / duration, 0), 1) : 0) * 100}%`
   const at = (x: number) => {
     const r = track.current!.getBoundingClientRect()
@@ -222,13 +223,16 @@ function Timeline({
   return (
     <div
       ref={track}
-      className="relative h-11 cursor-pointer touch-none select-none"
+      className={cn("relative h-11 touch-none select-none", scrubbing ? "cursor-grabbing" : "cursor-pointer")}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId)
-        drag.current = { x: e.clientX, t: at(e.clientX) }
+        const scrub = !!(e.target as HTMLElement).closest("[data-playhead]")
+        drag.current = { x: e.clientX, t: at(e.clientX), scrub }
+        setScrubbing(scrub)
       }}
       onPointerMove={(e) => {
         const d = drag.current
+        if (d?.scrub) return onSeek(at(e.clientX))
         if (!d || Math.abs(e.clientX - d.x) < 4) return
         const t = at(e.clientX)
         onRange({ t0: Math.min(d.t, t), t1: Math.max(d.t, t) })
@@ -236,7 +240,8 @@ function Timeline({
       onPointerUp={(e) => {
         const d = drag.current
         drag.current = null
-        if (d && Math.abs(e.clientX - d.x) < 4) {
+        setScrubbing(false)
+        if (d && !d.scrub && Math.abs(e.clientX - d.x) < 4) {
           onRange(null)
           onSeek(at(e.clientX))
         }
@@ -260,8 +265,13 @@ function Timeline({
           style={{ left: pct(range.t0), width: pct(range.t1 - range.t0) }}
         />
       )}
-      <div className="absolute top-4 flex -translate-x-1/2 flex-col items-center" style={{ left: pct(time) }}>
-        <span className={cn("size-3 rounded-full bg-foreground", inComment && "bg-highlight")} />
+      {/* the hit area is wider than the knob, so it is easy to grab */}
+      <div
+        data-playhead
+        className={cn("group/playhead absolute top-3 flex -translate-x-1/2 flex-col items-center px-2 pt-1", scrubbing ? "cursor-grabbing" : "cursor-grab")}
+        style={{ left: pct(time) }}
+      >
+        <span className={cn("size-3 rounded-full bg-foreground transition-transform group-hover/playhead:scale-125", scrubbing && "scale-125", inComment && "bg-highlight")} />
         <span className="h-4 w-0.5 bg-foreground" />
       </div>
     </div>

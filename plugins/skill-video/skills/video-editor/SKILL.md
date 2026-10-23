@@ -52,9 +52,18 @@ The first word of `$ARGUMENTS` picks the mode. Anything else is a new video.
 
 Read `references/style-schema.md`. The style belongs to this project folder.
 
-When the request is about a brand, a product or a site, take its identity from there first: palette, fonts, logo,
-tone and claims. Propose it in one confirmation instead of asking from scratch. Otherwise, interview the user briefly
-in their language, using AskUserQuestion where the answers are choices. Cover:
+When the request is about a brand, a product or a site, take its identity from there first, and look at it rather
+than reading it. Run `video.mjs site <url>`: it saves one screenshot per screen of the page, the colors it paints
+ranked by surface, its fonts and every inline SVG into `.style/site/`. Read every screenshot and `svgs.jpg`, then
+propose in one confirmation:
+- the whole palette the site uses, each color named by its role: `paper` and `ink`, plus `coal` for its dark
+  sections, `accent-dark`… (not five colors picked out of it);
+- its fonts and logo;
+- its **symbols**, the graphic devices that come back: a pictogram, the logo's shape, a pattern, how it writes its
+  buttons;
+- its tone and claims.
+
+Otherwise, interview the user briefly in their language, using AskUserQuestion where the answers are choices. Cover:
 - name and handle;
 - language;
 - niche and audience;
@@ -63,9 +72,12 @@ in their language, using AskUserQuestion where the answers are choices. Cover:
 - font;
 - the mood of the music.
 
-Then write everything with one `video.mjs style set a.b=value …`, plus one `style note "…"` per strong preference
-(the music's mood is a note). Show the resulting STYLE.md. The style says who the user is and how their videos look and sound. How to
-edit (pace, cuts, captions) belongs to the rule packs, not here.
+Then write everything with one `video.mjs style set a.b=value …`. Add a `style note "…"` only for a preference the
+user stated, such as the music's mood when they give one. Show the resulting STYLE.md.
+
+The style is material: who the user is, and the brand's colors, type and symbols. Every video follows its notes, so
+a creative direction you chose never goes there. How a video looks is invented in its own Direction (step 6), and how
+to edit (pace, cuts, captions) belongs to the rule packs.
 
 ## A new video
 
@@ -96,8 +108,8 @@ Read the encoders this machine has with `video.mjs codecs`.
   They become `--renders 2160p,1440p,1080p,720p`: the short side of the frame, so a 9:16 in 1080p is 1080×1920.
   - With a source, add « (d'origine) » to the one that matches its short side.
   - `480p` and the other resolutions of `renders.json` go through Other.
-- **Règles** (header `Règles`, **single choice**: one pack per video): the packs from `video.mjs rules list`,
-  with their descriptions, plus « Aucune règle ».
+- **Règles** (header `Règles`, **single choice**: one pack per video): « Aucune règle (recommandé) » first, the
+  default, then the packs from `video.mjs rules list` with their descriptions.
   - Beyond three packs, the user types the others through Other.
 
 **Call 2 (single choice):**
@@ -150,17 +162,31 @@ Then continue.
 Read `references/scene-format.md`, the project's `source/STYLE.md` (its notes included) and the **active pack**
 (`rules list` gives its file; its params are in `source/rules.json`).
 
+The style gives you material: the brand's palette, type and symbols, and what the user asked for in its notes. The
+look of this video is yours to invent here. The other videos of the projects folder are not a reference: do not open
+them unless the user points at one, and never define this video against another one.
+
 Then research what the video shows:
-- **The brand or product**: its colors, fonts, logo (take the SVG from the site when there is one), claims and
+- **The brand, seen.** Read the screenshots of its site and `svgs.jpg`: `.style/site/`, or run
+  `video.mjs site <url> -p <slug>` for another site or when they are missing. Look for the colors of its sections
+  and how it alternates them, its pictograms and recurring shapes, and the details of its interface. Copy the SVGs
+  you use into `assets/`, and fetch with `curl -L` the images that `site.json` lists. Then read its claims and
   numbers.
 - **Any inspiration video given**: download it with `uvx yt-dlp`, turn it into a contact sheet with ffmpeg
-  (`fps=2,scale=320:-1,tile=6x8`), and study its rhythm, transitions, typography and colors.
+  (`fps=2,scale=320:-1,tile=6x8`), and study its rhythm, transitions, scale and typography. Take its energy and its
+  techniques, not its motifs: translate its shapes into the brand's own (its dots become the brand's pictogram).
 - **The visuals**: fetch logos, screenshots and images into `assets/` with `curl -L`. The render is offline.
 
 Write a **Direction** section in About.md before writing any code:
 - the concept in one line;
-- sequence by sequence: the time range, what it says, its visual idea, its field (light, dark or accent) and the
-  transition into the next one;
+- **the brand's motif**: one graphic element of the brand (its pictogram, the logo's shape, a pattern of its site)
+  that runs through the whole video, as bullets, particles, masks, transitions and diagrams. A viewer recognizes the
+  brand with the logo hidden;
+- **the color story**: which field (light, dark or accent) carries which part of the story, and on which turn it
+  flips. The fields change on the story's turns, not at every sequence: for example the problem on a light field, the
+  answer on a dark one, the promise on the accent;
+- sequence by sequence: the time range, what it says, its visual idea, its field and the transition into the next
+  one;
 - the type scale, from display type to labels;
 - the textures and the motion language (eases, speeds);
 - the music's tempo, with the big moments placed on its beats.
@@ -168,8 +194,8 @@ Write a **Direction** section in About.md before writing any code:
 The bar is a motion designer's showreel, not a slide deck. What makes the difference:
 - **Fill the frame.** No frame is mostly empty. Display type is at the scale of the frame and may overflow it. A
   background is never a blank page: use fields of color, patterns, repeated type, grids or textures.
-- **Contrast between sequences.** Alternate light, dark and accent fields, scales and densities. Each sequence has
-  its own visual idea.
+- **Contrast between sequences.** Change the scale and the density from one sequence to the next, and give each its
+  own visual idea. The fields follow the color story.
 - **Show, do not caption.** Every idea becomes something to see: the product's interface, data that moves (charts,
   counters, maps), objects, diagrams, the real logos.
 - **Design the transitions.** Use masks, wipes, a zoom through a letter, a shape that grows to fill the frame, match
@@ -178,7 +204,7 @@ The bar is a motion designer's showreel, not a slide deck. What makes the differ
   whole sequences and parallax layers. Nothing stays still for more than about 1.5 s, and the cuts fall on the beats.
 - **Polish.** A grain or texture over everything, steady margins, and sizes readable on a phone.
 
-The style and the pack decide the look and the pace; the bar above decides the ambition.
+The style gives the material, the pack the pace, the Direction the look, and the bar above the ambition.
 
 ### 7. Write the main format
 
@@ -187,6 +213,8 @@ format only** (the first one). Give it the whole frame: the other formats come i
 frames at once leads to small, safe layouts.
 - Anchor every moment on the speech with `at(source seconds)`, so cuts never break the sync.
 - Put a `cue(kind, t, data)` on every event that should be heard, with what the sound needs (`dur`, `x`…).
+- Without speech, declare what the viewer reads with `say(text, from, to)`, one line per moment. It is the
+  transcript the user reviews and quotes in the studio.
 
 ### 8. Review until nothing is left to fix
 
@@ -201,6 +229,8 @@ This is where the quality comes from, so take the time it needs: usually four to
   - sizes unreadable on a phone;
   - timing that drags or rushes;
   - two sequences that look alike;
+  - the brand: next to the site's screenshots, is it recognizable with the logo hidden? Is the motif in most
+    sequences? Do the fields follow the color story?
   - anything below the bar of step 6.
 - **Fix, and look again.**
 
@@ -244,8 +274,8 @@ Update « État » in About.md.
 
 The pasted prompt lists changes, each with an `[id …]`, and names the feedback file `files/reviews/vN.json`.
 Read `references/review-format.md`, and read every attached image. Then handle each id:
-- **CUT**: add `[s0, s1]` (SOURCE seconds) to `cut` in `source/edit.json`. Check in `files/words.md` that the cut
-  falls between words.
+- **CUT**: add `[s0, s1]` to `cut` in `source/edit.json`: SOURCE seconds, or SCENE seconds (the scene's own time)
+  for a video without a source. Check in `files/words.md` that the cut falls between words or moments.
 - **COMMENT**: change the scene at that moment.
   - `[format …]` is the format the user was looking at. Change that format only when the request is about its
     composition (placement, size, framing, what the frame cuts). A change of content, text, numbers, timing or
@@ -287,7 +317,7 @@ the playhead. R reloads it after you edit the scene.
 
 When the user states a lasting preference ("always", "never", "I don't like this kind of…", a variation they
 picked), offer to save it in the right place:
-- **Identity, look or sound**: the style, with `video.mjs style set …` or `style note "…"`.
+- **Identity, look or sound**: the style, with `video.mjs style set …` or `style note "…"`, in the user's words.
 - **How to edit** (pace, cuts, density, what to show): the personal copy of the active pack concerned, in
   `.rules/`. If several packs are active, ask which one.
 
