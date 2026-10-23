@@ -1,0 +1,15 @@
+{
+  "name": "video-editor-engine",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "gsap": "^3.15.0",
+    "playwright-core": "^1.64.1"
+  },
+  "optionalDependencies": {
+    "@mediapipe/tasks-vision": "^1.1.1"
+  }
+}

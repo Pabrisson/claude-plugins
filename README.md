@@ -20,6 +20,7 @@ Marketplace **`pabrisson`** pour Claude Code : un plugin par type de composant e
 | `skill-shadcn` | `shadcn` | `skill-shadcn:shadcn` |
 | `skill-laravel` | `laravel-upgrade` | `skill-laravel:laravel-upgrade` |
 | `skill-find-skills` | `find-skills` | `skill-find-skills:find-skills` |
+| `skill-video` | `video-editor` | `skill-video:video-editor` |
 | `requesty` | Serveur MCP Requesty (`router.requesty.ai`) | outils `mcp__plugin_requesty_requesty__*` |
 | `dbeaver` | Serveur MCP DBeaver (`omnisql-mcp`, lancé via `npx`, indépendant de la version Node active) | outils `mcp__plugin_dbeaver_dbeaver__*` |
 
@@ -38,3 +39,4 @@ claude plugin install command-docs@pabrisson
 - Essayer une modification sans la publier : `claude --plugin-dir plugins/<plugin>` (session seulement, remplace la version installée du même nom).
 - Valider : `claude plugin validate .` (marketplace) ou `claude plugin validate plugins/<plugin>`.
 - Tester un mod : `claude plugin test plugins/mod-hud`.
+- Studio de `skill-video` : après une modification du studio, lancer `npm run build` dans `plugins-src/skill-video/studio/` avant d'incrémenter la version (seul le build, `engine/studio/dist/`, est livré dans le plugin).

@@ -1,0 +1,5 @@
+[
+  { "id": "rem", "type": "card", "from": 1.4, "to": 5.4, "title": "Remotion", "body": "106,3 s · 7 workers", "x": 420, "y": 830, "w": 560, "h": 220, "enter": "left",
+    "formats": { "9:16": { "fit": false, "x": 540, "y": 1380, "w": 760 } } },
+  { "id": "stamp", "type": "stamp", "from": 3, "to": 5.4, "text": "12,5× plus rapide", "x": 1500, "y": 830, "size": 50 }
+]

@@ -1,0 +1,32 @@
+{
+  "2160p": {
+    "description": "4K: YouTube 4K, large screens, archive",
+    "short": 2160,
+    "video_kbps": [45000, 68000],
+    "audio_kbps": 320
+  },
+  "1440p": {
+    "description": "2K (QHD)",
+    "short": 1440,
+    "video_kbps": [16000, 24000],
+    "audio_kbps": 320
+  },
+  "1080p": {
+    "description": "Full HD: YouTube, social networks",
+    "short": 1080,
+    "video_kbps": [8000, 12000],
+    "audio_kbps": 320
+  },
+  "720p": {
+    "description": "HD: websites, light and quick to start",
+    "short": 720,
+    "video_kbps": [5000, 7500],
+    "audio_kbps": 160
+  },
+  "480p": {
+    "description": "SD: previews, messaging",
+    "short": 480,
+    "video_kbps": [2500, 4000],
+    "audio_kbps": 128
+  }
+}

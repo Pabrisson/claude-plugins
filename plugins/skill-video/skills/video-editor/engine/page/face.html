@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>faces</title>
+<!--
+  Opened by `video.mjs prepare` when a pack sets face_framing: MediaPipe's face detector on camera frames.
+  detect(frames, width) → [[frame, cx, cy, size] | null] in source pixels: cy is the eyes' height.
+-->
+<script type="module">
+  import { FaceDetector, FilesetResolver } from './engine/node_modules/@mediapipe/tasks-vision/vision_bundle.mjs'
+
+  try {
+    const vision = await FilesetResolver.forVisionTasks(new URL('engine/node_modules/@mediapipe/tasks-vision/wasm', location.href).href)
+    const detector = await FaceDetector.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: new URL('engine/models/blaze_face_short_range.tflite', location.href).href },
+      runningMode: 'IMAGE',
+      minDetectionConfidence: 0.5,
+    })
+    window.detect = async (frames, width) => {
+      const out = []
+      for (const n of frames) {
+        const bmp = await createImageBitmap(await (await fetch(`project/frames/cam/${String(n).padStart(5, '0')}.jpg`)).blob())
+        const k = width / bmp.width, h = bmp.height, faces = detector.detect(bmp).detections
+        bmp.close()
+        // the largest face wins
+        const f = faces.sort((a, b) => b.boundingBox.width - a.boundingBox.width)[0]
+        if (!f) { out.push(null); continue }
+        const b = f.boundingBox, eyes = f.keypoints.slice(0, 2)
+        // keypoints are normalized, the box is in pixels
+        const cy = eyes.length === 2 ? ((eyes[0].y + eyes[1].y) / 2) * h : b.originY + b.height * 0.4
+        out.push([n, (b.originX + b.width / 2) * k, cy * k, b.height * k])
+      }
+      return out
+    }
+    window.ready = true
+  } catch (e) {
+    window.bootError = e.stack ?? String(e)
+  }
+</script>

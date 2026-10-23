@@ -76,6 +76,11 @@
       "description": "Skill find-skills: discover and install agent skills"
     },
     {
+      "name": "skill-video",
+      "source": "./plugins/skill-video",
+      "description": "Skill video-editor: edit a video from a source or create one from scratch in motion design, rendered locally in every format, with captions, synthesized music and sound, a review studio, editing rule packs and a style that learns"
+    },
+    {
       "name": "requesty",
       "source": "./plugins/requesty",
       "description": "MCP server Requesty (router.requesty.ai): Sentry tools through the Requesty router"

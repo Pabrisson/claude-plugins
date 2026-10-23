@@ -1,0 +1,142 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>render</title>
+<style>body { margin: 0; background: #000; }</style>
+<!--
+  Opened by video.mjs in headless Chrome (one page per worker, flag CanvasDrawElement). The scene's DOM lives inside
+  a layoutsubtree canvas; each frame: seek, one paint, drawElementImage, then WebCodecs. Results go to out?file=…
+-->
+<canvas id="host" layoutsubtree></canvas>
+<script type="module">
+  import { boot } from './engine/lib/page.js'
+
+  try {
+    const q = new URLSearchParams(location.search), host = document.getElementById('host')
+    const s = await boot(host, { format: q.get('format'), type: q.get('type') ?? '', variant: q.get('variant') ?? 0 })
+    const { job } = s, [W, H] = job.size, ctx = host.getContext('2d')
+    host.width = W
+    host.height = H
+    host.style.cssText = `width:${job.logical[0]}px;height:${job.logical[1]}px`
+    // after the frame's paint: a rAF callback runs before it, a task queued from there runs after (a bare rAF captures
+    // the previous paint); a MessageChannel task, as nested timers get clamped to 4 ms
+    const task = () => new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = r; c.port2.postMessage(0) })
+    const paint = () => new Promise(r => requestAnimationFrame(r)).then(task)
+    // the stage drawn at the output size (the API maps CSS pixels to the canvas bitmap)
+    async function capture(v) {
+      await s.seek(v)
+      await paint()
+      ctx.clearRect(0, 0, W, H)
+      ctx.drawElementImage(s.stage, 0, 0)
+    }
+    // motion blur: job.blur sub-frames over a 180° shutter (half a frame) around v, averaged as they come
+    const acc = new OffscreenCanvas(W, H), actx = acc.getContext('2d'), shutter = 0.5 / job.fps
+    async function frameAt(v) {
+      if (job.blur < 2) return capture(v).then(() => host)
+      for (let k = 0; k < job.blur; k++) {
+        await capture(Math.min(Math.max(v + shutter * ((k + 0.5) / job.blur - 0.5), 0), job.duration))
+        actx.globalCompositeOperation = k ? 'source-over' : 'copy'
+        actx.globalAlpha = 1 / (k + 1)
+        actx.drawImage(host, 0, 0)
+      }
+      return acc
+    }
+    const post = async (file, body) => {
+      const r = await fetch(`out?file=${encodeURIComponent(file)}`, { method: 'POST', body })
+      if (!r.ok) throw new Error(`could not save ${file}: ${(await r.json()).error}`)
+    }
+
+    // hardware first, then whatever this Chrome has
+    let config
+    async function configure() {
+      if (config) return config
+      const e = job.encoder, base = { codec: e.codec, width: W, height: H, bitrate: e.bitrate, framerate: job.fps, latencyMode: 'quality', bitrateMode: 'variable' }
+      if (e.family === 'h264') base.avc = { format: 'annexb' }
+      if (e.family === 'hevc') base.hevc = { format: 'annexb' }
+      for (const hardwareAcceleration of ['prefer-hardware', 'no-preference']) {
+        const c = { ...base, hardwareAcceleration }
+        if ((await VideoEncoder.isConfigSupported(c)).supported) return (config = c)
+      }
+      throw new Error(`this Chrome cannot encode ${e.codec} at ${W}×${H}`)
+    }
+
+    // Annex B streams (H.264, HEVC) join by concatenation; VP9 and AV1 frames get IVF frame headers
+    window.renderChunk = async (a, b, file) => {
+      const cfg = await configure(), parts = [], ivf = !cfg.avc && !cfg.hevc
+      let failed
+      const enc = new VideoEncoder({
+        output: chunk => {
+          const data = new Uint8Array(chunk.byteLength)
+          chunk.copyTo(data)
+          if (ivf) {
+            const head = new DataView(new ArrayBuffer(12))
+            head.setUint32(0, data.length, true)
+            head.setBigUint64(4, BigInt(Math.round((chunk.timestamp * job.fps) / 1e6)), true)
+            parts.push(head.buffer)
+          }
+          parts.push(data)
+        },
+        error: e => (failed = e),
+      })
+      enc.configure(cfg)
+      const fps = job.fps, gop = job.encoder.gop
+      for (let i = a; i < b; i++) {
+        const frame = new VideoFrame(await frameAt(i / fps), { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) })
+        enc.encode(frame, { keyFrame: (i - a) % gop === 0 })
+        frame.close()
+        if (failed) throw failed
+        while (enc.encodeQueueSize > 6) await task()
+      }
+      await enc.flush()
+      enc.close()
+      if (failed) throw failed
+      await post(file, new Blob(parts))
+      return cfg.hardwareAcceleration
+    }
+
+    // stills plus one contact sheet with their labels
+    window.renderStills = async (shots, contact) => {
+      const thumbs = []
+      for (const shot of shots) {
+        // an image already rendered by another page load (variants): only goes on the sheet
+        if (shot.src) {
+          thumbs.push(await createImageBitmap(await (await fetch(shot.src)).blob()))
+          continue
+        }
+        await capture(shot.v)
+        await post(shot.file, await new Promise(r => host.toBlob(r, 'image/jpeg', 0.9)))
+        thumbs.push(await createImageBitmap(host))
+      }
+      if (!contact) return
+      const cols = Math.ceil(Math.sqrt((shots.length * H) / W / 1.4)), rows = Math.ceil(shots.length / cols)
+      const tw = W >= H ? 480 : 300, th = Math.round((tw * H) / W), gap = 12, bar = 34
+      const sheet = new OffscreenCanvas(cols * (tw + gap) + gap, rows * (th + bar + gap) + gap), sc = sheet.getContext('2d')
+      sc.fillStyle = '#18181b'
+      sc.fillRect(0, 0, sheet.width, sheet.height)
+      sc.font = '600 18px Inter, sans-serif'
+      sc.textBaseline = 'middle'
+      thumbs.forEach((t, i) => {
+        const x = gap + (i % cols) * (tw + gap), y = gap + Math.floor(i / cols) * (th + bar + gap)
+        sc.drawImage(t, x, y, tw, th)
+        sc.fillStyle = '#e4e4e7'
+        sc.fillText(shots[i].label, x + 4, y + th + bar / 2)
+        t.close()
+      })
+      await post(contact, await sheet.convertToBlob({ type: 'image/jpeg', quality: 0.88 }))
+    }
+
+    // the on-screen texts every `step` seconds, for the transcript of a video without speech
+    window.sampleTexts = async step => {
+      const out = []
+      for (let v = 0; v < job.duration; v += step) {
+        await s.seek(v)
+        out.push([v, s.texts()])
+      }
+      return out
+    }
+    window.beats = () => s.beats()
+    window.cues = () => s.cues()
+    window.ready = true
+  } catch (e) {
+    window.bootError = e.stack ?? String(e)
+  }
+</script>
