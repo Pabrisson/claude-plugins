@@ -273,7 +273,8 @@ Update « État » in About.md.
 ## apply this feedback
 
 The pasted prompt lists changes, each with an `[id …]`, and names the feedback file `files/reviews/vN.json`.
-Read `references/review-format.md`, and read every attached image. Then handle each id:
+Read `references/review-format.md`, and read every attached image: its ratio says which format it shows, or the
+shape of a reference. Then handle each id:
 - **CUT**: add `[s0, s1]` to `cut` in `source/edit.json`: SOURCE seconds, or SCENE seconds (the scene's own time)
   for a video without a source. Check in `files/words.md` that the cut falls between words or moments.
 - **COMMENT**: change the scene at that moment.
@@ -281,6 +282,13 @@ Read `references/review-format.md`, and read every attached image. Then handle e
     composition (placement, size, framing, what the frame cuts). A change of content, text, numbers, timing or
     sound applies to every format.
   - Change only what is asked and keep the rest identical: the user has already approved it.
+- **Sound:** lines say what in the sound the comment is about.
+  - A track (`music`, `fx`) is that bus of `source/sound.py` at that moment: change its arrangement or its level there.
+    The `voice` track is the voice itself: its level in the style, or a cut.
+  - `every "<kind>"` is the sound `sound.py` designs for that kind: change it, every cue of the kind follows.
+  - One cue is a `cue()` of the scene. To change its sound only, give it its own data in the scene and let `sound.py`
+    read it. Move or remove the `cue()` when its timing is the problem.
+  - A change in `sound.py` alone needs no render: `audio`, then `final`.
 - In the feedback file, set `"resolved": true` and write one sentence in `reply` saying what you changed.
 
 Then run `stills` if the change is visual, then `render` (with the project's `--blur`) and `final`. Update « État » in About.md and tell the

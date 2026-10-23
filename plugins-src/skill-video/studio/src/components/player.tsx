@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react"
 import {
+  MaximizeIcon,
   PauseIcon,
   PenLineIcon,
   PlayIcon,
@@ -37,6 +38,9 @@ export function useVideoTime(video: RefObject<HTMLVideoElement | null>) {
 
 export const toggle = (v: HTMLVideoElement | null) =>
   v && (v.paused ? v.play() : v.pause())
+// the video alone on the screen; Esc, F or a second call come back
+export const fullscreen = (v: HTMLVideoElement | null) =>
+  document.fullscreenElement ? document.exitFullscreen() : v?.requestFullscreen()
 
 const RATES = [1, 2]
 
@@ -184,6 +188,14 @@ export function Player({
           >
             {muted ? <VolumeXIcon /> : <Volume2Icon />}
           </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Full screen" onClick={() => fullscreen(video.current)}>
+                <MaximizeIcon />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Full screen (F)</TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>

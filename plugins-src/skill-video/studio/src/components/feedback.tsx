@@ -1,9 +1,12 @@
 import { useState, type RefObject } from "react"
 import {
+  AudioWaveformIcon,
   CheckIcon,
   ChevronDownIcon,
   ClockIcon,
   MessageSquareTextIcon,
+  MicIcon,
+  MusicIcon,
   PencilIcon,
   RepeatIcon,
   ScissorsIcon,
@@ -31,7 +34,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { clock, minutes, when, type Comment, type Kind, type Range } from "@/lib/studio"
+import { clock, minutes, soundColor, soundLabel, when, type Comment, type Image, type Kind, type Range, type SoundRef } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 type Filter = "open" | "resolved" | "all"
@@ -47,6 +50,37 @@ function KindBadge({ type }: { type: Kind }) {
       <Icon data-icon="inline-start" />
       {label}
     </Badge>
+  )
+}
+
+function SoundBadge({ s, onRemove }: { s: SoundRef; onRemove?: () => void }) {
+  const Icon = s === "voice" ? MicIcon : s === "music" ? MusicIcon : AudioWaveformIcon, color = soundColor(s)
+  return (
+    <Badge
+      variant="outline"
+      className={cn("h-6 rounded-md font-mono font-normal", onRemove && "pr-0.5")}
+      style={{ borderColor: `color-mix(in oklch, ${color} 45%, transparent)`, background: `color-mix(in oklch, ${color} 14%, transparent)` }}
+    >
+      <Icon data-icon="inline-start" style={{ color }} />
+      {soundLabel(s)}
+      {onRemove && (
+        <Button variant="ghost" size="icon-xs" className="size-5" aria-label="Remove the sound" onClick={onRemove}>
+          <XIcon />
+        </Button>
+      )}
+    </Badge>
+  )
+}
+
+// a thumbnail with its ratio, as the prompt gives it to Claude
+function Thumb({ img }: { img: Image }) {
+  return (
+    <span className="relative block">
+      <img src={`review/${img.path.split("/").pop()}`} alt="Attached frame" className="size-20 rounded-md object-cover ring-1 ring-foreground/10" />
+      {img.ratio && (
+        <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 font-mono text-[10px] text-white">{img.ratio}</span>
+      )}
+    </span>
   )
 }
 
@@ -116,11 +150,18 @@ function Item({
         ) : (
           c.text && <p className={cn("text-sm leading-relaxed", c.resolved && "text-muted-foreground line-through")}>{c.text}</p>
         )}
+        {!!c.sounds?.length && (
+          <div className="flex flex-wrap gap-1.5">
+            {c.sounds.map((s, i) => (
+              <SoundBadge key={i} s={s} />
+            ))}
+          </div>
+        )}
         {c.images.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {c.images.map((img) => (
-              <a key={img} href={`review/${img.split("/").pop()}`} target="_blank" onClick={(e) => e.stopPropagation()}>
-                <img src={`review/${img.split("/").pop()}`} alt="Annotated frame" className="size-20 rounded-md object-cover ring-1 ring-foreground/10" />
+              <a key={img.path} href={`review/${img.path.split("/").pop()}`} target="_blank" onClick={(e) => e.stopPropagation()}>
+                <Thumb img={img} />
               </a>
             ))}
           </div>
@@ -149,11 +190,13 @@ export function Feedback({
   range,
   rangeWords,
   images,
+  sounds,
   composer,
   onSelect,
   onSave,
   onAdd,
   onRemoveImage,
+  onRemoveSound,
   onClearRange,
 }: {
   version: number
@@ -163,12 +206,14 @@ export function Feedback({
   time: number
   range: Range | null
   rangeWords: string
-  images: string[]
+  images: Image[]
+  sounds: SoundRef[]
   composer: RefObject<HTMLTextAreaElement | null>
   onSelect: (c: Comment) => void
   onSave: (comments: Comment[]) => void
   onAdd: (kind: Kind, text: string) => boolean
-  onRemoveImage: (img: string) => void
+  onRemoveImage: (img: Image) => void
+  onRemoveSound: (s: SoundRef) => void
   onClearRange: () => void
 }) {
   const [filter, setFilter] = useState<Filter>("open")
@@ -215,6 +260,7 @@ export function Feedback({
                 <EmptyDescription className="text-xs">
                   Play the video, press <Kbd>C</Kbd> and write what you want to change.
                   To cut, select a range in the transcript or on the timeline, then press <Kbd>⌫</Kbd>. Drop an image anywhere to attach it.
+                  To comment on the sound, pick a track or a cue in the Sound tab.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -269,6 +315,13 @@ export function Feedback({
           )}
         </div>
         {isRange && rangeWords && <p className="truncate text-xs text-muted-foreground italic">“{rangeWords}”</p>}
+        {sounds.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {sounds.map((s, i) => (
+              <SoundBadge key={i} s={s} onRemove={() => onRemoveSound(s)} />
+            ))}
+          </div>
+        )}
         <Textarea
           ref={composer}
           value={text}
@@ -284,8 +337,8 @@ export function Feedback({
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {images.map((img) => (
-              <div key={img} className="relative">
-                <img src={`review/${img.split("/").pop()}`} alt="Attached frame" className="size-20 rounded-md object-cover ring-1 ring-foreground/10" />
+              <div key={img.path} className="relative">
+                <Thumb img={img} />
                 <Button variant="secondary" size="icon-xs" className="absolute -top-2 -right-2 rounded-full" aria-label="Remove the image" onClick={() => onRemoveImage(img)}>
                   <XIcon />
                 </Button>

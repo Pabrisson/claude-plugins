@@ -34,7 +34,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.mp4': 'video/mp4',
   '.wav': 'audio/wav', '.wasm': 'application/wasm',
 }
-const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range. images: annotated frames. format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
+const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range. images: attached frames or pictures, with their size and ratio. sounds: what the comment is about in the sound, a whole track (voice, music, fx) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
 
 // codecs WebCodecs can put in an MP4. The resolutions' bitrates are H.264's: the others need less for the same look.
 const CODECS = {
@@ -676,7 +676,7 @@ async function render() {
 function mix(dir, force) {
   const f = rel => path.resolve(dir, rel), file = f('assets/mix.wav')
   const inputs = ['source/sound.py', 'source/edit.json', 'source/style.json', 'assets/timeline.json', 'assets/source.wav', '.cache/cues.json', path.join(ENGINE, 'audio.py')]
-  if (!force && fs.existsSync(file) && fs.statSync(file).mtimeMs >= Math.max(...inputs.map(x => fs.statSync(f(x), { throwIfNoEntry: false })?.mtimeMs ?? 0))) return file
+  if (!force && fs.existsSync(file) && fs.existsSync(f('assets/mix.json')) && fs.statSync(file).mtimeMs >= Math.max(...inputs.map(x => fs.statSync(f(x), { throwIfNoEntry: false })?.mtimeMs ?? 0))) return file
   const plan = audioPlan(dir)
   if (!plan.voice && !plan.sound) return fs.rmSync(file, { force: true }), null
   writeJson(f('.cache/audio-plan.json'), plan)
@@ -741,6 +741,11 @@ function final() {
     made.push(poster)
   }
   const v = addVersion(dir, p, { duration: ms(j.duration), files, timeline: j.timeline })
+  // what the studio's sound panel shows of this version: the cues and each track's level (audio.py's mix.json)
+  if (audio) {
+    fs.mkdirSync(f('files/sound'), { recursive: true })
+    fs.writeFileSync(f(`files/sound/v${v}.json`), JSON.stringify({ cues: fs.existsSync(f('.cache/cues.json')) ? readJson(f('.cache/cues.json')) : [], ...readJson(f('assets/mix.json')) }))
+  }
   console.log(made.join('\n'))
   console.log(`final v${v} in ${secs(started)} s (${audio ? path.basename(audio) : 'no audio'}). Reload the studio`)
 }

@@ -211,23 +211,31 @@ def compose(plan, n, speech):
 def mix(plan):
     lv = {**LEVELS, **(plan.get('levels') or {})}
     n = int(round(plan['duration'] * SR))
-    out, gain, speech, music, fx = np.zeros((2, n)), np.ones(n), False, None, None
+    out, gain, speech, music, fx, parts = np.zeros((2, n)), np.ones(n), False, None, None, {}
     if plan.get('voice'):
         v = read(plan['voice'], n)
         speech = lufs(np.stack([v, v])) > -70
-        out += norm(np.stack([v, v]), lv['lufs'])
+        parts['voice'] = norm(np.stack([v, v]), lv['lufs'])
         gain = ducking(v, lv['duck'], n)
     if plan.get('sound'): music, fx = compose(plan, n, speech)
     if speech:  # a bed under the voice, at the style's levels
-        if music is not None: out += norm(music, lv['music']) * gain
-        if fx is not None: out += norm(fx, lv['sfx'])
+        if music is not None: parts['music'] = norm(music, lv['music']) * gain
+        if fx is not None: parts['fx'] = norm(fx, lv['sfx'])
     else:  # no voice: sound.py's own balance
-        for x in (music, fx):
-            if x is not None: out += x
+        parts.update({k: x for k, x in (('music', music), ('fx', fx)) if x is not None})
+    for x in parts.values(): out += x
     # the whole mix to the target (the limiter takes some loudness off: a second pass brings it back)
     # ponytail: a brickwall limiter alone, add a compressor on the voice if dynamic voices pump
     for _ in range(2): out = limit(norm(out, lv['lufs']), 10 ** (lv['peak'] / 20))
-    return out, {'gain': gain, 'speech': speech, 'music': music, 'fx': fx}
+    return out, {'gain': gain, 'speech': speech, 'music': music, 'fx': fx, 'parts': parts}
+
+
+def tracks(parts, step=.05):
+    """What the studio draws of each part of the mix: its level (dB under the loudest part, -60 floor) every step s."""
+    b = int(step * SR)
+    rms = {k: np.sqrt(np.pad(x ** 2, ((0, 0), (0, -x.shape[1] % b))).reshape(2, -1, b).mean((0, 2))) for k, x in parts.items()}
+    top = max([r.max() for r in rms.values()] + [1e-9])
+    return {'step': step, 'tracks': {k: np.round(np.maximum(20 * np.log10(r / top + 1e-9), -60), 1).tolist() for k, r in rms.items()}}
 
 
 SELFTEST_SOUND = '''
@@ -266,11 +274,15 @@ def selftest():
         assert g[talk].mean() < g[~talk].mean() - 3, f'music {g[talk].mean():.1f} dB under the voice, {g[~talk].mean():.1f} dB between'
         assert mix(plan)[0].tobytes() == out.tobytes(), 'not deterministic'
         assert mix({**plan, 'variant': 2})[0].tobytes() != out.tobytes(), 'sound.py does not get the variant'
+        lv = tracks(info['parts'])['tracks']
+        voice, said = np.array(lv['voice']), talk[::2400]
+        assert set(lv) == {'voice', 'music', 'fx'} and len(voice) == len(said), 'one level per track every 50 ms'
+        assert max(max(x) for x in lv.values()) == 0 and voice[said].mean() > voice[~said].mean() + 20, 'track levels'
         fx = info['fx']
         for c in cues:
             s = int(c['t'] * SR)
             assert np.abs(fx[:, s - 480:s]).max() == 0 < np.abs(fx[:, s:s + 48]).max(), f'effect at {c["t"]} s is off its cue'
-    print(f'selftest ok in {time.time() - started:.1f} s: exact length, no clipping, -14 LUFS with and without a voice, music down under it, effects on their cues, variants, deterministic')
+    print(f'selftest ok in {time.time() - started:.1f} s: exact length, no clipping, -14 LUFS with and without a voice, music down under it, effects on their cues, track levels, variants, deterministic')
 
 
 if __name__ == '__main__':
@@ -294,6 +306,8 @@ if __name__ == '__main__':
         out[:, out.shape[1] - k:] *= np.linspace(1, 0, k)
     dest = a.out or plan['out']
     write(dest, out)
+    # the whole mix: the studio's sound panel reads its tracks (mix.json next to mix.wav)
+    if a.at is None: Path(dest).with_suffix('.json').write_text(json.dumps(tracks(info['parts'])))
     parts = [x for x, on in (('voice', plan.get('voice')), ('sound.py', plan.get('sound'))) if on]
     print(f"{dest}: {out.shape[1] / SR:.2f} s, {lufs(out):.1f} LUFS, peak {20 * np.log10(np.abs(out).max() + 1e-9):.1f} dBFS"
           f" ({', '.join(parts) or 'silence'}{f', variant {plan.get('variant')}' if plan.get('variant') else ''}) in {time.time() - started:.1f} s")

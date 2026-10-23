@@ -3,8 +3,10 @@ import { toast } from "sonner"
 import { CopyIcon, EllipsisIcon, FilmIcon, LayoutGridIcon, TriangleAlertIcon } from "lucide-react"
 
 import { Feedback } from "@/components/feedback"
+import { Panel, type Tab } from "@/components/panel"
 import { PromptDialog } from "@/components/prompt-dialog"
-import { Player, toggle, useVideoTime } from "@/components/player"
+import { fullscreen, Player, toggle, useVideoTime } from "@/components/player"
+import { SoundTimeline } from "@/components/sound"
 import { Transcript } from "@/components/transcript"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,14 +33,19 @@ import {
   clock,
   minutes,
   newId,
+  ratioName,
+  sameSound,
   timeline,
   versionWords,
   when,
   wordsIn,
   type Comment,
+  type Image,
   type Kind,
   type Project,
   type Range,
+  type Sound,
+  type SoundRef,
 } from "@/lib/studio"
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000
@@ -54,7 +61,11 @@ export default function App() {
   const [format, setFormat] = useState("")
   const [range, setRange] = useState<Range | null>(null)
   const [drawing, setDrawing] = useState(false)
-  const [images, setImages] = useState<string[]>([])
+  const [images, setImages] = useState<Image[]>([])
+  // the version's sound, and the tracks or cues picked for the next comment
+  const [sound, setSound] = useState<Sound | null>(null)
+  const [sounds, setSounds] = useState<SoundRef[]>([])
+  const [tab, setTab] = useState("transcript")
   // the prompt shown in the dialog before copying, null when closed
   const [prompt, setPrompt] = useState<string | null>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -66,6 +77,7 @@ export default function App() {
       .project()
       .then(async (p) => {
         const all = await Promise.all(p.versions.map((v) => api.reviews(v.v)))
+        if (p.versions.length) setSound(await api.sound(p.versions.at(-1)!.v))
         setReviews(Object.fromEntries(p.versions.map((v, i) => [v.v, all[i].comments])))
         setProject(p)
         setFormat(p.formats.find((f) => p.versions.at(-1)?.files[f]) ?? p.formats[0])
@@ -111,12 +123,14 @@ export default function App() {
       text: text.trim(),
       words: words ? wordsIn(words, { t0, t1 }) : "",
       images,
+      ...(sounds.length ? { sounds } : {}),
       resolved: false,
       created: new Date().toISOString(),
       ...(project.formats.length > 1 ? { format } : {}),
     }
     save([...comments, c])
     setImages([])
+    setSounds([])
     setRange(null)
     // back to the shortcuts (Space, C, P, ⌫)
     composer.current?.blur()
@@ -126,11 +140,11 @@ export default function App() {
 
   async function attach(png: Blob) {
     try {
-      const { path } = await api.image(newId(), png)
-      const n = images.length + 1
-      setImages([...images, path])
+      const [{ path }, bmp] = await Promise.all([api.image(newId(), png), createImageBitmap(png)])
+      const ratio = ratioName(bmp.width, bmp.height), n = images.length + 1
+      setImages([...images, { path, size: [bmp.width, bmp.height], ratio }])
       setDrawing(false)
-      toast(`${n} image${n > 1 ? "s" : ""} ready for this feedback`)
+      toast(`${n} image${n > 1 ? "s" : ""} ready for this feedback (${ratio})`)
       composer.current?.focus()
     } catch (e) {
       toast.error(`Image not saved: ${(e as Error).message}`)
@@ -147,13 +161,20 @@ export default function App() {
     }
   }
 
+  const pick = (s: SoundRef) =>
+    setSounds((xs) => (xs.some((x) => sameSound(x, s)) ? xs.filter((x) => !sameSound(x, s)) : [...xs, s]))
+  const clear = () => {
+    setRange(null)
+    setSounds([])
+  }
+
   function select(c: Comment) {
     if (c.format && c.format !== format && ver?.files[c.format]) setFormat(c.format)
     seek(c.t0)
     setRange(c.t1 > c.t0 ? { t0: c.t0, t1: c.t1 } : null)
   }
 
-  // shortcuts: Space play · C write · P draw · ⌫ cut the selection · Esc close or clear
+  // shortcuts: Space play · C write · P draw · F full screen · ⌫ cut the selection · Esc close or clear
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // the prompt dialog has its own keys (Esc, ⌘↵)
@@ -162,13 +183,14 @@ export default function App() {
       if (e.key === "Escape") {
         if (drawing) setDrawing(false)
         else if (typing) (e.target as HTMLElement).blur()
-        else setRange(null)
+        else clear()
         return
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === " ") toggle(video.current)
       else if (e.key === "c") composer.current?.focus()
       else if (e.key === "p") setDrawing((d) => !d)
+      else if (e.key === "f") fullscreen(video.current)
       else if ((e.key === "Backspace" || e.key === "Delete") && range) add("cut", "")
       else return
       e.preventDefault()
@@ -209,6 +231,32 @@ export default function App() {
         )}
       </Empty>
     )
+
+  const tabs: Tab[] = [
+    ...(words
+      ? [
+          {
+            value: "transcript",
+            label: "Transcript",
+            badge: words[0]?.screen ? `On screen · ${words.length}` : undefined,
+            info: words[0]?.screen
+              ? "What the video shows, moment by moment. Click a line to select it, drag across lines to select several, then comment."
+              : "Click a word to jump there. Drag across words to select their range, then cut it or comment on it.",
+          },
+        ]
+      : []),
+    ...(sound
+      ? [
+          {
+            value: "sound",
+            label: "Sound",
+            badge: sound.cues.length ? String(sound.cues.length) : undefined,
+            info: "One row per track and per kind of sound. Click a row's name to comment on all of it, or one cue (several if you like). On the rows, click to jump, drag to select a range. Pinch or ⌘-scroll to zoom.",
+          },
+        ]
+      : []),
+  ]
+  const shown = tabs.find((t) => t.value === tab)?.value ?? tabs[0]?.value
 
   const meta = (label: string, value: string) => (
     <>
@@ -309,18 +357,42 @@ export default function App() {
                 </EmptyHeader>
               </Empty>
             )}
-            {words && ver && (
-              <Transcript
+            {ver && tabs.length > 0 && (
+              <Panel
                 className="h-[clamp(7.5rem,26%,17rem)] shrink-0"
-                words={words}
-                time={time}
+                tabs={tabs}
+                tab={shown}
                 range={range}
-                marked={comments.filter((c) => c.t1 > c.t0)}
-                onSeek={seek}
-                onRange={setRange}
+                sounds={sounds.length}
+                onTab={setTab}
                 onCut={() => add("cut", "")}
                 onComment={() => composer.current?.focus()}
-              />
+                onClear={clear}
+              >
+                {shown === "sound" && sound ? (
+                  <SoundTimeline
+                    sound={sound}
+                    duration={ver.duration}
+                    time={time}
+                    range={range}
+                    picked={sounds}
+                    onSeek={seek}
+                    onRange={setRange}
+                    onPick={pick}
+                  />
+                ) : (
+                  words && (
+                    <Transcript
+                      words={words}
+                      time={time}
+                      range={range}
+                      marked={comments.filter((c) => c.t1 > c.t0)}
+                      onSeek={seek}
+                      onRange={setRange}
+                    />
+                  )
+                )}
+              </Panel>
             )}
           </main>
 
@@ -338,11 +410,13 @@ export default function App() {
               range={range}
               rangeWords={range && words ? wordsIn(words, range) : ""}
               images={images}
+              sounds={sounds}
               composer={composer}
               onSelect={select}
               onSave={save}
               onAdd={add}
               onRemoveImage={(img) => setImages(images.filter((i) => i !== img))}
+              onRemoveSound={pick}
               onClearRange={() => setRange(null)}
             />
           )}

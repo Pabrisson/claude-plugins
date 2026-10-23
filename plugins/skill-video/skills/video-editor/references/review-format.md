@@ -2,7 +2,9 @@
 
 Every render (`rough`, `final`) is a version `vN` of the project (`source/project.json` `versions`). The studio
 (`video.mjs studio`, http://127.0.0.1:41187/<slug>/) shows one version; the user comments, cuts and draws on it,
-then **Copy prompt** gives the text to paste into Claude.
+then **Copy prompt** gives the text to paste into Claude. Next to the transcript, the Sound tab shows the version's
+tracks (voice, music, effects) with their levels, then one row per kind of cue: the user picks a track, every cue of
+a kind, or one cue for a comment.
 
 ## `files/reviews/vN.json`
 
@@ -13,7 +15,9 @@ then **Copy prompt** gives the text to paste into Claude.
   "comments": [
     { "id": "m2k9x0a1b2c3", "type": "comment", "t0": 3.2, "t1": 5.8, "s0": 4.1, "s1": 7.0,
       "text": "the counter should land on 11 726", "words": "plus de onze mille", "format": "9:16",
-      "images": ["assets/review/frame-m2k9x0a1b2c3.png"], "resolved": false, "reply": "", "created": "…" }
+      "images": [{ "path": "assets/review/frame-m2k9x0a1b2c3.png", "size": [1080, 1920], "ratio": "9:16" }],
+      "sounds": ["music", { "kind": "whoosh", "t": 3.4, "dur": 0.6, "x": 0.4 }],
+      "resolved": false, "reply": "", "created": "…" }
   ]
 }
 ```
@@ -25,7 +29,8 @@ then **Copy prompt** gives the text to paste into Claude.
 | `s0`, `s1` | SOURCE seconds, or SCENE seconds (the scene's own time) without a source: use them for `cut`, to find the words in `files/words.md`, and to find the moment in the scene |
 | `words` | What is said, or shown on screen, in the range |
 | `format` | The format the user was looking at. Only a request about that format's composition (placement, size, framing) stays in it; content, text, timing and sound changes apply to every format |
-| `images` | Frames the user drew on (`assets/review/frame-<id>.png`): read them |
+| `images` | Frames the user drew on, or pictures they dropped (`assets/review/frame-<id>.png`), with their size in pixels and ratio: read them. Older files have bare paths |
+| `sounds` | What the comment is about in the sound: a whole track (`voice`, `music`, `fx`), every cue of a kind (`{ "kind" }`), or one cue of the scene (`kind`, `t` in VIDEO seconds, its data). Absent when the comment is not about the sound |
 | `resolved`, `reply` | **Claude writes them**: `resolved: true` and one sentence on what changed. The studio shows the reply |
 
 The studio keeps an answer Claude wrote even when an older tab saves the file again. Edit only `resolved` and
@@ -41,24 +46,36 @@ Reviewed video: /Users/me/ma-chaine/demo/output/demo-9x16-1080p.mp4, version v2 
 1. COMMENT from 00:03.20 to 00:05.80 (VIDEO 3.20 s → 5.80 s, 2.60 s) · SOURCE 4.10 s → 7.00 s [id m2k9x0a1b2c3] [format 9:16]
    Words: "plus de onze mille"
    Request: the counter should land on 11 726
-   Image: /Users/me/ma-chaine/demo/assets/review/frame-m2k9x0a1b2c3.png
+   Sound: the music track (sound.py's music bus)
+   Sound: every "pop" cue (the sound sound.py designs for this kind)
+   Sound: cue "whoosh" at 00:03.40 (VIDEO 3.40 s · SOURCE 4.30 s) dur 0.6, x 0.4
+   Image (9:16, 1080×1920 px): /Users/me/ma-chaine/demo/assets/review/frame-m2k9x0a1b2c3.png
 2. CUT from 00:12.00 to 00:13.40 (VIDEO 12.00 s → 13.40 s, 1.40 s) · SOURCE 14.90 s → 16.50 s [id m2k9x0a1b2c4]
 
 Times: mm:ss.cc = minutes:seconds.hundredths …
 Types: CUT = remove the range (it goes in `cut`, in SOURCE time); COMMENT = any other request …
+Sound: a track is a part of the mix …; a cue is the scene's cue(kind, t, data) call … /Users/me/ma-chaine/demo/files/sound/v2.json.
 Feedback file: …/files/reviews/v2.json (video version v2, same ids). For each change applied, set "resolved": true …
 Change only these points and keep the rest of the edit identical. …
 ```
 
 `[format …]` appears only for a project with several formats, `SOURCE` only with a source, `Words:` only with a
-transcript (`On screen:` for a video without speech: the lines of what it shows, joined by « / »), `Image:` once per
-attached drawing.
+transcript (`On screen:` for a video without speech: the lines of what it shows, joined by « / »), `Sound:` once per
+picked track or cue (and the `Sound:` note at the end), `Image:` once per attached image with its ratio and size.
+
+## `files/sound/vN.json`
+
+What the Sound tab shows of version N, written by `final`: `cues` (the scene's `cue()` calls, VIDEO seconds), `step`
+(seconds) and `tracks`, each track's level in dB under the loudest one (-60 floor), one value per step. Read it to
+find a cue, or to see where a track is loud or quiet.
 
 ## Applying it
 
 - **CUT**: add `[s0, s1]` to `cut` in `source/edit.json` (SOURCE seconds, or SCENE seconds without a source); no
   `prepare` needed: the timeline applies `cut` itself. Check the words around the cut in `files/words.md` so it lands between words.
-- **COMMENT**: change the scene (`source/scene.js`, `scene.css`, `edit.json`, assets) at that moment. Anchor the
+- **COMMENT**: change the scene (`source/scene.js`, `scene.css`, `edit.json`, assets) at that moment; with `Sound:`
+  lines, change `source/sound.py` (the track's part, or the sound of the cue's kind), or the `cue()` when its timing
+  is wrong. Anchor the
   change with `at(source seconds)`; the video times of the prompt only say where the user was looking. A request
   about one format's composition changes that format only (`format === '16:9'`, `pick()`, or CSS on
   `#stage.landscape`); anything else changes every format.

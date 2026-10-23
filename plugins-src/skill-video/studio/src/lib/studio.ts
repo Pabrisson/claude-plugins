@@ -24,6 +24,16 @@ export type Project = {
   versions: Version[]
 }
 export type Kind = "comment" | "cut"
+// the parts of the mix: the voice, sound.py's music and effects buses
+export type Track = "voice" | "music" | "fx"
+// one of the scene's cue(kind, t, data) calls, t in video seconds
+export type Cue = { kind: string; t: number; [data: string]: unknown }
+// a version's sound (files/sound/vN.json): its cues, and each track's level in dB every `step` seconds
+export type Sound = { cues: Cue[]; step: number; tracks: Partial<Record<Track, number[]>> }
+// what a comment points at in the sound: a whole track, one cue, or every cue of a kind
+export type SoundRef = Track | Cue | { kind: string }
+// size and ratio are missing on images attached before they were recorded
+export type Image = { path: string; size?: [number, number]; ratio?: string }
 // t0/t1: video seconds of the reviewed version; s0/s1: source seconds
 export type Comment = {
   id: string
@@ -34,7 +44,8 @@ export type Comment = {
   s1?: number
   text: string
   words: string
-  images: string[]
+  images: Image[]
+  sounds?: SoundRef[]
   resolved: boolean
   reply?: string
   created: string
@@ -51,7 +62,18 @@ async function json(r: Response) {
 export const api = {
   project: (): Promise<Project> => fetch("api/project").then(json),
   reviews: (v: number): Promise<{ comments: Comment[] }> =>
-    fetch(`api/reviews/v${v}`).then(json),
+    fetch(`api/reviews/v${v}`)
+      .then(json)
+      // images used to be bare paths
+      .then((r) => ({
+        comments: r.comments.map((c: Comment) => ({
+          ...c,
+          images: (c.images ?? []).map((i: Image | string) => (typeof i === "string" ? { path: i } : i)),
+        })),
+      })),
+  // null for a version without sound (a rough cut, a silent video)
+  sound: (v: number): Promise<Sound | null> =>
+    fetch(`project/files/sound/v${v}.json`).then((r) => (r.ok ? r.json() : null)),
   save: (v: number, comments: Comment[]) =>
     fetch(`api/reviews/v${v}`, {
       method: "POST",
@@ -60,6 +82,28 @@ export const api = {
     }).then(json),
   image: (id: string, png: Blob): Promise<{ path: string }> =>
     fetch(`api/review-image?id=${id}`, { method: "POST", body: png }).then(json),
+}
+
+const RATIOS = ["16:9", "9:16", "1:1", "4:5", "5:4", "4:3", "3:4", "3:2", "2:3", "16:10", "21:9"]
+// 1080×1920 → 9:16; an odd size keeps its plain ratio (1.53:1)
+export function ratioName(w: number, h: number) {
+  const near = RATIOS.find((r) => {
+    const [a, b] = r.split(":").map(Number)
+    return Math.abs((a / b) * (h / w) - 1) < 0.015
+  })
+  return near ?? `${(w / h).toFixed(2)}:1`
+}
+
+export const TRACKS: Record<Track, string> = { voice: "Voice", music: "Music", fx: "Effects" }
+export const sameSound = (a: SoundRef, b: SoundRef) =>
+  typeof a === "string" || typeof b === "string" ? a === b : a.kind === b.kind && (a as Cue).t === (b as Cue).t
+export const soundLabel = (s: SoundRef) =>
+  typeof s === "string" ? TRACKS[s] : "t" in s ? `${s.kind} ${minutes((s as Cue).t)}` : `every ${s.kind}`
+// one hue per track or kind of cue, the same in the timeline and on the badges
+export function soundColor(s: SoundRef) {
+  let h = 0
+  for (const ch of typeof s === "string" ? s : s.kind) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return `oklch(0.74 0.14 ${(h * 137.508) % 360})`
 }
 
 export const newId = () =>
@@ -129,7 +173,17 @@ export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
     lines.push(`${i + 1}. ${c.type.toUpperCase()} ${where}${source} [id ${c.id}]${format}`)
     if (c.words) lines.push(`   ${p.words?.[0]?.screen ? "On screen" : "Words"}: "${c.words}"`)
     if (c.text) lines.push(`   Request: ${c.text}`)
-    for (const img of c.images) lines.push(`   Image: ${p.dir}/${img}`)
+    for (const s of c.sounds ?? []) {
+      if (typeof s === "string") lines.push(`   Sound: the ${s} track${s === "voice" ? "" : ` (sound.py's ${s} bus)`}`)
+      else if (!("t" in s)) lines.push(`   Sound: every "${s.kind}" cue (the sound sound.py designs for this kind)`)
+      else {
+        const { kind, t, ...data } = s as Cue
+        const extra = Object.entries(data).map(([k, x]) => `${k} ${JSON.stringify(x)}`).join(", ")
+        lines.push(`   Sound: cue "${kind}" at ${clock(t)} (VIDEO ${secs(t)} · ${p.source ? "SOURCE" : "SCENE"} ${secs(timeline(ver).toSource(t))})${extra ? ` ${extra}` : ""}`)
+      }
+    }
+    for (const img of c.images)
+      lines.push(`   Image${img.ratio ? ` (${img.ratio}, ${img.size?.join("×")} px)` : ""}: ${p.dir}/${img.path}`)
   })
   // how to read the list and where to answer, so the prompt stands on its own
   lines.push(
@@ -138,6 +192,9 @@ export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
     p.source
       ? "Types: CUT = remove the range (it goes in `cut`, in SOURCE time); COMMENT = any other request (visual, text, caption, sound, pace), at a moment or over a range."
       : "Types: CUT = remove the range from the video (it goes in `cut` in source/edit.json, in SCENE time: the scene's own seconds); COMMENT = any other request (visual, text, sound, pace), at a moment or over a range.",
+    ...(open.some((c) => c.sounds?.length)
+      ? [`Sound: a track is a part of the mix (voice, or sound.py's music or fx bus) over the comment's time; a cue is the scene's cue(kind, t, data) call, heard as the sound sound.py designs for its kind ("every" means all the cues of that kind). This version's cues and track levels: ${p.dir}/files/sound/v${ver.v}.json.`]
+      : []),
     "",
     `Feedback file: ${p.dir}/files/reviews/v${ver.v}.json (video version v${ver.v}, same ids). For each change applied, set "resolved": true and write what you did in one sentence in "reply", the studio shows it.`,
     `Change only these points and keep the rest of the edit identical. Times are VIDEO time (or ${p.source ? "SOURCE" : "SCENE"} when stated). Rerun the steps needed (${p.source ? "prepare, rough, " : ""}stills, render, audio, final): the new render opens the next version, reloading the studio shows it.`
