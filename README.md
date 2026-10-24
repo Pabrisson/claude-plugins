@@ -204,7 +204,21 @@ Claude becomes a video editor for any genre: one or several rushes (files or URL
 | `apply this feedback …` | Applies the feedback pasted from the studio (cuts, comments, sound, visuals) |
 | `variations <element>` | Numbered variants of one element, then keeps the choice |
 | `preview` | Live debug page of the scene in Chrome |
-| `rules list \| use \| new \| edit` | Editing rule packs, one per genre (`shorts`, `youtube`, `interview`, `tutorial`, `montage`, `corporate` and `motion-design` included) |
+| `rules list \| use \| new \| edit` | Editing rule packs, one per genre (see below) |
+
+Rule packs: one per video, chosen at the start (none by default). A pack in `.rules/` with the same name overrides the plugin's.
+
+| Pack | For | Graphics |
+|---|---|---|
+| `shorts` | TikTok, Reels, YouTube Shorts: aggressive cuts, speed-up, captions, hook, CTA, music bed | lead |
+| `motion-design` | Motion design carries the visuals: every idea gets an animated element, nothing stays static | lead |
+| `youtube` | Long-form YouTube (8 to 30 min): hook then chapters, jump cuts that breathe, B-roll and lower thirds, end screen | support |
+| `interview` | Interviews, podcasts, testimonials and talks: the words lead, natural pauses, names and quotes on screen, B-roll on the topics | support |
+| `tutorial` | Tutorials, screen recordings and courses: every step kept and clear, zooms on the action, callouts, chapters | support |
+| `montage` | Montages carried by music (travel, vlog, event, aftermovie, sport, product shots): cuts on the beat, natural sound moments, few words | support |
+| `corporate` | Corporate and brand films (presentation, product demo, recruitment, case study): calm pace, polished, the brand on every frame | support |
+
+Graphics: `lead`, the motion design carries the video; `support`, the footage carries it and the graphics serve it.
 
 - **Render**: 9:16, 16:9, 1:1 and 4:5 formats, 4K, 2K, 1080p and 720p resolutions, H.264, HEVC, AV1 and VP9 codecs, captions, synthesized music and sound effects. About 10 s for a 75 s video (40 s with motion blur), unchanged chunks cached.
 - **Studio**: local review on `127.0.0.1`, from port 41187, one server per projects folder. Feedback goes back to Claude as a prompt to paste.
