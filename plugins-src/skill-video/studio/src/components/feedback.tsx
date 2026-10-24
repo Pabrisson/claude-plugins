@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState, type RefObject } from "react"
+import { Fragment, useEffect, useRef, useState, type RefObject } from "react"
 import {
   AudioWaveformIcon,
   CheckIcon,
   ChevronsLeftIcon,
   ChevronsRightIcon,
   FilmIcon,
-  ChevronDownIcon,
   ClockIcon,
   MessageSquareTextIcon,
   MicIcon,
@@ -23,11 +22,6 @@ import { follow, useStoredSize } from "@/components/panel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import {
   Empty,
   EmptyDescription,
@@ -133,6 +127,16 @@ function Picks({ transcript, sounds = [], visuals = [], onRemoveSound, onRemoveV
         />
       ))}
     </div>
+  )
+}
+
+// the title of a version's feedback in the list
+function Group({ label, count }: { label: string; count: number }) {
+  return (
+    <p className="flex items-center px-2.5 pt-3 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase first:pt-1">
+      {label}
+      <span className="ml-auto font-normal tracking-normal tabular-nums">{count}</span>
+    </p>
   )
 }
 
@@ -307,7 +311,10 @@ export function Feedback({
   const [filter, setFilter] = useState<Filter>("open")
   const [kind, setKind] = useState<Kind>("comment")
   const [text, setText] = useState("")
-  const counts = { open: comments.filter((c) => !c.resolved).length, resolved: comments.filter((c) => c.resolved).length, all: comments.length }
+  // the earlier versions' feedback is done with: it shows under Resolved and All, a group per version, newest first
+  const old = filter === "open" ? [] : previous
+  const before = previous.reduce((n, p) => n + p.comments.length, 0)
+  const counts = { open: comments.filter((c) => !c.resolved).length, resolved: comments.filter((c) => c.resolved).length + before, all: comments.length + before }
   // a comment pointed at stays in view, whatever the filter
   const shown = comments.filter((c) => filter === "all" || c.resolved === (filter === "resolved") || focus?.ids.includes(c.id))
   const isRange = !!range && range.t1 > range.t0
@@ -369,6 +376,7 @@ export function Feedback({
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-1 p-2">
+          {old.length > 0 && shown.length > 0 && <Group label={`Version ${version} · current`} count={shown.length} />}
           {shown.map((c) => (
             <Item
               key={focus?.ids.includes(c.id) ? `${c.id}-${focus.n}` : c.id}
@@ -382,7 +390,15 @@ export function Feedback({
               onDelete={() => onSave(comments.filter((x) => x.id !== c.id))}
             />
           ))}
-          {!comments.length && (
+          {old.map((p) => (
+            <Fragment key={p.v}>
+              <Group label={`Version ${p.v}`} count={p.comments.length} />
+              {p.comments.map((c, i) => (
+                <Item key={c.id} c={c} n={i + 1} multiFormat={multiFormat} onSelect={() => {}} />
+              ))}
+            </Fragment>
+          ))}
+          {!comments.length && !old.length && (
             <Empty className="px-4 py-8">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -397,24 +413,7 @@ export function Feedback({
               </EmptyHeader>
             </Empty>
           )}
-          {!!comments.length && !shown.length && <p className="py-10 text-center text-sm text-muted-foreground">Nothing {filter} on this version.</p>}
-
-          {previous.map((p) => (
-            <Collapsible key={p.v} className="mt-3">
-              <CollapsibleTrigger className="group/prev flex w-full items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs font-medium">
-                <ChevronDownIcon className="size-4 -rotate-90 transition-transform group-data-[state=open]/prev:rotate-0" />
-                Previous version · v{p.v}
-                <span className="ml-auto font-normal text-muted-foreground">
-                  {p.comments.length} item{p.comments.length === 1 ? "" : "s"}
-                </span>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="flex flex-col gap-1 pt-1">
-                {p.comments.map((c, i) => (
-                  <Item key={c.id} c={c} n={i + 1} multiFormat={multiFormat} onSelect={() => {}} />
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
-          ))}
+          {!!comments.length && !shown.length && !old.length && <p className="py-10 text-center text-sm text-muted-foreground">Nothing {filter} on this version.</p>}
         </div>
       </ScrollArea>
 
