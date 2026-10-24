@@ -1,8 +1,0 @@
-{
-  "name": "agent-prompt",
-  "version": "1.0.0",
-  "description": "Agent prompt-engineer: prompt optimization for LLMs and AI features",
-  "author": {
-    "name": "Pierre Alain BRISSON"
-  }
-}

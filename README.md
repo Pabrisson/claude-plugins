@@ -10,21 +10,23 @@ Marketplace **`pabrisson`** pour Claude Code : un plugin par type de composant e
 | `mod-ports` | Panneau à droite listant ce qui tourne pour le projet (Docker, Kubernetes, process) | icône ⇄ du HUD |
 | `mod-code-fence` | Entoure d'un bloc ```` ```lang ```` le code collé dans le prompt | — |
 | `hook-notify` | Notification desktop (macOS, Linux, Windows) à la fin d'une tâche ou en attente d'une saisie, durée de chaque prompt en SQLite | — |
-| `agent-frontend` | `frontend-developer`, `ui-ux-designer` | `agent-frontend:frontend-developer` |
-| `agent-backend` | `backend-architect`, `api-documenter` | `agent-backend:backend-architect` |
-| `agent-review` | `code-reviewer` | `agent-review:code-reviewer` |
-| `agent-prompt` | `prompt-engineer` | `agent-prompt:prompt-engineer` |
-| `command-docs` | `add-readme`, `add-changelog`, `update-docs`, `create-architecture-documentation`, `summarize-implementation` | `/command-docs:add-readme` |
-| `command-review` | `code-review`, `refactor-code` | `/command-review:code-review` |
-| `command-toolbox` | `ultra-think`, `fork-sync` | `/command-toolbox:ultra-think` |
-| `skill-shadcn` | `shadcn` | `skill-shadcn:shadcn` |
+| `command-docs` | `add-readme`, `add-changelog`, `summarize-implementation` | `/command-docs:add-readme` |
+| `command-docs-templates` | `update-docs`, `create-architecture-documentation` et les autres commandes de documentation de davila7/claude-code-templates | `/command-docs-templates:update-docs` |
+| `command-toolbox` | `fork-sync` | `/command-toolbox:fork-sync` |
+| `skill-shadcn` | `shadcn` (tiré de shadcn-ui/ui) | `skill-shadcn:shadcn` |
 | `skill-laravel` | `laravel-upgrade` | `skill-laravel:laravel-upgrade` |
-| `skill-find-skills` | `find-skills` | `skill-find-skills:find-skills` |
+| `skill-find-skills` | `find-skills` (tiré de vercel-labs/skills) | `skill-find-skills:find-skills` |
 | `skill-video` | `video-editor` | `skill-video:video-editor` |
 | `requesty` | Serveur MCP Requesty (`router.requesty.ai`) | outils `mcp__plugin_requesty_requesty__*` |
 | `dbeaver` | Serveur MCP DBeaver (`omnisql-mcp`, lancé via `npx`, indépendant de la version Node active) | outils `mcp__plugin_dbeaver_dbeaver__*` |
 
 Préfixes utilisés : `mod-`, `hook-`, `agent-`, `command-` et `skill-`. Les serveurs MCP n'ont pas de préfixe. Leurs réglages (clé API, connexions autorisées, lecture seule…) sont demandés à l'installation et se modifient ensuite dans `/config` ; la clé API est rangée dans le Keychain, jamais dans le repo. Pour un futur thème, output style, monitor ou exécutable : `theme-*` (`themes/*.json`), `output-style-*` (`output-styles/*.md`), `monitor-*` (`monitors/monitors.json`) ou `bin/` dans le plugin concerné.
+
+`command-docs-templates`, `skill-shadcn` et `skill-find-skills` ne contiennent aucun fichier ici : leur entrée du marketplace pointe vers le dépôt d'origine (`git-subdir`), ces projets n'ayant pas de marketplace Claude. Tout ce qui a son propre marketplace ou existe nativement s'installe de là-bas :
+
+- agents : `claude plugin marketplace add wshobson/agents` puis `frontend-mobile-development`, `backend-development`, `documentation-generation`, `llm-application-dev`
+- revue de code : `/code-review` et `/simplify` (natifs), `code-review` / `pr-review-toolkit@claude-plugins-official`
+- réflexion profonde : `/effort max` ou le mot-clé `ultrathink` (natifs)
 
 ## Installation
 

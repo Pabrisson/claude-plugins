@@ -1,8 +1,0 @@
-{
-  "name": "agent-review",
-  "version": "1.0.0",
-  "description": "Agent code-reviewer: quality, security and maintainability review",
-  "author": {
-    "name": "Pierre Alain BRISSON"
-  }
-}
