@@ -215,7 +215,7 @@ frames at once leads to small, safe layouts.
 - Put a `cue(kind, t, data)` on every event that should be heard, with what the sound needs (`dur`, `x`…).
 - Declare what the picture is made of with `part(kind, t0, t1, data)`: a `part('sequence', …, { name, field })`
   per sequence (`field`: the palette color it sits on), and one per key element (`title`, `counter`, `logo`,
-  `transition`…). The studio's Video tab shows them, and the user's feedback points at them by kind and name.
+  `transition`…). The studio's Clip tab shows them, and the user's feedback points at them by kind and name.
 - Without speech, declare what the viewer reads with `say(text, from, to)`, one line per moment. It is the
   transcript the user reviews and quotes in the studio.
 

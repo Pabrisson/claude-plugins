@@ -135,7 +135,7 @@ export async function boot(host, query) {
     frame: t => Math.round(t * job.fps) / job.fps,
     tick: f => ticks.push(f),
     cue: (kind, t, o = {}) => cues.push({ kind, t: Math.round(t * 1000) / 1000, ...o }),
-    // what the studio's Video tab shows: a sequence, a title, a counter… on the palette color `field` when given
+    // what the studio's Clip tab shows: a sequence, a title, a counter… on the palette color `field` when given
     part: (kind, t0, t1, o = {}) => parts.push({ kind, t0: Math.round(t0 * 1000) / 1000, t1: Math.round(t1 * 1000) / 1000, ...o, ...(look.palette[o.field] ? { color: look.palette[o.field] } : {}) }),
     say: (text, t0, t1) => says.push({ w: String(text).replace(/\s+/g, ' ').trim(), v0: Math.round(t0 * 1000) / 1000, v1: Math.round(t1 * 1000) / 1000 }),
     camera: () => { const c = camera(job, time); if (c) live.push(c); return c },

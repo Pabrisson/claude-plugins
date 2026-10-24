@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useRef, useState } from "react"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { minutes, type Range, type VWord } from "@/lib/studio"
+import { minutes, type Marks, type Range, type VWord } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 const overlaps = (w: VWord, r: Range) => w.v1 > r.t0 && w.v0 < r.t1
 
 // Follows the playback. Speech: a click on a word seeks there, a drag across words selects their range. Without
 // speech the transcript is what the video shows, one line per moment: a click selects the moment, a drag several.
+// What open comments cover is marked (a dot by a line, a dotted underline under words): a click on the mark shows them.
 export function Transcript({
   words,
   time,
@@ -19,7 +20,8 @@ export function Transcript({
   words: VWord[]
   time: number
   range: Range | null
-  marked: Range[]
+  // the open comments over a word or a line
+  marked: (w: VWord) => Marks
   onSeek: (t: number) => void
   onRange: (r: Range | null) => void
 }) {
@@ -43,6 +45,7 @@ export function Transcript({
       if (a === b && !lines) {
         onRange(null)
         onSeek(words[a].v0)
+        marked(words[a])?.onClick()
       } else {
         // a line is a moment: one click selects it
         onRange({ t0: words[a].v0, t1: words[b].v1 })
@@ -52,7 +55,7 @@ export function Transcript({
     }
     window.addEventListener("pointerup", up)
     return () => window.removeEventListener("pointerup", up)
-  }, [drag, words, lines, onRange, onSeek])
+  }, [drag, words, lines, marked, onRange, onSeek])
 
   const sel = words.map((w, i) =>
     drag ? i >= Math.min(drag.a, drag.b) && i <= Math.max(drag.a, drag.b) : !!selected && overlaps(w, selected)
@@ -72,6 +75,8 @@ export function Transcript({
             <div
               key={i}
               ref={follow(i)}
+              data-v0={w.v0}
+              data-v1={w.v1}
               className={cn(
                 "flex cursor-pointer gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/60",
                 w.v0 > time && "text-muted-foreground",
@@ -87,7 +92,16 @@ export function Transcript({
               </span>
               {/* its own slot, as far from the time as from the text */}
               <span className="flex h-5 w-1.5 shrink-0 items-center">
-                {marked.some((r) => overlaps(w, r)) && <span className="size-1.5 rounded-full bg-highlight" />}
+                {marked(w) && (
+                  <button
+                    className="-m-1 p-1"
+                    title={marked(w)!.title}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={marked(w)!.onClick}
+                  >
+                    <span className="block size-1.5 rounded-full bg-highlight transition-transform hover:scale-150" />
+                  </button>
+                )}
               </span>
               <span className="leading-5">
                 {w.w.split(" · ").map((part, j) => (
@@ -106,10 +120,12 @@ export function Transcript({
             <Fragment key={i}>
               <span
                 ref={follow(i)}
+                data-v0={w.v0}
+                data-v1={w.v1}
                 className={cn(
                   "cursor-pointer rounded-md px-1 py-0.5 text-muted-foreground transition-colors",
                   w.v1 <= time && "text-foreground",
-                  marked.some((r) => overlaps(w, r)) && "underline decoration-highlight decoration-dotted decoration-2 underline-offset-[7px]",
+                  marked(w) && "underline decoration-highlight decoration-dotted decoration-2 underline-offset-[7px]",
                   // one band over the selection, spaces included
                   sel[i] && "rounded-none bg-highlight/40 text-foreground",
                   sel[i] && !sel[i - 1] && "rounded-l-md",

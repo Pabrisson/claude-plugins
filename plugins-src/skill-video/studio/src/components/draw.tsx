@@ -118,7 +118,7 @@ export function DrawLayer({
     <>
       <canvas
         ref={canvas}
-        className="absolute inset-0 size-full cursor-crosshair touch-none rounded-xl"
+        className="absolute inset-0 size-full cursor-crosshair touch-none"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
           drawing.current = true

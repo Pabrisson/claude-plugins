@@ -1,8 +1,9 @@
 # Review studio feedback
 
 Every render (`rough`, `final`) is a version `vN` of the project (`source/project.json` `versions`). The studio
-(`video.mjs studio`, http://127.0.0.1:41187/<slug>/) shows one version; the user comments, cuts and draws on it,
-then **Copy prompt** gives the text to paste into Claude. Next to the transcript, the Video tab shows the version's
+(`video.mjs studio`, http://127.0.0.1:41187/<slug>/; the root opens the first video of the folder, the grid button
+switches to another) shows one version; the user comments, cuts and draws on it,
+then **Copy prompt** gives the text to paste into Claude. Next to the transcript, the Clip tab shows the version's
 thumbnails and one row per kind of the scene's `part()`, and the Sound tab its tracks (voice, music, effects) with
 their levels, then one row per kind of cue: the user picks a part, a track, a cue, or every one of a kind for a comment.
 
@@ -29,6 +30,7 @@ their levels, then one row per kind of cue: the user picks a part, a track, a cu
 | `t0`, `t1` | VIDEO seconds of **that version**; `t1 === t0` for a single moment |
 | `s0`, `s1` | SOURCE seconds, or SCENE seconds (the scene's own time) without a source: use them for `cut`, to find the words in `files/words.md`, and to find the moment in the scene |
 | `words` | What is said, or shown on screen, in the range |
+| `from` | `"transcript"` when the user made the comment on a selection of the transcript: it is about those words or lines. Absent otherwise |
 | `format` | The format the user was looking at. Only a request about that format's composition (placement, size, framing) stays in it; content, text, timing and sound changes apply to every format |
 | `images` | Frames the user drew on, or pictures they dropped (`assets/review/frame-<id>.png`), with their size in pixels and ratio: read them. Older files have bare paths |
 | `visuals` | What the comment is about in the picture: a part of the scene (`kind`, `t0`/`t1` in VIDEO seconds, its data), or every part of a kind (`{ "kind" }`). Absent when the comment is not about one |
@@ -63,8 +65,10 @@ Feedback file: …/files/reviews/v2.json (video version v2, same ids). For each 
 Change only these points and keep the rest of the edit identical. …
 ```
 
-`[format …]` appears only for a project with several formats, `SOURCE` only with a source, `Words:` only with a
-transcript (`On screen:` for a video without speech: the lines of what it shows, joined by « / »), `Visual:` once per
+Each change keeps its number in the studio (#4): the list skips the resolved ones. `[format …]` appears only for a
+project with several formats, `SOURCE` only with a source, `Words:` only with a
+transcript (`On screen:` for a video without speech: the lines of what it shows, joined by « / »; either says
+`(selected in the transcript)` when the comment was made there), `Visual:` once per
 picked part, `Sound:` once per picked track or cue (each with its note at the end), `Image:` once per attached image with its ratio and size.
 
 ## `files/sound/vN.json`
@@ -75,7 +79,7 @@ find a cue, or to see where a track is loud or quiet.
 
 ## `files/video/vN.json`
 
-What the Video tab shows of version N, written by `final`: `parts` (the scene's `part()` calls, the `clip()`s and,
+What the Clip tab shows of version N, written by `final`: `parts` (the scene's `part()` calls, the `clip()`s and,
 with a source, the kept `take`s, VIDEO seconds) and `strips`, per format a sheet of thumbnails (`file`, one every
 `every` seconds, `cols` per row, `w`×`h` px each).
 

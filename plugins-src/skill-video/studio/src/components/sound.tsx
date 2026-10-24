@@ -1,5 +1,5 @@
 import { Block, Lanes, type Lane } from "@/components/lanes"
-import { clock, sameSound, soundColor, TRACKS, type Range, type Sound, type SoundRef, type Track } from "@/lib/studio"
+import { clock, markOf, sameSound, soundColor, soundSpot, TRACKS, type Comment, type Range, type Sound, type SoundRef, type Track } from "@/lib/studio"
 
 // px: a track's row, a kind of sound's row
 const LANE = 34, ROW = 20
@@ -21,27 +21,34 @@ function Level({ db, step, scale, color }: { db: number[]; step: number; scale: 
 }
 
 // The version's sound: one row per track with its level, then one row per kind of cue under the effects, each in its
-// color. A row's name picks all of it for the next comment, a cue that cue.
+// color. A row's name picks all of it for the next comment, a cue that cue. What an open comment points at carries
+// its number (by a row's name, just after a cue); a click on it shows the comment.
 export function SoundTimeline({
   sound,
   duration,
   time,
   range,
   picked,
+  comments,
   onSeek,
   onRange,
   onPick,
+  onFocus,
 }: {
   sound: Sound
   duration: number
   time: number
   range: Range | null
   picked: SoundRef[]
+  // the version's comments, numbered in this order
+  comments: Comment[]
   onSeek: (t: number) => void
   onRange: (r: Range | null) => void
   onPick: (s: SoundRef) => void
+  onFocus: (ids: string[]) => void
 }) {
   const isPicked = (s: SoundRef) => picked.some((p) => sameSound(p, s))
+  const marks = (s: SoundRef) => markOf(comments, (c) => !!c.sounds?.some((x) => sameSound(x, s)), onFocus)
   const tracks = (["voice", "music", "fx"] as Track[]).filter((k) => sound.tracks[k] || (k === "fx" && sound.cues.length))
   // in order of first appearance
   const kinds = [...new Set(sound.cues.map((c) => c.kind))]
@@ -54,6 +61,8 @@ export function SoundTimeline({
       picked: isPicked(k),
       title: `Comment on the whole ${TRACKS[k].toLowerCase()} track`,
       onPick: () => onPick(k),
+      marks: marks(k),
+      spot: soundSpot(k),
       content: (scale: number) => sound.tracks[k] && <Level db={sound.tracks[k]} step={sound.step} scale={scale} color={soundColor(k)} />,
     })),
     ...kinds.map((kind) => {
@@ -67,6 +76,8 @@ export function SoundTimeline({
         picked: isPicked({ kind }),
         title: `Comment on every ${kind}`,
         onPick: () => onPick({ kind }),
+        marks: marks({ kind }),
+        spot: soundSpot({ kind }),
         count: cues.length,
         content: (scale: number) =>
           cues.map((c, i) => {
@@ -80,6 +91,8 @@ export function SoundTimeline({
                 height={ROW}
                 color={soundColor(c)}
                 picked={isPicked(c)}
+                marks={marks(c)}
+                spot={soundSpot(c)}
                 title={[clock(t), ...Object.entries(data).map(([a, b]) => `${a} ${JSON.stringify(b)}`)].join(" · ")}
                 onClick={() => {
                   onPick(c)

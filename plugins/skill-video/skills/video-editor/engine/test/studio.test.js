@@ -68,3 +68,10 @@ test('videos answer byte ranges', async () => {
   assert.equal(r.headers.get('content-range'), 'bytes 100-199/1000')
   assert.equal((await r.arrayBuffer()).byteLength, 100)
 })
+
+test('the root opens the first video, and the studio lists them all', async () => {
+  const r = await fetch(`http://127.0.0.1:${port}/`, { redirect: 'manual' })
+  assert.equal(r.status, 302)
+  assert.equal(r.headers.get('location'), '/demo/')
+  assert.deepEqual((await (await fetch(base + 'api/projects')).json()).map(x => [x.slug, x.versions]), [['demo', 1]])
+})

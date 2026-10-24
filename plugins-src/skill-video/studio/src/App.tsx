@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { CopyIcon, EllipsisIcon, FilmIcon, LayoutGridIcon, TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, CopyIcon, EllipsisIcon, FilmIcon, LayoutGridIcon, TriangleAlertIcon } from "lucide-react"
 
-import { Feedback } from "@/components/feedback"
+import { Feedback, type Point } from "@/components/feedback"
 import { Panel, type Tab } from "@/components/panel"
 import { PromptDialog } from "@/components/prompt-dialog"
-import { fullscreen, Player, toggle, useVideoTime } from "@/components/player"
+import { fullscreen, mark, Player, toggle, useVideoTime } from "@/components/player"
 import { SoundTimeline } from "@/components/sound"
 import { VideoTimeline } from "@/components/video"
 import { Transcript } from "@/components/transcript"
@@ -16,6 +16,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -26,17 +27,19 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Toaster } from "@/components/ui/sonner"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
   api,
   buildPrompt,
   clock,
+  markOf,
   minutes,
   newId,
   ratioName,
   sameSound,
   sameVisual,
+  soundSpot,
+  visualSpot,
   timeline,
   versionWords,
   when,
@@ -48,6 +51,7 @@ import {
   type Range,
   type Sound,
   type SoundRef,
+  type VideoItem,
   type Visual,
   type VisualRef,
 } from "@/lib/studio"
@@ -72,7 +76,9 @@ export default function App() {
   // the version's parts and thumbnails, and the parts picked for the next comment
   const [visual, setVisual] = useState<Visual | null>(null)
   const [visuals, setVisuals] = useState<VisualRef[]>([])
-  const [tab, setTab] = useState("transcript")
+  const [tab, setTab] = useState("video")
+  // the folder's videos, read when the switcher opens
+  const [videos, setVideos] = useState<VideoItem[] | null>(null)
   // the prompt shown in the dialog before copying, null when closed
   const [prompt, setPrompt] = useState<string | null>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -137,6 +143,7 @@ export default function App() {
       images,
       ...(sounds.length ? { sounds } : {}),
       ...(visuals.length ? { visuals } : {}),
+      ...(r?.from ? { from: r.from } : {}),
       resolved: false,
       created: new Date().toISOString(),
       ...(project.formats.length > 1 ? { format } : {}),
@@ -177,6 +184,9 @@ export default function App() {
 
   const pick = (s: SoundRef) =>
     setSounds((xs) => (xs.some((x) => sameSound(x, s)) ? xs.filter((x) => !sameSound(x, s)) : [...xs, s]))
+  // the comments a mark points at, flashed in the feedback column
+  const [focus, setFocus] = useState<{ ids: string[]; n: number } | null>(null)
+  const show = (ids: string[]) => setFocus((f) => ({ ids, n: (f?.n ?? 0) + 1 }))
   const pickVisual = (v: VisualRef) =>
     setVisuals((xs) => (xs.some((x) => sameVisual(x, v)) ? xs.filter((x) => !sameVisual(x, v)) : [...xs, v]))
   const clear = () => {
@@ -191,7 +201,31 @@ export default function App() {
     setRange(c.t1 > c.t0 ? { t0: c.t0, t1: c.t1 } : null)
   }
 
-  // shortcuts: Space play · C write · P draw · F full screen · ⌫ cut the selection · Esc close or clear
+  // a badge of a comment: its tab opens, the playhead goes there and what it names flashes
+  const [spot, setSpot] = useState<{ key?: string; range: Range; n: number } | null>(null)
+  function point(c: Comment, to: Point) {
+    select(c)
+    const at = to.sound && typeof to.sound !== "string" && "t" in to.sound ? (to.sound.t as number) : to.visual && "t0" in to.visual ? (to.visual.t0 as number) : null
+    if (at !== null) seek(at)
+    setTab(to.sound ? "sound" : to.visual ? "video" : "transcript")
+    const key = to.sound ? soundSpot(to.sound) : to.visual ? visualSpot(to.visual) : undefined
+    setSpot((s) => ({ key, range: { t0: c.t0, t1: Math.max(c.t1, c.t0 + 0.01) }, n: (s?.n ?? 0) + 1 }))
+  }
+  useEffect(() => {
+    if (!spot) return
+    // after the tab has drawn its rows
+    const raf = requestAnimationFrame(() => {
+      const els = spot.key
+        ? [...document.querySelectorAll<HTMLElement>(`[data-spot="${CSS.escape(spot.key)}"]`)]
+        : [...document.querySelectorAll<HTMLElement>("[data-v0]")].filter((el) => +el.dataset.v1! > spot.range.t0 && +el.dataset.v0! < spot.range.t1)
+      els[0]?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
+      for (const el of els)
+        el.animate([{ outline: "2px solid var(--highlight)", outlineOffset: "2px" }, { outline: "2px solid transparent", outlineOffset: "2px" }], { duration: 1800, easing: "ease-in" })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [spot])
+
+  // shortcuts: Space play · C write · P draw · F full screen · I/O selection in/out · ⌫ cut the selection · Esc close or clear
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // the prompt dialog has its own keys (Esc, ⌘↵)
@@ -208,6 +242,7 @@ export default function App() {
       else if (e.key === "c") composer.current?.focus()
       else if (e.key === "p") setDrawing((d) => !d)
       else if (e.key === "f") fullscreen(video.current)
+      else if (e.key === "i" || e.key === "o") setRange(mark(e.key === "i" ? "in" : "out", time, range))
       else if ((e.key === "Backspace" || e.key === "Delete") && range) add("cut", "")
       else return
       e.preventDefault()
@@ -250,25 +285,25 @@ export default function App() {
     )
 
   const tabs: Tab[] = [
+    ...(visual
+      ? [
+          {
+            value: "video",
+            label: "Clip",
+            badge: visual.parts.length ? String(visual.parts.length) : undefined,
+            info: "The frames, then one row per kind of part the scene declared (sequences, titles…). Click a row's name to comment on all of it, or one block (several if you like). Hover the frames to see them. On the rows, click to jump, drag to select a range. Pinch or ⌘-scroll to zoom.",
+          },
+        ]
+      : []),
     ...(words
       ? [
           {
             value: "transcript",
             label: "Transcript",
-            badge: words[0]?.screen ? `On screen · ${words.length}` : undefined,
+            badge: words[0]?.screen ? String(words.length) : undefined,
             info: words[0]?.screen
               ? "What the video shows, moment by moment. Click a line to select it, drag across lines to select several, then comment."
               : "Click a word to jump there. Drag across words to select their range, then cut it or comment on it.",
-          },
-        ]
-      : []),
-    ...(visual
-      ? [
-          {
-            value: "video",
-            label: "Video",
-            badge: visual.parts.length ? String(visual.parts.length) : undefined,
-            info: "The frames, then one row per kind of part the scene declared (sequences, titles…). Click a row's name to comment on all of it, or one block (several if you like). Hover the frames to see them. On the rows, click to jump, drag to select a range. Pinch or ⌘-scroll to zoom.",
           },
         ]
       : []),
@@ -284,7 +319,7 @@ export default function App() {
       : []),
   ]
   const shown = tabs.find((t) => t.value === tab)?.value ?? tabs[0]?.value
-  // the sequence on screen, named in the Video tab's header
+  // the sequence on screen, named in the Clip tab's header
   const playing = visual?.parts.findLast((p) => p.kind === "sequence" && p.t0 <= time && time < p.t1)
 
   const meta = (label: string, value: string) => (
@@ -297,10 +332,41 @@ export default function App() {
     <TooltipProvider>
       <div className="flex h-svh flex-col overflow-hidden">
         <header className="flex items-center gap-3 border-b px-3 py-2.5 lg:gap-4 lg:px-5">
-          {/* decorative: one studio per project, no project picker */}
-          <div aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-            <LayoutGridIcon className="size-4" />
-          </div>
+          <DropdownMenu onOpenChange={(o) => o && api.projects().then(setVideos, () => setVideos([]))}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" size="icon" className="size-9 shrink-0" aria-label="Other videos">
+                <LayoutGridIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-auto">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Videos in this folder</DropdownMenuLabel>
+              <DropdownMenuGroup>
+                {!videos && <DropdownMenuItem disabled>Loading…</DropdownMenuItem>}
+                {videos?.map((v) => (
+                  <DropdownMenuItem
+                    key={v.slug}
+                    className="gap-3"
+                    onSelect={() => {
+                      if (v.slug !== project.slug) location.href = `../${v.slug}/`
+                    }}
+                  >
+                    {v.poster ? (
+                      <img src={`../${v.slug}/video/${v.poster}`} alt="" className="h-9 w-16 shrink-0 rounded-sm object-cover ring-1 ring-foreground/10" />
+                    ) : (
+                      <span className="h-9 w-16 shrink-0 rounded-sm bg-muted" />
+                    )}
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate text-sm">{v.slug}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {[v.duration ? minutes(v.duration) : "not rendered yet", v.versions && `v${v.versions}`, v.rendered && when(v.rendered)].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                    {v.slug === project.slug && <CheckIcon className="ml-auto" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold">{project.slug}</h1>
             <p className="truncate text-xs text-muted-foreground">
@@ -319,17 +385,6 @@ export default function App() {
               {meta("Rules", project.rules.join(", ") || "none")}
             </p>
           </div>
-          {project.formats.length > 1 && (
-            <Tabs value={format} onValueChange={setFormat} className="shrink-0">
-              <TabsList>
-                {project.formats.map((f) => (
-                  <TabsTrigger key={f} value={f} disabled={!ver?.files[f]} className="font-mono text-xs">
-                    {f}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          )}
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -337,7 +392,7 @@ export default function App() {
                   <EllipsisIcon />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-auto">
                 <DropdownMenuGroup>
                   <DropdownMenuItem onSelect={() => navigator.clipboard.writeText(project.dir).then(() => toast("Project path copied"))}>
                     Copy the project path
@@ -349,7 +404,7 @@ export default function App() {
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button size="sm" variant={open.length ? "default" : "secondary"} disabled={!open.length} onClick={() => ver && setPrompt(buildPrompt(project, ver, open))}>
+            <Button size="sm" variant={open.length ? "default" : "secondary"} disabled={!open.length} onClick={() => ver && setPrompt(buildPrompt(project, ver, comments))}>
               <CopyIcon data-icon="inline-start" />
               <span className="hidden sm:inline">Copy prompt</span>
               <Badge variant="secondary" className="min-w-5 rounded-full px-1.5 tabular-nums">
@@ -366,6 +421,9 @@ export default function App() {
                 video={video}
                 src={src}
                 ratio={ratioOf(format)}
+                format={format}
+                formats={project.formats.map((f) => ({ value: f, ready: !!ver?.files[f] }))}
+                onFormat={setFormat}
                 time={time}
                 comments={comments}
                 range={range}
@@ -374,6 +432,7 @@ export default function App() {
                 onRange={setRange}
                 onDraw={setDrawing}
                 onAttach={attach}
+                onFocus={show}
               />
             ) : (
               <Empty className="flex-1">
@@ -415,6 +474,8 @@ export default function App() {
                     onSeek={seek}
                     onRange={setRange}
                     onPick={pickVisual}
+                    comments={comments}
+                    onFocus={show}
                   />
                 ) : shown === "sound" && sound ? (
                   <SoundTimeline
@@ -426,6 +487,8 @@ export default function App() {
                     onSeek={seek}
                     onRange={setRange}
                     onPick={pick}
+                    comments={comments}
+                    onFocus={show}
                   />
                 ) : (
                   words && (
@@ -433,9 +496,9 @@ export default function App() {
                       words={words}
                       time={time}
                       range={range}
-                      marked={comments.filter((c) => c.t1 > c.t0)}
+                      marked={(w) => markOf(comments, (c) => c.t1 > c.t0 && w.v1 > c.t0 && w.v0 < c.t1, show)}
                       onSeek={seek}
-                      onRange={setRange}
+                      onRange={(r) => setRange(r && { ...r, from: "transcript" })}
                     />
                   )
                 )}
@@ -447,6 +510,8 @@ export default function App() {
             <Feedback
               version={ver.v}
               comments={comments}
+              focus={focus}
+              onPoint={point}
               previous={project.versions
                 .slice(0, -1)
                 .reverse()

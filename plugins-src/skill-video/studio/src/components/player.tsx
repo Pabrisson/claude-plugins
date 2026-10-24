@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react"
 import {
+  FlagTriangleLeftIcon,
+  FlagTriangleRightIcon,
   MaximizeIcon,
   PauseIcon,
   PenLineIcon,
@@ -11,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { DrawLayer } from "@/components/draw"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import {
@@ -18,7 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { clock, type Comment, type Range } from "@/lib/studio"
+import { clock, numberOf, type Comment, type Range } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 // the playing time, read every frame (timeupdate only fires a few times a second)
@@ -38,6 +41,11 @@ export function useVideoTime(video: RefObject<HTMLVideoElement | null>) {
 
 export const toggle = (v: HTMLVideoElement | null) =>
   v && (v.paused ? v.play() : v.pause())
+// In and Out (I, O): the playhead becomes the selection's start or end, the other end stays when it can. A lone mark
+// is a selection of no length, shown as a line until the other one is set
+export const mark = (side: "in" | "out", t: number, r: Range | null): Range =>
+  side === "in" ? { t0: t, t1: r && r.t1 > t ? r.t1 : t } : { t0: r && r.t0 < t ? r.t0 : t, t1: t }
+
 // the video alone on the screen; Esc, F or a second call come back
 export const fullscreen = (v: HTMLVideoElement | null) =>
   document.fullscreenElement ? document.exitFullscreen() : v?.requestFullscreen()
@@ -48,6 +56,9 @@ export function Player({
   video,
   src,
   ratio,
+  format,
+  formats,
+  onFormat,
   time,
   comments,
   range,
@@ -56,10 +67,15 @@ export function Player({
   onRange,
   onDraw,
   onAttach,
+  onFocus,
 }: {
   video: RefObject<HTMLVideoElement | null>
   src: string
   ratio: number
+  format: string
+  // the project's formats, ready when this version has its file
+  formats: { value: string; ready: boolean }[]
+  onFormat: (f: string) => void
   time: number
   comments: Comment[]
   range: Range | null
@@ -68,6 +84,7 @@ export function Player({
   onRange: (r: Range | null) => void
   onDraw: (on: boolean) => void
   onAttach: (png: Blob) => void
+  onFocus: (ids: string[]) => void
 }) {
   const [paused, setPaused] = useState(true)
   const [muted, setMuted] = useState(false)
@@ -90,6 +107,17 @@ export function Player({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="relative min-h-0 flex-1" style={{ containerType: "size" }}>
+        {formats.length > 1 && (
+          <Tabs orientation="vertical" value={format} onValueChange={onFormat} className="absolute top-1/2 right-0 z-10 -translate-y-1/2">
+            <TabsList className="bg-popover/90 shadow-md ring-1 ring-foreground/10 backdrop-blur-sm">
+              {formats.map((f) => (
+                <TabsTrigger key={f.value} value={f.value} disabled={!f.ready} className="font-mono text-xs group-data-vertical/tabs:justify-center">
+                  {f.value}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        )}
         <div className="absolute inset-0 flex items-center justify-center">
           <div
             className="relative"
@@ -101,7 +129,7 @@ export function Player({
               muted={muted}
               playsInline
               className={cn(
-                "size-full rounded-2xl bg-black ring-1 ring-foreground/10",
+                "size-full bg-background ring-1 ring-foreground/10",
                 drawing && "ring-2 ring-highlight"
               )}
               onClick={() => toggle(video.current)}
@@ -137,6 +165,7 @@ export function Player({
         range={range}
         onSeek={onSeek}
         onRange={onRange}
+        onFocus={onFocus}
       />
 
       <div className="flex items-center gap-1 @lg:gap-2">
@@ -158,6 +187,22 @@ export function Player({
             </Button>
           </TooltipTrigger>
           <TooltipContent>+5 s</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Mark in" onClick={() => onRange(mark("in", time, range))}>
+              <FlagTriangleRightIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>In: the selection starts here (I)</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Mark out" onClick={() => onRange(mark("out", time, range))}>
+              <FlagTriangleLeftIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Out: the selection ends here (O)</TooltipContent>
         </Tooltip>
         <span className="ml-1 font-mono text-xs whitespace-nowrap tabular-nums @lg:ml-2 @lg:text-sm">
           {clock(time)} <span className="text-muted-foreground">/ {clock(duration)}</span>
@@ -205,24 +250,30 @@ export function Player({
 // a nice tick step for ~10 to 20 ticks
 const step = (d: number) => [1, 2, 5, 10, 15, 30, 60, 120, 300].find((s) => d / s <= 20) ?? 600
 
-// Commented ranges ride above the track; a click seeks, a drag selects a range. Grabbing the playhead itself drags it.
+// Open comments ride above the track (a click on one shows it); a click seeks, a drag selects a range. Grabbing the
+// playhead itself drags it, grabbing the selection slides it along.
 function Timeline({
   time,
   duration,
-  comments,
+  comments: all,
   range,
   onSeek,
   onRange,
+  onFocus,
 }: {
   time: number
   duration: number
+  // the version's comments, numbered in this order
   comments: Comment[]
   range: Range | null
   onSeek: (t: number) => void
   onRange: (r: Range | null) => void
+  onFocus: (ids: string[]) => void
 }) {
+  const comments = all.filter((c) => !c.resolved)
   const track = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ x: number; t: number; scrub: boolean } | null>(null)
+  // moving: the selection as it was when grabbed
+  const drag = useRef<{ x: number; t: number; scrub: boolean; moving?: Range } | null>(null)
   const [scrubbing, setScrubbing] = useState(false)
   const pct = (t: number) => `${(duration ? Math.min(Math.max(t / duration, 0), 1) : 0) * 100}%`
   const at = (x: number) => {
@@ -238,13 +289,21 @@ function Timeline({
       className={cn("relative h-11 touch-none select-none", scrubbing ? "cursor-grabbing" : "cursor-pointer")}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId)
+        const pill = (e.target as HTMLElement).closest<HTMLElement>("[data-comment]")
+        if (pill) onFocus([pill.dataset.comment!])
         const scrub = !!(e.target as HTMLElement).closest("[data-playhead]")
-        drag.current = { x: e.clientX, t: at(e.clientX), scrub }
-        setScrubbing(scrub)
+        const moving = !scrub && range && (e.target as HTMLElement).closest("[data-range]") ? range : undefined
+        drag.current = { x: e.clientX, t: at(e.clientX), scrub, moving }
+        setScrubbing(scrub || !!moving)
       }}
       onPointerMove={(e) => {
         const d = drag.current
         if (d?.scrub) return onSeek(at(e.clientX))
+        if (d?.moving) {
+          const { t0, t1 } = d.moving, dt = Math.min(Math.max(at(e.clientX) - d.t, -t0), duration - t1)
+          onRange({ t0: t0 + dt, t1: t1 + dt })
+          return onSeek(t0 + dt)
+        }
         if (!d || Math.abs(e.clientX - d.x) < 4) return
         const t = at(e.clientX)
         onRange({ t0: Math.min(d.t, t), t1: Math.max(d.t, t) })
@@ -254,13 +313,20 @@ function Timeline({
         drag.current = null
         setScrubbing(false)
         if (d && !d.scrub && Math.abs(e.clientX - d.x) < 4) {
-          onRange(null)
+          // a click on the selection keeps it
+          if (!d.moving) onRange(null)
           onSeek(at(e.clientX))
         }
       }}
     >
       {comments.map((c) => (
-        <div key={c.id} className="absolute top-1 flex h-2.5 items-center" style={{ left: pct(c.t0), width: `calc(${pct(c.t1 - c.t0)} + 10px)` }}>
+        <div
+          key={c.id}
+          data-comment={c.id}
+          className="absolute top-1 flex h-2.5 items-center"
+          style={{ left: pct(c.t0), width: `calc(${pct(c.t1 - c.t0)} + 10px)` }}
+          title={`Feedback #${numberOf(all, c)}`}
+        >
           <span className="size-2.5 shrink-0 rounded-full bg-highlight" />
           <span className="h-1 flex-1 rounded-r-full bg-highlight" />
         </div>
@@ -273,8 +339,10 @@ function Timeline({
       </div>
       {range && (
         <div
-          className="absolute top-5.5 h-5 rounded-md border-2 border-highlight bg-highlight/20"
+          data-range
+          className={cn("absolute top-5.5 h-5 rounded-md border-2 border-highlight bg-highlight/20", scrubbing ? "cursor-grabbing" : "cursor-grab")}
           style={{ left: pct(range.t0), width: pct(range.t1 - range.t0) }}
+          title="Drag to move the selection"
         />
       )}
       {/* the hit area is wider than the knob, so it is easy to grab */}

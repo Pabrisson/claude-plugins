@@ -1,7 +1,7 @@
-import { useState } from "react"
+import { Fragment, useState } from "react"
 
-import { Block, Lanes, type Lane } from "@/components/lanes"
-import { clock, colorOf, sameVisual, visualColor, type Part, type Range, type Strip, type Visual, type VisualRef } from "@/lib/studio"
+import { Block, Lanes, Mark, type Lane } from "@/components/lanes"
+import { clock, colorOf, markOf, sameVisual, visualSpot, type Comment, type Part, type Range, type Strip, type Visual, type VisualRef } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 // px: the frames' row, the sequences' row (thumbnails over a caption), a thumbnail's height, a kind of part's row,
@@ -41,8 +41,9 @@ function Frames({ strip, t0, t1, scale }: { strip: Strip; t0: number; t1: number
   ))
 }
 
-// The video as a track of its sequences (their thumbnails, name and length, the field's color as a line under them)
-// and one row per other kind of part the scene declared. A row's name picks every part of it for the next comment, a block that part; hovering the track shows the frame.
+// The video as a track of its sequences (their thumbnails, name and length) and one row per other kind of part the
+// scene declared. A row's name picks every part of it for the next comment, a block that part; hovering the track
+// shows the frame.
 export function VideoTimeline({
   visual,
   format,
@@ -50,9 +51,11 @@ export function VideoTimeline({
   time,
   range,
   picked,
+  comments,
   onSeek,
   onRange,
   onPick,
+  onFocus,
 }: {
   visual: Visual
   format: string
@@ -60,12 +63,17 @@ export function VideoTimeline({
   time: number
   range: Range | null
   picked: VisualRef[]
+  // the version's comments, numbered in this order
+  comments: Comment[]
   onSeek: (t: number) => void
   onRange: (r: Range | null) => void
   onPick: (x: VisualRef) => void
+  onFocus: (ids: string[]) => void
 }) {
   const [hover, setHover] = useState<{ x: number; i: number } | null>(null)
   const isPicked = (x: VisualRef) => picked.some((p) => sameVisual(p, x))
+  // a dot on what an open comment points at; a click on it shows the comment
+  const marks = (x: VisualRef) => markOf(comments, (c) => !!c.visuals?.some((v) => sameVisual(v, x)), onFocus)
   const strip = visual.strips[format] ?? Object.values(visual.strips)[0]
   const seqs = visual.parts.filter((p) => p.kind === "sequence")
   // the next sequence starts during a transition: each block ends where the next begins
@@ -105,33 +113,40 @@ export function VideoTimeline({
           picked: isPicked({ kind: "sequence" }),
           title: "Comment on every sequence",
           onPick: () => onPick({ kind: "sequence" }),
+          marks: marks({ kind: "sequence" }),
+          spot: visualSpot({ kind: "sequence" }),
           count: seqs.length,
           content: (scale) =>
             hovering(
-              seqs.map((s, i) => (
-                <button
-                  key={i}
-                  className={cn(
-                    "absolute top-1 bottom-1 overflow-hidden rounded-md bg-muted text-left ring-1 ring-foreground/15 transition-shadow hover:ring-foreground/40",
-                    s === playing && "ring-2 ring-foreground/70 hover:ring-foreground/70",
-                    isPicked(s) && "ring-2 ring-highlight hover:ring-highlight"
-                  )}
-                  style={{ left: s.t0 * scale, width: Math.max((ends[i] - s.t0) * scale - 2, 4) }}
-                  title={`${s.name ?? "sequence"} · ${clock(s.t0)} → ${clock(s.t1)}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => {
-                    onPick(s)
-                    onSeek(s.t0)
-                  }}
-                >
-                  <Frames strip={strip} t0={s.t0} t1={ends[i]} scale={scale} />
-                  <span className={cn("absolute inset-x-0 bottom-0 flex h-[22px] items-center gap-1.5 truncate bg-card/95 px-1.5 pb-[3px] font-mono text-[10px]", s === playing ? "text-foreground" : "text-muted-foreground")}>
-                    <span className="truncate">{s.name ?? "sequence"}</span>
-                    <span className="shrink-0 text-muted-foreground/70 tabular-nums">{(s.t1 - s.t0).toFixed(1)} s</span>
-                  </span>
-                  <span className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: visualColor(s) }} />
-                </button>
-              )),
+              seqs.map((s, i) => {
+                const width = Math.max((ends[i] - s.t0) * scale - 2, 4), m = marks(s)
+                return (
+                  <Fragment key={i}>
+                    <button
+                      className={cn(
+                        "absolute top-1 bottom-1 overflow-hidden rounded-[3px] bg-muted text-left ring-1 ring-foreground/15 transition-shadow hover:ring-foreground/40",
+                        s === playing && "ring-2 ring-foreground/70 hover:ring-foreground/70",
+                        isPicked(s) && "ring-2 ring-highlight hover:ring-highlight"
+                      )}
+                      style={{ left: s.t0 * scale, width }}
+                      data-spot={visualSpot(s)}
+                      title={`${s.name ?? "sequence"} · ${clock(s.t0)} → ${clock(s.t1)}`}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => {
+                        onPick(s)
+                        onSeek(s.t0)
+                      }}
+                    >
+                      <Frames strip={strip} t0={s.t0} t1={ends[i]} scale={scale} />
+                      <span className={cn("absolute inset-x-0 bottom-0 flex h-[22px] items-center gap-1.5 truncate bg-card/95 px-1.5 font-mono text-[10px]", s === playing ? "text-foreground" : "text-muted-foreground")}>
+                        <span className="truncate">{s.name ?? "sequence"}</span>
+                        <span className="shrink-0 text-muted-foreground/70 tabular-nums">{(s.t1 - s.t0).toFixed(1)} s</span>
+                        {m && <Mark marks={m} className="ml-auto" />}
+                      </span>
+                    </button>
+                  </Fragment>
+                )
+              }),
               scale
             ),
         }
@@ -166,34 +181,39 @@ export function VideoTimeline({
         picked: isPicked({ kind }),
         title: `Comment on every ${kind}`,
         onPick: () => onPick({ kind }),
+        marks: marks({ kind }),
+        spot: visualSpot({ kind }),
         count: parts.length,
         content: (scale: number) =>
-          parts.map((p: Part, i) =>
-            cascade ? (
-              <button
-                key={i}
-                className={cn(
-                  "absolute flex items-center gap-1.5 overflow-hidden rounded-md bg-muted pr-1.5 text-left font-mono text-[10px] text-muted-foreground ring-1 ring-foreground/15 transition-shadow hover:ring-foreground/40",
-                  p.t0 <= time && time < p.t1 && "text-foreground ring-foreground/70 hover:ring-foreground/70",
-                  isPicked(p) && "ring-2 ring-highlight hover:ring-highlight"
-                )}
-                style={{ left: p.t0 * scale, top: 4 + levels[i] * STEP, width: Math.max((p.t1 - p.t0) * scale - 2, 24), height: STEP - 4 }}
-                title={about(p)}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={choose(p)}
-              >
-                {/* a frame a little after it starts: the first one is often still the transition */}
-                {strip && (
-                  <Thumb
-                    strip={strip}
-                    i={Math.min(Math.round((p.t0 + Math.min(1, (p.t1 - p.t0) / 3)) / strip.every), strip.count - 1)}
-                    height={STEP - 4}
-                    className="shrink-0"
-                  />
-                )}
-                <span className="truncate">{p.name ?? kind}</span>
-                <span className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: visualColor(p) }} />
-              </button>
+          parts.map((p: Part, i) => {
+            const width = Math.max((p.t1 - p.t0) * scale - 2, 24), m = marks(p)
+            return cascade ? (
+              <Fragment key={i}>
+                <button
+                  className={cn(
+                    "absolute flex items-center gap-1.5 overflow-hidden rounded-[3px] bg-muted pr-1.5 text-left font-mono text-[10px] text-muted-foreground ring-1 ring-foreground/15 transition-shadow hover:ring-foreground/40",
+                    p.t0 <= time && time < p.t1 && "text-foreground ring-foreground/70 hover:ring-foreground/70",
+                    isPicked(p) && "ring-2 ring-highlight hover:ring-highlight"
+                  )}
+                  style={{ left: p.t0 * scale, top: 4 + levels[i] * STEP, width, height: STEP - 4 }}
+                  data-spot={visualSpot(p)}
+                  title={about(p)}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={choose(p)}
+                >
+                  {/* a frame a little after it starts: the first one is often still the transition */}
+                  {strip && (
+                    <Thumb
+                      strip={strip}
+                      i={Math.min(Math.round((p.t0 + Math.min(1, (p.t1 - p.t0) / 3)) / strip.every), strip.count - 1)}
+                      height={STEP - 4}
+                      className="shrink-0"
+                    />
+                  )}
+                  <span className="truncate">{p.name ?? kind}</span>
+                  {m && <Mark marks={m} className="ml-auto" />}
+                </button>
+              </Fragment>
             ) : (
               <Block
                 key={i}
@@ -201,15 +221,16 @@ export function VideoTimeline({
                 t1={p.t1}
                 scale={scale}
                 height={ROW}
-                color={visualColor(p)}
-                edge={!!p.color}
+                color={colorOf(kind)}
                 picked={isPicked(p)}
                 label={p.name ?? kind}
                 title={about(p)}
+                marks={m}
+                spot={visualSpot(p)}
                 onClick={choose(p)}
               />
             )
-          ),
+          }),
       }
     }),
   ]

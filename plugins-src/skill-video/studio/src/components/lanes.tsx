@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
 
 import { ScrollBar } from "@/components/ui/scroll-area"
-import { minutes, type Range } from "@/lib/studio"
+import { minutes, type Marks, type Range } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 // px: the rows' names
@@ -22,6 +22,10 @@ export type Lane = {
   count?: number
   // a kind under a track: indented
   sub?: boolean
+  // comments about the whole row
+  marks?: Marks
+  // its address for a badge that points at it (data-spot)
+  spot?: string
   content: (scale: number) => ReactNode
 }
 
@@ -31,51 +35,85 @@ const ink = (bg: string) => {
   return m && 0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16) < 150 ? "#fff" : "#000"
 }
 
-// one moment of a row: a cue, a part; at least 6 px wide, its label inside when it fits. `edge`: the color is a
-// line under a neutral block (a background color, which can be as dark as the studio or as light as paper)
+// the numbers of the comments about a row or a clip ("#2"): a click shows them in the feedback column
+export function Mark({ marks, className, style }: { marks: NonNullable<Marks>; className?: string; style?: React.CSSProperties }) {
+  return (
+    <span
+      role="button"
+      title={marks.title}
+      className={cn(
+        "shrink-0 cursor-pointer rounded-[3px] bg-[color-mix(in_oklch,var(--highlight)_18%,var(--card))] px-1 font-mono text-[10px] leading-4 font-medium text-highlight tabular-nums transition-colors hover:bg-[color-mix(in_oklch,var(--highlight)_32%,var(--card))]",
+        className
+      )}
+      style={style}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation()
+        marks.onClick()
+      }}
+    >
+      {marks.label}
+    </span>
+  )
+}
+
+// one moment of a row: a cue, a part; at least 6 px wide, its label inside when it fits. A comment about it outlines
+// it in white (blue is the selection's) and shows its number while the pointer is on it
 export function Block({
   t0,
   t1,
   scale,
   color,
-  edge,
   picked,
   label,
   title,
   height,
+  marks,
+  spot,
   onClick,
 }: {
   t0: number
   t1: number
   scale: number
   color: string
-  edge?: boolean
   picked: boolean
   label?: string
   title: string
   height: number
+  marks?: Marks
+  spot?: string
   onClick: () => void
 }) {
   const width = Math.max((t1 - t0) * scale, 6)
   return (
-    <button
-      className={cn(
-        "absolute top-1 truncate rounded-[3px] px-1.5 text-left font-mono text-[10px] leading-none opacity-75 ring-1 ring-foreground/15 transition-opacity hover:opacity-100",
-        edge && "bg-muted text-foreground opacity-100 hover:bg-foreground/15",
-        picked && "opacity-100 ring-2 ring-highlight ring-offset-1 ring-offset-card"
+    <span className="group/block absolute top-1 hover:z-10" style={{ left: t0 * scale, width, height: height - 8 }}>
+      <button
+        className={cn(
+          "block size-full truncate rounded-[3px] px-1.5 text-left font-mono text-[10px] leading-none opacity-75 ring-1 ring-foreground/15 transition-opacity hover:opacity-100",
+          marks && "opacity-100 ring-[1.5px] ring-foreground",
+          picked && "opacity-100 ring-2 ring-highlight ring-offset-1 ring-offset-card"
+        )}
+        style={{ background: color, color: ink(color) }}
+        title={marks ? `${title} · ${marks.title}` : title}
+        data-spot={spot}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={onClick}
+      >
+        {label && width > 36 ? label : null}
+      </button>
+      {/* its padding bridges the gap, so the pointer reaches the number without losing the hover */}
+      {marks && (
+        <span className="absolute top-1/2 left-full hidden -translate-y-1/2 pl-[3px] group-hover/block:block">
+          <Mark marks={marks} />
+        </span>
       )}
-      style={{ left: t0 * scale, width, height: height - 8, ...(edge ? { boxShadow: `inset 0 -3px 0 ${color}` } : { background: color, color: ink(color) }) }}
-      title={title}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={onClick}
-    >
-      {label && width > 36 ? label : null}
-    </button>
+    </span>
   )
 }
 
-// A timeline of rows under a ruler, for the Sound and Video tabs: a click on a row's name picks all of it, on the
-// rows a click seeks and a drag selects a range. Pinch or ⌘-scroll zooms; the playhead stays in view while it plays.
+// A timeline of rows under a ruler, for the Sound and Clip tabs: a click on a row's name picks all of it, on the
+// rows a click seeks and a drag selects a range, on the ruler a drag scrubs. Pinch or ⌘-scroll zooms; the playhead
+// stays in view while it plays.
 export function Lanes({
   lanes,
   duration,
@@ -94,20 +132,22 @@ export function Lanes({
   const scroller = useRef<HTMLDivElement>(null)
   const inner = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; t: number } | null>(null)
-  const [width, setWidth] = useState(0)
+  const [view, setView] = useState({ width: 0, height: 0 })
   // px per second, null: the default
   const [zoom, setZoom] = useState<number | null>(null)
-  const fit = Math.max(width - LABEL - 16, 100) / duration
+  const fit = Math.max(view.width - LABEL - 16, 100) / duration
   const scale = zoom ?? Math.max(fit, 40)
   const ticks = Array.from({ length: Math.floor(duration / tickStep(scale)) + 1 }, (_, i) => i * tickStep(scale))
   const selected = range && range.t1 > range.t0 ? range : null
+  // the playhead on a whole pixel: its head and its line must not round apart
+  const head = Math.round(time * scale)
   const at = (clientX: number) => {
     const r = inner.current!.getBoundingClientRect()
     return Math.min(Math.max((clientX - r.left - LABEL) / scale, 0), duration)
   }
 
   useEffect(() => {
-    const el = scroller.current!, ro = new ResizeObserver(() => setWidth(el.clientWidth))
+    const el = scroller.current!, ro = new ResizeObserver(() => setView({ width: el.clientWidth, height: el.clientHeight }))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -129,8 +169,8 @@ export function Lanes({
   }, [duration, scale])
 
   useEffect(() => {
-    const el = scroller.current!, x = time * scale, view = el.clientWidth - LABEL
-    if (!drag.current && (x < el.scrollLeft || x > el.scrollLeft + view - 24)) el.scrollLeft = x - view * 0.25
+    const el = scroller.current!, x = time * scale, visible = el.clientWidth - LABEL
+    if (!drag.current && (x < el.scrollLeft || x > el.scrollLeft + visible - 24)) el.scrollLeft = x - visible * 0.25
     // follow the time, not the zoom (it keeps the point under the pointer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [time])
@@ -141,8 +181,9 @@ export function Lanes({
       <ScrollAreaPrimitive.Viewport ref={scroller} className="size-full overscroll-x-contain">
         <div
           ref={inner}
-          className="relative min-h-full touch-none pb-3 select-none"
-          style={{ width: LABEL + duration * scale + 16 }}
+          className="relative touch-none pb-3 select-none"
+          // the whole height of the card: the playhead and the selection reach its bottom
+          style={{ width: LABEL + duration * scale + 16, minHeight: view.height }}
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId)
             drag.current = { x: e.clientX, t: at(e.clientX) }
@@ -164,12 +205,25 @@ export function Lanes({
         >
           <div className="sticky top-0 z-20 flex h-5 bg-card">
             <div className="sticky left-0 z-20 shrink-0 border-r bg-card" style={{ width: LABEL }} />
-            <div className="relative flex-1">
+            <div
+              className="relative flex-1 cursor-ew-resize"
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                e.currentTarget.setPointerCapture(e.pointerId)
+                onSeek(at(e.clientX))
+              }}
+              onPointerMove={(e) => e.currentTarget.hasPointerCapture(e.pointerId) && onSeek(at(e.clientX))}
+            >
               {ticks.map((t) => (
                 <span key={t} className="absolute top-0 h-5 border-l border-foreground/10 pl-1 font-mono text-[10px] leading-5 text-muted-foreground" style={{ left: t * scale }}>
                   {minutes(t)}
                 </span>
               ))}
+              {/* the playhead's head: it stays in view over the rows when they scroll */}
+              <div className="pointer-events-none absolute inset-y-0 flex w-[11px] flex-col items-center" style={{ left: head - 5 }}>
+                <span className="mt-0.5 h-3 w-[11px] shrink-0 bg-foreground [clip-path:polygon(0_0,100%_0,100%_62%,50%_100%,0_62%)]" />
+                <span className="w-px flex-1 bg-foreground" />
+              </div>
             </div>
           </div>
           {lanes.map((l) => (
@@ -183,6 +237,7 @@ export function Lanes({
                 style={{ width: LABEL }}
                 disabled={!l.onPick}
                 aria-pressed={l.onPick ? !!l.picked : undefined}
+                data-spot={l.spot}
                 title={l.title}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={l.onPick}
@@ -194,7 +249,10 @@ export function Lanes({
                   />
                 )}
                 <span className="truncate">{l.label}</span>
-                {l.count !== undefined && <span className="ml-auto text-[10px] text-muted-foreground/70 tabular-nums">{l.count}</span>}
+                <span className="ml-auto flex shrink-0 items-center gap-1">
+                  {l.marks && <Mark marks={l.marks} />}
+                  {l.count !== undefined && <span className="text-[10px] text-muted-foreground/70 tabular-nums">{l.count}</span>}
+                </span>
               </button>
               <div className="relative flex-1">{l.content(scale)}</div>
             </div>
@@ -205,7 +263,7 @@ export function Lanes({
               style={{ left: LABEL + selected.t0 * scale, width: (selected.t1 - selected.t0) * scale }}
             />
           )}
-          <div className="pointer-events-none absolute inset-y-0 z-10 w-px bg-foreground" style={{ left: LABEL + time * scale }} />
+          <div className="pointer-events-none absolute inset-y-0 z-10 w-px bg-foreground" style={{ left: LABEL + head }} />
         </div>
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar className="z-30" />

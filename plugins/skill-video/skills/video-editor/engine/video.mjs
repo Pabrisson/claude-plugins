@@ -34,7 +34,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.mp4': 'video/mp4',
   '.wav': 'audio/wav', '.wasm': 'application/wasm',
 }
-const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
+const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range; from: "transcript" when the comment was made on a selection of the transcript. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
 
 // codecs WebCodecs can put in an MP4. The resolutions' bitrates are H.264's: the others need less for the same look.
 const CODECS = {
@@ -578,7 +578,7 @@ const job = (dir, format, type) => {
 }
 
 // the scene's sound cues (video seconds), the same in every format, for sound.py. The file only changes with them,
-// so the mix is not rebuilt for nothing. Its parts (the studio's Video tab) go next to them
+// so the mix is not rebuilt for nothing. Its parts (the studio's Clip tab) go next to them
 async function saveCues(dir, page) {
   const file = path.join(dir, '.cache/cues.json'), cues = await page.evaluate(() => window.cues())
   fs.mkdirSync(path.dirname(file), { recursive: true })
@@ -747,7 +747,7 @@ function final() {
     fs.mkdirSync(f('files/sound'), { recursive: true })
     fs.writeFileSync(f(`files/sound/v${v}.json`), JSON.stringify({ cues: fs.existsSync(f('.cache/cues.json')) ? readJson(f('.cache/cues.json')) : [], ...readJson(f('assets/mix.json')) }))
   }
-  // and its Video tab: the scene's parts, the takes kept from the source, and per format a strip of thumbnails
+  // and its Clip tab: the scene's parts, the takes kept from the source, and per format a strip of thumbnails
   // (one every `every` s, `cols` per row of the sheet)
   const every = Math.max(0.5, j.duration / 400), count = Math.ceil(j.duration / every), cols = 10, strips = {}
   fs.mkdirSync(f('files/video'), { recursive: true })
@@ -859,6 +859,9 @@ const inside = (root, rel) => {
   return file.startsWith(root + path.sep) ? file : ''
 }
 
+// the videos of the projects folder, by name
+const videos = () => fs.readdirSync(HOME).filter(x => /^[a-z0-9][a-z0-9-]*$/.test(x) && fs.existsSync(path.join(HOME, x, 'source/project.json'))).sort()
+
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
 // /<slug>/ the studio · api/… its JSON API · video/<file> output/ · review/<file> assets/review/ ·
@@ -872,6 +875,14 @@ async function handle(req, res, write = false) {
   if (url.pathname === '/__video-editor/quit' && post) { res.on('finish', () => process.exit(0)); return reply(res, 200, {}) }
   if (url.pathname === '/__blank/') { res.writeHead(200, { 'Content-Type': MIME['.html'] }); return res.end('<!doctype html><title>blank</title>') }
 
+  // the root opens the first video of the folder
+  if (url.pathname === '/') {
+    const [first] = videos()
+    if (!first) return reply(res, 404, { error: `no video in ${HOME}` })
+    res.writeHead(302, { Location: `/${first}/` })
+    return res.end()
+  }
+
   const [slug, ...rest] = url.pathname.slice(1).split('/').map(decodeURIComponent)
   const dir = path.join(HOME, slug)
   if (!/^[a-z0-9][a-z0-9-]*$/.test(slug) || !fs.existsSync(path.join(dir, 'source/project.json'))) return reply(res, 404, { error: `no project ${slug}` })
@@ -879,6 +890,14 @@ async function handle(req, res, write = false) {
 
   const sub = rest.join('/'), m = sub.match(/^api\/reviews\/v(\d+)$/)
   if (sub === 'api/project') return reply(res, 200, projectInfo(dir))
+  // the other videos of the folder, for the studio's switcher
+  if (sub === 'api/projects') {
+    return reply(res, 200, videos().map(x => {
+      const p = readJson(path.join(HOME, x, 'source/project.json')), last = p.versions?.at(-1)
+      const poster = `${x}-${ratio(p.formats[0])}-poster.jpg`
+      return { slug: x, versions: p.versions?.length ?? 0, rendered: last?.rendered ?? null, duration: last?.duration ?? null, poster: fs.existsSync(path.join(HOME, x, 'output', poster)) ? poster : null }
+    }))
+  }
   if (sub === 'api/job') {
     try { return reply(res, 200, buildJob(dir, url.searchParams.get('format'), url.searchParams.get('type') ?? '')) } catch (e) { return reply(res, 400, { error: e.message }) }
   }

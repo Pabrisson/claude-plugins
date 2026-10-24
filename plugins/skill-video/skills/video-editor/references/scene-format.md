@@ -88,7 +88,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 | `captions(opts)` | Word-by-word sticker captions of the speech (below) |
 | `paper()` | `Promise<string>`: a paper texture as a CSS background, only when the style asks for a paper look |
 | `cue(kind, t, data)` | A named sound moment at video time `t`, for sound.py: any kind and data (`{ dur, x, … }`) |
-| `part(kind, t0, t1, data)` | A part of the picture from `t0` to `t1` (video seconds), for the studio's Video tab: `'sequence'` with `{ name, field }` (`field`: the palette color it sits on), or a key element of any kind (`'title'`, `'counter'`…) with `{ name }` |
+| `part(kind, t0, t1, data)` | A part of the picture from `t0` to `t1` (video seconds), for the studio's Clip tab: `'sequence'` with `{ name, field }` (`field`: the palette color it sits on), or a key element of any kind (`'title'`, `'counter'`…) with `{ name }` |
 | `say(text, from, to)` | What the viewer reads from `from` to `to` (video seconds): one line of the transcript (below) |
 | `tick(fn)` | `fn(t)` runs at every frame (and sub-frame), after the timeline |
 | `num(n, decimals)` | A number in the creator's language (`11 726`, `106,3`) |
@@ -160,7 +160,7 @@ The music and the sound design are written for each video in `source/sound.py`: 
 
 ## Parts
 
-The studio's Video tab shows the video as thumbnails and, under them, one row per kind of `part()`. Declare them next
+The studio's Clip tab shows the video as thumbnails and, under them, one row per kind of `part()`. Declare them next
 to the tweens they describe, so the user's feedback can name them and you find them back:
 
 ```js

@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from "react"
+import { useEffect, useRef, useState, type RefObject } from "react"
 import {
   AudioWaveformIcon,
   CheckIcon,
@@ -11,6 +11,7 @@ import {
   MicIcon,
   MusicIcon,
   PencilIcon,
+  TextQuoteIcon,
   RepeatIcon,
   ScissorsIcon,
   SparkleIcon,
@@ -39,7 +40,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { clock, minutes, soundColor, soundLabel, visualColor, visualLabel, when, type Comment, type Image, type Kind, type Range, type SoundRef, type VisualRef } from "@/lib/studio"
+import { clock, colorOf, minutes, soundColor, soundLabel, visualColor, visualLabel, when, type Comment, type Image, type Kind, type Range, type SoundRef, type VisualRef } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 type Filter = "open" | "resolved" | "all"
@@ -59,11 +60,19 @@ function KindBadge({ type }: { type: Kind }) {
 }
 
 // a sound or a part picked for a comment, in its timeline color
-function PickBadge({ label, color, icon: Icon, onRemove }: { label: string; color: string; icon: typeof FilmIcon; onRemove?: () => void }) {
+function PickBadge({ label, color, icon: Icon, onRemove, onClick }: { label: string; color: string; icon: typeof FilmIcon; onRemove?: () => void; onClick?: () => void }) {
   return (
     <Badge
       variant="outline"
-      className={cn("h-6 rounded-md font-mono font-normal", onRemove && "pr-0.5")}
+      className={cn("h-6 rounded-md font-mono font-normal", onRemove && "pr-0.5", onClick && "cursor-pointer hover:brightness-125")}
+      title={onClick ? "Show where it is" : undefined}
+      onClick={
+        onClick &&
+        ((e) => {
+          e.stopPropagation()
+          onClick()
+        })
+      }
       style={{ borderColor: `color-mix(in oklch, ${color} 45%, transparent)`, background: `color-mix(in oklch, ${color} 14%, transparent)` }}
     >
       <Icon data-icon="inline-start" style={{ color }} />
@@ -90,17 +99,28 @@ function Thumb({ img }: { img: Image }) {
 }
 
 // the badges of what a comment points at: sounds, then parts of the picture
-function Picks({ sounds = [], visuals = [], onRemoveSound, onRemoveVisual }: {
+function Picks({ transcript, sounds = [], visuals = [], onRemoveSound, onRemoveVisual, onPoint }: {
+  // the comment was made on a selection of the transcript
+  transcript?: boolean
   sounds?: SoundRef[]
   visuals?: VisualRef[]
   onRemoveSound?: (s: SoundRef) => void
   onRemoveVisual?: (x: VisualRef) => void
+  onPoint?: (to: Point) => void
 }) {
-  if (!sounds.length && !visuals.length) return null
+  if (!transcript && !sounds.length && !visuals.length) return null
   return (
     <div className="flex flex-wrap gap-1.5">
+      {transcript && <PickBadge label="Transcript" color={colorOf("transcript")} icon={TextQuoteIcon} onClick={onPoint && (() => onPoint({}))} />}
       {visuals.map((x, i) => (
-        <PickBadge key={`v${i}`} label={visualLabel(x)} color={visualColor(x)} icon={FilmIcon} onRemove={onRemoveVisual && (() => onRemoveVisual(x))} />
+        <PickBadge
+          key={`v${i}`}
+          label={visualLabel(x)}
+          color={visualColor(x)}
+          icon={FilmIcon}
+          onRemove={onRemoveVisual && (() => onRemoveVisual(x))}
+          onClick={onPoint && (() => onPoint({ visual: x }))}
+        />
       ))}
       {sounds.map((s, i) => (
         <PickBadge
@@ -109,21 +129,34 @@ function Picks({ sounds = [], visuals = [], onRemoveSound, onRemoveVisual }: {
           color={soundColor(s)}
           icon={s === "voice" ? MicIcon : s === "music" ? MusicIcon : AudioWaveformIcon}
           onRemove={onRemoveSound && (() => onRemoveSound(s))}
+          onClick={onPoint && (() => onPoint({ sound: s }))}
         />
       ))}
     </div>
   )
 }
 
+// what a badge of a comment points at: a sound, a part, or (neither) its time in the transcript
+export type Point = { sound?: SoundRef; visual?: VisualRef }
+
 function Item({
   c,
+  n,
+  flash,
   multiFormat,
+  onPoint,
   onSelect,
   onChange,
   onDelete,
 }: {
   c: Comment
+  // its number in the version (#3)
+  n: number
+  // pointed at from a mark: it flashes once
+  flash?: boolean
   multiFormat: boolean
+  // a click on a badge shows what it names in the timelines or the transcript
+  onPoint?: (to: Point) => void
   onSelect: () => void
   onChange?: (c: Comment) => void
   onDelete?: () => void
@@ -132,7 +165,9 @@ function Item({
   const range = c.t1 > c.t0
   return (
     <div
+      data-comment={c.id}
       className="group/item flex cursor-pointer gap-2.5 rounded-lg border border-transparent p-2.5 hover:border-border hover:bg-card/50"
+      style={flash ? { animation: "flash 2s ease-out" } : undefined}
       onClick={onSelect}
     >
       <div className="flex h-5 items-center" onClick={(e) => e.stopPropagation()}>
@@ -146,8 +181,20 @@ function Item({
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-muted-foreground tabular-nums">#{n}</span>
           <KindBadge type={c.type} />
-          <Badge variant="outline" className="h-5 rounded-md font-mono">
+          <Badge
+            variant="outline"
+            className={cn("h-5 rounded-md font-mono", onPoint && "cursor-pointer hover:bg-muted")}
+            title={onPoint ? "Show it in the transcript" : undefined}
+            onClick={
+              onPoint &&
+              ((e) => {
+                e.stopPropagation()
+                onPoint({})
+              })
+            }
+          >
             {range ? `${minutes(c.t0)} → ${minutes(c.t1)}` : minutes(c.t0)}
           </Badge>
           {multiFormat && c.format && <Badge variant="secondary">{c.format}</Badge>}
@@ -181,7 +228,7 @@ function Item({
         ) : (
           c.text && <p className={cn("text-sm leading-relaxed", c.resolved && "text-muted-foreground line-through")}>{c.text}</p>
         )}
-        <Picks sounds={c.sounds} visuals={c.visuals} />
+        <Picks transcript={c.from === "transcript"} sounds={c.sounds} visuals={c.visuals} onPoint={onPoint} />
         {c.images.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {c.images.map((img) => (
@@ -209,6 +256,8 @@ function Item({
 export function Feedback({
   version,
   comments,
+  focus,
+  onPoint,
   previous,
   multiFormat,
   time,
@@ -228,6 +277,9 @@ export function Feedback({
 }: {
   version: number
   comments: Comment[]
+  // the comments a mark points at (n: the click, so a second one flashes again)
+  focus: { ids: string[]; n: number } | null
+  onPoint: (c: Comment, to: Point) => void
   previous: { v: number; comments: Comment[] }[]
   multiFormat: boolean
   time: number
@@ -249,11 +301,15 @@ export function Feedback({
   const [kind, setKind] = useState<Kind>("comment")
   const [text, setText] = useState("")
   const counts = { open: comments.filter((c) => !c.resolved).length, resolved: comments.filter((c) => c.resolved).length, all: comments.length }
-  const shown = comments.filter((c) => filter === "all" || c.resolved === (filter === "resolved"))
+  // a comment pointed at stays in view, whatever the filter
+  const shown = comments.filter((c) => filter === "all" || c.resolved === (filter === "resolved") || focus?.ids.includes(c.id))
   const isRange = !!range && range.t1 > range.t0
   // side by side (md and up): the left edge drags the column wider, the button gives it half the window
   const [width, keepWidth] = useStoredSize("video-editor.feedback-width")
   const aside = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (focus) aside.current?.querySelector(`[data-comment="${focus.ids[0]}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" })
+  }, [focus])
   const resize = (e: React.PointerEvent) => {
     const w0 = aside.current?.offsetWidth ?? 400
     // the player keeps at least 30rem
@@ -308,8 +364,11 @@ export function Feedback({
         <div className="flex flex-col gap-1 p-2">
           {shown.map((c) => (
             <Item
-              key={c.id}
+              key={focus?.ids.includes(c.id) ? `${c.id}-${focus.n}` : c.id}
               c={c}
+              n={comments.indexOf(c) + 1}
+              flash={focus?.ids.includes(c.id)}
+              onPoint={(to) => onPoint(c, to)}
               multiFormat={multiFormat}
               onSelect={() => onSelect(c)}
               onChange={(next) => onSave(comments.map((x) => (x.id === c.id ? next : x)))}
@@ -325,8 +384,8 @@ export function Feedback({
                 <EmptyTitle className="text-sm">No feedback on this version (v{version})</EmptyTitle>
                 <EmptyDescription className="text-xs">
                   Play the video, press <Kbd>C</Kbd> and write what you want to change.
-                  To cut, select a range in the transcript or on the timeline, then press <Kbd>⌫</Kbd>. Drop an image anywhere to attach it.
-                  To comment on a part of the picture or of the sound, pick it in the Video or Sound tab.
+                  To cut, select a range in the transcript or on the timeline (or mark it with <Kbd>I</Kbd> and <Kbd>O</Kbd>), then press <Kbd>⌫</Kbd>. Drop an image anywhere to attach it.
+                  To comment on a part of the picture or of the sound, pick it in the Clip or Sound tab.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -343,8 +402,8 @@ export function Feedback({
                 </span>
               </CollapsibleTrigger>
               <CollapsibleContent className="flex flex-col gap-1 pt-1">
-                {p.comments.map((c) => (
-                  <Item key={c.id} c={c} multiFormat={multiFormat} onSelect={() => {}} />
+                {p.comments.map((c, i) => (
+                  <Item key={c.id} c={c} n={i + 1} multiFormat={multiFormat} onSelect={() => {}} />
                 ))}
               </CollapsibleContent>
             </Collapsible>

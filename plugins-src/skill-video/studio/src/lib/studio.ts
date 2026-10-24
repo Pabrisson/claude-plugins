@@ -5,6 +5,8 @@ export type Word = { w: string; t0: number; t1: number; screen?: boolean }
 // a transcript word placed on one version's video time
 export type VWord = Word & { v0: number; v1: number }
 export type VideoFile = { file: string; url: string; size: number; mtime: string }
+// a video of the folder, for the switcher: its last version and its poster (a file of its output/)
+export type VideoItem = { slug: string; versions: number; rendered: string | null; duration: number | null; poster: string | null }
 export type Version = {
   v: number
   rough?: boolean
@@ -37,7 +39,7 @@ export type SoundRef = Track | Cue | { kind: string }
 export type Part = { kind: string; t0: number; t1: number; name?: string; color?: string; [data: string]: unknown }
 // a sheet of thumbnails, one every `every` s, `cols` per row, `w`×`h` px each
 export type Strip = { file: string; every: number; count: number; cols: number; w: number; h: number }
-// a version's Video tab (files/video/vN.json): its parts, and a strip per format
+// a version's Clip tab (files/video/vN.json): its parts, and a strip per format
 export type Visual = { parts: Part[]; strips: Record<string, Strip> }
 // what a comment points at in the picture: one part, or every part of a kind
 export type VisualRef = Part | { kind: string }
@@ -60,8 +62,11 @@ export type Comment = {
   reply?: string
   created: string
   format?: string
+  // "transcript": made on a selection of the transcript
+  from?: "transcript"
 }
-export type Range = { t0: number; t1: number }
+// from: where the selection was made, when it was the transcript
+export type Range = { t0: number; t1: number; from?: "transcript" }
 
 async function json(r: Response) {
   if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? r.statusText)
@@ -71,6 +76,7 @@ async function json(r: Response) {
 // relative URLs: the page lives at /<slug>/
 export const api = {
   project: (): Promise<Project> => fetch("api/project").then(json),
+  projects: (): Promise<VideoItem[]> => fetch("api/projects").then(json),
   reviews: (v: number): Promise<{ comments: Comment[] }> =>
     fetch(`api/reviews/v${v}`)
       .then(json)
@@ -84,7 +90,7 @@ export const api = {
   // null for a version without sound (a rough cut, a silent video)
   sound: (v: number): Promise<Sound | null> =>
     fetch(`project/files/sound/v${v}.json`).then((r) => (r.ok ? r.json() : null)),
-  // null for a version made before the Video tab
+  // null for a version made before the Clip tab
   video: (v: number): Promise<Visual | null> =>
     fetch(`project/files/video/v${v}.json`).then((r) => (r.ok ? r.json() : null)),
   save: (v: number, comments: Comment[]) =>
@@ -119,6 +125,10 @@ export function colorOf(name: string) {
   return `oklch(0.74 0.14 ${(h * 137.508) % 360})`
 }
 export const soundColor = (s: SoundRef) => colorOf(typeof s === "string" ? s : s.kind)
+// where a sound or a part sits in the Sound and Clip tabs (data-spot), for a badge to point at it
+export const soundSpot = (s: SoundRef) =>
+  typeof s === "string" ? `sound:${s}` : "t" in s ? `sound:${s.kind}@${(s as Cue).t}` : `sound:${s.kind}`
+export const visualSpot = (x: VisualRef) => ("t0" in x ? `visual:${x.kind}@${(x as Part).t0}` : `visual:${x.kind}`)
 export const sameVisual = (a: VisualRef, b: VisualRef) => a.kind === b.kind && (a as Part).t0 === (b as Part).t0
 export const visualLabel = (x: VisualRef) =>
   "t0" in x ? `${(x as Part).name ?? x.kind} ${minutes((x as Part).t0)}` : `every ${x.kind}`
@@ -166,8 +176,24 @@ export function wordsIn(words: VWord[], { t0, t1 }: Range) {
 
 const secs = (t: number) => `${t.toFixed(2)} s`
 
+// a comment's number in its version (#3), the same in the studio and in the prompt
+export const numberOf = (all: Comment[], c: Comment) => all.indexOf(c) + 1
+
+// the mark of the open comments that `hit` finds: their numbers ("#2", "#2 +1"), and a click that shows them
+export type Marks = { label: string; title: string; onClick: () => void } | undefined
+export function markOf(all: Comment[], hit: (c: Comment) => boolean, show: (ids: string[]) => void): Marks {
+  const ns = all.filter((c) => !c.resolved && hit(c)).map((c) => numberOf(all, c))
+  if (!ns.length) return undefined
+  return {
+    label: `#${ns[0]}${ns.length > 1 ? ` +${ns.length - 1}` : ""}`,
+    title: `Feedback ${ns.map((n) => `#${n}`).join(", ")}`,
+    onClick: () => show(ns.map((n) => all[n - 1].id)),
+  }
+}
+
 // the text Claude receives: every open item with both clocks, the words and the id
-export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
+export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
+  const open = all.filter((c) => !c.resolved)
   const video = ver.files[p.formats[0]] ?? Object.values(ver.files).find(Boolean)
   const lines = [
     `/skill-video:video-editor apply this feedback to the video ${p.slug} (${p.dir})`,
@@ -175,7 +201,7 @@ export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
     `Reviewed video: ${p.dir}/output/${video?.file}, version v${ver.v} of ${when(ver.rendered)}, length ${clock(ver.duration)} (${secs(ver.duration)}).`,
     `${open.length} change${open.length > 1 ? "s" : ""} to apply:`,
   ]
-  open.forEach((c, i) => {
+  open.forEach((c) => {
     const range = c.t1 > c.t0
     const where = range
       ? `from ${clock(c.t0)} to ${clock(c.t1)} (VIDEO ${secs(c.t0)} → ${secs(c.t1)}, ${secs(c.t1 - c.t0)})`
@@ -189,8 +215,8 @@ export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
           ? ` · ${own} ${secs(c.s0)} → ${secs(c.s1)}`
           : ` · ${own} ${secs(c.s0)}`
     const format = p.formats.length > 1 && c.format ? ` [format ${c.format}]` : ""
-    lines.push(`${i + 1}. ${c.type.toUpperCase()} ${where}${source} [id ${c.id}]${format}`)
-    if (c.words) lines.push(`   ${p.words?.[0]?.screen ? "On screen" : "Words"}: "${c.words}"`)
+    lines.push(`${numberOf(all, c)}. ${c.type.toUpperCase()} ${where}${source} [id ${c.id}]${format}`)
+    if (c.words) lines.push(`   ${p.words?.[0]?.screen ? "On screen" : "Words"}${c.from === "transcript" ? " (selected in the transcript)" : ""}: "${c.words}"`)
     if (c.text) lines.push(`   Request: ${c.text}`)
     for (const s of c.sounds ?? []) {
       if (typeof s === "string") lines.push(`   Sound: the ${s} track${s === "voice" ? "" : ` (sound.py's ${s} bus)`}`)
