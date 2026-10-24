@@ -99,4 +99,4 @@ with a source, the kept `take`s, VIDEO seconds) and `strips`, per format a sheet
   `#stage.landscape`); anything else changes every format.
 - **Text fix**: write `to` in place of `from` in the scene at that moment, word for word, and change nothing else.
 - Answer every id in the feedback file, then run what the change needs (`stills` to check, then `render`,
-  `final`); `final` makes the next version and the user reloads the studio.
+  `final`); `final` makes the next version, and the open studio offers to reload it.

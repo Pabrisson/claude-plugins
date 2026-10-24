@@ -11,6 +11,7 @@ import {
   MusicIcon,
   PencilIcon,
   TextQuoteIcon,
+  RefreshCwIcon,
   RepeatIcon,
   ScissorsIcon,
   SparkleIcon,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react"
 
 import { follow, useStoredSize } from "@/components/panel"
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -34,7 +36,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { clock, colorOf, minutes, soundColor, soundLabel, visualColor, visualLabel, when, type Comment, type Image, type Kind, type Range, type SoundRef, type VisualRef } from "@/lib/studio"
+import { clock, colorOf, minutes, soundColor, soundLabel, visualColor, visualLabel, when, type Comment, type Image, type Kind, type Range, type SoundRef, type VideoItem, type VisualRef } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 type Filter = "open" | "resolved" | "all"
@@ -266,6 +268,7 @@ function Item({
 
 export function Feedback({
   version,
+  newer,
   comments,
   focus,
   onPoint,
@@ -287,6 +290,8 @@ export function Feedback({
   onClearRange,
 }: {
   version: number
+  // this video with a version newer than the one shown, once a render lands
+  newer: VideoItem | null
   comments: Comment[]
   // the comments a mark points at (n: the click, so a second one flashes again)
   focus: { ids: string[]; n: number } | null
@@ -374,6 +379,22 @@ export function Feedback({
         </Tabs>
       </div>
 
+      {newer && (
+        <div className="border-b p-2">
+          <Alert>
+            <RefreshCwIcon />
+            <AlertTitle>Version v{newer.versions} is ready</AlertTitle>
+            <AlertDescription className="text-xs">
+              {newer.rendered && `Rendered ${when(newer.rendered)}. `}Reload to review it: the feedback on v{version} moves under Resolved.
+            </AlertDescription>
+            <AlertAction>
+              <Button size="xs" onClick={() => location.reload()}>
+                Reload
+              </Button>
+            </AlertAction>
+          </Alert>
+        </div>
+      )}
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-1 p-2">
           {old.length > 0 && shown.length > 0 && <Group label={`Version ${version} · current`} count={shown.length} />}

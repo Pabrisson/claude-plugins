@@ -300,7 +300,7 @@ shape of a reference. Then handle each id:
 - In the feedback file, set `"resolved": true` and write one sentence in `reply` saying what you changed.
 
 Then run `stills` if the change is visual, then `render` (with the project's `--blur`) and `final`. Update « État » in About.md and tell the
-user to reload the studio.
+user the new version is ready: the open studio offers to reload it.
 
 ## variations <element>
 

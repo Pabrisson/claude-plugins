@@ -80,6 +80,8 @@ export default function App() {
   const [tab, setTab] = useState("transcript")
   // the folder's videos, read when the switcher opens
   const [videos, setVideos] = useState<VideoItem[] | null>(null)
+  // this video once a render made while the studio is open has added a version: offered as a reload
+  const [newer, setNewer] = useState<VideoItem | null>(null)
   // the prompt shown in the dialog before copying, null when closed
   const [prompt, setPrompt] = useState<string | null>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -103,6 +105,22 @@ export default function App() {
       })
       .catch((e) => setError(e.message))
   }, [])
+
+  useEffect(() => {
+    if (!project) return
+    const id = setInterval(
+      () =>
+        api.projects().then(
+          (vs) => {
+            const me = vs.find((v) => v.slug === project.slug)
+            if (me && me.versions > project.versions.length) setNewer(me)
+          },
+          () => {}
+        ),
+      5000
+    )
+    return () => clearInterval(id)
+  }, [project])
 
   // the studio always reviews the latest version; older ones only show their feedback
   const ver = project?.versions.at(-1)
@@ -541,6 +559,7 @@ export default function App() {
           {ver && (
             <Feedback
               version={ver.v}
+              newer={newer}
               comments={comments}
               focus={focus}
               onPoint={point}
