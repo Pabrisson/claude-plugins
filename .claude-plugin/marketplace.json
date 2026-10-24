@@ -31,47 +31,14 @@
       "description": "Commands add-readme, add-changelog, summarize-implementation"
     },
     {
-      "name": "command-docs-templates",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/davila7/claude-code-templates.git",
-        "path": "cli-tool/components/commands/documentation"
-      },
-      "strict": false,
-      "commands": ["./"],
-      "description": "Documentation commands (update-docs, create-architecture-documentation…), pulled from davila7/claude-code-templates"
-    },
-    {
       "name": "command-toolbox",
       "source": "./plugins/command-toolbox",
       "description": "Command fork-sync (sync a fork with upstream)"
     },
     {
-      "name": "skill-shadcn",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/shadcn-ui/ui.git",
-        "path": "skills"
-      },
-      "strict": false,
-      "skills": ["./shadcn"],
-      "description": "Skill shadcn, pulled from shadcn-ui/ui: add, search, fix, style and compose shadcn/ui components"
-    },
-    {
       "name": "skill-laravel",
       "source": "./plugins/skill-laravel",
       "description": "Skill laravel-upgrade: upgrade Laravel one major version at a time with test pauses"
-    },
-    {
-      "name": "skill-find-skills",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/vercel-labs/skills.git",
-        "path": "skills"
-      },
-      "strict": false,
-      "skills": ["./find-skills"],
-      "description": "Skill find-skills, pulled from vercel-labs/skills: discover and install agent skills"
     },
     {
       "name": "skill-video",
