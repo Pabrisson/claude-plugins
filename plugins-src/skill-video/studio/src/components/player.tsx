@@ -103,13 +103,6 @@ export function Player({
   // the real ratio once the file is read; the format's until then
   const [meta, setMeta] = useState<{ src: string; ratio: number } | null>(null)
   const ar = meta?.src === src ? meta.ratio : ratio
-  // a format switch loads another file: carry the time over
-  const resume = useRef(0)
-
-  useEffect(() => {
-    resume.current = video.current?.currentTime ?? 0
-  }, [src, video])
-
   useEffect(() => {
     if (drawing) video.current?.pause()
   }, [drawing, video])
@@ -148,7 +141,8 @@ export function Player({
               onLoadedMetadata={(e) => {
                 setDuration(e.currentTarget.duration)
                 setMeta({ src, ratio: e.currentTarget.videoWidth / e.currentTarget.videoHeight })
-                e.currentTarget.currentTime = resume.current
+                // a format switch loads another file, back at 0: the studio's time (only a seek moves it back) carries over
+                e.currentTarget.currentTime = time
                 e.currentTarget.playbackRate = rate
               }}
             />

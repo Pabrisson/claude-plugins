@@ -58,7 +58,11 @@ export function Transcript({
   useEffect(() => {
     const el = currentEl.current, view = el?.closest("[data-slot=scroll-area-viewport]")
     if (drag || free || !el || !view) return
-    if (lines) return el.scrollIntoView({ block: "center", behavior: "smooth" })
+    // not returned: Chrome's scrollIntoView gives a promise, which React would take for the effect's cleanup
+    if (lines) {
+      el.scrollIntoView({ block: "center", behavior: "smooth" })
+      return
+    }
     // the speech holds still while the word walks along it, clear of the fades; past them, its line goes up to a third
     const r = el.getBoundingClientRect(), v = view.getBoundingClientRect()
     if (r.top < v.top + 24 || r.bottom > v.bottom - 32) view.scrollBy({ top: r.top - v.top - v.height / 3, behavior: "smooth" })

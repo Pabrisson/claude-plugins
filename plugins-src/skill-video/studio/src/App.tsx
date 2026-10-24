@@ -217,18 +217,21 @@ export default function App() {
     setSounds([])
   }
 
-  function select(c: Comment) {
-    if (c.format && c.format !== format && ver?.files[c.format]) setFormat(c.format)
-    seek(c.t0)
+  // at: where the playhead goes, the comment's start unless a badge names a moment
+  function select(c: Comment, at = c.t0) {
+    if (c.format && c.format !== format && ver?.files[c.format]) {
+      setFormat(c.format)
+      // the other format's file loads first: the seek waits for it
+      video.current?.addEventListener("loadedmetadata", () => seek(at), { once: true })
+    } else seek(at)
     setRange(c.t1 > c.t0 ? { t0: c.t0, t1: c.t1 } : null)
   }
 
   // a badge of a comment: its tab opens, the playhead goes there and what it names flashes
   const [spot, setSpot] = useState<{ key?: string; range: Range; n: number } | null>(null)
   function point(c: Comment, to: Point) {
-    select(c)
     const at = to.sound && typeof to.sound !== "string" && "t" in to.sound ? (to.sound.t as number) : to.visual && "t0" in to.visual ? (to.visual.t0 as number) : null
-    if (at !== null) seek(at)
+    select(c, at ?? c.t0)
     setTab(to.sound ? "sound" : to.visual ? "video" : "transcript")
     const key = to.sound ? soundSpot(to.sound) : to.visual ? visualSpot(to.visual) : undefined
     setSpot((s) => ({ key, range: { t0: c.t0, t1: Math.max(c.t1, c.t0 + 0.01) }, n: (s?.n ?? 0) + 1 }))
