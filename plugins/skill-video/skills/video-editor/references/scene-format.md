@@ -84,7 +84,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 | `style` | style.json merged with the defaults (`creator`, `look`, `notes`) |
 | `pick(land, port, tall)` | The value for this format |
 | `camera()` | The source camera (below), or `null` without a source |
-| `clip(id, start)` | A clip of `edit.json`'s `media` as a box playing from video time `start` |
+| `clip(id, start)` | A clip of `edit.json`'s `media` as a box playing from video time `start`, its sound with it |
 | `captions(opts)` | Word-by-word sticker captions of the speech (below) |
 | `paper()` | `Promise<string>`: a paper texture as a CSS background, only when the style asks for a paper look |
 | `cue(kind, t, data)` | A named sound moment at video time `t`, for sound.py: any kind and data (`{ dur, x, … }`) |
@@ -112,6 +112,15 @@ stage.append(win)
 tl.to(cam.view, { zoom: 1.25, duration: 0.2, ease: 'power3.out' }, at(22.1))
 ```
 
+**Grade** the footage with a CSS `filter` on the camera and the clips: `contrast()`, `saturate()`, `brightness()`,
+and `sepia()` with `hue-rotate()` for warmth. Put one class on every footage box in `scene.css`, so all the rushes
+get the same look; tween `filter` on `tl` for a change of mood.
+
+**Several rushes** (`init` with `--source` more than once) are one source, joined end to end in the order given.
+Each one starts where `source.files[i].at` says (`source/project.json`, About.md's Sources), in SOURCE seconds.
+`at()`, `cut` and `words.md` use that joined time. A rush of another shape than the first is letterboxed into it:
+give the first `--source` the main shape, or make the odd one a `media` clip and place it freely.
+
 ### captions(opts)
 
 `div.ve-captions` (full width, centered): groups of `words` (3) ending on punctuation or a pause; each word pops in
@@ -121,14 +130,22 @@ it with CSS (`.ve-captions span` is a word). Only for speech.
 ## `source/edit.json`
 
 ```json
-{ "duration": 45, "cut": [[12.4, 14.1]], "poster": 2.5, "media": { "arc": { "src": "assets/clips/arc.mp4", "from": 2, "dur": 6, "width": 720 } } }
+{ "duration": 45, "cut": [[12.4, 14.1]], "poster": 2.5, "media": { "arc": { "src": "assets/clips/arc.mp4", "from": 2, "dur": 6, "volume": 0.5 } } }
 ```
 
 `duration` (seconds) is required without a source; with one, the timeline gives it. `cut` holds ranges to remove
 (the studio's cuts): source seconds with a source; without one, seconds of the scene's own time. The scene keeps
 its timings and the engine skips the cut ranges, along with the cues and `say()` lines inside them. `duration` in
 the scene stays the scene's full length. `poster` is the source time of the poster frame, `media` the clips `clip()` and media actors
-play (extracted as frames at the project's rate).
+play: B-roll, cutaways, a screen recording, a second camera.
+- `from` and `dur` (seconds) take a piece of the file.
+- Frames are extracted at the project's rate and as large as the largest resolution needs. `width` (px) forces a
+  smaller size for a clip that only ever plays in a small box.
+- **Sound**: a clip plays its own sound where the scene plays its picture. It is brought to the music bed's
+  loudness and goes down under the voice like the music. `volume` scales it: `1` by default, `0.3` for ambience
+  under the voice, `2` (+6 dB) when its sound is the moment, `0` to mute it (a second camera of the same take).
+  Its level is in `edit.json`, so changing it needs only `audio` then `final`, no render. It is the `clips` track of
+  the mix.
 
 ## The transcript of a video without speech
 
@@ -156,7 +173,8 @@ text replaces what is inside), and leave decoration out with `data-say=""`.
 ## Sound
 
 The music and the sound design are written for each video in `source/sound.py`: see `sound-format.md`. The scene's
-`cue()` calls are its timeline of events (exported by `render` and `stills` into `.cache/cues.json`).
+`cue()` calls are its timeline of events (exported by `render` and `stills` into `.cache/cues.json`), and where its
+clips play goes next to them (`.cache/clips.json`) for their own sound.
 
 ## Parts
 

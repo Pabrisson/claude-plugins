@@ -28,8 +28,8 @@ export type Project = {
   versions: Version[]
 }
 export type Kind = "comment" | "cut"
-// the parts of the mix: the voice, sound.py's music and effects buses
-export type Track = "voice" | "music" | "fx"
+// the parts of the mix: the voice, sound.py's music and effects buses, the media clips' own sound
+export type Track = "voice" | "music" | "fx" | "clips"
 // one of the scene's cue(kind, t, data) calls, t in video seconds
 export type Cue = { kind: string; t: number; [data: string]: unknown }
 // a version's sound (files/sound/vN.json): its cues, and each track's level in dB every `step` seconds
@@ -117,7 +117,7 @@ export function ratioName(w: number, h: number) {
   return near ?? `${(w / h).toFixed(2)}:1`
 }
 
-export const TRACKS: Record<Track, string> = { voice: "Voice", music: "Music", fx: "Effects" }
+export const TRACKS: Record<Track, string> = { voice: "Voice", music: "Music", fx: "Effects", clips: "Clips" }
 export const sameSound = (a: SoundRef, b: SoundRef) =>
   typeof a === "string" || typeof b === "string" ? a === b : a.kind === b.kind && (a as Cue).t === (b as Cue).t
 export const soundLabel = (s: SoundRef) =>
@@ -224,7 +224,8 @@ export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
     if (c.fix) lines.push(`   Text fix: "${c.fix.from}" → "${c.fix.to}"`)
     if (c.text) lines.push(`   Request: ${c.text}`)
     for (const s of c.sounds ?? []) {
-      if (typeof s === "string") lines.push(`   Sound: the ${s} track${s === "voice" ? "" : ` (sound.py's ${s} bus)`}`)
+      if (typeof s === "string")
+        lines.push(`   Sound: the ${s} track${s === "voice" ? "" : s === "clips" ? " (the media clips' own sound)" : ` (sound.py's ${s} bus)`}`)
       else if (!("t" in s)) lines.push(`   Sound: every "${s.kind}" cue (the sound sound.py designs for this kind)`)
       else {
         const { kind, t, ...data } = s as Cue
@@ -254,7 +255,7 @@ export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
       ? ["Text fix: the user corrected a line of what the video shows: write the new text in the scene at that moment, as given, and change nothing else."]
       : []),
     ...(open.some((c) => c.sounds?.length)
-      ? [`Sound: a track is a part of the mix (voice, or sound.py's music or fx bus) over the comment's time; a cue is the scene's cue(kind, t, data) call, heard as the sound sound.py designs for its kind ("every" means all the cues of that kind). This version's cues and track levels: ${p.dir}/files/sound/v${ver.v}.json.`]
+      ? [`Sound: a track is a part of the mix (voice, sound.py's music or fx bus, or clips: the media clips' own sound, set by their volume in edit.json) over the comment's time; a cue is the scene's cue(kind, t, data) call, heard as the sound sound.py designs for its kind ("every" means all the cues of that kind). This version's cues and track levels: ${p.dir}/files/sound/v${ver.v}.json.`]
       : []),
     ...(open.some((c) => c.visuals?.length)
       ? [`Visual: a part is the scene's part(kind, t0, t1, data) call: find it in source/scene.js by its kind, name and times ("every" means all the parts of that kind; a take is a kept piece of the source, a clip a media of edit.json). This version's parts: ${p.dir}/files/video/v${ver.v}.json.`]

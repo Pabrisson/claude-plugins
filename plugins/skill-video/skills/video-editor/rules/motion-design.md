@@ -1,7 +1,7 @@
 ---
 name: motion-design
 description: Motion design carries the visuals: every idea gets an animated element, nothing stays static
-params: {"max_static": 2, "sfx": true}
+params: {"max_static": 2, "sfx": true, "graphics": "lead"}
 ---
 ## When writing the scene
 - One visual per idea and per key word, invented for this video: numbers → counters that climb, brands → their

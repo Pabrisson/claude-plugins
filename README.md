@@ -83,7 +83,7 @@ A skill triggers on its own when the request matches its description, or is call
 | Skill | Plugin | Arguments | Role |
 |---|---|---|---|
 | `/skill-laravel:laravel-upgrade` | [`skill-laravel`](#skill-laravel) | `<target version>` | Upgrades Laravel one major version at a time, with a test pause between each |
-| `/skill-video:video-editor` | [`skill-video`](#skill-video) | `setup \| <video or URL> \| apply this feedback … \| variations \| preview \| rules …` | Edits a video (short, motion design), rendered locally with captions, sound and a review studio |
+| `/skill-video:video-editor` | [`skill-video`](#skill-video) | `setup \| <videos or URLs> \| apply this feedback … \| variations \| preview \| rules …` | Edits a video of any genre (short, YouTube, interview, tutorial, montage, brand film, motion design), rendered locally with captions, sound and a review studio |
 
 ### MCP servers
 
@@ -195,16 +195,16 @@ At each step it adopts the new structure, even when optional, with no backward-c
 
 `claude plugin install skill-video@pabrisson` — requires Node ≥ 22, `ffmpeg`/`ffprobe`, Google Chrome, `uv`; transcription (mlx-whisper) needs an Apple Silicon Mac. The skill runs `doctor` at the start of each conversation and gives the install command for anything missing.
 
-Claude becomes a video editor: a talking-head take (file or URL) becomes a short or a longer video with motion design on every idea, or a brief becomes a motion-design video with no footage.
+Claude becomes a video editor for any genre: one or several rushes (files or URLs) plus B-roll become a short, a long YouTube video, an interview, a tutorial, a montage on music or a brand film, with graphics that carry the video or serve the footage; or a brief becomes a motion-design video with no footage.
 
 | Arguments | Mode |
 |---|---|
 | `setup` | Style interview: name, language, audience, CTA, palette, font, music; or the identity of a site (`site <url>`) |
-| `<video or URL> [sources…] [studio]` | New video; `studio` opens the review from the rough cut |
+| `<videos or URLs> [sources…] [studio]` | New video: several rushes are joined end to end, B-roll plays with its own sound; `studio` opens the review from the rough cut |
 | `apply this feedback …` | Applies the feedback pasted from the studio (cuts, comments, sound, visuals) |
 | `variations <element>` | Numbered variants of one element, then keeps the choice |
 | `preview` | Live debug page of the scene in Chrome |
-| `rules list \| use \| new \| edit` | Editing rule packs (`shorts` and `motion-design` included) |
+| `rules list \| use \| new \| edit` | Editing rule packs, one per genre (`shorts`, `youtube`, `interview`, `tutorial`, `montage`, `corporate` and `motion-design` included) |
 
 - **Render**: 9:16, 16:9, 1:1 and 4:5 formats, 4K, 2K, 1080p and 720p resolutions, H.264, HEVC, AV1 and VP9 codecs, captions, synthesized music and sound effects. About 10 s for a 75 s video (40 s with motion blur), unchanged chunks cached.
 - **Studio**: local review on `127.0.0.1`, from port 41187, one server per projects folder. Feedback goes back to Claude as a prompt to paste.

@@ -69,6 +69,41 @@ test('a pack dropped in .rules/ is listed and applies at init, with the style fr
   assert.ok(!fs.existsSync(path.join(home, 'demo/source/site')))
 })
 
+const ffmpeg = (...argv) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { cwd: home })
+
+test('several sources are joined end to end, in order, each fitted into the first one and cut to whole frames', { timeout: 120000 }, () => {
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=1280x720:r=30:d=2', '-f', 'lavfi', '-i', 'sine=f=440:r=44100:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'r1.mp4')
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc=s=720x1280:r=25:d=1.52', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', 'r2.mov')
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=640x480:r=24:d=1.2', '-f', 'lavfi', '-i', 'sine=f=880:r=48000:d=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'r3.mp4')
+  const log = cli('init', 'rushes', '--formats', '16:9', '--renders', '720p', '--rules', 'none', ...['r1.mp4', 'r2.mov', 'r3.mp4'].flatMap(x => ['--source', path.join(home, x)]))
+  const { source } = JSON.parse(read('rushes/source/project.json'))
+  assert.deepEqual(source.files.map(x => [path.basename(x.from), x.at, x.duration]), [['r1.mp4', 0, 2], ['r2.mov', 2, 1.533], ['r3.mp4', 3.533, 1.2]])
+  assert.deepEqual([source.width, source.height, source.fps, source.audio], [1280, 720, 30, true])
+  assert.ok(Math.abs(source.duration - 4.733) < 0.02, `${source.duration} s`)
+  assert.match(log, /video 2: .*r2\.mov from 2 s of the source/)
+  assert.match(read('rushes/About.md'), /- Video 3: .*r3\.mp4 \(from 3\.533 s of the source, 1\.2 s\)/)
+  assert.deepEqual(fs.readdirSync(path.join(home, 'rushes/assets')).filter(x => x.endsWith('.mp4')), ['source.mp4'])
+})
+
+test("a media clip's own sound plays where the scene plays it, a cut inside it included", { timeout: 300000 }, () => {
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=640x360:r=30:d=1', '-f', 'lavfi', '-i', 'sine=f=440:r=48000:d=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'tone.mp4')
+  cli('init', 'broll', '--formats', '16:9', '--renders', '720p', '--fps', '30', '--rules', 'none')
+  fs.writeFileSync(path.join(home, 'broll/source/edit.json'), JSON.stringify({ duration: 3, cut: [[1.5, 1.8]], media: { tone: { src: path.join(home, 'tone.mp4') } } }))
+  fs.writeFileSync(path.join(home, 'broll/source/scene.js'), `export default async function scene({ stage, clip }) {
+    const c = clip('tone', 1)
+    stage.append(c)
+  }`)
+  cli('render', '-p', 'broll')
+  cli('final', '-p', 'broll')
+  assert.deepEqual(JSON.parse(read('broll/.cache/clips.json')), [{ id: 'tone', t: 1, from: 0, dur: 0.5 }, { id: 'tone', t: 1.5, from: 0.8, dur: 0.2 }])
+  // the frames keep the clip's size (under the 720p the render needs), its sound sits next to them
+  assert.equal(JSON.parse(read('broll/.cache/media/tone/meta.json')).want.short, 720)
+  assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width', '-of', 'csv=p=0', path.join(home, 'broll/.cache/media/tone/00001.jpg')], { encoding: 'utf8' }), /^640/)
+  const { step, tracks } = JSON.parse(read('broll/assets/mix.json')), at = t => tracks.clips[Math.round(t / step)]
+  // 0.5 s from its start, then the 0.2 s kept after the cut: heard from 1 to 1.7 s of the video
+  assert.ok(at(0.95) === -60 && at(1.25) > -3 && at(1.6) > -3 && at(1.75) === -60, JSON.stringify(tracks.clips))
+})
+
 test("final keeps the scene's parts and a strip of thumbnails per format for the studio's Video tab", { timeout: 300000 }, () => {
   cli('init', 'parts', '--formats', '16:9,9:16', '--renders', '720p', '--rules', 'none')
   fs.writeFileSync(path.join(home, 'parts/source/edit.json'), JSON.stringify({ duration: 3 }))

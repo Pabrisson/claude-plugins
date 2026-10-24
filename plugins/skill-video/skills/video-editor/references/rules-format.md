@@ -40,6 +40,7 @@ one line.
 | `captions` | `false` | Tells Claude to put `captions()` in the scene |
 | `music` | `false` | Tells Claude to compose music in `source/sound.py` |
 | `sfx` | `false` | Tells Claude to put `cue()` on key moments and design their sounds in `source/sound.py` |
+| `graphics` | none | Tells Claude what carries the video: `lead` (the motion design: the showreel bar of the skill's Direction) or `support` (the footage: the graphics serve it, the footage bar). Without it, Claude decides from the video and writes the choice in the Direction |
 | any other key | | Read by Claude only, e.g. `max_static` (longest stretch without a visual change, for the self-review) |
 
 Merge, lowest priority first: the defaults above, then the packs in the chosen order (only the keys a pack declares

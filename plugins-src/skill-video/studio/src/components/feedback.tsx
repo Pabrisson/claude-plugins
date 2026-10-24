@@ -136,7 +136,7 @@ function Picks({ transcript, sounds = [], visuals = [], onRemoveTranscript, onRe
           key={`s${i}`}
           label={soundLabel(s)}
           color={soundColor(s)}
-          icon={s === "voice" ? MicIcon : s === "music" ? MusicIcon : AudioWaveformIcon}
+          icon={s === "voice" ? MicIcon : s === "music" ? MusicIcon : s === "clips" ? FilmIcon : AudioWaveformIcon}
           onRemove={onRemoveSound && (() => onRemoveSound(s))}
           onClick={onPoint && (() => onPoint({ sound: s }))}
         />

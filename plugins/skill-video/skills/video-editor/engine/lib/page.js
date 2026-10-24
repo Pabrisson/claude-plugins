@@ -2,11 +2,12 @@
 // and the actors layer when the project has an actors/ folder. seek(t) puts the page exactly at a video time;
 // the render page then captures the stage, the preview just shows it.
 import { camera, captions, clip, paper, picker, rng } from './kit.js'
-import { createActors } from './runtime.js'
+import { createActors, resolveActors } from './runtime.js'
 import { makeTimeline } from './timeline.js'
 
 const GSAP = ['gsap', 'CustomEase', 'CustomWiggle', 'SplitText', 'DrawSVGPlugin', 'MotionPathPlugin', 'MorphSVGPlugin', 'ScrambleTextPlugin', 'TextPlugin']
 const pad = n => String(n).padStart(5, '0')
+const ms = x => Math.round(x * 1000) / 1000
 
 const script = src => new Promise((ok, ko) => {
   const s = document.createElement('script')
@@ -105,7 +106,7 @@ export async function boot(host, query) {
 
   const fmt = {}, num = (n, d = 0) => (fmt[d] ??= new Intl.NumberFormat(job.style.creator.lang, { minimumFractionDigits: d, maximumFractionDigits: d })).format(n)
   const words = job.words.filter(w => !w.screen && (!segs || segs.some(([a, b]) => w.t1 > a && w.t0 < b))).map(w => ({ ...w, v0: time.toVideo(w.t0), v1: time.toVideo(w.t1) }))
-  const tl = gsap.timeline({ paused: true }), ticks = [], cues = [], says = [], parts = [], live = []
+  const tl = gsap.timeline({ paused: true }), ticks = [], cues = [], says = [], parts = [], live = [], clips = []
   // Without a source the scene runs on its own time and a cut (edit.json) removes ranges of it: the frame at video
   // time v shows the scene at toSource(v), and its cues, lines and beats come back on video time
   const noSource = !job.source, sceneAt = v => (noSource ? time.toSource(v) : v), onVideo = t => Math.round((noSource ? time.toVideo(t) : t) * 1000) / 1000
@@ -139,7 +140,7 @@ export async function boot(host, query) {
     part: (kind, t0, t1, o = {}) => parts.push({ kind, t0: Math.round(t0 * 1000) / 1000, t1: Math.round(t1 * 1000) / 1000, ...o, ...(look.palette[o.field] ? { color: look.palette[o.field] } : {}) }),
     say: (text, t0, t1) => says.push({ w: String(text).replace(/\s+/g, ' ').trim(), v0: Math.round(t0 * 1000) / 1000, v1: Math.round(t1 * 1000) / 1000 }),
     camera: () => { const c = camera(job, time); if (c) live.push(c); return c },
-    clip: (id, start = 0) => { const c = clip(job, id, start), m = job.media[id]; live.push(c); parts.push({ kind: 'clip', t0: start, t1: start + m.count / m.fps, id }); return c },
+    clip: (id, start = 0) => { const c = clip(job, id, start), m = job.media[id]; live.push(c); parts.push({ kind: 'clip', t0: start, t1: start + m.count / m.fps, id }); clips.push({ id, start }); return c },
     captions: o => { const c = captions(job, words, o); live.push(c); return c },
     paper: () => paper(job),
     actors: () => actorsEl,
@@ -171,6 +172,19 @@ export async function boot(host, query) {
     cues: () => cues.filter(c => kept(c.t)).map(c => ({ ...c, t: onVideo(c.t) })).toSorted((a, b) => a.t - b.t),
     parts: () => parts.map(x => ({ ...x, t0: onVideo(x.t0), t1: onVideo(x.t1) })).filter(x => x.t1 > x.t0).toSorted((a, b) => a.t0 - b.t0),
     says: () => says.map(x => ({ ...x, v0: onVideo(x.v0), v1: onVideo(x.v1) })).filter(x => x.v1 > x.v0).toSorted((a, b) => a.v0 - b.v0),
+    // what the media make heard, in video seconds: { id, t, from (seconds into the clip), dur }. A clip() plays from
+    // its start (without a source, a cut inside it skips that part of its sound as of its picture), a media actor
+    // from its entrance through its exit
+    clips() {
+      const len = id => job.media[id].count / job.media[id].fps, spans = noSource && segs ? segs : [[0, Infinity]]
+      const scene = clips.flatMap(({ id, start }) => spans.map(([a, b]) => [Math.max(a, start), Math.min(b, start + len(id))]).filter(([a, b]) => b > a)
+        .map(([a, b]) => ({ id, t: onVideo(a), from: ms(a - start), dur: ms(b - a) })))
+      const acted = resolveActors(job.actors ?? [], job.format).filter(a => a.type === 'media' && job.media?.[a.media]).map(a => {
+        const t = time.toVideo(a.from ?? 0), from = a.offset ?? 0, end = a.to === undefined ? job.duration : time.toVideo(a.to) + (a.post ?? 0.3)
+        return { id: a.media, t: ms(t), from, dur: ms(Math.min(len(a.media) - from, end - t)) }
+      })
+      return [...scene, ...acted].filter(x => x.dur > 0).toSorted((a, b) => a.t - b.t)
+    },
     texts: () => visibleTexts(stage),
     actors: v => actors?.live(v) ?? [],
     // one image per beat: where tweens start, once they have played a little

@@ -34,7 +34,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.mp4': 'video/mp4',
   '.wav': 'audio/wav', '.wasm': 'application/wasm',
 }
-const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range; from: "transcript" when the comment was made on a selection of the transcript. fix: {from, to}, a line of what the video shows that the user corrected in the transcript. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
+const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range; from: "transcript" when the comment was made on a selection of the transcript. fix: {from, to}, a line of what the video shows that the user corrected in the transcript. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx, clips) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
 
 // codecs WebCodecs can put in an MP4. The resolutions' bitrates are H.264's: the others need less for the same look.
 const CODECS = {
@@ -58,7 +58,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     project: { type: 'string', short: 'p' },
     formats: { type: 'string' },
     renders: { type: 'string' },
-    source: { type: 'string' },
+    source: { type: 'string', multiple: true },
     rules: { type: 'string' },
     fps: { type: 'string' },
     codec: { type: 'string' },
@@ -148,6 +148,34 @@ function fetchSource(src, dest) {
   try { run('ffmpeg', [...io, '-c', 'copy', dest]) }
   catch { run('ffmpeg', [...io, '-c:v', 'libx264', '-crf', '16', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '320k', dest]) }
 }
+
+// Several rushes become one source, end to end in the given order: each one fitted (letterboxed) into the frame and
+// rate of the first, cut to whole frames so the joins fall exactly, its sound at 48 kHz stereo (silence when it has
+// none). Returns where each one starts in the joined source.
+// ponytail: always re-encoded by the concat filter, a stream copy would do when every rush already matches the first
+function joinSources(list, dest) {
+  const rushes = list.map((src, i) => {
+    const file = path.join(path.dirname(dest), `rush-${i + 1}.mp4`)
+    fetchSource(src, file)
+    return { from: src, file, ...probe(file) }
+  })
+  const { width: w, height: h, fps } = rushes[0], sound = rushes.some(r => r.audio)
+  let at = 0
+  const graph = rushes.map((r, i) => {
+    Object.assign(r, { at, frames: Math.max(1, Math.round(r.duration * fps)) })
+    at += r.frames / fps
+    const samples = Math.round((r.frames / fps) * RATE)
+    return `[${i}:v]scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${r.frames}[v${i}];` +
+      (!sound ? '' : r.audio ? `[${i}:a]aresample=${RATE},aformat=channel_layouts=stereo,apad,atrim=end_sample=${samples}[a${i}];` : `anullsrc=r=${RATE}:cl=stereo,atrim=end_sample=${samples}[a${i}];`)
+  }).join('') + rushes.map((_, i) => `[v${i}]${sound ? `[a${i}]` : ''}`).join('') + `concat=n=${rushes.length}:v=1:a=${sound ? 1 : 0}[v]${sound ? '[a]' : ''}`
+  run('ffmpeg', ['-y', '-v', 'error', ...rushes.flatMap(r => ['-i', r.file]), '-filter_complex', graph, '-map', '[v]', ...(sound ? ['-map', '[a]', '-c:a', 'aac', '-b:a', '320k'] : []),
+    '-c:v', 'libx264', '-crf', '16', '-preset', 'fast', '-pix_fmt', 'yuv420p', dest])
+  for (const r of rushes) fs.rmSync(r.file)
+  return rushes.map(r => ({ from: r.from, at: ms(r.at), duration: ms(r.frames / fps) }))
+}
+
+// the scale filter that brings a frame's short side down to `need` (never up)
+const shrinkTo = ({ width: w, height: h }, need) => (Math.min(w, h) > need ? (w < h ? `,scale=${need}:-2` : `,scale=-2:${need}`) : '')
 
 function centerCrop({ width: w, height: h }, r) {
   const cw = even(Math.min(w, h * r)), ch = even(Math.min(h, w / r))
@@ -315,28 +343,31 @@ async function detectFaces(dir, p) {
 function extractFrames(dir, p) {
   const dest = path.join(dir, 'frames/cam')
   if (!opt.force && fs.existsSync(dest) && fs.readdirSync(dest).length) return
-  const started = Date.now(), { width: w, height: h, fps } = p.source
-  const need = Math.max(...p.renders.map(t => renderShort(t))), scale = Math.min(w, h) > need ? (w < h ? `,scale=${need}:-2` : `,scale=-2:${need}`) : ''
+  const started = Date.now(), need = Math.max(...p.renders.map(t => renderShort(t)))
   fs.rmSync(dest, { recursive: true, force: true })
   fs.mkdirSync(dest, { recursive: true })
-  run('ffmpeg', ['-y', '-v', 'error', '-i', path.join(dir, 'assets/source.mp4'), '-vf', `fps=${fps}${scale}`, '-q:v', '3', path.join(dest, '%05d.jpg')])
+  run('ffmpeg', ['-y', '-v', 'error', '-i', path.join(dir, 'assets/source.mp4'), '-vf', `fps=${p.source.fps}${shrinkTo(p.source, need)}`, '-q:v', '3', path.join(dest, '%05d.jpg')])
   console.log(`camera frames: ${fs.readdirSync(dest).length} in ${secs(started)} s`)
 }
 
-// clips of edit.json's media as JPEG frames at the project rate, kept while the clip and its cut stay the same
-function extractMedia(dir, media, fps) {
+// clips of edit.json's media as JPEG frames at the project rate, as large as the largest render needs (or `width` px
+// wide), with their sound (audio.wav) when they have one; kept while the clip and its cut stay the same
+function extractMedia(dir, media, p) {
+  const need = Math.max(...p.renders.map(t => renderShort(t)))
   for (const [id, m] of Object.entries(media ?? {})) {
     if (!/^[\w-]+$/.test(id)) die(`media id ${id}: letters, digits, - and _ only`)
     const src = path.resolve(dir, String(m.src).replace(/^~(?=\/)/, os.homedir()))
     if (!fs.existsSync(src)) die(`media ${id}: ${src} not found`)
     const dest = path.join(dir, '.cache/media', id), metaFile = path.join(dest, 'meta.json')
-    const want = { src, mtime: fs.statSync(src).mtimeMs, from: m.from ?? 0, dur: m.dur ?? null, fps, width: m.width ?? 720 }
+    const want = { src, mtime: fs.statSync(src).mtimeMs, from: m.from ?? 0, dur: m.dur ?? null, fps: p.fps, width: m.width ?? null, short: need }
     if (fs.existsSync(metaFile) && JSON.stringify(readJson(metaFile).want) === JSON.stringify(want)) continue
     fs.rmSync(dest, { recursive: true, force: true })
     fs.mkdirSync(dest, { recursive: true })
-    run('ffmpeg', ['-y', '-v', 'error', '-ss', `${want.from}`, ...(want.dur ? ['-t', `${want.dur}`] : []), '-i', src, '-vf', `fps=${fps},scale=${want.width}:-2`, '-q:v', '4', path.join(dest, '%05d.jpg')])
+    const info = probe(src), cut = ['-ss', `${want.from}`, ...(want.dur ? ['-t', `${want.dur}`] : []), '-i', src]
+    run('ffmpeg', ['-y', '-v', 'error', ...cut, '-vf', `fps=${p.fps}${m.width ? `,scale=${m.width}:-2` : shrinkTo(info, need)}`, '-q:v', '4', path.join(dest, '%05d.jpg')])
+    if (info.audio) run('ffmpeg', ['-y', '-v', 'error', ...cut, '-vn', '-ac', '2', '-ar', `${RATE}`, '-c:a', 'pcm_s16le', '-bitexact', '-map_metadata', '-1', path.join(dest, 'audio.wav')])
     const v = probe(path.join(dest, '00001.jpg'))
-    writeJson(metaFile, { want, count: fs.readdirSync(dest).filter(x => x.endsWith('.jpg')).length, fps, ar: v.width / v.height })
+    writeJson(metaFile, { want, count: fs.readdirSync(dest).filter(x => x.endsWith('.jpg')).length, fps: p.fps, ar: v.width / v.height })
   }
 }
 
@@ -459,7 +490,9 @@ rules: ${JSON.stringify(active)}
 ## Hook
 
 ## Sources
-${src ? `- Video: ${src.from} (${src.width}×${src.height}, ${src.duration} s)` : '- No source video: made from scratch in motion design'}
+${!src ? '- No source video: made from scratch in motion design'
+    : src.files ? `${src.files.map((x, i) => `- Video ${i + 1}: ${x.from} (from ${x.at} s of the source, ${x.duration} s)`).join('\n')}\n- Joined end to end: ${src.width}×${src.height}, ${src.duration} s`
+    : `- Video: ${src.from} (${src.width}×${src.height}, ${src.duration} s)`}
 
 ## Chiffres clés
 
@@ -471,25 +504,29 @@ ${src ? `- Video: ${src.from} (${src.width}×${src.height}, ${src.duration} s)` 
 }
 
 function init(slug) {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url>] [--rules a,b|none]')
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url> [--source <file|url>…]] [--rules a,b|none]')
   if (opt.fps && !(+opt.fps > 0 && +opt.fps <= 120)) die('--fps: frames per second, e.g. 24, 25, 30, 50 or 60')
   if (opt.codec && !CODECS[opt.codec]) die(`--codec: one of ${Object.keys(CODECS).join(', ')}`)
   const dir = path.join(HOME, slug)
   if (fs.existsSync(dir)) die(`${dir} already exists`)
-  const formats = list(opt.formats), types = list(opt.renders), known = renders()
-  if (!formats.length || formats.some(f => !FORMATS[f] && !(f === 'source' && opt.source))) die(`--formats: one or more of ${Object.keys(FORMATS).join(', ')}, source (with --source)`)
+  const formats = list(opt.formats), types = list(opt.renders), known = renders(), sources = opt.source ?? []
+  if (!formats.length || formats.some(f => !FORMATS[f] && !(f === 'source' && sources.length))) die(`--formats: one or more of ${Object.keys(FORMATS).join(', ')}, source (with --source)`)
   if (!types.length || types.some(t => !known[t])) die(`--renders: one or more of ${Object.keys(known).join(', ')}`)
   const active = opt.rules === 'none' ? [] : list(opt.rules)
   let params
   try { params = mergeParams(packs(), active) } catch (e) { die(e.message) }
-  if (opt.source && !/^https?:\/\//.test(opt.source) && !fs.existsSync(opt.source)) die(`source not found: ${opt.source}`)
+  for (const s of sources) if (!/^https?:\/\//.test(s) && !fs.existsSync(s)) die(`source not found: ${s}`)
 
   for (const d of ['assets/images', 'assets/logos', 'assets/review', 'files/reviews', 'output', 'source', 'stills']) fs.mkdirSync(path.join(dir, d), { recursive: true })
   let source = null
-  if (opt.source) {
+  if (sources.length) {
     const file = path.join(dir, 'assets/source.mp4')
-    try { fetchSource(opt.source, file) } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); die(`could not get the source: ${e.message}`) }
-    source = { from: opt.source, ...probe(file) }
+    let files
+    try {
+      if (sources.length === 1) fetchSource(sources[0], file)
+      else files = joinSources(sources, file)
+    } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); die(`could not get the source: ${e.message}`) }
+    source = { from: sources.join(' + '), ...probe(file), ...(files && { files }) }
   }
   // output frame rate: asked at the start, else the source's, else 30
   const p = { slug, formats, renders: types, fps: opt.fps ? +opt.fps : source?.fps ?? 30, codec: opt.codec ?? 'h264', source, created: new Date().toISOString() }
@@ -507,6 +544,7 @@ function init(slug) {
 
   console.log(`project: ${dir}`)
   console.log(`formats: ${formats.join(', ')} · renders: ${types.join(', ')} · ${ms(p.fps)} fps · ${CODECS[p.codec].label} · rules: ${active.join(', ') || 'none'}`)
+  for (const [i, x] of (source?.files ?? []).entries()) console.log(`video ${i + 1}: ${x.from} from ${x.at} s of the source (${x.duration} s)`)
   console.log(source ? `source: ${source.width}×${source.height}, ${ms(source.fps)} fps, ${source.duration} s${source.audio ? '' : ', no audio'}. Next: prepare, then rough` : 'no source: set duration in source/edit.json, write source/scene.js, then stills and render')
 }
 
@@ -569,7 +607,7 @@ function rough() {
 function readyToDraw(dir) {
   const p = readJson(path.join(dir, 'source/project.json'))
   if (!fs.existsSync(path.join(dir, 'source/scene.js'))) die('write source/scene.js first (see references/scene-format.md)')
-  extractMedia(dir, loadEdit(dir).media, p.fps)
+  extractMedia(dir, loadEdit(dir).media, p)
   return p
 }
 
@@ -577,12 +615,15 @@ const job = (dir, format, type) => {
   try { return buildJob(dir, format, type) } catch (e) { die(e.message) }
 }
 
-// the scene's sound cues (video seconds), the same in every format, for sound.py. The file only changes with them,
-// so the mix is not rebuilt for nothing. Its parts (the studio's Clip tab) go next to them
+// the scene's sound cues (video seconds), the same in every format, for sound.py, and where its media clips play,
+// for their own sound. The files only change with them, so the mix is not rebuilt for nothing. Its parts (the
+// studio's Clip tab) go next to them
 async function saveCues(dir, page) {
-  const file = path.join(dir, '.cache/cues.json'), cues = await page.evaluate(() => window.cues())
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  if (!fs.existsSync(file) || JSON.stringify(cues) !== JSON.stringify(readJson(file))) writeJson(file, cues)
+  fs.mkdirSync(path.join(dir, '.cache'), { recursive: true })
+  for (const [name, list] of [['cues', await page.evaluate(() => window.cues())], ['clips', await page.evaluate(() => window.clips())]]) {
+    const file = path.join(dir, `.cache/${name}.json`)
+    if (!fs.existsSync(file) || JSON.stringify(list) !== JSON.stringify(readJson(file))) writeJson(file, list)
+  }
   writeJson(path.join(dir, '.cache/parts.json'), await page.evaluate(() => window.parts()))
 }
 
@@ -672,28 +713,33 @@ async function render() {
   console.log(`render done in ${secs(started)} s. Next: final`)
 }
 
-// assets/mix.wav: the edited voice, the music of edit.json and the scene's cues (.cache/cues.json, from render), mixed
-// by audio.py (uv runs it with numpy). Rebuilt when one of its inputs changed; null when there is nothing to hear.
+// assets/mix.wav: the edited voice, the music of edit.json, the scene's cues (.cache/cues.json, from render) and the
+// sound of its media clips (.cache/clips.json), mixed by audio.py (uv runs it with numpy). Rebuilt when one of its
+// inputs changed; null when there is nothing to hear.
 function mix(dir, force) {
   const f = rel => path.resolve(dir, rel), file = f('assets/mix.wav')
-  const inputs = ['source/sound.py', 'source/edit.json', 'source/style.json', 'assets/timeline.json', 'assets/source.wav', '.cache/cues.json', path.join(ENGINE, 'audio.py')]
+  const inputs = ['source/sound.py', 'source/edit.json', 'source/style.json', 'assets/timeline.json', 'assets/source.wav', '.cache/cues.json', '.cache/clips.json', path.join(ENGINE, 'audio.py')]
   if (!force && fs.existsSync(file) && fs.existsSync(f('assets/mix.json')) && fs.statSync(file).mtimeMs >= Math.max(...inputs.map(x => fs.statSync(f(x), { throwIfNoEntry: false })?.mtimeMs ?? 0))) return file
   const plan = audioPlan(dir)
-  if (!plan.voice && !plan.sound) return fs.rmSync(file, { force: true }), null
+  if (!plan.voice && !plan.sound && !plan.clips.length) return fs.rmSync(file, { force: true }), null
   writeJson(f('.cache/audio-plan.json'), plan)
   run('uv', ['run', '--quiet', path.join(ENGINE, 'audio.py'), f('.cache/audio-plan.json')])
   return file
 }
 
 // what audio.py mixes, every time in video seconds: the voice, source/sound.py (written for the video), the scene's
-// cues and the spoken words for it to follow
+// cues and the spoken words for it to follow, and the pieces of media the scene plays with their volume (edit.json)
 function audioPlan(dir) {
   const f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), j = job(dir, p.formats[0], ''), tl = makeTimeline(j.timeline), s = j.style.sound, segs = j.timeline?.segments
   const words = j.words.filter(w => !w.screen && (!segs || segs.some(([a, b]) => w.t1 > a && w.t0 < b))).map(w => ({ w: w.w, v0: ms(tl.toVideo(w.t0)), v1: ms(tl.toVideo(w.t1)) }))
+  const media = loadEdit(dir).media ?? {}, wav = id => f(`.cache/media/${id}/audio.wav`)
+  extractMedia(dir, media, p)
+  const clips = (fs.existsSync(f('.cache/clips.json')) ? readJson(f('.cache/clips.json')) : [])
+    .filter(c => media[c.id] && media[c.id].volume !== 0 && fs.existsSync(wav(c.id))).map(c => ({ ...c, wav: wav(c.id), gain: media[c.id].volume ?? 1 }))
   return {
     duration: j.duration, voice: p.source?.audio ? buildVoice(dir, tl) : null,
     sound: fs.existsSync(f('source/sound.py')) ? f('source/sound.py') : null, variant: 0,
-    cues: fs.existsSync(f('.cache/cues.json')) ? readJson(f('.cache/cues.json')) : [], words,
+    cues: fs.existsSync(f('.cache/cues.json')) ? readJson(f('.cache/cues.json')) : [], words, clips,
     levels: { music: s.music, sfx: s.sfx, duck: s.duck }, out: f('assets/mix.wav'),
   }
 }
@@ -704,7 +750,7 @@ function audio() {
   const dir = projectDir(), started = Date.now(), n = +(opt.variants ?? 0)
   if (!opt.variants) {
     const file = mix(dir, true)
-    return console.log(file ? `audio done in ${secs(started)} s. Next: final` : 'no voice and no source/sound.py: the video stays silent')
+    return console.log(file ? `audio done in ${secs(started)} s. Next: final` : 'no voice, no source/sound.py and no media sound: the video stays silent')
   }
   const plan = audioPlan(dir), tl = makeTimeline(job(dir, readJson(path.join(dir, 'source/project.json')).formats[0], '').timeline)
   if (!(n >= 2) || opt.at === undefined || !plan.sound) die('usage: audio --at <source seconds> --variants N (source/sound.py reads v.variant)')

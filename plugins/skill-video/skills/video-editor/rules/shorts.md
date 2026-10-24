@@ -1,7 +1,7 @@
 ---
 name: shorts
 description: Short-form rhythm (TikTok, Reels, YouTube Shorts): aggressive cuts, speed-up, captions, hook, CTA, music bed
-params: {"face_framing": true, "speed": 1.15, "breaths": {"sentence": 0.08, "comma": 0.05}, "captions": true, "music": true}
+params: {"face_framing": true, "speed": 1.15, "breaths": {"sentence": 0.08, "comma": 0.05}, "captions": true, "music": true, "graphics": "lead"}
 ---
 ## When writing the scene
 - Strong hook in the first 2 s: the most surprising claim or number, said and shown at once. Never open on a greeting.

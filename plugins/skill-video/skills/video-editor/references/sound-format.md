@@ -6,6 +6,8 @@ video's music and effects. The engine (`engine/audio.py`) runs it, then does the
 - with a voice, it edits the voice, ducks the music under it, and sets the music and the effects to the style's
   levels;
 - without a voice, it keeps your balance between music and effects;
+- it adds the media clips' own sound where the scene plays them, at the music bed's loudness times their `volume`
+  (`edit.json`), ducked under the voice: you do not place them in `sound.py`;
 - in every case, the whole mix goes to -14 LUFS with peaks under -1 dBFS.
 
 `video.mjs audio` builds `assets/mix.wav` and prints its loudness. `final` rebuilds it whenever `sound.py`, the cues

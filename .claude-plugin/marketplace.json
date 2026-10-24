@@ -43,7 +43,7 @@
     {
       "name": "skill-video",
       "source": "./plugins/skill-video",
-      "description": "Skill video-editor: edit a video from a source or create one from scratch in motion design, rendered locally in every format, with captions, synthesized music and sound, a review studio, editing rule packs and a style that learns"
+      "description": "Skill video-editor: edit a video of any genre from one or several rushes and B-roll, or create one from scratch in motion design, rendered locally in every format, with captions, synthesized music and sound, a review studio, editing rule packs and a style that learns"
     },
     {
       "name": "requesty",

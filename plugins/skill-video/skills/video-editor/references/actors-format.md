@@ -76,7 +76,8 @@ A clip from `edit.json`'s `media`, playing at its own pace from the actor's entr
 ```js
 { id: 'm', type: 'media', media: 'arc', from: 0, to: 6.9, w: 520, label: 'Mon dernier short', dot: 'accent', offset: 0.3 }
 ```
-`ar` forces the ratio; `offset` starts the clip later (seconds).
+`ar` forces the ratio; `offset` starts the clip later (seconds). Its sound plays from its entrance through its exit,
+at the media's `volume` (scene-format.md, `edit.json`).
 
 ## arrow
 Drawn on during `draw` seconds (0.6). `a` and `b` are relative to the actor's `x, y` (0, 0 by default, so absolute).

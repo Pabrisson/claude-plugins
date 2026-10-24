@@ -1,15 +1,16 @@
 ---
 name: video-editor
-description: Claude as a video editor. Cuts a talking-head take (local file or URL) into a short or a longer video, or creates a motion-design video from scratch when there is no footage. Renders every chosen format (9:16, 16:9, 1:1, 4:5) in every chosen resolution (4K, 2K, 1080p, 720p) locally and fast, with captions, synthesized music and sound effects, a local review studio and a style that learns. Use it whenever the user wants to edit, cut or make a video, a short, a reel, a TikTok, an animated explainer or motion design ("monte cette vidéo", "fais-moi un short", "crée une vidéo", "montage", "motion design", "video editing"), or gives a video file or link to work on. Also use it when they paste "apply this feedback" from the studio, or ask for variations, the video style setup or editing rule packs.
-argument-hint: "[setup | <video file or URL> [content sources…] [studio] | apply this feedback … | variations <element> | preview | rules …]"
+description: Claude as a video editor for any genre. Edits footage (one or several rushes, local files or URLs, plus B-roll) into a short, a long YouTube video, an interview or podcast clip, a tutorial, a montage on music (travel, vlog, event), a brand film…, or creates a motion-design video from scratch when there is no footage. Renders every chosen format (9:16, 16:9, 1:1, 4:5) in every chosen resolution (4K, 2K, 1080p, 720p) locally and fast, with captions, synthesized music and sound effects, a local review studio and a style that learns. Use it whenever the user wants to edit, cut, assemble or make a video of any kind ("monte cette vidéo", "monte mes rushes", "fais-moi un short", "crée une vidéo", "montage", "motion design", "video editing"), or gives video files or links to work on. Also use it when they paste "apply this feedback" from the studio, or ask for variations, the video style setup or editing rule packs.
+argument-hint: "[setup | <video files or URLs…> [content sources…] [studio] | apply this feedback … | variations <element> | preview | rules …]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/video.mjs *)
 ---
 
 # Video editor
 
-You edit videos for the user the way a human editor would: a talking-head take becomes a tight video with motion
-design on every idea, or a brief becomes a motion-design video with no footage at all. A local engine renders it.
-The user reviews it in a local studio, and their feedback comes back to you as a pasted prompt.
+You edit videos for the user the way a human editor would, whatever the genre. Rushes become a tight edit: a short,
+a long YouTube video, an interview, a tutorial, a montage on music, a brand film… The graphics carry the video or
+serve the footage, as the genre calls for. Or a brief becomes a motion-design video with no footage at all. A local
+engine renders it. The user reviews it in a local studio, and their feedback comes back to you as a pasted prompt.
 
 `video.mjs` below means `node ${CLAUDE_SKILL_DIR}/engine/video.mjs`. References are in
 `${CLAUDE_SKILL_DIR}/references/`; read the one a step names before doing that step.
@@ -46,7 +47,7 @@ The first word of `$ARGUMENTS` picks the mode. Anything else is a new video.
 | `variations <element>` | Numbered options for one element, then save the choice |
 | `preview` | The live debug page of the current project |
 | `rules …` | List, choose, create or edit rule packs |
-| anything else | A new video: `[<video file or URL>] [content sources…] [studio]` |
+| anything else | A new video: `[<video files or URLs…>] [content sources…] [studio]` |
 
 ## setup
 
@@ -81,11 +82,20 @@ to edit (pace, cuts, captions) belongs to the rule packs.
 
 ## A new video
 
-### 1. Source
+### 1. Rushes and sources
 
-A video file or URL in the request is the source. Without one, the video is made from scratch in motion design:
-do not ask for a source. Other files, links or claude.ai artifacts in the request are **content sources**: the
-facts, numbers and visuals the video talks about.
+The video files or URLs in the request are the **rushes**. Without any, the video is made from scratch in motion
+design: do not ask for footage. Sort the rushes in two groups:
+- **The source**: the rushes the video follows in time, usually the ones with the speech. They are transcribed and
+  cut on their words. Several are joined end to end, in the order the request gives them.
+- **The clips**: B-roll, cutaways, screen recordings, a second camera. They go in `edit.json`'s `media` (step 3),
+  and the scene plays them anywhere, over or between the source, with their own sound.
+
+When nothing tells you which rush is which, the ones with speech are the source and the others are clips. A montage
+without speech takes every rush as a clip, so that the scene can order its shots freely.
+
+Other files, links or claude.ai artifacts in the request are **content sources**: the facts, numbers and visuals
+the video talks about.
 
 ### 2. Starting questions
 
@@ -95,28 +105,29 @@ two to four options, and "Other" is always added for free text.
 Skip a question only when the request already answers it explicitly, and skip a call that has no question left.
 Write the labels in the user's language. The French ones below are the defaults.
 
-Before asking, read the source's size and frame rate with `video.mjs probe <file|url>` (it does not download).
-Read the encoders this machine has with `video.mjs codecs`.
+Before asking, read the size and frame rate of the first rush (the source's first, else the first clip) with
+`video.mjs probe <file|url>` (it does not download). Read the encoders this machine has with `video.mjs codecs`.
 
 **Call 1:**
 - **Formats** (header `Formats`, multiSelect): `9:16` (Shorts, Reels, TikTok), `16:9` (YouTube, web), `1:1` (carré
   Instagram/Facebook), `4:5` (portrait Instagram/Facebook).
-  - When the source's `format` (from `probe`) is one of these, add « (format d'origine) » to it.
-  - When it matches none of them, put « Format d'origine (W×H) » first and drop `4:5`, which stays reachable
-    through Other. That option becomes `--formats source`.
+  - When the rush's `format` (from `probe`) is one of these, add « (format d'origine) » to it.
+  - When it matches none of them and the rush is the source, put « Format d'origine (W×H) » first and drop `4:5`,
+    which stays reachable through Other. That option becomes `--formats source`.
 - **Résolutions** (header `Résolution`, multiSelect): `4K (2160p)`, `2K (1440p)`, `1080p (Full HD)`, `720p (HD)`.
   They become `--renders 2160p,1440p,1080p,720p`: the short side of the frame, so a 9:16 in 1080p is 1080×1920.
-  - With a source, add « (d'origine) » to the one that matches its short side.
+  - With footage, add « (d'origine) » to the one that matches the rush's short side.
   - `480p` and the other resolutions of `renders.json` go through Other.
 - **Règles** (header `Règles`, **single choice**: one pack per video): « Aucune règle (recommandé) » first, the
-  default, then the packs from `video.mjs rules list` with their descriptions.
-  - Beyond three packs, the user types the others through Other.
+  default, then the packs from `video.mjs rules list` with their descriptions. A pack is a genre: `shorts`,
+  `youtube`, `interview`, `tutorial`, `montage`, `corporate`, `motion-design`, and the user's own.
+  - After « Aucune règle », the three packs closest to the request. The user types the others through Other.
 
 **Call 2 (single choice):**
 - **Cadence** (header `Cadence`):
-  - With a source: « Cadence d'origine (N i/s) » first, then `25`, `30` and `60`, without repeating the
-    original rate.
-  - Without a source: `30` (recommandé), `25`, `60`, `24`.
+  - With footage: « Cadence d'origine (N i/s) » first, then `25`, `30` and `60`, without repeating the original
+    rate.
+  - Without footage: `30` (recommandé), `25`, `60`, `24`.
 - **Codec** (header `Codec`): `H.264` (recommandé) first, then `HEVC`, `AV1` and `VP9`.
   - Offer only the codecs that `codecs` lists as available.
   - Add « (logiciel, plus lent) » to a codec that has no hardware encoder.
@@ -128,11 +139,17 @@ The first format chosen is the main one: the rough cut and the studio use it.
 Pick a short slug from the topic (`a-z0-9-`), then run:
 
 ```
-video.mjs init <slug> --formats 9:16,1:1 --renders 1080p,720p --fps 30 --codec h264 [--source <file|url>] --rules shorts
+video.mjs init <slug> --formats 9:16,1:1 --renders 1080p,720p --fps 30 --codec h264 [--source <file|url> …] --rules shorts
 ```
 
-Use `--rules none` for no pack, and leave `--fps` out to keep the source's rate. With a source, run
-`video.mjs prepare -p <slug>`, then `video.mjs rough -p <slug>`:
+Use `--rules none` for no pack, and leave `--fps` out to keep the source's rate. Give one `--source` per rush of the
+source, in the order of the video. `init` joins them and prints where each one starts. A rush of another shape
+than the first is letterboxed into it: put first the one with the main shape, or make the odd one a clip.
+
+Declare the clips in `source/edit.json`'s `media`, with the path of each file. Download a clip given as a URL into
+`<slug>/assets/clips/` first, with `uvx yt-dlp`.
+
+With a source, run `video.mjs prepare -p <slug>`, then `video.mjs rough -p <slug>`:
 - `prepare` transcribes the speech, cuts the silences when a pack says so, and frames the face when a pack says so.
 - `rough` gives `output/<slug>-rough.mp4` (version v1).
 
@@ -143,8 +160,9 @@ Read the content sources and fill `<slug>/About.md`:
 - sections: Hook, Sources, Chiffres clés (every number with its source), État, Beats (the story, moment by
   moment).
 
-With a source, the beats follow `files/words.md`, which gives the words with their SOURCE times. Without one, the
-beats come from the brief, and their total gives `duration` (seconds) in `source/edit.json`.
+With a source, the beats follow `files/words.md`, which gives the words with their SOURCE times. With several
+rushes, say which one each beat comes from (About.md's Sources gives where each one starts). Without a source, the
+beats come from the brief and the clips, and their total gives `duration` (seconds) in `source/edit.json`.
 
 ### 5. Studio before the edit (only with the word `studio` and a rough cut)
 
@@ -166,7 +184,16 @@ The style gives you material: the brand's palette, type and symbols, and what th
 look of this video is yours to invent here. The other videos of the projects folder are not a reference: do not open
 them unless the user points at one, and never define this video against another one.
 
+Settle **what carries the video** with the pack's `graphics` param:
+- `lead`: the motion design carries it (shorts, explainers, a video without footage).
+- `support`: the footage carries it, and the graphics serve it (interviews, long YouTube videos, tutorials,
+  montages, brand films).
+- Without the param, decide from the video and write the choice in the Direction. Without footage, it is `lead`.
+
 Then research what the video shows:
+- **The footage, seen.** Before anything else, look at every rush: a contact sheet of each one with ffmpeg
+  (`fps=1,scale=320:-1,tile=6x8`, a higher rate for a short rush), and `files/words.md` for the speech. Note the
+  best shots and moments, and the problems: shaky, dark, out of focus, a bad framing, noise.
 - **The brand, seen.** Read the screenshots of its site and `svgs.jpg`: `.style/site/`, or run
   `video.mjs site <url> -p <slug>` for another site or when they are missing. Look for the colors of its sections
   and how it alternates them, its pictograms and recurring shapes, and the details of its interface. Copy the SVGs
@@ -178,20 +205,32 @@ Then research what the video shows:
 - **The visuals**: fetch logos, screenshots and images into `assets/` with `curl -L`. The render is offline.
 
 Write a **Direction** section in About.md before writing any code:
-- the concept in one line;
+- the concept in one line, and what carries the video (`lead` or `support`);
 - **the brand's motif**: one graphic element of the brand (its pictogram, the logo's shape, a pattern of its site)
   that runs through the whole video, as bullets, particles, masks, transitions and diagrams. A viewer recognizes the
-  brand with the logo hidden;
+  brand with the logo hidden. With `support`, it lives in the graphics: the lower thirds, the titles, the
+  transitions;
 - **the color story**: which field (light, dark or accent) carries which part of the story, and on which turn it
   flips. The fields change on the story's turns, not at every sequence: for example the problem on a light field, the
-  answer on a dark one, the promise on the accent;
-- sequence by sequence: the time range, what it says, its visual idea, its field and the transition into the next
-  one;
+  answer on a dark one, the promise on the accent. With `support`, the fields are the graphics' and the cards';
+- sequence by sequence: the time range, what it says, its visual idea (with footage: the rush, the shot, the
+  framing and the clips over it), its field and the transition into the next one;
+- with footage: **the cut** (its pace, where it breathes, where the clips cover the source), and **the grade**, one
+  look for every rush (a CSS `filter`, scene-format.md);
 - the type scale, from display type to labels;
 - the textures and the motion language (eases, speeds);
 - the music's tempo, with the big moments placed on its beats.
 
-The bar is a motion designer's showreel, not a slide deck. What makes the difference:
+With `support`, the bar is a professional editor's cut, where the footage shines. What makes the difference:
+- **Every cut has a reason.** A new idea, a better shot, the beat. No stutter, no clipped word, no dead air.
+- **The best footage, framed.** Choose the best take and the best seconds of each shot. Reframe a badly framed shot
+  with `cam.view` (zoom, focus) and cover a jump cut or a weak shot with a clip.
+- **One look and one sound.** The same grade on every rush, and the same voice level from one rush to the next.
+- **Graphics that serve.** Lower thirds, titles, callouts and data in the brand's palette, type and motif. They come
+  in and go out with intent, and never cover a face or the action.
+- **It breathes.** A strong shot may hold. The pack's `max_static` is the longest stretch without a change.
+
+With `lead`, the bar is a motion designer's showreel, not a slide deck. What makes the difference:
 - **Fill the frame.** No frame is mostly empty. Display type is at the scale of the frame and may overflow it. A
   background is never a blank page: use fields of color, patterns, repeated type, grids or textures.
 - **Contrast between sequences.** Change the scale and the density from one sequence to the next, and give each its
@@ -204,7 +243,8 @@ The bar is a motion designer's showreel, not a slide deck. What makes the differ
   whole sequences and parallax layers. Nothing stays still for more than about 1.5 s, and the cuts fall on the beats.
 - **Polish.** A grain or texture over everything, steady margins, and sizes readable on a phone.
 
-The style gives the material, the pack the pace, the Direction the look, and the bar above the ambition.
+The style gives the material, the pack the pace and what carries the video, the Direction the look, and the bar
+above the ambition.
 
 ### 7. Write the main format
 
@@ -212,6 +252,8 @@ Write `source/scene.css` first: the design system of the Direction. Then write `
 format only** (the first one). Give it the whole frame: the other formats come in step 9, and composing three
 frames at once leads to small, safe layouts.
 - Anchor every moment on the speech with `at(source seconds)`, so cuts never break the sync.
+- Show the source with `camera()` and play the clips with `clip(id, start)`: each one brings its sound, at its
+  `volume` in `edit.json`.
 - Put a `cue(kind, t, data)` on every event that should be heard, with what the sound needs (`dur`, `x`…).
 - Declare what the picture is made of with `part(kind, t0, t1, data)`: a `part('sequence', …, { name, field })`
   per sequence (`field`: the palette color it sits on), and one per key element (`title`, `counter`, `logo`,
@@ -234,6 +276,8 @@ This is where the quality comes from, so take the time it needs: usually four to
   - two sequences that look alike;
   - the brand: next to the site's screenshots, is it recognizable with the logo hidden? Is the motif in most
     sequences? Do the fields follow the color story?
+  - with footage: a weak or badly framed shot left in, a raw jump cut, a grade that changes between rushes, a
+    graphic over a face or the action, a clip that hides what the speaker shows;
   - anything below the bar of step 6.
 - **Fix, and look again.**
 
@@ -250,15 +294,17 @@ When the pack or the request asks for music or sound, write `source/sound.py`. A
 sound. Read `references/sound-format.md` first.
 - Compose the score on the Direction's tempo and beats.
 - Design one sound for each kind of cue.
+- The clips play their own sound by themselves: set each one's `volume` in `edit.json`.
 
-Run `video.mjs audio -p <slug>` and measure: the balance of the bands, effects starting on their cues, and a quiet
-break.
+Run `video.mjs audio -p <slug>` and measure: the balance of the bands, effects starting on their cues, a quiet
+break, and the clips' level against the voice.
 
 ### 11. Render and deliver
 
 Run `video.mjs render -p <slug> --blur 4`, then `video.mjs final -p <slug>`.
-- `--blur 4` gives motion blur. The render is four times slower, and it is worth it for motion design. Use
-  `--blur 1` for a talking head, and keep the same value for every later render of the project.
+- `--blur 4` gives motion blur to the graphics (never to the footage). The render is four times slower, and it is
+  worth it with `lead`. With `support`, use `--blur 1`, or `--blur 2` when the graphics move a lot. Keep the same
+  value for every later render of the project.
 - `final` mixes the sound and makes a new version.
 
 Check what you deliver. Extract about 20 frames of the main MP4 across its length (`ffmpeg -ss <t> -i … -frames:v 1`)
@@ -289,11 +335,12 @@ shape of a reference. Then handle each id:
   - Change only what is asked and keep the rest identical: the user has already approved it.
 - **Sound:** lines say what in the sound the comment is about.
   - A track (`music`, `fx`) is that bus of `source/sound.py` at that moment: change its arrangement or its level there.
-    The `voice` track is the voice itself: its level in the style, or a cut.
+    The `voice` track is the voice itself: its level in the style, or a cut. The `clips` track is the clips' own
+    sound: the `volume` of the media playing at that moment, in `edit.json`.
   - `every "<kind>"` is the sound `sound.py` designs for that kind: change it, every cue of the kind follows.
   - One cue is a `cue()` of the scene. To change its sound only, give it its own data in the scene and let `sound.py`
     read it. Move or remove the `cue()` when its timing is the problem.
-  - A change in `sound.py` alone needs no render: `audio`, then `final`.
+  - A change in `sound.py` or in a clip's `volume` alone needs no render: `audio`, then `final`.
 - **Visual:** lines name the parts of the picture the comment is about: find each `part()` in the scene by its kind,
   name and times, and change what it wraps. `every "<kind>"` is every part of that kind (all the titles…): change
   their shared class or helper. A `take` is a kept piece of the source, a `clip` a media of `edit.json`.
@@ -342,8 +389,9 @@ Finished projects keep their frozen style and packs. Nothing changes them after 
 ## Good to know
 
 - **Times.**
-  - With a source, the CLI, `edit.json` (`cut`, `poster`) and `at()` use SOURCE seconds.
-  - The scene's timeline, `cue()` and `sound.py` run in VIDEO seconds.
+  - With a source, the CLI, `edit.json` (`cut`, `poster`) and `at()` use SOURCE seconds. With several rushes, they
+    are the seconds of the joined source: `source.files` in `source/project.json` gives where each rush starts.
+  - The scene's timeline, `cue()`, `clip()` and `sound.py` run in VIDEO seconds.
   - Without a source, the two are the same.
 - **Render speed.** A 75 s video renders in about 10 s, about 40 s with `--blur 4`. Unchanged chunks are cached,
   and changing only the sound never re-renders the picture.

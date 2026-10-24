@@ -7,7 +7,7 @@ switches to another) shows one version; the user comments, cuts and draws on it,
 then **Copy prompt** gives the text to paste into Claude. The transcript tab comes first, under the scene's sequences:
 the speech in paragraphs, or, without speech, the lines of what the video shows with their frame, where a
 double-click corrects a line (`fix`). Next to it, the Clip tab shows the version's
-thumbnails and one row per kind of the scene's `part()`, and the Sound tab its tracks (voice, music, effects) with
+thumbnails and one row per kind of the scene's `part()`, and the Sound tab its tracks (voice, clips, music, effects) with
 their levels, then one row per kind of cue: the user picks a part, a track, a cue, or every one of a kind for a comment.
 
 ## `files/reviews/vN.json`
@@ -38,7 +38,7 @@ their levels, then one row per kind of cue: the user picks a part, a track, a cu
 | `format` | The format the user was looking at. Only a request about that format's composition (placement, size, framing) stays in it; content, text, timing and sound changes apply to every format |
 | `images` | Frames the user drew on, or pictures they dropped (`assets/review/frame-<id>.png`), with their size in pixels and ratio: read them. Older files have bare paths |
 | `visuals` | What the comment is about in the picture: a part of the scene (`kind`, `t0`/`t1` in VIDEO seconds, its data), or every part of a kind (`{ "kind" }`). Absent when the comment is not about one |
-| `sounds` | What the comment is about in the sound: a whole track (`voice`, `music`, `fx`), every cue of a kind (`{ "kind" }`), or one cue of the scene (`kind`, `t` in VIDEO seconds, its data). Absent when the comment is not about the sound |
+| `sounds` | What the comment is about in the sound: a whole track (`voice`, `clips`, `music`, `fx`), every cue of a kind (`{ "kind" }`), or one cue of the scene (`kind`, `t` in VIDEO seconds, its data). Absent when the comment is not about the sound |
 | `resolved`, `reply` | **Claude writes them**: `resolved: true` and one sentence on what changed. The studio shows the reply |
 
 The studio keeps an answer Claude wrote even when an older tab saves the file again. Edit only `resolved` and
@@ -94,7 +94,7 @@ with a source, the kept `take`s, VIDEO seconds) and `strips`, per format a sheet
   `prepare` needed: the timeline applies `cut` itself. Check the words around the cut in `files/words.md` so it lands between words.
 - **COMMENT**: change the scene (`source/scene.js`, `scene.css`, `edit.json`, assets) at that moment; with `Sound:`
   lines, change `source/sound.py` (the track's part, or the sound of the cue's kind), or the `cue()` when its timing
-  is wrong; with `Visual:` lines, change what the named `part()` wraps. Anchor the
+  is wrong; the `clips` track is the media's own sound: change the `volume` of that media in `edit.json`; with `Visual:` lines, change what the named `part()` wraps. Anchor the
   change with `at(source seconds)`; the video times of the prompt only say where the user was looking. A request
   about one format's composition changes that format only (`format === '16:9'`, `pick()`, or CSS on
   `#stage.landscape`); anything else changes every format.

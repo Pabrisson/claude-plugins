@@ -13,6 +13,7 @@ placement, filters, noise, oscillators, envelopes, reverb, tape stop. numpy only
 The plan, written by video.mjs audio (every time in VIDEO seconds):
   {"duration": 43.2, "voice": "…/assets/voice.wav" | null, "sound": "…/source/sound.py" | null, "variant": 0,
    "cues": [{"kind": "hit", "t": 1.2}], "words": [{"w": "Bonjour", "v0": 0.4, "v1": 0.8}],
+   "clips": [{"id": "arc", "wav": "…/.cache/media/arc/audio.wav", "t": 3.2, "from": 0, "dur": 4, "gain": 1}],
    "levels": {"music": -21, "sfx": -28.5, "duck": 0.5}, "out": "…/assets/mix.wav"}
 """
 import argparse, importlib.util, json, os, sys, tempfile, time, wave
@@ -192,6 +193,21 @@ def write(path, x):
         w.writeframes(np.round(np.clip(x, -1, 1) * 32767).astype('<i2').T.tobytes())
 
 
+def clip_sound(clips, n, target):
+    """The media's own sound where the scene plays them: each media at the target loudness (measured on all of it)
+    times its gain, with 10 ms fades at the edges of every piece."""
+    out, media = np.zeros((2, n)), {}
+    for c in clips:
+        if c['wav'] not in media: media[c['wav']] = norm(load(c['wav']), target)
+        x = media[c['wav']][:, int(round(c['from'] * SR)):int(round((c['from'] + c['dur']) * SR))].copy()
+        f = min(480, x.shape[1] // 2)
+        if f:
+            x[:, :f] *= np.linspace(0, 1, f)
+            x[:, -f:] *= np.linspace(1, 0, f)
+        place(out, c['t'], x, c.get('gain', 1))
+    return out
+
+
 def compose(plan, n, speech):
     """Runs source/sound.py: sound(v) returns the music bus, or (music, fx); each stereo (2, n) or mono."""
     spec = importlib.util.spec_from_file_location('sound', plan['sound'])
@@ -223,6 +239,8 @@ def mix(plan):
         if fx is not None: parts['fx'] = norm(fx, lv['sfx'])
     else:  # no voice: sound.py's own balance
         parts.update({k: x for k, x in (('music', music), ('fx', fx)) if x is not None})
+    if plan.get('clips'):  # at the music bed's level, down under the voice like it
+        parts['clips'] = clip_sound(plan['clips'], n, lv['music']) * (gain if speech else 1)
     for x in parts.values(): out += x
     # the whole mix to the target (the limiter takes some loudness off: a second pass brings it back)
     # ponytail: a brickwall limiter alone, add a compressor on the voice if dynamic voices pump
@@ -282,7 +300,16 @@ def selftest():
         for c in cues:
             s = int(c['t'] * SR)
             assert np.abs(fx[:, s - 480:s]).max() == 0 < np.abs(fx[:, s:s + 48]).max(), f'effect at {c["t"]} s is off its cue'
-    print(f'selftest ok in {time.time() - started:.1f} s: exact length, no clipping, -14 LUFS with and without a voice, music down under it, effects on their cues, track levels, variants, deterministic')
+        tone = secs(1)
+        write(f'{tmp}/clip.wav', np.stack([.2 * np.sin(2 * np.pi * 300 * tone)] * 2))
+        piece = lambda voice, t: mix({**plan, 'voice': voice, 'clips': [{'wav': f'{tmp}/clip.wav', 't': t, 'from': .2, 'dur': .5}]})[1]['parts']['clips']
+        clip = piece(None, 4)
+        heard = lambda a, b: np.abs(clip[:, int(a * SR):int(b * SR)]).max() > 0
+        assert heard(4, 4.02) and heard(4.48, 4.5) and not heard(0, 4) and not heard(4.5 + 1 / SR, d), 'clip sound off its place'
+        level = lambda x, t: lufs(x[:, int(t * SR):int((t + .5) * SR)])
+        assert abs(level(clip, 4) - LEVELS['music']) < 1, f'clip at {level(clip, 4):.1f} LUFS'
+        assert level(piece(plan['voice'], 5), 5) < LEVELS['music'] - 3, 'clip sound not down under the voice'
+    print(f'selftest ok in {time.time() - started:.1f} s: exact length, no clipping, -14 LUFS with and without a voice, music down under it, effects on their cues, track levels, variants, clip sound in place, deterministic')
 
 
 if __name__ == '__main__':
@@ -308,6 +335,6 @@ if __name__ == '__main__':
     write(dest, out)
     # the whole mix: the studio's sound panel reads its tracks (mix.json next to mix.wav)
     if a.at is None: Path(dest).with_suffix('.json').write_text(json.dumps(tracks(info['parts'])))
-    parts = [x for x, on in (('voice', plan.get('voice')), ('sound.py', plan.get('sound'))) if on]
+    parts = [x for x, on in (('voice', plan.get('voice')), ('sound.py', plan.get('sound')), ('clips', plan.get('clips'))) if on]
     print(f"{dest}: {out.shape[1] / SR:.2f} s, {lufs(out):.1f} LUFS, peak {20 * np.log10(np.abs(out).max() + 1e-9):.1f} dBFS"
           f" ({', '.join(parts) or 'silence'}{f', variant {plan.get('variant')}' if plan.get('variant') else ''}) in {time.time() - started:.1f} s")

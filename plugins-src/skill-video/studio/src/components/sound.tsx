@@ -49,7 +49,7 @@ export function SoundTimeline({
 }) {
   const isPicked = (s: SoundRef) => picked.some((p) => sameSound(p, s))
   const marks = (s: SoundRef) => markOf(comments, (c) => !!c.sounds?.some((x) => sameSound(x, s)), onFocus)
-  const tracks = (["voice", "music", "fx"] as Track[]).filter((k) => sound.tracks[k] || (k === "fx" && sound.cues.length))
+  const tracks = (["voice", "clips", "music", "fx"] as Track[]).filter((k) => sound.tracks[k] || (k === "fx" && sound.cues.length))
   // in order of first appearance
   const kinds = [...new Set(sound.cues.map((c) => c.kind))]
   const lanes: Lane[] = [
