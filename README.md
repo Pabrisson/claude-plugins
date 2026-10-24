@@ -1,32 +1,26 @@
 # claude-plugins
 
-Marketplace **`pabrisson`** pour Claude Code : un plugin par type de composant et par domaine, nommé `<type>-<domaine>`. Chacun s'active séparément.
+**`pabrisson`** marketplace for Claude Code. Each plugin holds a single type of component (mod, hook, agent, command, skill or MCP server) for one domain, and is enabled on its own. A plugin that mixes several types goes under [Plugins](#plugins).
 
-## Plugins
+## Contents
 
-| Plugin | Contenu | Appel |
-|---|---|---|
-| `mod-hud` | Bandeau au-dessus du prompt (modèle, effort, branche, outils, usage, contexte, coût, mise à jour) | — |
-| `mod-ports` | Panneau à droite listant ce qui tourne pour le projet (Docker, Kubernetes, process) | icône ⇄ du HUD |
-| `mod-code-fence` | Entoure d'un bloc ```` ```lang ```` le code collé dans le prompt | — |
-| `hook-notify` | Notification desktop (macOS, Linux, Windows) à la fin d'une tâche ou en attente d'une saisie, durée de chaque prompt en SQLite | — |
-| `command-docs` | `add-readme`, `add-changelog`, `summarize-implementation` | `/command-docs:add-readme` |
-| `command-docs-templates` | `update-docs`, `create-architecture-documentation` et les autres commandes de documentation de davila7/claude-code-templates | `/command-docs-templates:update-docs` |
-| `command-toolbox` | `fork-sync` | `/command-toolbox:fork-sync` |
-| `skill-shadcn` | `shadcn` (tiré de shadcn-ui/ui) | `skill-shadcn:shadcn` |
-| `skill-laravel` | `laravel-upgrade` | `skill-laravel:laravel-upgrade` |
-| `skill-find-skills` | `find-skills` (tiré de vercel-labs/skills) | `skill-find-skills:find-skills` |
-| `skill-video` | `video-editor` | `skill-video:video-editor` |
-| `requesty` | Serveur MCP Requesty (`router.requesty.ai`) | outils `mcp__plugin_requesty_requesty__*` |
-| `dbeaver` | Serveur MCP DBeaver (`omnisql-mcp`, lancé via `npx`, indépendant de la version Node active) | outils `mcp__plugin_dbeaver_dbeaver__*` |
-
-Préfixes utilisés : `mod-`, `hook-`, `agent-`, `command-` et `skill-`. Les serveurs MCP n'ont pas de préfixe. Leurs réglages (clé API, connexions autorisées, lecture seule…) sont demandés à l'installation et se modifient ensuite dans `/config` ; la clé API est rangée dans le Keychain, jamais dans le repo. Pour un futur thème, output style, monitor ou exécutable : `theme-*` (`themes/*.json`), `output-style-*` (`output-styles/*.md`), `monitor-*` (`monitors/monitors.json`) ou `bin/` dans le plugin concerné.
-
-`command-docs-templates`, `skill-shadcn` et `skill-find-skills` ne contiennent aucun fichier ici : leur entrée du marketplace pointe vers le dépôt d'origine (`git-subdir`), ces projets n'ayant pas de marketplace Claude. Tout ce qui a son propre marketplace ou existe nativement s'installe de là-bas :
-
-- agents : `claude plugin marketplace add wshobson/agents` puis `frontend-mobile-development`, `backend-development`, `documentation-generation`, `llm-application-dev`
-- revue de code : `/code-review` et `/simplify` (natifs), `code-review` / `pr-review-toolkit@claude-plugins-official`
-- réflexion profonde : `/effort max` ou le mot-clé `ultrathink` (natifs)
+- [Installation](#installation)
+- [Catalog](#catalog)
+  - [Mods](#mods)
+  - [Hooks](#hooks)
+  - [Agents](#agents)
+  - [Commands](#commands)
+  - [Skills](#skills)
+  - [MCP servers](#mcp-servers)
+  - [Plugins](#plugins)
+- [Plugin documentation](#plugin-documentation)
+  - [mod-hud](#mod-hud) · [mod-ports](#mod-ports) · [mod-code-fence](#mod-code-fence)
+  - [hook-notify](#hook-notify)
+  - [command-docs](#command-docs) · [command-toolbox](#command-toolbox)
+  - [skill-laravel](#skill-laravel) · [skill-video](#skill-video)
+  - [requesty](#requesty) · [dbeaver](#dbeaver)
+- [Plugin anatomy](#plugin-anatomy)
+- [Development](#development)
 
 ## Installation
 
@@ -35,10 +29,253 @@ claude plugin marketplace add Pabrisson/claude-plugins
 claude plugin install command-docs@pabrisson
 ```
 
-## Développement
+The `/plugin` menu does the same from inside a session.
 
-- Les plugins installés depuis le marketplace sont **copiés** dans `~/.claude/plugins/cache/pabrisson/<plugin>/<version>/`. Après une modification, incrémenter `version` dans `plugins/<plugin>/.claude-plugin/plugin.json`, pousser sur `main`, puis lancer `claude plugin marketplace update pabrisson && claude plugin update <plugin>@pabrisson` et redémarrer la session.
-- Essayer une modification sans la publier : `claude --plugin-dir plugins/<plugin>` (session seulement, remplace la version installée du même nom).
-- Valider : `claude plugin validate .` (marketplace) ou `claude plugin validate plugins/<plugin>`.
-- Tester un mod : `claude plugin test plugins/mod-hud`.
-- Studio de `skill-video` : après une modification du studio, lancer `npm run build` dans `plugins-src/skill-video/studio/` avant d'incrémenter la version (seul le build, `engine/studio/dist/`, est livré dans le plugin).
+### Update
+
+```bash
+claude plugin marketplace update pabrisson && claude plugin update <plugin>@pabrisson
+```
+
+then restart the session.
+
+### Uninstall
+
+```bash
+claude plugin uninstall <plugin>@pabrisson
+```
+
+## Catalog
+
+### Mods
+
+Mods change the Claude Code interface. They are active as soon as they are installed, nothing to call.
+
+| Plugin | Role | Trigger |
+|---|---|---|
+| [`mod-hud`](#mod-hud) | Band above the prompt: model, effort, folder, branch, tools, usage, context, cost, update | always on |
+| [`mod-ports`](#mod-ports) | Right pane listing what runs for the project (Docker, Kubernetes, processes), with links, restart and stop | HUD's `⇄` icon |
+| [`mod-code-fence`](#mod-code-fence) | Wraps code pasted into the prompt in a ```` ```lang ```` fence | paste into the prompt (terminal) |
+
+### Hooks
+
+| Plugin | Role | Events |
+|---|---|---|
+| [`hook-notify`](#hook-notify) | Desktop notification (macOS, Linux, Windows) when a task ends or Claude waits for a permission, each prompt's duration logged to SQLite | `UserPromptSubmit`, `Stop`, `Notification` |
+
+### Agents
+
+No `agent-*` plugin yet.
+
+### Commands
+
+| Command | Plugin | Arguments | Role |
+|---|---|---|---|
+| `/command-docs:add-readme` | [`command-docs`](#command-docs) | — | Creates a professional README.md suited to the project type |
+| `/command-docs:add-changelog` | [`command-docs`](#command-docs) | `[version] \| [entry-type] [description]` | Maintains CHANGELOG.md in the Keep a Changelog format |
+| `/command-docs:summarize-implementation` | [`command-docs`](#command-docs) | — | Summarizes the conversation's last implementation for reuse elsewhere |
+| `/command-toolbox:fork-sync` | [`command-toolbox`](#command-toolbox) | `[upstream-branch] \| --rebase \| --merge` | Syncs a fork with its upstream while keeping local changes |
+
+### Skills
+
+A skill triggers on its own when the request matches its description, or is called like a command.
+
+| Skill | Plugin | Arguments | Role |
+|---|---|---|---|
+| `/skill-laravel:laravel-upgrade` | [`skill-laravel`](#skill-laravel) | `<target version>` | Upgrades Laravel one major version at a time, with a test pause between each |
+| `/skill-video:video-editor` | [`skill-video`](#skill-video) | `setup \| <video or URL> \| apply this feedback … \| variations \| preview \| rules …` | Edits a video (short, motion design), rendered locally with captions, sound and a review studio |
+
+### MCP servers
+
+MCP servers have no prefix. Their settings are asked at install time and can be changed later in `/config`.
+
+| Plugin | Server | Tools |
+|---|---|---|
+| [`requesty`](#requesty) | HTTP `https://router.requesty.ai/v1/mcp` | `mcp__plugin_requesty_requesty__*` (Sentry, Context7) |
+| [`dbeaver`](#dbeaver) | stdio `npx -y omnisql-mcp@2.0.1` | `mcp__plugin_dbeaver_dbeaver__*` |
+
+### Plugins
+
+Plugins that bundle several types of components. None yet.
+
+## Plugin documentation
+
+### `mod-hud`
+
+`claude plugin install mod-hud@pabrisson`
+
+Band above the prompt, in the terminal as well as in the desktop app. Text colors follow `/theme`.
+
+- **Line 1**: model (`Opus 5.5`) • effort (`○ Low` to `◈ Max`) | folder • git branch • `⚡` number of tools run, then the running tool ("Bash running 3s") or the last one used.
+- **Agent line**: when an agent's transcript is opened from the task list, a line `▸ name ● status • ◷ time since spawned • Σ tokens generated • ⧉ its position among agents • ✎ its task`, and lines 1 and 2 show its model, effort, tools and context.
+- **Line 2**: 5h and 7d usage gauges with their reset time, context (percentage and tokens), session cost (hidden while it is $0.00). In a narrow window, the line drops the reset times first, then the cost, then the tokens.
+- **Line 3**: a new Claude Code version is available, with an **Update** button (brew, winget, mise, otherwise `claude update`). Once installed: "restart Claude to use it".
+- **Alerts**: a toast when the context goes over 85% ("consider /compact") and when 5h usage goes over 90%, once per crossing.
+- **`⇄` icon**: opens and closes the [`mod-ports`](#mod-ports) pane; without it, a toast says so.
+
+On the desktop, the app already shows the model and effort: the HUD only shows folder, branch, tools and gauges there, with no update line.
+
+### `mod-ports`
+
+`claude plugin install mod-ports@pabrisson` (opened from [`mod-hud`](#mod-hud))
+
+"Ports" pane on the right, opened by the HUD's `⇄` icon and rescanned every 5 s while open. The project is the git repository: a session started in a subfolder still sees the project's compose and cluster.
+
+| Section | What is listed | Restart `⟳` | Stop `⏹` |
+|---|---|---|---|
+| Docker | Swarm services mounting the project (replicas, Traefik hosts, published ports), the project's running containers, stopped compose containers | `docker service update --force` / `docker restart` | — |
+| Kubernetes | Services of the project's cluster (its `.kube/config`, set by direnv), state from ready replicas, ingress hosts | `kubectl rollout restart` | — |
+| Process | Processes listening on TCP whose working directory is inside the project (`lsof`) | — | `kill` |
+
+- Dot: green = up, orange = partial, red = down, grey = unknown.
+- Links: `localhost:<port>` and Traefik or ingress hosts (https with TLS) open in the browser; database ports (3306, 5432, 6379, 27017) are copied with their scheme (`mysql://…`).
+- `⟳` and `⏹` need two presses within 3 s.
+- `docker`, `kubectl` and `lsof` are used when present; a section whose tool is missing stays empty.
+
+### `mod-code-fence`
+
+`claude plugin install mod-code-fence@pabrisson`
+
+Code pasted into the prompt (terminal only) lands wrapped in a ```` ```lang ```` fence.
+
+- Detection: shebang, JSON, YAML, then PHP, HTML, XML, Dockerfile, SQL, Python, Go, Rust, Java, TypeScript, JavaScript, CSS and Bash. Code of an unknown language: a fence with no language. Prose: left as is.
+- Never touched: typing, a single-line paste, text that already contains ```` ``` ````, a paste inside an open fence.
+
+### `hook-notify`
+
+`claude plugin install hook-notify@pabrisson` — requires `python3`.
+
+Adapted from [CCNotify](https://github.com/dazuiba/CCNotify).
+
+| Event | Effect |
+|---|---|
+| `UserPromptSubmit` | Records the prompt (session, text, folder) |
+| `Stop` | Records the end and notifies "`<project> · job#<n> ✓ <duration>`", with the start of the prompt and of the answer |
+| `Notification` | Notifies a permission request ("Permission Required") or an action request; "waiting for input" is only timestamped, the `Stop` notification is enough |
+
+- **macOS**: `terminal-notifier` (`brew install terminal-notifier`) with sound and icon; a click opens the project in VS Code if `code` is in the `PATH`. Otherwise `osascript`.
+- **Linux**: `notify-send`. **Windows / WSL**: PowerShell toast.
+- **Data**: `ccnotify.db` (table `prompt`: `session_id`, `prompt`, `cwd`, `seq`, `created_at`, `stoped_at`, `lastWaitUserAt`) and `ccnotify.log` (daily rotation) in `~/.claude/plugins/data/hook-notify-pabrisson/`, kept across updates.
+
+```bash
+sqlite3 ~/.claude/plugins/data/hook-notify-pabrisson/ccnotify.db \
+  "select cwd, seq, created_at, stoped_at from prompt order by id desc limit 10"
+```
+
+### `command-docs`
+
+`claude plugin install command-docs@pabrisson`
+
+- **`add-readme`**: analyzes the project (type, technologies, purpose) and writes a README.md: badges, description, prerequisites, installation, configuration, usage, structure, scripts, tests, deployment. Tailored for Laravel, frontend (React/Vue), Node.js and Python.
+- **`add-changelog [version] | [entry-type] [description]`**: reads the existing CHANGELOG.md and the last 10 commits, then adds the entry in the Keep a Changelog format. Runs on Sonnet.
+- **`summarize-implementation`**: a reusable, project-agnostic summary of the conversation's last implementation: problem, approach, logic, components, technical decisions, dependencies, adaptation notes. Runs on Sonnet.
+
+### `command-toolbox`
+
+`claude plugin install command-toolbox@pabrisson`
+
+**`fork-sync [upstream-branch] | --rebase | --merge`**: syncs a fork with its upstream without losing local work. Checks the repository state, backs up the branch, sets up the `upstream` remote, fetches its changes, analyzes the divergence, picks merge or rebase, resolves conflicts, verifies, pushes and cleans up. Runs on Sonnet.
+
+### `skill-laravel`
+
+`claude plugin install skill-laravel@pabrisson`
+
+**`laravel-upgrade <target version>`**, for example `/skill-laravel:laravel-upgrade 12` from Laravel 9. The skill builds the path 9 → 10 → 11 → 12, then for each version:
+
+1. reads the official upgrade guide and compares with the Laravel skeleton on GitHub;
+2. updates `composer.json` and runs `composer update` until it succeeds;
+3. syncs `config/` and `.env.example`, keeping custom values;
+4. applies the code changes and replaces deprecated code;
+5. clears every cache and checks `php artisan`;
+6. **stops** so the user can test before the next version.
+
+At each step it adopts the new structure, even when optional, with no backward-compatibility shims. A final report sums up the changes.
+
+### `skill-video`
+
+`claude plugin install skill-video@pabrisson` — requires Node ≥ 22, `ffmpeg`/`ffprobe`, Google Chrome, `uv`; transcription (mlx-whisper) needs an Apple Silicon Mac. The skill runs `doctor` at the start of each conversation and gives the install command for anything missing.
+
+Claude becomes a video editor: a talking-head take (file or URL) becomes a short or a longer video with motion design on every idea, or a brief becomes a motion-design video with no footage.
+
+| Arguments | Mode |
+|---|---|
+| `setup` | Style interview: name, language, audience, CTA, palette, font, music; or the identity of a site (`site <url>`) |
+| `<video or URL> [sources…] [studio]` | New video; `studio` opens the review from the rough cut |
+| `apply this feedback …` | Applies the feedback pasted from the studio (cuts, comments, sound, visuals) |
+| `variations <element>` | Numbered variants of one element, then keeps the choice |
+| `preview` | Live debug page of the scene in Chrome |
+| `rules list \| use \| new \| edit` | Editing rule packs (`shorts` and `motion-design` included) |
+
+- **Render**: 9:16, 16:9, 1:1 and 4:5 formats, 4K, 2K, 1080p and 720p resolutions, H.264, HEVC, AV1 and VP9 codecs, captions, synthesized music and sound effects. About 10 s for a 75 s video (40 s with motion blur), unchanged chunks cached.
+- **Studio**: local review on `127.0.0.1`, from port 41187, one server per projects folder. Feedback goes back to Claude as a prompt to paste.
+- **Folders**: the current folder (or `$VIDEO_EDITOR_DIR`) holds one folder per video (`<slug>/`), the project's style (`.style/`) and its own rule packs (`.rules/`).
+- **Learning**: stated preferences go into the style (`style set`, `style note`) or into the personal copy of the active pack.
+- **First runs**: the first transcription downloads the Whisper model (~1.5 GB), the first render installs `playwright-core`.
+
+Everything stays on the machine.
+
+### `requesty`
+
+`claude plugin install requesty@pabrisson`
+
+HTTP MCP server of the [Requesty](https://requesty.ai) router (`https://router.requesty.ai/v1/mcp`), exposing Sentry tools (issues, errors, traces, logs, replays, Seer analysis…) and Context7 (library documentation).
+
+| Setting | Description |
+|---|---|
+| `api_key` | Requesty API key (`rqsty-sk-…`), sent as a Bearer token. Required, stored in the Keychain, never in the repo |
+
+### `dbeaver`
+
+`claude plugin install dbeaver@pabrisson`
+
+[`omnisql-mcp`](https://www.npmjs.com/package/omnisql-mcp) MCP server run through `npx` (independent of the active Node version), querying the connections of the local DBeaver workspace: list connections and tables, read a schema, run or explain a query, compare schemas, export, statistics.
+
+| Setting | Default | Description |
+|---|---|---|
+| `read_only` | `true` | Disables every write |
+| `allowed_connections` | empty (all) | Comma-separated DBeaver connection IDs or names |
+| `timeout` | `30000` | Query timeout, in ms |
+| `debug` | `false` | Debug logging |
+
+## Plugin anatomy
+
+```
+.claude-plugin/marketplace.json      # the marketplace's plugin list
+plugins/<plugin>/
+├── .claude-plugin/plugin.json       # name, version, description, userConfig, mcpServers
+├── agents/<name>.md                 # agents
+├── commands/<name>.md               # commands    → /<plugin>:<name>
+├── skills/<name>/SKILL.md           # skills      → /<plugin>:<name>
+├── hooks/hooks.json                 # hooks, or {"modules": ["./register.tsx"]} for a mod
+├── types/index.d.ts                 # a mod's types (declared by "types" in plugin.json)
+└── tests/                           # a mod's tests (claude plugin test)
+plugins-src/<plugin>/                # sources to build before publishing (skill-video's studio)
+```
+
+Naming: `<type>-<domain>`.
+
+| Prefix | Type | Files |
+|---|---|---|
+| `mod-` | mod | `hooks/hooks.json` → `{"modules": [...]}` |
+| `hook-` | hook | `hooks/hooks.json` |
+| `agent-` | agent | `agents/*.md` |
+| `command-` | command | `commands/*.md` |
+| `skill-` | skill | `skills/<name>/SKILL.md` |
+| none | MCP server | `mcpServers` in `plugin.json` |
+
+For a future theme, output style, monitor or executable: `theme-*` (`themes/*.json`), `output-style-*` (`output-styles/*.md`), `monitor-*` (`monitors/monitors.json`) or `bin/` in the plugin concerned.
+
+**Marketplace entry**: `{"name": "<plugin>", "source": "./plugins/<plugin>", "description": "…"}` in `.claude-plugin/marketplace.json`.
+
+**Settings**: `userConfig` in `plugin.json` declares the settings asked at install time and editable in `/config`. A `"sensitive": true` setting goes to the Keychain. They are read through `${user_config.<key>}`.
+
+**Paths**: `${CLAUDE_PLUGIN_ROOT}` is the plugin's folder (replaced on every update), `$CLAUDE_PLUGIN_DATA` its data folder (kept), `${CLAUDE_SKILL_DIR}` a skill's folder.
+
+## Development
+
+- Plugins installed from the marketplace are **copied** to `~/.claude/plugins/cache/pabrisson/<plugin>/<version>/`. After a change, bump `version` in `plugins/<plugin>/.claude-plugin/plugin.json`, push to `main`, then run `claude plugin marketplace update pabrisson && claude plugin update <plugin>@pabrisson` and restart the session.
+- Try a change without publishing it: `claude --plugin-dir plugins/<plugin>` (current session only, replaces the installed version of the same name).
+- Validate: `claude plugin validate .` (marketplace) or `claude plugin validate plugins/<plugin>`.
+- Test a mod: `claude plugin test plugins/mod-hud`.
+- `skill-video` studio: after changing the studio, run `npm run build` in `plugins-src/skill-video/studio/` before bumping the version (only the build, `engine/studio/dist/`, ships in the plugin).
+- Add a plugin: create `plugins/<type>-<domain>/.claude-plugin/plugin.json`, add its entry to `.claude-plugin/marketplace.json`, then add it to the [Catalog](#catalog) and the [Plugin documentation](#plugin-documentation).
