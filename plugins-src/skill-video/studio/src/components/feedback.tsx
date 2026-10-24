@@ -189,7 +189,7 @@ function Item({
   return (
     <div
       data-comment={c.id}
-      className="group/item flex cursor-pointer gap-2.5 rounded-lg border border-transparent p-2.5 hover:border-border hover:bg-card/50"
+      className="group/item flex scroll-mb-2 cursor-pointer gap-2.5 rounded-lg border border-transparent p-2.5 hover:border-border hover:bg-card/50"
       style={flash ? { animation: "flash 2s ease-out" } : undefined}
       onClick={onSelect}
     >
@@ -364,6 +364,12 @@ export function Feedback({
   useEffect(() => {
     if (focus) aside.current?.querySelector(`[data-comment="${focus.ids[0]}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" })
   }, [focus])
+  // a feedback just added: the list goes down to it (its bottom, under Open)
+  const count = useRef(comments.length)
+  useEffect(() => {
+    if (comments.length > count.current) aside.current?.querySelector(`[data-comment="${comments.at(-1)!.id}"]`)?.scrollIntoView({ block: "end", behavior: "smooth" })
+    count.current = comments.length
+  }, [comments])
   const resize = (e: React.PointerEvent) => {
     const w0 = aside.current?.offsetWidth ?? 400
     // the player keeps at least 30rem

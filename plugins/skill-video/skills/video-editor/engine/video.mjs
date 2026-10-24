@@ -937,23 +937,30 @@ function serve() {
 }
 
 // the studio server in the background: reused when it runs this very engine (same file, same version) for this projects folder
+// one server per projects folder, side by side from PORT up: another folder's server keeps its port
 async function ensureServer() {
-  const base = `http://127.0.0.1:${PORT}/`, sleep = t => new Promise(ok => setTimeout(ok, t))
-  const ping = () => fetch(base + '__video-editor').then(r => r.json()).catch(() => null)
-  let live = await ping()
-  if (live && (live.engine !== ENGINE || live.home !== HOME || live.mtime !== LOADED)) {
-    await fetch(base + '__video-editor/quit', { method: 'POST' }).catch(() => {})
+  const sleep = t => new Promise(ok => setTimeout(ok, t)), base = port => `http://127.0.0.1:${port}/`
+  const ping = port => fetch(base(port) + '__video-editor').then(r => r.json()).catch(() => null)
+  const ports = Array.from({ length: 20 }, (_, i) => PORT + i), lives = await Promise.all(ports.map(ping))
+  let i = lives.findIndex(l => l?.home === HOME)
+  if (i >= 0 && lives[i].engine === ENGINE && lives[i].mtime === LOADED) return base(ports[i])
+  // this folder's server from another engine (or an older one) gives its port to this one
+  if (i >= 0) {
+    await fetch(base(ports[i]) + '__video-editor/quit', { method: 'POST' }).catch(() => {})
     await sleep(300)
-    live = null
+    lives[i] = null
+  } else i = 0
+  fs.mkdirSync(HOME, { recursive: true })
+  const log = fs.openSync(path.join(HOME, '.studio.log'), 'a')
+  // a port taken by something that is not a studio fails to start: the next one is tried
+  for (; i < ports.length; i++) {
+    if (lives[i]) continue
+    spawn(process.execPath, [SELF, 'serve'], { cwd: HOME, env: { ...process.env, VIDEO_EDITOR_DIR: HOME, VIDEO_EDITOR_PORT: `${ports[i]}` }, detached: true, stdio: ['ignore', log, log] }).unref()
+    let live = null
+    for (let k = 0; k < 50 && !(live = await ping(ports[i])); k++) await sleep(100)
+    if (live?.home === HOME) return base(ports[i])
   }
-  if (!live) {
-    fs.mkdirSync(HOME, { recursive: true })
-    const log = fs.openSync(path.join(HOME, '.studio.log'), 'a')
-    spawn(process.execPath, [SELF, 'serve'], { cwd: HOME, env: { ...process.env, VIDEO_EDITOR_DIR: HOME }, detached: true, stdio: ['ignore', log, log] }).unref()
-    for (let i = 0; i < 50 && !(live = await ping()); i++) await sleep(100)
-    if (!live) die(`the studio server did not start, see ${path.join(HOME, '.studio.log')}`)
-  }
-  return base
+  die(`the studio server did not start on ports ${PORT}–${PORT + 19}, see ${path.join(HOME, '.studio.log')}`)
 }
 
 // one studio per project: the server only serves projects of the projects folder

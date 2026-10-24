@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -74,4 +74,18 @@ test('the root opens the first video, and the studio lists them all', async () =
   assert.equal(r.status, 302)
   assert.equal(r.headers.get('location'), '/demo/')
   assert.deepEqual((await (await fetch(base + 'api/projects')).json()).map(x => [x.slug, x.versions]), [['demo', 1]])
+})
+
+test('one studio server per projects folder, side by side', async () => {
+  const p0 = 42000 + Math.floor(Math.random() * 400), other = fs.mkdtempSync(path.join(os.tmpdir(), 'video-studio-'))
+  fs.cpSync(dir, path.join(other, 'demo'), { recursive: true })
+  const open = h => execFileSync(process.execPath, [engine, 'studio', '-p', 'demo'], { env: { ...process.env, VIDEO_EDITOR_DIR: h, VIDEO_EDITOR_PORT: `${p0}` } }).toString().trim()
+  try {
+    assert.equal(open(home), `studio: http://127.0.0.1:${p0}/demo/`)
+    // another folder does not stop the first one's server: it takes the next port
+    assert.equal(open(other), `studio: http://127.0.0.1:${p0 + 1}/demo/`)
+    assert.equal(open(home), `studio: http://127.0.0.1:${p0}/demo/`)
+  } finally {
+    for (const p of [p0, p0 + 1]) await fetch(`http://127.0.0.1:${p}/__video-editor/quit`, { method: 'POST' }).catch(() => {})
+  }
 })

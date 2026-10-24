@@ -351,3 +351,5 @@ Finished projects keep their frozen style and packs. Nothing changes them after 
   `<canvas>` placed by layout.
 - **Everything stays on the machine.** The studio server listens on 127.0.0.1 only. Do not upload the user's
   footage anywhere.
+- **One studio per projects folder.** `studio` reuses this folder's server, or starts one on the first free port from
+  41187: other folders' studios keep running side by side. Give the user the URL it prints.

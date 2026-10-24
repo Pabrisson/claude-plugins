@@ -1,7 +1,8 @@
 # Review studio feedback
 
 Every render (`rough`, `final`) is a version `vN` of the project (`source/project.json` `versions`). The studio
-(`video.mjs studio`, http://127.0.0.1:41187/<slug>/; the root opens the first video of the folder, the grid button
+(`video.mjs studio`, http://127.0.0.1:41187/<slug>/, or the next free port when another projects folder has its own
+studio there; the root opens the first video of the folder, the grid button
 switches to another) shows one version; the user comments, cuts and draws on it,
 then **Copy prompt** gives the text to paste into Claude. The transcript tab comes first, under the scene's sequences:
 the speech in paragraphs, or, without speech, the lines of what the video shows with their frame, where a
