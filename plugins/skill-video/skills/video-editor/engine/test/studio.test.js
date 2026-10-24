@@ -30,6 +30,8 @@ const onDisk = () => JSON.parse(fs.readFileSync(path.join(dir, 'files/reviews/v1
 
 test('reviews are written with their envelope', async () => {
   await up()
+  const p = await (await fetch(base + 'api/project')).json()
+  assert.deepEqual([p.fps, p.codec], [30, 'H.264'])
   assert.equal((await save([{ id: 'a1', type: 'comment', t0: 1, t1: 2, text: 'x', resolved: false }])).status, 200)
   const r = onDisk()
   assert.equal(r.version, 'v1')

@@ -456,7 +456,7 @@ export function Feedback({
             <Fragment key={p.v}>
               <Group label={`Version ${p.v}`} count={p.comments.length} />
               {p.comments.map((c, i) => (
-                <Item key={c.id} c={c} n={i + 1} multiFormat={multiFormat} onSelect={() => {}} />
+                <Item key={c.id} c={c} n={i + 1} multiFormat={multiFormat} onPoint={(to) => onPoint(c, to)} onSelect={() => onSelect(c)} />
               ))}
             </Fragment>
           ))}

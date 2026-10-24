@@ -236,13 +236,18 @@ export default function App() {
   }
 
   // at: where the playhead goes, the comment's start unless a badge names a moment
+  // an earlier version's comment, at its moment in this version: its source (or scene) seconds have not moved
+  const here = (c: Comment): Comment =>
+    comments.includes(c) || c.s0 === undefined || !ver
+      ? c
+      : { ...c, t0: r3(timeline(ver).toVideo(c.s0)), t1: r3(timeline(ver).toVideo(c.s1 ?? c.s0)) }
+
   function select(c: Comment, at = c.t0) {
     if (c.format && c.format !== format && ver?.files[c.format]) {
       setFormat(c.format)
       // the other format's file loads first: the seek waits for it
       video.current?.addEventListener("loadedmetadata", () => seek(at), { once: true })
     } else seek(at)
-    setRange(c.t1 > c.t0 ? { t0: c.t0, t1: c.t1 } : null)
   }
 
   // a badge of a comment: its tab opens, the playhead goes there and what it names flashes
@@ -414,6 +419,14 @@ export default function App() {
             <h1 className="truncate text-sm font-semibold">{project.slug}</h1>
             <p className="truncate text-xs text-muted-foreground">
               {meta("Format", format)}
+              {" · "}
+              {meta("", `${Math.round(project.fps * 100) / 100} fps`)}
+              {project.codec && (
+                <>
+                  {" · "}
+                  {meta("", project.codec)}
+                </>
+              )}
               {ver && (
                 <>
                   {" · "}
@@ -562,7 +575,7 @@ export default function App() {
               newer={newer}
               comments={comments}
               focus={focus}
-              onPoint={point}
+              onPoint={(c, to) => point(here(c), to)}
               previous={project.versions
                 .slice(0, -1)
                 .reverse()
@@ -576,7 +589,7 @@ export default function App() {
               sounds={sounds}
               visuals={visuals}
               composer={composer}
-              onSelect={select}
+              onSelect={(c) => select(here(c))}
               onSave={save}
               onAdd={add}
               onRemoveImage={(img) => setImages(images.filter((i) => i !== img))}

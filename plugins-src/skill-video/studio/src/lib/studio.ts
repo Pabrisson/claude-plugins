@@ -20,6 +20,8 @@ export type Project = {
   dir: string
   formats: string[]
   fps: number
+  // the codec's label (H.264…); missing from an older server
+  codec?: string
   source: boolean
   rules: string[]
   words: Word[] | null

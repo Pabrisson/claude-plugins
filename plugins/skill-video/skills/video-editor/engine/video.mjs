@@ -804,6 +804,8 @@ function projectInfo(dir) {
     dir,
     formats: p.formats,
     fps: p.fps,
+    // its label (H.264, HEVC (H.265)…), for the studio's header
+    codec: CODECS[p.codec ?? 'h264'].label,
     source: !!p.source,
     rules: rules.active,
     // null: no transcript (turned off by a pack, or not made yet)
