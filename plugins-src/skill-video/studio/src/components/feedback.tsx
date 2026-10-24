@@ -74,7 +74,17 @@ function PickBadge({ label, color, icon: Icon, onRemove, onClick }: { label: str
       <Icon data-icon="inline-start" style={{ color }} />
       {label}
       {onRemove && (
-        <Button variant="ghost" size="icon-xs" className="size-5" aria-label={`Remove ${label}`} onClick={onRemove}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="size-5"
+          aria-label={`Remove ${label}`}
+          onClick={(e) => {
+            // not the badge's own click (it points), nor the comment's (it selects)
+            e.stopPropagation()
+            onRemove()
+          }}
+        >
           <XIcon />
         </Button>
       )}
@@ -95,9 +105,10 @@ function Thumb({ img }: { img: Image }) {
 }
 
 // the badges of what a comment points at: sounds, then parts of the picture
-function Picks({ transcript, sounds = [], visuals = [], onRemoveSound, onRemoveVisual, onPoint }: {
+function Picks({ transcript, sounds = [], visuals = [], onRemoveTranscript, onRemoveSound, onRemoveVisual, onPoint }: {
   // the comment was made on a selection of the transcript
   transcript?: boolean
+  onRemoveTranscript?: () => void
   sounds?: SoundRef[]
   visuals?: VisualRef[]
   onRemoveSound?: (s: SoundRef) => void
@@ -107,7 +118,9 @@ function Picks({ transcript, sounds = [], visuals = [], onRemoveSound, onRemoveV
   if (!transcript && !sounds.length && !visuals.length) return null
   return (
     <div className="flex flex-wrap gap-1.5">
-      {transcript && <PickBadge label="Transcript" color={colorOf("transcript")} icon={TextQuoteIcon} onClick={onPoint && (() => onPoint({}))} />}
+      {transcript && (
+        <PickBadge label="Transcript" color={colorOf("transcript")} icon={TextQuoteIcon} onRemove={onRemoveTranscript} onClick={onPoint && (() => onPoint({}))} />
+      )}
       {visuals.map((x, i) => (
         <PickBadge
           key={`v${i}`}
@@ -168,6 +181,10 @@ function Item({
   onDelete?: () => void
 }) {
   const [editing, setEditing] = useState<string | null>(null)
+  const commit = () => {
+    onChange?.({ ...c, text: editing!.trim() })
+    setEditing(null)
+  }
   const range = c.t1 > c.t0
   return (
     <div
@@ -205,10 +222,17 @@ function Item({
           </Badge>
           {multiFormat && c.format && <Badge variant="secondary">{c.format}</Badge>}
           {onChange && (
-            <div className="ml-auto flex opacity-0 group-hover/item:opacity-100" onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon-sm" aria-label="Edit" onClick={() => setEditing(c.text)}>
-                <PencilIcon />
-              </Button>
+            <div className={cn("ml-auto flex opacity-0 group-hover/item:opacity-100", editing !== null && "opacity-100")} onClick={(e) => e.stopPropagation()}>
+              {/* while it is edited, the pencil saves */}
+              {editing !== null ? (
+                <Button variant="ghost" size="icon-sm" aria-label="Save" onClick={commit}>
+                  <CheckIcon />
+                </Button>
+              ) : (
+                <Button variant="ghost" size="icon-sm" aria-label="Edit" onClick={() => setEditing(c.text)}>
+                  <PencilIcon />
+                </Button>
+              )}
               <Button variant="ghost" size="icon-sm" aria-label="Delete" onClick={onDelete}>
                 <Trash2Icon />
               </Button>
@@ -233,15 +257,26 @@ function Item({
               if (e.key === "Escape") setEditing(null)
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                onChange?.({ ...c, text: editing.trim() })
-                setEditing(null)
+                commit()
               }
             }}
           />
         ) : (
           c.text && <p className={cn("text-sm leading-relaxed", c.resolved && "text-muted-foreground line-through")}>{c.text}</p>
         )}
-        <Picks transcript={c.from === "transcript"} sounds={c.sounds} visuals={c.visuals} onPoint={onPoint} />
+        <Picks
+          transcript={c.from === "transcript"}
+          sounds={c.sounds}
+          visuals={c.visuals}
+          onPoint={onPoint}
+          // while it is edited, its badges can go
+          {...(editing !== null &&
+            onChange && {
+              onRemoveTranscript: () => onChange({ ...c, from: undefined }),
+              onRemoveSound: (s: SoundRef) => onChange({ ...c, sounds: c.sounds?.filter((x) => x !== s) }),
+              onRemoveVisual: (x: VisualRef) => onChange({ ...c, visuals: c.visuals?.filter((v) => v !== x) }),
+            })}
+        />
         {c.images.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {c.images.map((img) => (

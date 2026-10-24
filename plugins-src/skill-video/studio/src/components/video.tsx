@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 // px: the frames' row, the sequences' row (thumbnails over a caption), a thumbnail's height, a kind of part's row,
 // a step of a cascade
-const STRIP = 56, CLIPS = 80, THUMB = 48, ROW = 22, STEP = 28
+const STRIP = 56, CLIPS = 74, THUMB = 42, ROW = 22, STEP = 24
 
 // one thumbnail of the sheet, `height` px high
 export function Thumb({ strip, i, height, className, style }: { strip: Strip; i: number; height: number; className?: string; style?: React.CSSProperties }) {
@@ -164,11 +164,12 @@ export function VideoTimeline({
         onPick(p)
         onSeek(p.t0)
       }
-      // under sequences, a cascade: each part one step lower than the one before it in the same sequence
-      const seen = new Map<number, number>()
+      // under sequences, as few rows as it takes: a part goes one row down only while the one above still runs (a
+      // transition), so they all show at once
+      const rowEnds: number[] = []
       const levels = parts.map((p) => {
-        const s = seqs.findLastIndex((q) => q.t0 <= p.t0 + 0.01), n = seen.get(s) ?? 0
-        seen.set(s, n + 1)
+        const free = rowEnds.findIndex((e) => e <= p.t0 + 0.01), n = free < 0 ? rowEnds.length : free
+        rowEnds[n] = p.t1
         return n
       })
       const cascade = seqs.length > 0
