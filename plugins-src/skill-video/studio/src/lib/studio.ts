@@ -32,6 +32,15 @@ export type Cue = { kind: string; t: number; [data: string]: unknown }
 export type Sound = { cues: Cue[]; step: number; tracks: Partial<Record<Track, number[]>> }
 // what a comment points at in the sound: a whole track, one cue, or every cue of a kind
 export type SoundRef = Track | Cue | { kind: string }
+// one of the scene's part(kind, t0, t1, data) calls (video seconds): a sequence, a title, a clip, a take of the
+// source… `color`: the palette color of its `field`
+export type Part = { kind: string; t0: number; t1: number; name?: string; color?: string; [data: string]: unknown }
+// a sheet of thumbnails, one every `every` s, `cols` per row, `w`×`h` px each
+export type Strip = { file: string; every: number; count: number; cols: number; w: number; h: number }
+// a version's Video tab (files/video/vN.json): its parts, and a strip per format
+export type Visual = { parts: Part[]; strips: Record<string, Strip> }
+// what a comment points at in the picture: one part, or every part of a kind
+export type VisualRef = Part | { kind: string }
 // size and ratio are missing on images attached before they were recorded
 export type Image = { path: string; size?: [number, number]; ratio?: string }
 // t0/t1: video seconds of the reviewed version; s0/s1: source seconds
@@ -46,6 +55,7 @@ export type Comment = {
   words: string
   images: Image[]
   sounds?: SoundRef[]
+  visuals?: VisualRef[]
   resolved: boolean
   reply?: string
   created: string
@@ -74,6 +84,9 @@ export const api = {
   // null for a version without sound (a rough cut, a silent video)
   sound: (v: number): Promise<Sound | null> =>
     fetch(`project/files/sound/v${v}.json`).then((r) => (r.ok ? r.json() : null)),
+  // null for a version made before the Video tab
+  video: (v: number): Promise<Visual | null> =>
+    fetch(`project/files/video/v${v}.json`).then((r) => (r.ok ? r.json() : null)),
   save: (v: number, comments: Comment[]) =>
     fetch(`api/reviews/v${v}`, {
       method: "POST",
@@ -99,12 +112,18 @@ export const sameSound = (a: SoundRef, b: SoundRef) =>
   typeof a === "string" || typeof b === "string" ? a === b : a.kind === b.kind && (a as Cue).t === (b as Cue).t
 export const soundLabel = (s: SoundRef) =>
   typeof s === "string" ? TRACKS[s] : "t" in s ? `${s.kind} ${minutes((s as Cue).t)}` : `every ${s.kind}`
-// one hue per track or kind of cue, the same in the timeline and on the badges
-export function soundColor(s: SoundRef) {
+// one hue per name (a track, a kind), the same in the timeline and on the badges
+export function colorOf(name: string) {
   let h = 0
-  for (const ch of typeof s === "string" ? s : s.kind) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0
   return `oklch(0.74 0.14 ${(h * 137.508) % 360})`
 }
+export const soundColor = (s: SoundRef) => colorOf(typeof s === "string" ? s : s.kind)
+export const sameVisual = (a: VisualRef, b: VisualRef) => a.kind === b.kind && (a as Part).t0 === (b as Part).t0
+export const visualLabel = (x: VisualRef) =>
+  "t0" in x ? `${(x as Part).name ?? x.kind} ${minutes((x as Part).t0)}` : `every ${x.kind}`
+// a part on its field's color, otherwise its kind's
+export const visualColor = (x: VisualRef) => (x as Part).color ?? colorOf(x.kind)
 
 export const newId = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
@@ -182,6 +201,14 @@ export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
         lines.push(`   Sound: cue "${kind}" at ${clock(t)} (VIDEO ${secs(t)} · ${p.source ? "SOURCE" : "SCENE"} ${secs(timeline(ver).toSource(t))})${extra ? ` ${extra}` : ""}`)
       }
     }
+    for (const x of c.visuals ?? []) {
+      if (!("t0" in x)) lines.push(`   Visual: every "${x.kind}" part`)
+      else {
+        const { kind, t0, t1, name, ...data } = x as Part, tl = timeline(ver)
+        const extra = Object.entries(data).filter(([k]) => k !== "color").map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(", ")
+        lines.push(`   Visual: ${kind}${name ? ` "${name}"` : ""} from ${clock(t0)} to ${clock(t1)} (VIDEO ${secs(t0)} → ${secs(t1)} · ${own} ${secs(tl.toSource(t0))} → ${secs(tl.toSource(t1))})${extra ? ` ${extra}` : ""}`)
+      }
+    }
     for (const img of c.images)
       lines.push(`   Image${img.ratio ? ` (${img.ratio}, ${img.size?.join("×")} px)` : ""}: ${p.dir}/${img.path}`)
   })
@@ -194,6 +221,9 @@ export function buildPrompt(p: Project, ver: Version, open: Comment[]) {
       : "Types: CUT = remove the range from the video (it goes in `cut` in source/edit.json, in SCENE time: the scene's own seconds); COMMENT = any other request (visual, text, sound, pace), at a moment or over a range.",
     ...(open.some((c) => c.sounds?.length)
       ? [`Sound: a track is a part of the mix (voice, or sound.py's music or fx bus) over the comment's time; a cue is the scene's cue(kind, t, data) call, heard as the sound sound.py designs for its kind ("every" means all the cues of that kind). This version's cues and track levels: ${p.dir}/files/sound/v${ver.v}.json.`]
+      : []),
+    ...(open.some((c) => c.visuals?.length)
+      ? [`Visual: a part is the scene's part(kind, t0, t1, data) call: find it in source/scene.js by its kind, name and times ("every" means all the parts of that kind; a take is a kept piece of the source, a clip a media of edit.json). This version's parts: ${p.dir}/files/video/v${ver.v}.json.`]
       : []),
     "",
     `Feedback file: ${p.dir}/files/reviews/v${ver.v}.json (video version v${ver.v}, same ids). For each change applied, set "resolved": true and write what you did in one sentence in "reply", the studio shows it.`,

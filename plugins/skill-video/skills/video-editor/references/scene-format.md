@@ -88,6 +88,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 | `captions(opts)` | Word-by-word sticker captions of the speech (below) |
 | `paper()` | `Promise<string>`: a paper texture as a CSS background, only when the style asks for a paper look |
 | `cue(kind, t, data)` | A named sound moment at video time `t`, for sound.py: any kind and data (`{ dur, x, … }`) |
+| `part(kind, t0, t1, data)` | A part of the picture from `t0` to `t1` (video seconds), for the studio's Video tab: `'sequence'` with `{ name, field }` (`field`: the palette color it sits on), or a key element of any kind (`'title'`, `'counter'`…) with `{ name }` |
 | `say(text, from, to)` | What the viewer reads from `from` to `to` (video seconds): one line of the transcript (below) |
 | `tick(fn)` | `fn(t)` runs at every frame (and sub-frame), after the timeline |
 | `num(n, decimals)` | A number in the creator's language (`11 726`, `106,3`) |
@@ -156,6 +157,19 @@ text replaces what is inside), and leave decoration out with `data-say=""`.
 
 The music and the sound design are written for each video in `source/sound.py`: see `sound-format.md`. The scene's
 `cue()` calls are its timeline of events (exported by `render` and `stills` into `.cache/cues.json`).
+
+## Parts
+
+The studio's Video tab shows the video as thumbnails and, under them, one row per kind of `part()`. Declare them next
+to the tweens they describe, so the user's feedback can name them and you find them back:
+
+```js
+part('sequence', at(26), at(28), { name: 'the reveal', field: 'accent' })
+part('title', at(26.2), at(27.8), { name: 'Figural' })
+```
+
+A `clip()` is a part of its own (`kind: 'clip'`), and with a source `final` adds the kept takes (`kind: 'take'`).
+`render` and `stills` export the parts into `.cache/parts.json`; `final` keeps them in `files/video/vN.json`.
 
 ## Checking
 

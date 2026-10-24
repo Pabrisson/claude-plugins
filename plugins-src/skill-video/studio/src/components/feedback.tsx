@@ -1,7 +1,10 @@
-import { useState, type RefObject } from "react"
+import { useRef, useState, type RefObject } from "react"
 import {
   AudioWaveformIcon,
   CheckIcon,
+  ChevronsLeftIcon,
+  ChevronsRightIcon,
+  FilmIcon,
   ChevronDownIcon,
   ClockIcon,
   MessageSquareTextIcon,
@@ -15,6 +18,7 @@ import {
   XIcon,
 } from "lucide-react"
 
+import { follow, useStoredSize } from "@/components/panel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -34,7 +38,8 @@ import { Kbd } from "@/components/ui/kbd"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { clock, minutes, soundColor, soundLabel, when, type Comment, type Image, type Kind, type Range, type SoundRef } from "@/lib/studio"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { clock, minutes, soundColor, soundLabel, visualColor, visualLabel, when, type Comment, type Image, type Kind, type Range, type SoundRef, type VisualRef } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 type Filter = "open" | "resolved" | "all"
@@ -53,8 +58,8 @@ function KindBadge({ type }: { type: Kind }) {
   )
 }
 
-function SoundBadge({ s, onRemove }: { s: SoundRef; onRemove?: () => void }) {
-  const Icon = s === "voice" ? MicIcon : s === "music" ? MusicIcon : AudioWaveformIcon, color = soundColor(s)
+// a sound or a part picked for a comment, in its timeline color
+function PickBadge({ label, color, icon: Icon, onRemove }: { label: string; color: string; icon: typeof FilmIcon; onRemove?: () => void }) {
   return (
     <Badge
       variant="outline"
@@ -62,9 +67,9 @@ function SoundBadge({ s, onRemove }: { s: SoundRef; onRemove?: () => void }) {
       style={{ borderColor: `color-mix(in oklch, ${color} 45%, transparent)`, background: `color-mix(in oklch, ${color} 14%, transparent)` }}
     >
       <Icon data-icon="inline-start" style={{ color }} />
-      {soundLabel(s)}
+      {label}
       {onRemove && (
-        <Button variant="ghost" size="icon-xs" className="size-5" aria-label="Remove the sound" onClick={onRemove}>
+        <Button variant="ghost" size="icon-xs" className="size-5" aria-label={`Remove ${label}`} onClick={onRemove}>
           <XIcon />
         </Button>
       )}
@@ -81,6 +86,32 @@ function Thumb({ img }: { img: Image }) {
         <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 font-mono text-[10px] text-white">{img.ratio}</span>
       )}
     </span>
+  )
+}
+
+// the badges of what a comment points at: sounds, then parts of the picture
+function Picks({ sounds = [], visuals = [], onRemoveSound, onRemoveVisual }: {
+  sounds?: SoundRef[]
+  visuals?: VisualRef[]
+  onRemoveSound?: (s: SoundRef) => void
+  onRemoveVisual?: (x: VisualRef) => void
+}) {
+  if (!sounds.length && !visuals.length) return null
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visuals.map((x, i) => (
+        <PickBadge key={`v${i}`} label={visualLabel(x)} color={visualColor(x)} icon={FilmIcon} onRemove={onRemoveVisual && (() => onRemoveVisual(x))} />
+      ))}
+      {sounds.map((s, i) => (
+        <PickBadge
+          key={`s${i}`}
+          label={soundLabel(s)}
+          color={soundColor(s)}
+          icon={s === "voice" ? MicIcon : s === "music" ? MusicIcon : AudioWaveformIcon}
+          onRemove={onRemoveSound && (() => onRemoveSound(s))}
+        />
+      ))}
+    </div>
   )
 }
 
@@ -150,13 +181,7 @@ function Item({
         ) : (
           c.text && <p className={cn("text-sm leading-relaxed", c.resolved && "text-muted-foreground line-through")}>{c.text}</p>
         )}
-        {!!c.sounds?.length && (
-          <div className="flex flex-wrap gap-1.5">
-            {c.sounds.map((s, i) => (
-              <SoundBadge key={i} s={s} />
-            ))}
-          </div>
-        )}
+        <Picks sounds={c.sounds} visuals={c.visuals} />
         {c.images.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {c.images.map((img) => (
@@ -191,12 +216,14 @@ export function Feedback({
   rangeWords,
   images,
   sounds,
+  visuals,
   composer,
   onSelect,
   onSave,
   onAdd,
   onRemoveImage,
   onRemoveSound,
+  onRemoveVisual,
   onClearRange,
 }: {
   version: number
@@ -208,12 +235,14 @@ export function Feedback({
   rangeWords: string
   images: Image[]
   sounds: SoundRef[]
+  visuals: VisualRef[]
   composer: RefObject<HTMLTextAreaElement | null>
   onSelect: (c: Comment) => void
   onSave: (comments: Comment[]) => void
   onAdd: (kind: Kind, text: string) => boolean
   onRemoveImage: (img: Image) => void
   onRemoveSound: (s: SoundRef) => void
+  onRemoveVisual: (x: VisualRef) => void
   onClearRange: () => void
 }) {
   const [filter, setFilter] = useState<Filter>("open")
@@ -222,11 +251,48 @@ export function Feedback({
   const counts = { open: comments.filter((c) => !c.resolved).length, resolved: comments.filter((c) => c.resolved).length, all: comments.length }
   const shown = comments.filter((c) => filter === "all" || c.resolved === (filter === "resolved"))
   const isRange = !!range && range.t1 > range.t0
+  // side by side (md and up): the left edge drags the column wider, the button gives it half the window
+  const [width, keepWidth] = useStoredSize("video-editor.feedback-width")
+  const aside = useRef<HTMLElement>(null)
+  const resize = (e: React.PointerEvent) => {
+    const w0 = aside.current?.offsetWidth ?? 400
+    // the player keeps at least 30rem
+    follow(e, (dx) => keepWidth(Math.max(300, Math.min(window.innerWidth - 480, w0 - dx))))
+  }
 
   return (
-    <aside className="flex h-[45%] min-h-0 shrink-0 flex-col border-t md:h-auto md:w-[clamp(19.5rem,27vw,32rem)] md:border-t-0 md:border-l">
+    <aside
+      ref={aside}
+      className={cn(
+        "relative flex h-[45%] min-h-0 shrink-0 flex-col border-t md:h-auto md:max-w-[calc(100vw-30rem)] md:border-t-0 md:border-l",
+        width ? "md:w-(--feedback-width)" : "md:w-[clamp(19.5rem,27vw,32rem)]"
+      )}
+      style={width ? ({ "--feedback-width": `${width}px` } as React.CSSProperties) : undefined}
+    >
+      <div
+        className="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:transition-colors hover:after:bg-highlight md:block"
+        onPointerDown={resize}
+        onDoubleClick={() => keepWidth(null)}
+        title="Drag to resize, double-click to reset"
+      />
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
-        <h2 className="text-sm font-semibold">Feedback</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-sm font-semibold">Feedback</h2>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="hidden md:inline-flex"
+                aria-label={width ? "Reset the width" : "Widen"}
+                onClick={() => keepWidth(width ? null : Math.min(window.innerWidth / 2, window.innerWidth - 480))}
+              >
+                {width ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{width ? "Reset the width" : "Widen"}</TooltipContent>
+          </Tooltip>
+        </div>
         <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)}>
           <TabsList>
             {(["open", "resolved", "all"] as const).map((f) => (
@@ -260,7 +326,7 @@ export function Feedback({
                 <EmptyDescription className="text-xs">
                   Play the video, press <Kbd>C</Kbd> and write what you want to change.
                   To cut, select a range in the transcript or on the timeline, then press <Kbd>⌫</Kbd>. Drop an image anywhere to attach it.
-                  To comment on the sound, pick a track or a cue in the Sound tab.
+                  To comment on a part of the picture or of the sound, pick it in the Video or Sound tab.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -315,13 +381,7 @@ export function Feedback({
           )}
         </div>
         {isRange && rangeWords && <p className="truncate text-xs text-muted-foreground italic">“{rangeWords}”</p>}
-        {sounds.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {sounds.map((s, i) => (
-              <SoundBadge key={i} s={s} onRemove={() => onRemoveSound(s)} />
-            ))}
-          </div>
-        )}
+        <Picks sounds={sounds} visuals={visuals} onRemoveSound={onRemoveSound} onRemoveVisual={onRemoveVisual} />
         <Textarea
           ref={composer}
           value={text}

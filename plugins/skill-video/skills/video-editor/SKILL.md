@@ -213,6 +213,9 @@ format only** (the first one). Give it the whole frame: the other formats come i
 frames at once leads to small, safe layouts.
 - Anchor every moment on the speech with `at(source seconds)`, so cuts never break the sync.
 - Put a `cue(kind, t, data)` on every event that should be heard, with what the sound needs (`dur`, `x`…).
+- Declare what the picture is made of with `part(kind, t0, t1, data)`: a `part('sequence', …, { name, field })`
+  per sequence (`field`: the palette color it sits on), and one per key element (`title`, `counter`, `logo`,
+  `transition`…). The studio's Video tab shows them, and the user's feedback points at them by kind and name.
 - Without speech, declare what the viewer reads with `say(text, from, to)`, one line per moment. It is the
   transcript the user reviews and quotes in the studio.
 
@@ -289,6 +292,9 @@ shape of a reference. Then handle each id:
   - One cue is a `cue()` of the scene. To change its sound only, give it its own data in the scene and let `sound.py`
     read it. Move or remove the `cue()` when its timing is the problem.
   - A change in `sound.py` alone needs no render: `audio`, then `final`.
+- **Visual:** lines name the parts of the picture the comment is about: find each `part()` in the scene by its kind,
+  name and times, and change what it wraps. `every "<kind>"` is every part of that kind (all the titles…): change
+  their shared class or helper. A `take` is a kept piece of the source, a `clip` a media of `edit.json`.
 - In the feedback file, set `"resolved": true` and write one sentence in `reply` saying what you changed.
 
 Then run `stills` if the change is visual, then `render` (with the project's `--blur`) and `final`. Update « État » in About.md and tell the

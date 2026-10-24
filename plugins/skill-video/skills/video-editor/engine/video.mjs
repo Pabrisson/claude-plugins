@@ -34,7 +34,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.mp4': 'video/mp4',
   '.wav': 'audio/wav', '.wasm': 'application/wasm',
 }
-const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range. images: attached frames or pictures, with their size and ratio. sounds: what the comment is about in the sound, a whole track (voice, music, fx) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
+const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
 
 // codecs WebCodecs can put in an MP4. The resolutions' bitrates are H.264's: the others need less for the same look.
 const CODECS = {
@@ -578,11 +578,12 @@ const job = (dir, format, type) => {
 }
 
 // the scene's sound cues (video seconds), the same in every format, for sound.py. The file only changes with them,
-// so the mix is not rebuilt for nothing
+// so the mix is not rebuilt for nothing. Its parts (the studio's Video tab) go next to them
 async function saveCues(dir, page) {
   const file = path.join(dir, '.cache/cues.json'), cues = await page.evaluate(() => window.cues())
   fs.mkdirSync(path.dirname(file), { recursive: true })
   if (!fs.existsSync(file) || JSON.stringify(cues) !== JSON.stringify(readJson(file))) writeJson(file, cues)
+  writeJson(path.join(dir, '.cache/parts.json'), await page.evaluate(() => window.parts()))
 }
 
 async function stills() {
@@ -640,7 +641,7 @@ async function render() {
         for (let x; (x = todo.shift());) hw.add(await page.evaluate(([a, b, file]) => window.renderChunk(a, b, file), [x.a, x.b, name(x)]))
       }))
       // cached chunks mean the same scene, so the same cues
-      if (!fs.existsSync(f('.cache/cues.json')) || (count && fmt === p.formats[0])) {
+      if (!fs.existsSync(f('.cache/parts.json')) || (count && fmt === p.formats[0])) {
         if (!count) await openPage(pages[0], url, j)
         await saveCues(dir, pages[0])
       }
@@ -746,6 +747,18 @@ function final() {
     fs.mkdirSync(f('files/sound'), { recursive: true })
     fs.writeFileSync(f(`files/sound/v${v}.json`), JSON.stringify({ cues: fs.existsSync(f('.cache/cues.json')) ? readJson(f('.cache/cues.json')) : [], ...readJson(f('assets/mix.json')) }))
   }
+  // and its Video tab: the scene's parts, the takes kept from the source, and per format a strip of thumbnails
+  // (one every `every` s, `cols` per row of the sheet)
+  const every = Math.max(0.5, j.duration / 400), count = Math.ceil(j.duration / every), cols = 10, strips = {}
+  fs.mkdirSync(f('files/video'), { recursive: true })
+  for (const fmt of p.formats) {
+    const [a, b] = fmt.split(':').map(Number), w = 2 * Math.round((72 * a) / b), file = `files/video/v${v}-${ratio(fmt)}.jpg`
+    run('ffmpeg', ['-y', '-v', 'error', '-i', f(`output/${files[fmt]}`), '-vf', `fps=1/${every},scale=${w}:144,tile=${cols}x${Math.ceil(count / cols)}`, '-frames:v', '1', '-q:v', '5', f(file)])
+    strips[fmt] = { file, every, count, cols, w, h: 144 }
+  }
+  const takes = p.source ? (j.timeline?.segments ?? [[0, j.duration]]).map(([a, b], i) => ({ kind: 'take', t0: ms(tl.toVideo(a)), t1: ms(tl.toVideo(b - 0.001)), name: `take ${i + 1}`, source: [a, b] })) : []
+  const parts = fs.existsSync(f('.cache/parts.json')) ? readJson(f('.cache/parts.json')) : []
+  fs.writeFileSync(f(`files/video/v${v}.json`), JSON.stringify({ parts: [...takes, ...parts], strips }))
   console.log(made.join('\n'))
   console.log(`final v${v} in ${secs(started)} s (${audio ? path.basename(audio) : 'no audio'}). Reload the studio`)
 }

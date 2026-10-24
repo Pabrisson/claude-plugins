@@ -105,7 +105,7 @@ export async function boot(host, query) {
 
   const fmt = {}, num = (n, d = 0) => (fmt[d] ??= new Intl.NumberFormat(job.style.creator.lang, { minimumFractionDigits: d, maximumFractionDigits: d })).format(n)
   const words = job.words.filter(w => !w.screen && (!segs || segs.some(([a, b]) => w.t1 > a && w.t0 < b))).map(w => ({ ...w, v0: time.toVideo(w.t0), v1: time.toVideo(w.t1) }))
-  const tl = gsap.timeline({ paused: true }), ticks = [], cues = [], says = [], live = []
+  const tl = gsap.timeline({ paused: true }), ticks = [], cues = [], says = [], parts = [], live = []
   // Without a source the scene runs on its own time and a cut (edit.json) removes ranges of it: the frame at video
   // time v shows the scene at toSource(v), and its cues, lines and beats come back on video time
   const noSource = !job.source, sceneAt = v => (noSource ? time.toSource(v) : v), onVideo = t => Math.round((noSource ? time.toVideo(t) : t) * 1000) / 1000
@@ -135,9 +135,11 @@ export async function boot(host, query) {
     frame: t => Math.round(t * job.fps) / job.fps,
     tick: f => ticks.push(f),
     cue: (kind, t, o = {}) => cues.push({ kind, t: Math.round(t * 1000) / 1000, ...o }),
+    // what the studio's Video tab shows: a sequence, a title, a counter… on the palette color `field` when given
+    part: (kind, t0, t1, o = {}) => parts.push({ kind, t0: Math.round(t0 * 1000) / 1000, t1: Math.round(t1 * 1000) / 1000, ...o, ...(look.palette[o.field] ? { color: look.palette[o.field] } : {}) }),
     say: (text, t0, t1) => says.push({ w: String(text).replace(/\s+/g, ' ').trim(), v0: Math.round(t0 * 1000) / 1000, v1: Math.round(t1 * 1000) / 1000 }),
     camera: () => { const c = camera(job, time); if (c) live.push(c); return c },
-    clip: (id, start) => { const c = clip(job, id, start); live.push(c); return c },
+    clip: (id, start = 0) => { const c = clip(job, id, start), m = job.media[id]; live.push(c); parts.push({ kind: 'clip', t0: start, t1: start + m.count / m.fps, id }); return c },
     captions: o => { const c = captions(job, words, o); live.push(c); return c },
     paper: () => paper(job),
     actors: () => actorsEl,
@@ -167,6 +169,7 @@ export async function boot(host, query) {
   return {
     job, api, stage, tl, seek,
     cues: () => cues.filter(c => kept(c.t)).map(c => ({ ...c, t: onVideo(c.t) })).toSorted((a, b) => a.t - b.t),
+    parts: () => parts.map(x => ({ ...x, t0: onVideo(x.t0), t1: onVideo(x.t1) })).filter(x => x.t1 > x.t0).toSorted((a, b) => a.t0 - b.t0),
     says: () => says.map(x => ({ ...x, v0: onVideo(x.v0), v1: onVideo(x.v1) })).filter(x => x.v1 > x.v0).toSorted((a, b) => a.v0 - b.v0),
     texts: () => visibleTexts(stage),
     actors: v => actors?.live(v) ?? [],

@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react"
-import { AudioWaveformIcon, InfoIcon, Maximize2Icon, MessageSquareTextIcon, Minimize2Icon, ScissorsIcon, XIcon } from "lucide-react"
+import { InfoIcon, PlayIcon, Maximize2Icon, MessageSquareTextIcon, Minimize2Icon, ScissorsIcon, XIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,14 +12,38 @@ import { cn } from "@/lib/utils"
 
 export type Tab = { value: string; label: string; badge?: string; info: string }
 
-// the card's height, dragged or expanded, kept across reloads
-const HEIGHT = "video-editor.transcript-height"
-const stored = () => {
-  try {
-    return Number(localStorage.getItem(HEIGHT)) || null
-  } catch {
-    return null
+// a size the user dragged or expanded, kept across reloads; null: the layout's default
+export function useStoredSize(key: string) {
+  const [size, setSize] = useState<number | null>(() => {
+    try {
+      return Number(localStorage.getItem(key)) || null
+    } catch {
+      return null
+    }
+  })
+  const keep = (s: number | null) => {
+    setSize(s)
+    try {
+      if (s) localStorage.setItem(key, String(Math.round(s)))
+      else localStorage.removeItem(key)
+    } catch {
+      // private window: the size just lasts for this visit
+    }
   }
+  return [size, keep] as const
+}
+
+// follows a drag from `e` until the pointer is released: `move` gets how far it went (px)
+export function follow(e: React.PointerEvent, move: (dx: number, dy: number) => void) {
+  e.preventDefault()
+  const x0 = e.clientX, y0 = e.clientY
+  const onMove = (m: PointerEvent) => move(m.clientX - x0, m.clientY - y0)
+  const up = () => {
+    window.removeEventListener("pointermove", onMove)
+    window.removeEventListener("pointerup", up)
+  }
+  window.addEventListener("pointermove", onMove)
+  window.addEventListener("pointerup", up)
 }
 
 // The card under the player: the transcript and the sound, one tab each. The selection's actions sit in the header,
@@ -28,7 +52,8 @@ export function Panel({
   tabs,
   tab,
   range,
-  sounds,
+  picked,
+  status,
   onTab,
   onCut,
   onComment,
@@ -39,7 +64,10 @@ export function Panel({
   tabs: Tab[]
   tab: string
   range: Range | null
-  sounds: number
+  // what is picked for the next comment ("2 sounds · 1 visual"), empty when nothing
+  picked: string
+  // what the tab follows while it plays ("the reveal: Figural")
+  status?: string
   onTab: (tab: string) => void
   onCut: () => void
   onComment: () => void
@@ -47,32 +75,16 @@ export function Panel({
   className?: string
   children: ReactNode
 }) {
-  const [height, setHeight] = useState<number | null>(stored)
+  const [height, keep] = useStoredSize("video-editor.transcript-height")
   const card = useRef<HTMLDivElement>(null)
   const selected = range && range.t1 > range.t0 ? range : null
   const current = tabs.find((t) => t.value === tab) ?? tabs[0]
 
-  const keep = (h: number | null) => {
-    setHeight(h)
-    try {
-      if (h) localStorage.setItem(HEIGHT, String(Math.round(h)))
-      else localStorage.removeItem(HEIGHT)
-    } catch {
-      // private window: the size just lasts for this visit
-    }
-  }
   // the player keeps at least 20rem (video, timeline, controls)
   const room = () => (card.current?.parentElement?.clientHeight ?? 800) - 320
   const resize = (e: React.PointerEvent) => {
-    e.preventDefault()
-    const y0 = e.clientY, h0 = card.current?.offsetHeight ?? 200
-    const move = (m: PointerEvent) => keep(Math.max(120, Math.min(room(), h0 + y0 - m.clientY)))
-    const up = () => {
-      window.removeEventListener("pointermove", move)
-      window.removeEventListener("pointerup", up)
-    }
-    window.addEventListener("pointermove", move)
-    window.addEventListener("pointerup", up)
+    const h0 = card.current?.offsetHeight ?? 200
+    follow(e, (_, dy) => keep(Math.max(120, Math.min(room(), h0 - dy))))
   }
 
   return (
@@ -113,6 +125,12 @@ export function Panel({
               )}
             </>
           )}
+          {status && (
+            <span className="flex min-w-0 items-center gap-1 truncate font-normal text-muted-foreground">
+              <PlayIcon className="size-3 shrink-0 fill-current" />
+              {status}
+            </span>
+          )}
         </CardTitle>
         <CardAction className="flex items-center gap-1">
           {selected && (
@@ -120,10 +138,9 @@ export function Panel({
               {clock(selected.t0)} → {clock(selected.t1)}
             </span>
           )}
-          {sounds > 0 && (
+          {picked && (
             <Badge variant="outline" className="mr-1 h-5 rounded-md border-highlight/30 bg-highlight/10 text-highlight">
-              <AudioWaveformIcon data-icon="inline-start" />
-              {sounds} sound{sounds > 1 ? "s" : ""}
+              {picked}
             </Badge>
           )}
           {selected && (
@@ -132,7 +149,7 @@ export function Panel({
               Cut <Kbd>⌫</Kbd>
             </Button>
           )}
-          {(selected || sounds > 0) && (
+          {(selected || picked) && (
             <>
               <Button variant="secondary" size="xs" onClick={onComment}>
                 <MessageSquareTextIcon data-icon="inline-start" />

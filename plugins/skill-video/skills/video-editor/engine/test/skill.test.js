@@ -68,3 +68,22 @@ test('a pack dropped in .rules/ is listed and applies at init, with the style fr
   assert.doesNotMatch(read('demo/source/STYLE.md'), /A later note/)
   assert.ok(!fs.existsSync(path.join(home, 'demo/source/site')))
 })
+
+test("final keeps the scene's parts and a strip of thumbnails per format for the studio's Video tab", { timeout: 300000 }, () => {
+  cli('init', 'parts', '--formats', '16:9,9:16', '--renders', '720p', '--rules', 'none')
+  fs.writeFileSync(path.join(home, 'parts/source/edit.json'), JSON.stringify({ duration: 3 }))
+  fs.writeFileSync(path.join(home, 'parts/source/scene.js'), `export default async function scene({ stage, tl, part }) {
+    stage.innerHTML = '<h1 style="font-size:200px">Hey</h1>'
+    tl.from(stage.firstChild, { opacity: 0, duration: 1 }, 0.5)
+    part('sequence', 0, 2, { name: 'hook', field: 'accent' })
+    part('title', 0.5, 1.5)
+  }`)
+  cli('render', '-p', 'parts')
+  cli('final', '-p', 'parts')
+  const v = JSON.parse(read('parts/files/video/v1.json'))
+  assert.deepEqual(v.parts.map(x => [x.kind, x.t0, x.t1]), [['sequence', 0, 2], ['title', 0.5, 1.5]])
+  assert.match(v.parts[0].color, /^#[0-9a-f]{6}$/)
+  assert.deepEqual(Object.keys(v.strips), ['16:9', '9:16'])
+  assert.equal(v.strips['9:16'].count, 6)
+  assert.ok(fs.statSync(path.join(home, 'parts', v.strips['9:16'].file)).size > 1000)
+})

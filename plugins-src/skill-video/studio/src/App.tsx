@@ -7,6 +7,7 @@ import { Panel, type Tab } from "@/components/panel"
 import { PromptDialog } from "@/components/prompt-dialog"
 import { fullscreen, Player, toggle, useVideoTime } from "@/components/player"
 import { SoundTimeline } from "@/components/sound"
+import { VideoTimeline } from "@/components/video"
 import { Transcript } from "@/components/transcript"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -35,6 +36,7 @@ import {
   newId,
   ratioName,
   sameSound,
+  sameVisual,
   timeline,
   versionWords,
   when,
@@ -46,6 +48,8 @@ import {
   type Range,
   type Sound,
   type SoundRef,
+  type Visual,
+  type VisualRef,
 } from "@/lib/studio"
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000
@@ -65,6 +69,9 @@ export default function App() {
   // the version's sound, and the tracks or cues picked for the next comment
   const [sound, setSound] = useState<Sound | null>(null)
   const [sounds, setSounds] = useState<SoundRef[]>([])
+  // the version's parts and thumbnails, and the parts picked for the next comment
+  const [visual, setVisual] = useState<Visual | null>(null)
+  const [visuals, setVisuals] = useState<VisualRef[]>([])
   const [tab, setTab] = useState("transcript")
   // the prompt shown in the dialog before copying, null when closed
   const [prompt, setPrompt] = useState<string | null>(null)
@@ -77,7 +84,12 @@ export default function App() {
       .project()
       .then(async (p) => {
         const all = await Promise.all(p.versions.map((v) => api.reviews(v.v)))
-        if (p.versions.length) setSound(await api.sound(p.versions.at(-1)!.v))
+        if (p.versions.length) {
+          const v = p.versions.at(-1)!.v
+          const [s, vis] = await Promise.all([api.sound(v), api.video(v)])
+          setSound(s)
+          setVisual(vis)
+        }
         setReviews(Object.fromEntries(p.versions.map((v, i) => [v.v, all[i].comments])))
         setProject(p)
         setFormat(p.formats.find((f) => p.versions.at(-1)?.files[f]) ?? p.formats[0])
@@ -124,6 +136,7 @@ export default function App() {
       words: words ? wordsIn(words, { t0, t1 }) : "",
       images,
       ...(sounds.length ? { sounds } : {}),
+      ...(visuals.length ? { visuals } : {}),
       resolved: false,
       created: new Date().toISOString(),
       ...(project.formats.length > 1 ? { format } : {}),
@@ -131,6 +144,7 @@ export default function App() {
     save([...comments, c])
     setImages([])
     setSounds([])
+    setVisuals([])
     setRange(null)
     // back to the shortcuts (Space, C, P, ⌫)
     composer.current?.blur()
@@ -163,7 +177,10 @@ export default function App() {
 
   const pick = (s: SoundRef) =>
     setSounds((xs) => (xs.some((x) => sameSound(x, s)) ? xs.filter((x) => !sameSound(x, s)) : [...xs, s]))
+  const pickVisual = (v: VisualRef) =>
+    setVisuals((xs) => (xs.some((x) => sameVisual(x, v)) ? xs.filter((x) => !sameVisual(x, v)) : [...xs, v]))
   const clear = () => {
+    setVisuals([])
     setRange(null)
     setSounds([])
   }
@@ -245,6 +262,16 @@ export default function App() {
           },
         ]
       : []),
+    ...(visual
+      ? [
+          {
+            value: "video",
+            label: "Video",
+            badge: visual.parts.length ? String(visual.parts.length) : undefined,
+            info: "The frames, then one row per kind of part the scene declared (sequences, titles…). Click a row's name to comment on all of it, or one block (several if you like). Hover the frames to see them. On the rows, click to jump, drag to select a range. Pinch or ⌘-scroll to zoom.",
+          },
+        ]
+      : []),
     ...(sound
       ? [
           {
@@ -257,6 +284,8 @@ export default function App() {
       : []),
   ]
   const shown = tabs.find((t) => t.value === tab)?.value ?? tabs[0]?.value
+  // the sequence on screen, named in the Video tab's header
+  const playing = visual?.parts.findLast((p) => p.kind === "sequence" && p.t0 <= time && time < p.t1)
 
   const meta = (label: string, value: string) => (
     <>
@@ -363,13 +392,31 @@ export default function App() {
                 tabs={tabs}
                 tab={shown}
                 range={range}
-                sounds={sounds.length}
+                picked={[
+                  sounds.length && `${sounds.length} sound${sounds.length > 1 ? "s" : ""}`,
+                  visuals.length && `${visuals.length} visual${visuals.length > 1 ? "s" : ""}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                status={shown === "video" && playing ? (playing.name ?? "sequence") : undefined}
                 onTab={setTab}
                 onCut={() => add("cut", "")}
                 onComment={() => composer.current?.focus()}
                 onClear={clear}
               >
-                {shown === "sound" && sound ? (
+                {shown === "video" && visual ? (
+                  <VideoTimeline
+                    visual={visual}
+                    format={format}
+                    duration={ver.duration}
+                    time={time}
+                    range={range}
+                    picked={visuals}
+                    onSeek={seek}
+                    onRange={setRange}
+                    onPick={pickVisual}
+                  />
+                ) : shown === "sound" && sound ? (
                   <SoundTimeline
                     sound={sound}
                     duration={ver.duration}
@@ -411,12 +458,14 @@ export default function App() {
               rangeWords={range && words ? wordsIn(words, range) : ""}
               images={images}
               sounds={sounds}
+              visuals={visuals}
               composer={composer}
               onSelect={select}
               onSave={save}
               onAdd={add}
               onRemoveImage={(img) => setImages(images.filter((i) => i !== img))}
               onRemoveSound={pick}
+              onRemoveVisual={pickVisual}
               onClearRange={() => setRange(null)}
             />
           )}
