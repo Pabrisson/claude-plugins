@@ -176,7 +176,7 @@ export function DrawLayer({
           </TooltipTrigger>
           <TooltipContent>Close (Esc)</TooltipContent>
         </Tooltip>
-        <Button size="sm" className="ml-1" disabled={!shapes.length} onClick={attach}>
+        <Button size="sm" className="ml-1" onClick={attach}>
           Attach <Kbd>↵</Kbd>
         </Button>
       </div>
