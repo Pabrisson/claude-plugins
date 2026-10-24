@@ -3,7 +3,9 @@
 Every render (`rough`, `final`) is a version `vN` of the project (`source/project.json` `versions`). The studio
 (`video.mjs studio`, http://127.0.0.1:41187/<slug>/; the root opens the first video of the folder, the grid button
 switches to another) shows one version; the user comments, cuts and draws on it,
-then **Copy prompt** gives the text to paste into Claude. Next to the transcript, the Clip tab shows the version's
+then **Copy prompt** gives the text to paste into Claude. The transcript tab comes first, under the scene's sequences:
+the speech in paragraphs, or, without speech, the lines of what the video shows with their frame, where a
+double-click corrects a line (`fix`). Next to it, the Clip tab shows the version's
 thumbnails and one row per kind of the scene's `part()`, and the Sound tab its tracks (voice, music, effects) with
 their levels, then one row per kind of cue: the user picks a part, a track, a cue, or every one of a kind for a comment.
 
@@ -31,6 +33,7 @@ their levels, then one row per kind of cue: the user picks a part, a track, a cu
 | `s0`, `s1` | SOURCE seconds, or SCENE seconds (the scene's own time) without a source: use them for `cut`, to find the words in `files/words.md`, and to find the moment in the scene |
 | `words` | What is said, or shown on screen, in the range |
 | `from` | `"transcript"` when the user made the comment on a selection of the transcript: it is about those words or lines. Absent otherwise |
+| `fix` | `{ "from", "to" }`: a line of what the video shows that the user corrected in the transcript (double-click on the line). Absent otherwise |
 | `format` | The format the user was looking at. Only a request about that format's composition (placement, size, framing) stays in it; content, text, timing and sound changes apply to every format |
 | `images` | Frames the user drew on, or pictures they dropped (`assets/review/frame-<id>.png`), with their size in pixels and ratio: read them. Older files have bare paths |
 | `visuals` | What the comment is about in the picture: a part of the scene (`kind`, `t0`/`t1` in VIDEO seconds, its data), or every part of a kind (`{ "kind" }`). Absent when the comment is not about one |
@@ -68,7 +71,8 @@ Change only these points and keep the rest of the edit identical. …
 Each change keeps its number in the studio (#4): the list skips the resolved ones. `[format …]` appears only for a
 project with several formats, `SOURCE` only with a source, `Words:` only with a
 transcript (`On screen:` for a video without speech: the lines of what it shows, joined by « / »; either says
-`(selected in the transcript)` when the comment was made there), `Visual:` once per
+`(selected in the transcript)` when the comment was made there), `Text fix: "<from>" → "<to>"` for a corrected line
+(with its note at the end), `Visual:` once per
 picked part, `Sound:` once per picked track or cue (each with its note at the end), `Image:` once per attached image with its ratio and size.
 
 ## `files/sound/vN.json`
@@ -93,5 +97,6 @@ with a source, the kept `take`s, VIDEO seconds) and `strips`, per format a sheet
   change with `at(source seconds)`; the video times of the prompt only say where the user was looking. A request
   about one format's composition changes that format only (`format === '16:9'`, `pick()`, or CSS on
   `#stage.landscape`); anything else changes every format.
+- **Text fix**: write `to` in place of `from` in the scene at that moment, word for word, and change nothing else.
 - Answer every id in the feedback file, then run what the change needs (`stills` to check, then `render`,
   `final`); `final` makes the next version and the user reloads the studio.

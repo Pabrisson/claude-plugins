@@ -54,6 +54,7 @@ import {
   type VideoItem,
   type Visual,
   type VisualRef,
+  type VWord,
 } from "@/lib/studio"
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000
@@ -76,7 +77,7 @@ export default function App() {
   // the version's parts and thumbnails, and the parts picked for the next comment
   const [visual, setVisual] = useState<Visual | null>(null)
   const [visuals, setVisuals] = useState<VisualRef[]>([])
-  const [tab, setTab] = useState("video")
+  const [tab, setTab] = useState("transcript")
   // the folder's videos, read when the switcher opens
   const [videos, setVideos] = useState<VideoItem[] | null>(null)
   // the prompt shown in the dialog before copying, null when closed
@@ -106,6 +107,7 @@ export default function App() {
   // the studio always reviews the latest version; older ones only show their feedback
   const ver = project?.versions.at(-1)
   const words = useMemo(() => (project?.words && ver ? versionWords(project.words, ver) : null), [project, ver])
+  const sequences = useMemo(() => visual?.parts.filter((p) => p.kind === "sequence"), [visual])
   const comments = useMemo(() => (ver && reviews[ver.v]) || [], [ver, reviews])
   const open = comments.filter((c) => !c.resolved)
   const src = ver?.files[format]?.url
@@ -129,26 +131,18 @@ export default function App() {
       return false
     }
     if (kind === "comment" && !text.trim() && !images.length) return false
-    const [t0, t1] = r ? [r.t0, r.t1] : [time, time], tl = timeline(ver)
-    const c: Comment = {
-      id: newId(),
-      type: kind,
-      t0: r3(t0),
-      t1: r3(t1),
-      // the source's seconds, or the scene's own seconds without a source (they differ once something is cut)
-      s0: r3(tl.toSource(t0)),
-      s1: r3(tl.toSource(t1)),
-      text: text.trim(),
-      words: words ? wordsIn(words, { t0, t1 }) : "",
-      images,
-      ...(sounds.length ? { sounds } : {}),
-      ...(visuals.length ? { visuals } : {}),
-      ...(r?.from ? { from: r.from } : {}),
-      resolved: false,
-      created: new Date().toISOString(),
-      ...(project.formats.length > 1 ? { format } : {}),
-    }
-    save([...comments, c])
+    const [t0, t1] = r ? [r.t0, r.t1] : [time, time]
+    save([
+      ...comments,
+      comment(t0, t1, {
+        type: kind,
+        text: text.trim(),
+        images,
+        ...(sounds.length ? { sounds } : {}),
+        ...(visuals.length ? { visuals } : {}),
+        ...(r?.from ? { from: r.from } : {}),
+      }),
+    ])
     setImages([])
     setSounds([])
     setVisuals([])
@@ -157,6 +151,34 @@ export default function App() {
     composer.current?.blur()
     toast(`Feedback added · ${kind === "cut" ? "Cut" : "Comment"} at ${clock(t0)}`)
     return true
+  }
+
+  // a new comment from t0 to t1 (video seconds) with what is said or shown there
+  function comment(t0: number, t1: number, rest: Partial<Comment>): Comment {
+    const tl = timeline(ver!)
+    return {
+      id: newId(),
+      type: "comment",
+      t0: r3(t0),
+      t1: r3(t1),
+      // the source's seconds, or the scene's own seconds without a source (they differ once something is cut)
+      s0: r3(tl.toSource(t0)),
+      s1: r3(tl.toSource(t1)),
+      text: "",
+      words: words ? wordsIn(words, { t0, t1 }) : "",
+      images: [],
+      resolved: false,
+      created: new Date().toISOString(),
+      ...(project!.formats.length > 1 ? { format } : {}),
+      ...rest,
+    }
+  }
+
+  // a line of what the video shows, corrected in the transcript
+  function fix(line: VWord, to: string) {
+    save([...comments, comment(line.v0, line.v1, { words: "", from: "transcript", fix: { from: line.w, to } })])
+    setRange(null)
+    toast(`Feedback added · Text fix at ${clock(line.v0)}`)
   }
 
   async function attach(png: Blob) {
@@ -285,16 +307,6 @@ export default function App() {
     )
 
   const tabs: Tab[] = [
-    ...(visual
-      ? [
-          {
-            value: "video",
-            label: "Clip",
-            badge: visual.parts.length ? String(visual.parts.length) : undefined,
-            info: "The frames, then one row per kind of part the scene declared (sequences, titles…). Click a row's name to comment on all of it, or one block (several if you like). Hover the frames to see them. On the rows, click to jump, drag to select a range. Pinch or ⌘-scroll to zoom.",
-          },
-        ]
-      : []),
     ...(words
       ? [
           {
@@ -302,8 +314,18 @@ export default function App() {
             label: "Transcript",
             badge: words[0]?.screen ? String(words.length) : undefined,
             info: words[0]?.screen
-              ? "What the video shows, moment by moment. Click a line to select it, drag across lines to select several, then comment."
-              : "Click a word to jump there. Drag across words to select their range, then cut it or comment on it.",
+              ? "What the video shows, moment by moment, under its sequence. Click a line to select it, drag across lines to select several, then comment. Double-click a line to correct its text. Click a sequence's name to select all of it."
+              : "Paragraphs at each pause, under their sequence. Click a word to jump there. Drag across words to select their range, then cut it or comment on it.",
+          },
+        ]
+      : []),
+    ...(visual
+      ? [
+          {
+            value: "video",
+            label: "Clip",
+            badge: visual.parts.length ? String(visual.parts.length) : undefined,
+            info: "The frames, then one row per kind of part the scene declared (sequences, titles…). Click a row's name to comment on all of it, or one block (several if you like). Hover the frames to see them. On the rows, click to jump, drag to select a range. Pinch or ⌘-scroll to zoom.",
           },
         ]
       : []),
@@ -334,7 +356,7 @@ export default function App() {
         <header className="flex items-center gap-3 border-b px-3 py-2.5 lg:gap-4 lg:px-5">
           <DropdownMenu onOpenChange={(o) => o && api.projects().then(setVideos, () => setVideos([]))}>
             <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="icon" className="size-9 shrink-0" aria-label="Other videos">
+              <Button variant="secondary" size="icon" className="size-9 shrink-0 cursor-pointer" aria-label="Other videos">
                 <LayoutGridIcon />
               </Button>
             </DropdownMenuTrigger>
@@ -381,8 +403,12 @@ export default function App() {
                   {meta("Feedback", `v${ver.v}`)}
                 </>
               )}
-              {" · "}
-              {meta("Rules", project.rules.join(", ") || "none")}
+              {project.rules.length > 0 && (
+                <>
+                  {" · "}
+                  {meta("Rules", project.rules.join(", "))}
+                </>
+              )}
             </p>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -494,11 +520,14 @@ export default function App() {
                   words && (
                     <Transcript
                       words={words}
+                      sequences={sequences}
+                      strip={visual ? (visual.strips[format] ?? Object.values(visual.strips)[0]) : undefined}
                       time={time}
                       range={range}
                       marked={(w) => markOf(comments, (c) => c.t1 > c.t0 && w.v1 > c.t0 && w.v0 < c.t1, show)}
                       onSeek={seek}
                       onRange={(r) => setRange(r && { ...r, from: "transcript" })}
+                      onFix={fix}
                     />
                   )
                 )}

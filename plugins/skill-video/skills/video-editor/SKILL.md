@@ -281,6 +281,8 @@ shape of a reference. Then handle each id:
 - **CUT**: add `[s0, s1]` to `cut` in `source/edit.json`: SOURCE seconds, or SCENE seconds (the scene's own time)
   for a video without a source. Check in `files/words.md` that the cut falls between words or moments.
 - **COMMENT**: change the scene at that moment.
+  - `Text fix: "<from>" → "<to>"`: the user corrected that line of what the video shows: write `to` in its place,
+    as given.
   - `[format …]` is the format the user was looking at. Change that format only when the request is about its
     composition (placement, size, framing, what the frame cuts). A change of content, text, numbers, timing or
     sound applies to every format.

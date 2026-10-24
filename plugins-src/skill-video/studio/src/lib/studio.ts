@@ -64,6 +64,8 @@ export type Comment = {
   format?: string
   // "transcript": made on a selection of the transcript
   from?: "transcript"
+  // a line of what the video shows, corrected in the transcript
+  fix?: { from: string; to: string }
 }
 // from: where the selection was made, when it was the transcript
 export type Range = { t0: number; t1: number; from?: "transcript" }
@@ -217,6 +219,7 @@ export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
     const format = p.formats.length > 1 && c.format ? ` [format ${c.format}]` : ""
     lines.push(`${numberOf(all, c)}. ${c.type.toUpperCase()} ${where}${source} [id ${c.id}]${format}`)
     if (c.words) lines.push(`   ${p.words?.[0]?.screen ? "On screen" : "Words"}${c.from === "transcript" ? " (selected in the transcript)" : ""}: "${c.words}"`)
+    if (c.fix) lines.push(`   Text fix: "${c.fix.from}" → "${c.fix.to}"`)
     if (c.text) lines.push(`   Request: ${c.text}`)
     for (const s of c.sounds ?? []) {
       if (typeof s === "string") lines.push(`   Sound: the ${s} track${s === "voice" ? "" : ` (sound.py's ${s} bus)`}`)
@@ -245,6 +248,9 @@ export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
     p.source
       ? "Types: CUT = remove the range (it goes in `cut`, in SOURCE time); COMMENT = any other request (visual, text, caption, sound, pace), at a moment or over a range."
       : "Types: CUT = remove the range from the video (it goes in `cut` in source/edit.json, in SCENE time: the scene's own seconds); COMMENT = any other request (visual, text, sound, pace), at a moment or over a range.",
+    ...(open.some((c) => c.fix)
+      ? ["Text fix: the user corrected a line of what the video shows: write the new text in the scene at that moment, as given, and change nothing else."]
+      : []),
     ...(open.some((c) => c.sounds?.length)
       ? [`Sound: a track is a part of the mix (voice, or sound.py's music or fx bus) over the comment's time; a cue is the scene's cue(kind, t, data) call, heard as the sound sound.py designs for its kind ("every" means all the cues of that kind). This version's cues and track levels: ${p.dir}/files/sound/v${ver.v}.json.`]
       : []),

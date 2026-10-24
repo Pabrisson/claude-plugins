@@ -24,17 +24,27 @@ import {
 import { clock, numberOf, type Comment, type Range } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
-// the playing time, read every frame (timeupdate only fires a few times a second)
+// the playing time, read every frame (timeupdate only fires a few times a second). The media clock steps back a few
+// hundredths now and then (the audio clock catching up, a pause): only a seek moves it back, so the word, the line
+// and the playhead never flicker to the one before
 export function useVideoTime(video: RefObject<HTMLVideoElement | null>) {
   const [time, setTime] = useState(0)
   useEffect(() => {
-    let raf = 0
+    let raf = 0, seeked = false
+    // media events do not bubble: caught on the way down
+    const seek = () => void (seeked = true)
+    document.addEventListener("seeking", seek, true)
     const tick = () => {
-      setTime(video.current?.currentTime ?? 0)
+      const v = video.current, x = v?.currentTime ?? 0, back = seeked || !!v?.seeking
+      setTime((t) => (x < t && !back ? t : x))
+      seeked = false
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      document.removeEventListener("seeking", seek, true)
+    }
   }, [video])
   return time
 }

@@ -210,6 +210,13 @@ function Item({
           )}
         </div>
         {c.words && <p className="border-l-2 pl-3 text-[13px] text-muted-foreground italic">“{c.words}”</p>}
+        {c.fix && (
+          <p className="border-l-2 pl-3 text-[13px]">
+            <span className="text-muted-foreground line-through">{c.fix.from}</span>
+            <span className="px-1.5 text-muted-foreground">→</span>
+            {c.fix.to}
+          </p>
+        )}
         {editing !== null ? (
           <Textarea
             autoFocus

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 const STRIP = 56, CLIPS = 80, THUMB = 48, ROW = 22, STEP = 28
 
 // one thumbnail of the sheet, `height` px high
-function Thumb({ strip, i, height, className, style }: { strip: Strip; i: number; height: number; className?: string; style?: React.CSSProperties }) {
+export function Thumb({ strip, i, height, className, style }: { strip: Strip; i: number; height: number; className?: string; style?: React.CSSProperties }) {
   const k = height / strip.h, w = strip.w * k, rows = Math.ceil(strip.count / strip.cols)
   return (
     <div
