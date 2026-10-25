@@ -201,7 +201,7 @@ Claude becomes a video editor for any genre: one or several rushes (files or URL
 |---|---|
 | `setup` | Style interview: name, language, audience, CTA, palette, font, music, the names the transcript must spell right; or the identity of a site (`site <url>`) |
 | `<videos or URLs> [sources…] [studio]` | New video: several rushes are joined end to end (`file.mp4#t=12:30,14:10` keeps only a range), B-roll plays with its own sound, a second camera is synced by its sound; `studio` opens the review from the rough cut |
-| `apply this feedback …` | Applies the feedback pasted from the studio (cuts, comments, word fixes, sound, visuals), then renders a quick draft to review |
+| `apply this feedback …` | Applies the feedback pasted from the studio (cuts, comments, word fixes, sound, visuals), then renders the new version |
 | `variations <element>` | Numbered variants of one element, then keeps the choice |
 | `preview` | Live debug page of the scene in Chrome |
 | `rules list \| show \| use \| set \| new \| edit` | Editing rule packs, one per genre (see below), and the project's overrides |
@@ -222,7 +222,7 @@ Rule packs: one per video, chosen at the start (none by default). A pack in `.ru
 
 Graphics: `lead`, the motion design carries the video; `support`, the footage carries it and the graphics serve it.
 
-- **Render**: 9:16, 16:9, 1:1 and 4:5 formats, 4K, 2K, 1080p and 720p resolutions, H.264, HEVC, AV1 and VP9 codecs, captions, synthesized music and sound effects. About 10 s for a 75 s video (40 s with motion blur), unchanged chunks cached; review rounds render a 720p draft of the main format.
+- **Render**: 9:16, 16:9, 1:1 and 4:5 formats, 4K, 2K, 1080p and 720p resolutions, H.264, HEVC, AV1 and VP9 codecs, captions, synthesized music and sound effects. About 10 s for a 75 s video (40 s with motion blur), unchanged chunks cached; a 720p draft of the main format on request.
 - **Delivery**: the videos, a poster per format, subtitles (SRT, WebVTT), a description with YouTube's chapters, and a 1280×720 thumbnail for YouTube.
 - **Sound**: the voice is levelled from one rush to the next, cleaned (rumble, light denoise) and compressed; the music's beats are measured on a given track (any format) or laid out from a tempo.
 - **Studio**: local review on `127.0.0.1`, from port 41187, one server per projects folder, open from the start of each video: until the first version it shows what is being done (Claude's steps, the engine's, the renders' progress) and reloads by itself on the video. Feedback goes back to Claude as a prompt to paste.

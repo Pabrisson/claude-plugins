@@ -366,10 +366,10 @@ Update « État » in About.md.
 Read `references/review-format.md` and every image the prompt attaches, then follow its « Applying it »: each id gets
 its change, then `resolved` and `reply` in the feedback file.
 
-The review rounds run on drafts: `video.mjs render --draft -p <slug>`, then `video.mjs final --draft -p <slug>` (the
-main format in 720p, sharp, without the deliverables; add `--format <f>` to both for a change to another format's
-composition). A change in `sound.py` or in a clip's `volume` alone needs no render: `audio`, then `final --draft`.
-When the user approves the video or asks for the files, deliver it with step 11's full render and `final`.
+Then render it at once, without asking: `video.mjs render -p <slug>` with the project's `--blur`, then
+`video.mjs final -p <slug>`, which delivers every format and resolution again. A change in `sound.py` or in a clip's
+`volume` alone needs no render: `audio`, then `final`. Only when the user asks for a quick preview, render a draft
+instead: `render --draft`, then `final --draft` (the main format in 720p, sharp, without the deliverables).
 
 Update « État » in About.md and tell the user the new version is ready: the open studio offers to reload it.
 

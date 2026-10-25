@@ -283,7 +283,7 @@ export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
       : []),
     "",
     `Feedback file: ${p.dir}/files/reviews/v${ver.v}.json (video version v${ver.v}, same ids). For each change applied, set "resolved": true and write what you did in one sentence in "reply", the studio shows it.`,
-    `Change only these points and keep the rest of the edit identical. Times are VIDEO time (or ${p.source ? "SOURCE" : "SCENE"} when stated). Rerun the steps needed (${p.source ? "prepare, rough, " : ""}stills, render --draft, audio, final --draft): the new draft opens the next version, and the open studio offers to reload it.`
+    `Change only these points and keep the rest of the edit identical. Times are VIDEO time (or ${p.source ? "SOURCE" : "SCENE"} when stated). Rerun the steps needed (${p.source ? "prepare, rough, " : ""}stills, render, audio, final): the new render opens the next version, and the open studio offers to reload it.`
   )
   return lines.join("\n")
 }

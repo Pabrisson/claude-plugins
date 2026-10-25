@@ -124,6 +124,6 @@ every attached image: its ratio says which format it shows, or the shape of a re
   their shared class or helper. A `take` is a kept piece of the source, a `clip` a media of `edit.json`.
 - In the feedback file, set `"resolved": true` and write one sentence in `reply` saying what you changed.
 
-Then run `stills` if the change is visual, then the draft (`render --draft`, `final --draft`): it makes the next
-version, a draft, and the open studio offers to reload it. The full render (`render` with the project's `--blur`,
-then `final`) delivers the video once the user approves it.
+Then run `stills` if the change is visual, then `render` (with the project's `--blur`) and `final`, without waiting
+to be asked: `final` makes the next version, and the open studio offers to reload it. A draft (`render --draft`,
+`final --draft`) only when the user asks for a quick preview.
