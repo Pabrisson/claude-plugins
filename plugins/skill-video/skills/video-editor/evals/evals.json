@@ -5,7 +5,9 @@
       "id": 1,
       "prompt": "Fais-moi un short avec cette vidéo : engine/test/speech.mp4",
       "expected_output": "The skill checks the machine, reads the rush, then asks the starting questions in two AskUserQuestion calls with the user's defaults, before creating the project.",
-      "files": ["engine/test/speech.mp4"],
+      "files": [
+        "engine/test/speech.mp4"
+      ],
       "expectations": [
         "Runs `video.mjs doctor` before any other command of the skill",
         "Runs `video.mjs probe` on the rush and `video.mjs codecs` before asking the starting questions",
@@ -25,6 +27,8 @@
         "Never asks the user for footage",
         "Asks no starting question the request already answers (formats, resolution, rules, rate, codec)",
         "Runs `video.mjs init` without `--source`, with `--formats 9:16 --renders 1080p --fps 30 --codec h264 --rules none`",
+        "Opens the studio right after `video.mjs init` (`video.mjs studio -p <slug> --open`) and gives the user its URL",
+        "Runs `video.mjs status \"…\"` at the start of its own steps (brief, direction, scene, review passes, delivery)",
         "Sets `duration` in source/edit.json",
         "Writes the Direction section of About.md before writing source/scene.js",
         "Runs `video.mjs stills` and `video.mjs check` before rendering"
@@ -34,7 +38,9 @@
       "id": 3,
       "prompt": "Fais un clip vertical du passage entre 0:10 et 0:35 de engine/test/speech.mp4, en 9:16 720p, pack podcast-clip, cadence d'origine, H.264.",
       "expected_output": "Only the requested range of the rush becomes the source.",
-      "files": ["engine/test/speech.mp4"],
+      "files": [
+        "engine/test/speech.mp4"
+      ],
       "expectations": [
         "Runs `video.mjs init` with `--source` ending in `#t=0:10,0:35` (or the same range in seconds)",
         "Runs `video.mjs init` with `--rules podcast-clip`",

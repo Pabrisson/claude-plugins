@@ -17,6 +17,19 @@ export type Version = {
   timeline: { speed: number; segments: [number, number][] } | null
   files: Record<string, VideoFile | null>
 }
+// what is being done on the video (the project's .cache/progress.json): the engine's commands and Claude's own steps
+export type Step = {
+  id: string
+  label: string
+  by: "engine" | "claude"
+  state: "running" | "done" | "failed"
+  t0: string
+  t1?: string
+  // the chunks of a render
+  done?: number
+  total?: number
+}
+export type Progress = { updated: string; steps: Step[] }
 export type Project = {
   slug: string
   dir: string
@@ -105,6 +118,8 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ comments }),
     }).then(json),
+  // null before the first step is logged
+  progress: (): Promise<Progress | null> => fetch("project/.cache/progress.json").then((r) => (r.ok ? r.json() : null)),
   image: (id: string, png: Blob): Promise<{ path: string }> =>
     fetch(`api/review-image?id=${id}`, { method: "POST", body: png }).then(json),
 }

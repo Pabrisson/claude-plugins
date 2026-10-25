@@ -23,7 +23,7 @@ export default defineConfig({
   // npm run dev: open http://localhost:5173/<slug>/ with `video.mjs studio` running
   server: {
     proxy: {
-      "^/[a-z0-9-]+/(api|video|review)/": {
+      "^/[a-z0-9-]+/(api|video|review|project)/": {
         target: "http://127.0.0.1:41187",
         changeOrigin: true,
       },

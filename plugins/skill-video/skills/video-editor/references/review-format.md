@@ -1,5 +1,9 @@
 # Review studio feedback
 
+Before the first version, the studio shows what is being done, from the project's `.cache/progress.json`: the
+engine's steps (with the renders' progress) and Claude's (`video.mjs status`). It reloads by itself when the first
+version lands.
+
 Every render (`rough`, `final`, `final --draft`) is a version `vN` of the project (`source/project.json` `versions`;
 a draft has `draft: true` and the main format only). The studio
 (`video.mjs studio`, http://127.0.0.1:41187/<slug>/, or the next free port when another projects folder has its own

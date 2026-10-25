@@ -153,6 +153,12 @@ source, in the order of the video, each with its range when it has one. `init` j
 starts. A rush of another shape than the first is letterboxed into it: put first the one with the main shape, or
 make the odd one a clip.
 
+Right after `init`, open the studio with `video.mjs studio -p <slug> --open` and give the user its URL. Until the
+first version it shows what is being done, then it reloads by itself on the video. The engine logs its own steps
+(transcription, frames, renders and their progress). Log yours: at the start of each step (the brief, the direction,
+the main format's scene, each review pass, each other format, the sound, the delivery), run
+`video.mjs status "<a few words in English, like the studio>" -p <slug>`, e.g. `status "Review pass 2: transitions"`.
+
 Declare the clips in `source/edit.json`'s `media`, with the path of each file. Download a clip given as a URL into
 `<slug>/assets/clips/` first, with `uvx yt-dlp`. A clip that recorded the same moment as the source (a second
 camera, the other speaker's camera) gets synced by its sound: `video.mjs sync <media id> -p <slug>`. `clip()` then
@@ -183,8 +189,8 @@ beats come from the brief and the clips, and their total gives `duration` (secon
 
 ### 5. Studio before the edit (only with the word `studio` and a rough cut)
 
-Run `video.mjs studio -p <slug> --open`, tell the user the URL, and **stop and wait**. They will paste feedback on
-the rough. There is no scene yet, so handle it this way:
+The studio, open since step 3, has reloaded on the rough cut: tell the user it is there, and **stop and wait**. They
+will paste feedback on the rough. There is no scene yet, so handle it this way:
 - Apply the cuts to `edit.json`.
 - Keep the comments as notes in About.md's Beats, for the scene.
 - Answer every id in the feedback file.
@@ -344,8 +350,8 @@ that one frame instead of the video (scene-format.md). `video.mjs thumbnail -p <
 `output/<slug>-thumbnail.jpg` (1280×720).
 
 Check what you deliver. Extract about 20 frames of the main MP4 across its length (`ffmpeg -ss <t> -i … -frames:v 1`)
-into one sheet and read it, and check that the sound lands on the cuts. Then run
-`video.mjs studio -p <slug> --open`.
+into one sheet and read it, and check that the sound lands on the cuts. Then run `video.mjs studio -p <slug>`: the
+studio open since step 3 offers to reload on the new version, and the command gives its URL again.
 
 Give the user:
 - the studio URL;

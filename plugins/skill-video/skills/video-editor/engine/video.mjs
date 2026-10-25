@@ -95,6 +95,32 @@ const ffmpegLog = argv => {
   return r.stderr
 }
 
+// .cache/progress.json: what is being done on the video, for the studio while there is nothing to review yet. The
+// commands log their steps (with done/total when they count), Claude its own with `status`:
+// { updated, steps: [{ id, label, by: engine|claude, state: running|done|failed, t0, t1, done, total }] }, the last 60.
+// ponytail: read-modify-write without a lock, two commands writing at the same instant may lose a line
+const now = () => new Date().toISOString()
+function logSteps(dir, change) {
+  const file = path.join(dir, '.cache/progress.json')
+  let steps = []
+  try { steps = readJson(file).steps } catch {}
+  change(steps)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  writeJson(file, { updated: now(), steps: steps.slice(-60) })
+}
+// the steps this process started and has not ended: done when it exits well, failed when it dies
+const open = new Map()
+process.on('exit', code => {
+  // (not in a folder gone meanwhile: a failed init removes its own)
+  for (const [id, dir] of open) if (fs.existsSync(dir)) logSteps(dir, steps => Object.assign(steps.find(x => x.id === id) ?? {}, { state: code ? 'failed' : 'done', t1: now() }))
+})
+function step(dir, label) {
+  const id = `${process.pid}-${Date.now()}-${open.size}`, set = o => logSteps(dir, steps => Object.assign(steps.find(x => x.id === id) ?? {}, o))
+  logSteps(dir, steps => steps.push({ id, label, by: 'engine', state: 'running', t0: now() }))
+  open.set(id, dir)
+  return { tick: (done, total) => set({ done, total }), end: () => (open.delete(id), set({ state: 'done', t1: now() })) }
+}
+
 const packs = () => listPacks([['plugin', path.join(ENGINE, '../rules')], ['perso', path.join(HOME, '.rules')]])
 // --rules and rules use: one pack per video, or none
 const onePack = v => list(v).length > 1 ? die(`one pack per video, not ${v}`) : !v || v === 'none' ? [] : [v.trim()]
@@ -367,10 +393,11 @@ async function detectFaces(dir, p) {
 function extractFrames(dir, p) {
   const dest = path.join(dir, 'frames/cam')
   if (!opt.force && fs.existsSync(dest) && fs.readdirSync(dest).length) return
-  const started = Date.now(), need = Math.max(...p.renders.map(t => renderShort(t)))
+  const started = Date.now(), need = Math.max(...p.renders.map(t => renderShort(t))), s = step(dir, 'Extracting the camera frames')
   fs.rmSync(dest, { recursive: true, force: true })
   fs.mkdirSync(dest, { recursive: true })
   run('ffmpeg', ['-y', '-v', 'error', '-i', path.join(dir, 'assets/source.mp4'), '-vf', `fps=${p.source.fps}${shrinkTo(p.source, need)}`, '-q:v', '3', path.join(dest, '%05d.jpg')])
+  s.end()
   console.log(`camera frames: ${fs.readdirSync(dest).length} in ${secs(started)} s`)
 }
 
@@ -560,9 +587,11 @@ function init(slug) {
   if (sources.length) {
     const file = path.join(dir, 'assets/source.mp4')
     let files
+    const s = step(dir, sources.length > 1 ? `Joining ${sources.length} rushes` : 'Copying the source')
     try {
       if (sources.length === 1) fetchSource(sources[0], file)
       else files = joinSources(sources, file)
+      s.end()
     } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); die(`could not get the source: ${e.message}`) }
     source = { from: sources.join(' + '), ...probe(file), ...(files && { files }) }
   }
@@ -579,6 +608,7 @@ function init(slug) {
   writeJson(path.join(dir, 'source/rules.json'), { active, params, overrides: {} })
   writeJson(path.join(dir, 'source/edit.json'), { cut: [] })
   fs.writeFileSync(path.join(dir, 'About.md'), about(slug, p, active))
+  step(dir, 'Project created').end()
 
   console.log(`project: ${dir}`)
   console.log(`formats: ${formats.join(', ')} · renders: ${types.join(', ')} · ${ms(p.fps)} fps · ${CODECS[p.codec].label} · rules: ${active.join(', ') || 'none'}`)
@@ -605,7 +635,11 @@ async function prepare() {
   if (!params.transcribe) for (const x of ['assets/words.json', 'files/words.md']) fs.rmSync(f(x), { force: true })
   else if (!opt.force && fs.existsSync(f('assets/words.json'))) words = readJson(f('assets/words.json')).filter(w => !w.screen)
   else {
-    if (db && audible(db)) words = transcribe(f('assets/source.wav'), creator.lang, f('.cache'), creator.vocabulary.join(', '))
+    if (db && audible(db)) {
+      const s = step(dir, 'Transcribing the speech')
+      words = transcribe(f('assets/source.wav'), creator.lang, f('.cache'), creator.vocabulary.join(', '))
+      s.end()
+    }
     writeJson(f('assets/words.json'), words)
     fs.writeFileSync(f('files/words.md'), wordsMd(words, p.slug))
   }
@@ -618,7 +652,11 @@ async function prepare() {
   extractFrames(dir, p)
 
   if (params.face_framing) {
-    if (opt.force || !fs.existsSync(f('assets/frames.json'))) await detectFaces(dir, p)
+    if (opt.force || !fs.existsSync(f('assets/frames.json'))) {
+      const s = step(dir, 'Framing the face')
+      await detectFaces(dir, p)
+      s.end()
+    }
   } else fs.rmSync(f('assets/frames.json'), { force: true })
 
   // freezes: where the picture stays still (a screen recording waiting), as it plays once cut, with what is said
@@ -664,6 +702,7 @@ function rough() {
   if (!p.source) die('rough needs a source video')
   if (!fs.existsSync(f('assets/timeline.json'))) die('run prepare first')
   const started = Date.now()
+  step(dir, 'Rough cut')
   const tl = makeTimeline(readJson(f('assets/timeline.json')), loadEdit(dir).cut)
   const { fps } = p.source, [fw, fh] = logical(p.formats[0], p.source), k = 720 / Math.min(fw, fh)
   const [cx, cy, cw, ch] = centerCrop(p.source, fw / fh)
@@ -709,6 +748,7 @@ async function stills() {
   const formats = opt.format ? pick(opt.format, p.formats, 'format') : [p.formats[0]]
   const given = args.map(Number), n = +(opt.variants ?? 0)
   if (given.some(t => !(t >= 0)) || (opt.variants && !(n >= 2 && given.length === 1))) die('usage: stills [source seconds…] [--format f|all] | stills <source seconds> --variants N')
+  step(dir, n ? `${n} variants` : `Stills ${formats.join(', ')}`)
   await withChrome(p.slug, formats.length, async (pages, base) => {
     await screenTranscript(dir, pages[0], base, job(dir, p.formats[0], ''))
     await Promise.all(formats.map(async (fmt, i) => {
@@ -753,10 +793,15 @@ async function render() {
       const t0 = Date.now(), j = job(dir, fmt, type), c = CODECS[j.encoder.family], prefix = `${ratio(fmt)}-${type}-`
       const plan = chunkPlan(dir, j), name = x => `.cache/render/${prefix}${String(x.a).padStart(6, '0')}-${x.key.slice(0, 16)}.${c.ext}`
       const todo = plan.filter(x => !fs.existsSync(f(name(x)))), count = todo.length, hw = new Set()
-      const url = `${base}render?format=${encodeURIComponent(fmt)}&type=${type}`
+      const url = `${base}render?format=${encodeURIComponent(fmt)}&type=${type}`, s = step(dir, `Rendering ${fmt} ${type}`)
+      let rendered = 0
+      s.tick(0, count)
       await Promise.all(pages.slice(0, Math.min(n, todo.length)).map(async page => {
         await openPage(page, url, j)
-        for (let x; (x = todo.shift());) hw.add(await page.evaluate(([a, b, file]) => window.renderChunk(a, b, file), [x.a, x.b, name(x)]))
+        for (let x; (x = todo.shift());) {
+          hw.add(await page.evaluate(([a, b, file]) => window.renderChunk(a, b, file), [x.a, x.b, name(x)]))
+          s.tick(++rendered, count)
+        }
       }))
       // cached chunks mean the same scene, so the same cues
       if (!fs.existsSync(f('.cache/parts.json')) || (count && fmt === p.formats[0])) {
@@ -786,6 +831,7 @@ async function render() {
       fs.writeFileSync(f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.key`), plan.key)
       fs.rmSync(stream)
       const frames = plan.at(-1).b, took = (Date.now() - t0) / 1000
+      s.end()
       console.log(`${fmt} ${type}: ${j.size.join('×')} ${c.label} ${[...hw].join('/') || 'cached'}${j.blur > 1 ? `, motion blur ×${j.blur}` : ''}, ${frames} frames, ${count}/${plan.length} chunks rendered in ${took.toFixed(1)} s` + (count ? ` (${Math.round((frames * count) / plan.length / took)} fps, ${Math.min(n, count)} workers)` : ''))
     }
   })
@@ -827,6 +873,7 @@ function audioPlan(dir) {
 // into stills/sound/<n>.wav
 function audio() {
   const dir = projectDir(), started = Date.now(), n = +(opt.variants ?? 0)
+  step(dir, n ? `${n} sound variants` : 'Mixing the sound')
   if (!opt.variants) {
     const file = mix(dir, true)
     return console.log(file ? `audio done in ${secs(started)} s. Next: final` : 'no voice, no source/sound.py and no media sound: the video stays silent')
@@ -847,6 +894,7 @@ function final() {
   const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), edit = loadEdit(dir)
   const j = job(dir, p.formats[0], ''), tl = makeTimeline(j.timeline), started = Date.now(), draft = !!opt.draft
   const formats = draft ? renderSet(p)[0] : p.formats, types = draft ? ['draft'] : p.renders
+  step(dir, draft ? 'Making the draft version' : 'Delivering the video')
   const audio = mix(dir)
   // AAC once per bitrate (Apple's encoder when ffmpeg has it: ten times faster), then every file is a copy
   const aac = out('ffmpeg', ['-hide_banner', '-encoders']).includes(' aac_at ') ? 'aac_at' : 'aac', tracks = {}
@@ -917,6 +965,18 @@ function addVersion(dir, p, version) {
   p.versions = [...(p.versions ?? []), { v, rendered: new Date().toISOString(), ...version }]
   writeJson(path.join(dir, 'source/project.json'), p)
   return v
+}
+
+// status "<what Claude does now>": a step of Claude's own (the brief, the direction, the scene, a review pass…), shown
+// in the studio until the next one
+function status(...words) {
+  const dir = projectDir(), label = words.join(' ').trim()
+  if (!label) die('usage: status "<what you are doing now>" -p <slug>')
+  logSteps(dir, steps => {
+    for (const x of steps) if (x.by === 'claude' && x.state === 'running') Object.assign(x, { state: 'done', t1: now() })
+    steps.push({ id: `${process.pid}-${Date.now()}`, label, by: 'claude', state: 'running', t0: now() })
+  })
+  console.log(`status: ${label}`)
 }
 
 // thumbnail [--at <source s>]: the YouTube thumbnail, 1280×720 (output/<slug>-thumbnail.jpg). The scene draws it in
@@ -1450,6 +1510,7 @@ async function check() {
   const dir = projectDir(), f = rel => path.join(dir, rel), p = readyToDraw(dir)
   const j = job(dir, p.formats[0], ''), tl = makeTimeline(j.timeline), saved = fs.statSync(f('.cache/parts.json'), { throwIfNoEntry: false })
   if (!saved || saved.mtimeMs < fs.statSync(f('source/scene.js')).mtimeMs) die('run stills first: they save the parts of the current scene')
+  step(dir, 'Checking the edit')
   const words = fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : []
   const found = checkEdit(j.params, {
     duration: j.duration, cuts: loadEdit(dir).cut ?? [], joins: (j.timeline?.segments ?? []).slice(1).map(([a]) => tl.toVideo(a)),
@@ -1470,7 +1531,7 @@ async function check() {
 const commands = {
   doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs,
   style: () => style(...args), serve, rules: () => rules(...args), check, sync: () => syncMedia(args[0]), beats: () => beatGrid(args[0]), thumbnail,
-  fix: () => fixWord(args[0], args[1]),
+  fix: () => fixWord(args[0], args[1]), status: () => status(...args),
 }
 if (!commands[cmd]) die(`usage: video.mjs <${Object.keys(commands).join(' | ')}> [--project <slug>]`)
 await commands[cmd]()

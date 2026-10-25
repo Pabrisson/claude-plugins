@@ -9,6 +9,7 @@ import { fullscreen, mark, Player, toggle, useVideoTime } from "@/components/pla
 import { SoundTimeline } from "@/components/sound"
 import { VideoTimeline } from "@/components/video"
 import { Transcript } from "@/components/transcript"
+import { Waiting } from "@/components/waiting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -47,6 +48,7 @@ import {
   type Comment,
   type Image,
   type Kind,
+  type Progress,
   type Project,
   type Range,
   type Sound,
@@ -82,6 +84,8 @@ export default function App() {
   const [videos, setVideos] = useState<VideoItem[] | null>(null)
   // this video once a render made while the studio is open has added a version: offered as a reload
   const [newer, setNewer] = useState<VideoItem | null>(null)
+  // nothing to review yet: what is being done on the video
+  const [progress, setProgress] = useState<Progress | null>(null)
   // the prompt shown in the dialog before copying, null when closed
   const [prompt, setPrompt] = useState<string | null>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -119,6 +123,19 @@ export default function App() {
         ),
       5000
     )
+    return () => clearInterval(id)
+  }, [project])
+
+  // nothing to review yet: the progress until the first version lands, then the page reloads by itself
+  useEffect(() => {
+    if (!project || project.versions.length) return
+    const poll = () =>
+      Promise.all([api.projects(), api.progress()]).then(
+        ([vs, g]) => (vs.find((v) => v.slug === project.slug)?.versions ? location.reload() : setProgress(g)),
+        () => {}
+      )
+    poll()
+    const id = setInterval(poll, 2000)
     return () => clearInterval(id)
   }, [project])
 
@@ -494,6 +511,8 @@ export default function App() {
                 onAttach={attach}
                 onFocus={show}
               />
+            ) : !ver ? (
+              <Waiting progress={progress} />
             ) : (
               <Empty className="flex-1">
                 <EmptyHeader>

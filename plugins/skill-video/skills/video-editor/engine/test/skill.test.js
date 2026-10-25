@@ -81,7 +81,7 @@ test('one pack per video; rules show gives it with its personal lines, rules set
   fs.writeFileSync(path.join(home, 'chk/source/edit.json'), JSON.stringify({ duration: 20, cut: [] }))
   fs.writeFileSync(path.join(home, 'chk/source/scene.js'), 'export default async function scene({ captions }) { captions() }')
   assert.throws(() => cli('check', '-p', 'chk'), /run stills first/)
-  fs.mkdirSync(path.join(home, 'chk/.cache'))
+  fs.mkdirSync(path.join(home, 'chk/.cache'), { recursive: true })
   fs.writeFileSync(path.join(home, 'chk/.cache/parts.json'), JSON.stringify([{ kind: 'hook', t0: 0, t1: 2 }, { kind: 'cta', t0: 17, t1: 20 }]))
   const log = (() => { try { return cli('check', '-p', 'chk') } catch (e) { return e.stdout } })()
   assert.match(log, /✗ duration: 20 s, the pack wants 30 to 75 s/)
@@ -269,4 +269,24 @@ test('beats lays the grid of a tempo or measures a track; fix corrects a spoken 
   assert.deepEqual(JSON.parse(read('face/assets/words.json')).map(w => w.w), ['Secursus.', 'Merci'])
   assert.match(read('face/files/words.md'), /Secursus\.\n- \*\*00:02\.00\*\* Merci/)
   assert.throws(() => cli('fix', '30', 'x', '-p', 'face'), /no spoken word/)
+})
+
+test('the progress log: the commands and Claude log their steps, a command that dies leaves its step failed', { timeout: 300000 }, () => {
+  const steps = () => JSON.parse(read('wait/.cache/progress.json')).steps.map(x => [x.label, x.by, x.state, x.done ?? null, x.total ?? null])
+  cli('init', 'wait', '--formats', '16:9', '--renders', '720p', '--rules', 'none')
+  assert.deepEqual(steps(), [['Project created', 'engine', 'done', null, null]])
+  cli('status', 'Writing', 'the brief', '-p', 'wait')
+  cli('status', 'Writing the scene', '-p', 'wait')
+  fs.writeFileSync(path.join(home, 'wait/source/edit.json'), JSON.stringify({ duration: 5 }))
+  fs.writeFileSync(path.join(home, 'wait/source/scene.js'), 'export default async function scene({ stage }) { stage.innerHTML = "<h1>Hi</h1>" }')
+  assert.throws(() => cli('final', '-p', 'wait'), /no render/)
+  cli('render', '-p', 'wait')
+  assert.deepEqual(steps(), [
+    ['Project created', 'engine', 'done', null, null],
+    ['Writing the brief', 'claude', 'done', null, null],
+    ['Writing the scene', 'claude', 'running', null, null],
+    ['Delivering the video', 'engine', 'failed', null, null],
+    ['Rendering 16:9 720p', 'engine', 'done', 3, 3],
+  ])
+  assert.throws(() => cli('status', '-p', 'wait'), /usage: status/)
 })
