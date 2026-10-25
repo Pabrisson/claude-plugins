@@ -1173,10 +1173,12 @@ async function handle(req, res, write = false) {
 
   const sub = rest.join('/'), m = sub.match(/^api\/reviews\/v(\d+)$/)
   if (sub === 'api/project') return reply(res, 200, projectInfo(dir))
-  // the progress log, and the file Claude changed last: the work goes on between two logged steps
+  // the progress log, the file Claude changed last (the work goes on between two logged steps), and when the project
+  // started: the total time, even once the log has dropped its first steps
   if (sub === 'api/progress') {
     let log = { updated: null, steps: [] }
     try { log = readJson(path.join(dir, '.cache/progress.json')) } catch {}
+    log.started = readJson(path.join(dir, 'source/project.json')).created ?? null
     const touched = ['About.md', ...fs.readdirSync(path.join(dir, 'source'), { recursive: true }).map(x => path.join('source', x))]
       .filter(x => !/__pycache__|^source\/(project|rules|style)\.json$|^source\/STYLE\.md$/.test(x))
       .map(x => [x, fs.statSync(path.join(dir, x), { throwIfNoEntry: false })]).filter(([, st]) => st?.isFile())

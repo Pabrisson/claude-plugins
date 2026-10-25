@@ -30,7 +30,8 @@ export type Step = {
   total?: number
 }
 // touched: the file Claude changed last (About.md, source/…), the work going on between two logged steps
-export type Progress = { updated: string | null; steps: Step[]; touched: { file: string; mtime: string } | null }
+// started: when the project was created (null for an older one), the start of the total time
+export type Progress = { updated: string | null; steps: Step[]; touched: { file: string; mtime: string } | null; started?: string | null }
 export type Project = {
   slug: string
   dir: string
