@@ -278,7 +278,7 @@ above the ambition.
 `video.mjs status "Writing the scene" -p <slug>`
 
 Write `source/scene.css` first: the design system of the Direction. Then write `source/scene.js` for the **main
-format only** (the first one). Give it the whole frame: the other formats come in step 9, and composing three
+format only** (the first one). Give it the whole frame: the other formats come in step 10, and composing three
 frames at once leads to small, safe layouts.
 - Anchor every moment on the speech with `at(source seconds)`, so cuts never break the sync.
 - With music, lay its grid first: `video.mjs beats <bpm> -p <slug>` for the tempo you will compose on, or
@@ -293,9 +293,28 @@ frames at once leads to small, safe layouts.
 - Without speech, declare what the viewer reads with `say(text, from, to)`, one line per moment. It is the
   transcript the user reviews and quotes in the studio.
 
-### 8. Review until nothing is left to fix
+Once the scene is written, go straight to the sound (step 8): no review pass before it.
 
-This is where the quality comes from, so take the time it needs: usually four to eight passes. Each pass:
+### 8. Sound
+
+`video.mjs status "Sound" -p <slug>`
+
+The sound comes before the review, so that every pass reviews it with the picture. When the pack or the request
+asks for music or sound, write `source/sound.py`. A video without speech always gets sound. Read
+`references/sound-format.md` first.
+- Compose the score on the Direction's tempo and beats.
+- Design one sound for each kind of cue.
+- The clips play their own sound by themselves: set each one's `volume` in `edit.json`.
+
+The voice needs nothing: the engine levels the rushes, cuts the rumble, denoises lightly and compresses it.
+
+Run `video.mjs stills -p <slug>` (they save the scene's cues), then `video.mjs audio -p <slug>`, and measure: the
+balance of the bands, effects starting on their cues, a quiet break, and the clips' level against the voice.
+
+### 9. Review until nothing is left to fix
+
+Start it only once `source/sound.py` is written and mixed (step 8), when the video has sound. This is where the
+quality comes from, so take the time it needs: usually four to eight passes. Each pass:
 - **Log it**: `video.mjs status "Review pass <n>: <what it looks at>" -p <slug>`.
 - **Render the stills that matter**, not only the beats:
   `video.mjs stills <source s…> -p <slug> --format <main>`. Take both sides of every transition, the middle of the
@@ -303,7 +322,8 @@ This is where the quality comes from, so take the time it needs: usually four to
 - **Measure** with `video.mjs check -p <slug>`: the pack's numbers on the edit (length, hook, CTA, stretches without
   a change, cuts inside a word, cuts on the beat…), then the layout of every format: a text in the platforms'
   interface zones, too small for a phone, cut by the frame, or over a face. Fix what it flags. A text that is
-  decoration, not meant to be read, takes `data-say=""`.
+  decoration, not meant to be read, takes `data-say=""`. Then `video.mjs audio -p <slug>` once the stills are
+  rendered (they saved the cues moved by your fixes), and the measures of step 8 again.
 - **Read the sheets and hunt the defects**:
   - something that pops, flickers at a cut, or does not animate (`preview` shows the motion live);
   - overlaps and texts cut by the frame;
@@ -315,33 +335,20 @@ This is where the quality comes from, so take the time it needs: usually four to
     sequences? Do the fields follow the color story?
   - with footage: a weak or badly framed shot left in, a raw jump cut, a grade that changes between rushes, a
     graphic over a face or the action, a clip that hides what the speaker shows;
+  - the sound: a key entrance or transition with no sound, an effect off its cue, a cut off the beat, music that
+    covers the voice or ends cut off;
   - every line of the active pack's two checklists (picture, then sound and timing);
   - anything below the bar of step 6.
 - **Fix, and look again.**
 
 Stop when a full pass finds nothing.
 
-### 9. The other formats
+### 10. The other formats
 
 `video.mjs status "Format <f>" -p <slug>`, for each one.
 
 Recompose each other format with the same timings: the layout changes, not the story. Do not shrink the main
 format. Review each one the same way, on its own stills.
-
-### 10. Sound
-
-`video.mjs status "Sound" -p <slug>`
-
-When the pack or the request asks for music or sound, write `source/sound.py`. A video without speech always gets
-sound. Read `references/sound-format.md` first.
-- Compose the score on the Direction's tempo and beats.
-- Design one sound for each kind of cue.
-- The clips play their own sound by themselves: set each one's `volume` in `edit.json`.
-
-The voice needs nothing: the engine levels the rushes, cuts the rumble, denoises lightly and compresses it.
-
-Run `video.mjs audio -p <slug>` and measure: the balance of the bands, effects starting on their cues, a quiet
-break, and the clips' level against the voice.
 
 ### 11. Render and deliver
 
