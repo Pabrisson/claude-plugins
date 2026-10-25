@@ -155,9 +155,9 @@ make the odd one a clip.
 
 Right after `init`, open the studio with `video.mjs studio -p <slug> --open` and give the user its URL. Until the
 first version it shows what is being done, then it reloads by itself on the video. The engine logs its own steps
-(transcription, frames, renders and their progress). Log yours: at the start of each step (the brief, the direction,
-the main format's scene, each review pass, each other format, the sound, the delivery), run
-`video.mjs status "<a few words in English, like the studio>" -p <slug>`, e.g. `status "Review pass 2: transitions"`.
+(transcription, frames, renders and their progress); yours are only there if you log them. **Each step below, from
+the brief to the delivery, starts with its `status` line: run it before anything else of the step**, even when you
+track your plan elsewhere. It is all the user sees until the first version.
 
 Declare the clips in `source/edit.json`'s `media`, with the path of each file. Download a clip given as a URL into
 `<slug>/assets/clips/` first, with `uvx yt-dlp`. A clip that recorded the same moment as the source (a second
@@ -177,6 +177,8 @@ With a source, run `video.mjs prepare -p <slug>`, then `video.mjs rough -p <slug
 Without a source, run `prepare` only when the pack has `shots`, once the clips are declared.
 
 ### 4. Brief
+
+`video.mjs status "Brief" -p <slug>`
 
 Read the content sources and fill `<slug>/About.md`:
 - frontmatter: keep `status`, and set `updated`;
@@ -199,6 +201,8 @@ will paste feedback on the rough. There is no scene yet, so handle it this way:
 Then continue.
 
 ### 6. Art direction, before any code
+
+`video.mjs status "Art direction" -p <slug>`
 
 Read `references/scene-format.md`, the project's `source/STYLE.md` (its notes included) and the **active pack**
 with `video.mjs rules show -p <slug>`: its text, the user's own lines, and the params the project follows.
@@ -271,6 +275,8 @@ above the ambition.
 
 ### 7. Write the main format
 
+`video.mjs status "Writing the scene" -p <slug>`
+
 Write `source/scene.css` first: the design system of the Direction. Then write `source/scene.js` for the **main
 format only** (the first one). Give it the whole frame: the other formats come in step 9, and composing three
 frames at once leads to small, safe layouts.
@@ -290,6 +296,7 @@ frames at once leads to small, safe layouts.
 ### 8. Review until nothing is left to fix
 
 This is where the quality comes from, so take the time it needs: usually four to eight passes. Each pass:
+- **Log it**: `video.mjs status "Review pass <n>: <what it looks at>" -p <slug>`.
 - **Render the stills that matter**, not only the beats:
   `video.mjs stills <source s…> -p <slug> --format <main>`. Take both sides of every transition, the middle of the
   fast moves, and the peak and last frame of each sequence.
@@ -316,10 +323,14 @@ Stop when a full pass finds nothing.
 
 ### 9. The other formats
 
+`video.mjs status "Format <f>" -p <slug>`, for each one.
+
 Recompose each other format with the same timings: the layout changes, not the story. Do not shrink the main
 format. Review each one the same way, on its own stills.
 
 ### 10. Sound
+
+`video.mjs status "Sound" -p <slug>`
 
 When the pack or the request asks for music or sound, write `source/sound.py`. A video without speech always gets
 sound. Read `references/sound-format.md` first.
@@ -333,6 +344,8 @@ Run `video.mjs audio -p <slug>` and measure: the balance of the bands, effects s
 break, and the clips' level against the voice.
 
 ### 11. Render and deliver
+
+`video.mjs status "Delivery" -p <slug>`
 
 Write first a `## Description` section in About.md, in the style's language: a title, two or three lines and the
 platform's hashtags.

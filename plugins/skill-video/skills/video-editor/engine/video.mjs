@@ -983,6 +983,7 @@ function status(...words) {
 // 16:9 when it receives `thumbnail: true`, at the poster's time by default (scene-format.md)
 async function thumbnail() {
   const dir = projectDir(), f = rel => path.join(dir, rel), p = readyToDraw(dir), edit = loadEdit(dir), j = job(dir, '16:9', '', true), tl = makeTimeline(j.timeline)
+  step(dir, 'Thumbnail')
   const s = opt.at ?? edit.poster, v = Math.min(s != null ? tl.toVideo(+s) : Math.min(1.5, j.duration / 2), j.duration - 1 / j.fps)
   await withChrome(p.slug, 1, async ([page], base) => {
     await openPage(page, `${base}render?format=16%3A9&type=&thumbnail=1`, j)
@@ -1015,6 +1016,7 @@ function syncMedia(id) {
   const dir = projectDir(), p = readJson(path.join(dir, 'source/project.json')), edit = loadEdit(dir), m = edit.media?.[id]
   if (!m) die(`usage: sync <media id> -p <slug> (media of source/edit.json: ${Object.keys(edit.media ?? {}).join(', ') || 'none'})`)
   if (!p.source?.audio) die('sync needs a source video with sound')
+  step(dir, `Syncing ${id} by its sound`)
   const { sync, r } = JSON.parse(out('uv', ['run', '--quiet', path.join(ENGINE, 'audio.py'), '--sync', sourceWav(dir), mediaFile(dir, m)]))
   if (r < 0.7) die(`media ${id}: its sound does not match the source's (r ${r}): another moment, or no sound to compare`)
   edit.media[id] = { ...m, sync }
@@ -1025,7 +1027,12 @@ function syncMedia(id) {
 // beats <track | bpm> [--at <video s>]: the music's grid in VIDEO seconds, measured on a track (placed at --at in the
 // video, 0 by default) or laid out from a tempo; files/beats.md to read it, files/beats.json for check's on_beat
 function beatGrid(what) {
-  const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), j = job(dir, p.formats[0], ''), at = +(opt.at ?? 0)
+  const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), edit = loadEdit(dir), at = +(opt.at ?? 0)
+  // the video's length before any scene (the grid comes first): the source as its timeline keeps it, or edit.json's
+  const tl = p.source ? fs.existsSync(f('assets/timeline.json')) && makeTimeline(readJson(f('assets/timeline.json')), edit.cut)
+    : edit.duration > 0 && makeTimeline({ fps: p.fps, speed: 1, segments: [[0, edit.duration]] }, edit.cut)
+  const j = { duration: tl ? tl.duration : p.source?.duration ?? die('set "duration" (seconds) in source/edit.json first: the grid runs over the video') }
+  step(dir, /^\d+(\.\d+)?$/.test(what ?? '') ? `Beat grid at ${what} bpm` : 'Measuring the beats')
   let bpm, times, down = 0, from
   if (/^\d+(\.\d+)?$/.test(what ?? '')) {
     bpm = +what
@@ -1166,6 +1173,16 @@ async function handle(req, res, write = false) {
 
   const sub = rest.join('/'), m = sub.match(/^api\/reviews\/v(\d+)$/)
   if (sub === 'api/project') return reply(res, 200, projectInfo(dir))
+  // the progress log, and the file Claude changed last: the work goes on between two logged steps
+  if (sub === 'api/progress') {
+    let log = { updated: null, steps: [] }
+    try { log = readJson(path.join(dir, '.cache/progress.json')) } catch {}
+    const touched = ['About.md', ...fs.readdirSync(path.join(dir, 'source'), { recursive: true }).map(x => path.join('source', x))]
+      .filter(x => !/__pycache__|^source\/(project|rules|style)\.json$|^source\/STYLE\.md$/.test(x))
+      .map(x => [x, fs.statSync(path.join(dir, x), { throwIfNoEntry: false })]).filter(([, st]) => st?.isFile())
+      .reduce((a, b) => (!a || b[1].mtimeMs > a[1].mtimeMs ? b : a), null)
+    return reply(res, 200, { ...log, touched: touched && { file: touched[0], mtime: touched[1].mtime } })
+  }
   // the other videos of the folder, for the studio's switcher
   if (sub === 'api/projects') {
     return reply(res, 200, videos().map(x => {
@@ -1402,6 +1419,7 @@ async function seeLook() {
 async function site(url) {
   if (!/^(https?|file):\/\//.test(url ?? '')) die('usage: site <url> [-p <slug>]')
   const dir = opt.project ? path.join(projectDir(), 'assets/site') : path.join(HOME, '.style/site')
+  if (opt.project) step(projectDir(), `Looking at ${new URL(url).hostname || 'the site'}`)
   needChrome()
   const { chromium } = await playwright()
   const browser = await chromium.launch({ channel: 'chrome', headless: true })

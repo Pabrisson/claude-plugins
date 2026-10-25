@@ -22,8 +22,11 @@ export function Waiting({ progress }: { progress: Progress | null }) {
     return () => clearInterval(id)
   }, [])
   const steps = progress?.steps.slice(-14) ?? []
-  const live = !!progress && now - Date.parse(progress.updated) < 30 * 60_000
-  const current = live ? progress.steps.findLast((s) => s.by === "claude" && s.state === "running") : undefined
+  // the last news: a logged step, or a file Claude changed since
+  const last = Math.max(Date.parse(progress?.updated ?? "") || 0, Date.parse(progress?.touched?.mtime ?? "") || 0)
+  const live = !!last && now - last < 30 * 60_000
+  // (over the whole log: renders may have pushed Claude's step out of the last lines)
+  const current = live ? progress?.steps.findLast((s) => s.by === "claude" && s.state === "running") : undefined
   const busy = live && steps.some((s) => s.state === "running")
   return (
     <Empty className="flex-1">
@@ -31,11 +34,16 @@ export function Waiting({ progress }: { progress: Progress | null }) {
         <EmptyMedia variant="icon">{busy ? <LoaderCircleIcon className="animate-spin" /> : <FilmIcon />}</EmptyMedia>
         <EmptyTitle>{current?.label ?? "No video to review yet"}</EmptyTitle>
         <EmptyDescription>
-          {progress && !live
-            ? `No news since ${hour(progress.updated)}.`
+          {last && !live
+            ? `No news since ${hour(new Date(last).toISOString())}.`
             : "The video shows here as soon as its first version is rendered: the page reloads by itself."}
         </EmptyDescription>
       </EmptyHeader>
+      {progress?.touched && (
+        <p className="text-xs text-muted-foreground">
+          Last change: <span className="font-mono text-foreground/80">{progress.touched.file}</span> · {span(now - Date.parse(progress.touched.mtime))} ago
+        </p>
+      )}
       {steps.length > 0 && (
         <ol className="flex w-full max-w-md flex-col gap-0.5 text-left text-sm">
           {steps.map((s) => (

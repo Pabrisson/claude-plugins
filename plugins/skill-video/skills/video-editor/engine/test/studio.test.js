@@ -91,3 +91,17 @@ test('one studio server per projects folder, side by side', async () => {
     for (const p of [p0, p0 + 1]) await fetch(`http://127.0.0.1:${p}/__video-editor/quit`, { method: 'POST' }).catch(() => {})
   }
 })
+
+test('progress: the log, and the file Claude changed last (not the engine\'s own files)', async () => {
+  await up()
+  fs.writeFileSync(path.join(dir, 'About.md'), '# demo\n')
+  fs.writeFileSync(path.join(dir, 'source/scene.js'), 'export default () => {}')
+  fs.utimesSync(path.join(dir, 'About.md'), new Date(Date.now() - 60000), new Date(Date.now() - 60000))
+  fs.writeFileSync(path.join(dir, 'source/rules.json'), JSON.stringify({ active: [], params: {}, overrides: {} }))
+  let p = await (await fetch(base + 'api/progress')).json()
+  assert.deepEqual([p.steps, p.touched.file], [[], 'source/scene.js'])
+  fs.mkdirSync(path.join(dir, '.cache'), { recursive: true })
+  fs.writeFileSync(path.join(dir, '.cache/progress.json'), JSON.stringify({ updated: 'x', steps: [{ id: 'a', label: 'Brief', by: 'claude', state: 'running' }] }))
+  p = await (await fetch(base + 'api/progress')).json()
+  assert.equal(p.steps[0].label, 'Brief')
+})

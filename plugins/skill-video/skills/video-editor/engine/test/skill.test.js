@@ -251,11 +251,13 @@ test('sync places a second camera by its sound; it follows the source, silent', 
 
 test('beats lays the grid of a tempo or measures a track; fix corrects a spoken word; thumbnail composes 16:9', { timeout: 300000 }, () => {
   cli('init', 'beat', '--formats', '9:16', '--renders', '720p', '--rules', 'montage')
+  assert.throws(() => cli('beats', '120', '-p', 'beat'), /set "duration"/)
   fs.writeFileSync(path.join(home, 'beat/source/edit.json'), JSON.stringify({ duration: 6 }))
+  // the grid comes before the scene
+  cli('beats', '120', '--at', '0.5', '-p', 'beat')
   fs.writeFileSync(path.join(home, 'beat/source/scene.js'), `export default async function scene({ stage, thumbnail }) {
     stage.innerHTML = thumbnail ? '<h1 style="font-size:200px">Miniature</h1>' : '<h1>Short</h1>'
   }`)
-  cli('beats', '120', '--at', '0.5', '-p', 'beat')
   assert.deepEqual(JSON.parse(read('beat/files/beats.json')).beats, [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6])
   assert.match(read('beat/files/beats.md'), /120 bpm, a beat every 0\.5 s, a bar every 2 s \(4\/4\)\. VIDEO seconds, the track from 0\.5 s\.\n\n- bar 1: 00:00\.50 · 00:01\.00 · 00:01\.50 · 00:02\.00\n/)
   ffmpeg('-f', 'lavfi', '-i', "aevalsrc='if(lt(mod(t-0.25\\,0.5)\\,0.02)\\,sin(2*PI*3000*t)\\,0)':s=48000:d=10", 'clicks.mp3')
