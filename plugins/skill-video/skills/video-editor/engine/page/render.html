@@ -12,7 +12,7 @@
 
   try {
     const q = new URLSearchParams(location.search), host = document.getElementById('host')
-    const s = await boot(host, { format: q.get('format'), type: q.get('type') ?? '', variant: q.get('variant') ?? 0 })
+    const s = await boot(host, { format: q.get('format'), type: q.get('type') ?? '', variant: q.get('variant') ?? 0, thumbnail: q.get('thumbnail') ?? '' })
     const { job } = s, [W, H] = job.size, ctx = host.getContext('2d')
     host.width = W
     host.height = H
@@ -130,6 +130,19 @@
       for (let v = 0; v < job.duration; v += step) {
         await s.seek(v)
         out.push([v, s.texts()])
+      }
+      return out
+    }
+    // what check flags in the layout every `step` seconds (the frame painted first: boxes and hit tests need it). The
+    // stage leaves the canvas for good: a layoutsubtree is laid out but not hit-tested, and this page renders nothing
+    window.sampleLayout = async step => {
+      host.style.display = 'none'
+      document.body.append(s.stage)
+      const out = []
+      for (let v = 0; v < job.duration; v += step) {
+        await s.seek(v)
+        await paint()
+        out.push([Math.round(v * 1000) / 1000, s.layout()])
       }
       return out
     }

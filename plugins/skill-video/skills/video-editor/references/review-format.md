@@ -1,12 +1,13 @@
 # Review studio feedback
 
-Every render (`rough`, `final`) is a version `vN` of the project (`source/project.json` `versions`). The studio
+Every render (`rough`, `final`, `final --draft`) is a version `vN` of the project (`source/project.json` `versions`;
+a draft has `draft: true` and the main format only). The studio
 (`video.mjs studio`, http://127.0.0.1:41187/<slug>/, or the next free port when another projects folder has its own
 studio there; the root opens the first video of the folder, the grid button
 switches to another) shows one version; the user comments, cuts and draws on it,
 then **Copy prompt** gives the text to paste into Claude. The transcript tab comes first, under the scene's sequences:
-the speech in paragraphs, or, without speech, the lines of what the video shows with their frame, where a
-double-click corrects a line (`fix`). Next to it, the Clip tab shows the version's
+the speech in paragraphs, or, without speech, the lines of what the video shows with their frame; a double-click
+corrects a word or a line (`fix`). Next to it, the Clip tab shows the version's
 thumbnails and one row per kind of the scene's `part()`, and the Sound tab its tracks (voice, clips, music, effects) with
 their levels, then one row per kind of cue: the user picks a part, a track, a cue, or every one of a kind for a comment.
 
@@ -34,7 +35,7 @@ their levels, then one row per kind of cue: the user picks a part, a track, a cu
 | `s0`, `s1` | SOURCE seconds, or SCENE seconds (the scene's own time) without a source: use them for `cut`, to find the words in `files/words.md`, and to find the moment in the scene |
 | `words` | What is said, or shown on screen, in the range |
 | `from` | `"transcript"` when the user made the comment on a selection of the transcript: it is about those words or lines. Absent otherwise |
-| `fix` | `{ "from", "to" }`: a line of what the video shows that the user corrected in the transcript (double-click on the line). Absent otherwise |
+| `fix` | `{ "from", "to" }`: a line of what the video shows, or a spoken word, that the user corrected in the transcript (double-click on it; an emptied word goes). Absent otherwise |
 | `format` | The format the user was looking at. Only a request about that format's composition (placement, size, framing) stays in it; content, text, timing and sound changes apply to every format |
 | `images` | Frames the user drew on, or pictures they dropped (`assets/review/frame-<id>.png`), with their size in pixels and ratio: read them. Older files have bare paths |
 | `visuals` | What the comment is about in the picture: a part of the scene (`kind`, `t0`/`t1` in VIDEO seconds, its data), or every part of a kind (`{ "kind" }`). Absent when the comment is not about one |
@@ -90,14 +91,35 @@ with a source, the kept `take`s, VIDEO seconds) and `strips`, per format a sheet
 
 ## Applying it
 
-- **CUT**: add `[s0, s1]` to `cut` in `source/edit.json` (SOURCE seconds, or SCENE seconds without a source); no
-  `prepare` needed: the timeline applies `cut` itself. Check the words around the cut in `files/words.md` so it lands between words.
-- **COMMENT**: change the scene (`source/scene.js`, `scene.css`, `edit.json`, assets) at that moment; with `Sound:`
-  lines, change `source/sound.py` (the track's part, or the sound of the cue's kind), or the `cue()` when its timing
-  is wrong; the `clips` track is the media's own sound: change the `volume` of that media in `edit.json`; with `Visual:` lines, change what the named `part()` wraps. Anchor the
-  change with `at(source seconds)`; the video times of the prompt only say where the user was looking. A request
-  about one format's composition changes that format only (`format === '16:9'`, `pick()`, or CSS on
-  `#stage.landscape`); anything else changes every format.
-- **Text fix**: write `to` in place of `from` in the scene at that moment, word for word, and change nothing else.
-- Answer every id in the feedback file, then run what the change needs (`stills` to check, then `render`,
-  `final`); `final` makes the next version, and the open studio offers to reload it.
+The pasted prompt lists changes, each with an `[id …]`, and names the feedback file `files/reviews/vN.json`. Read
+every attached image: its ratio says which format it shows, or the shape of a reference. Then handle each id:
+- **CUT**: add `[s0, s1]` to `cut` in `source/edit.json`: SOURCE seconds, or SCENE seconds (the scene's own time)
+  for a video without a source. No `prepare` needed: the timeline applies `cut` itself. Check in `files/words.md`
+  that the cut falls between words or moments.
+- **COMMENT**: change the scene (`source/scene.js`, `scene.css`, `edit.json`, assets) at that moment. Anchor the change
+  with `at(source seconds)`: the video times of the prompt only say where the user was looking.
+  - `[format …]` is the format the user was looking at. Change that format only when the request is about its
+    composition (placement, size, framing, what the frame cuts): `format === '16:9'`, `pick()`, or CSS on
+    `#stage.landscape`. A change of content, text, numbers, timing or sound applies to every format.
+  - Change only what is asked and keep the rest identical: the user has already approved it.
+- **Text fix** `"<from>" → "<to>"`:
+  - without speech, the user corrected a line of what the video shows: write `to` in place of `from` in the scene at
+    that moment, word for word, and change nothing else;
+  - with speech, the user corrected a word of the transcript: `video.mjs fix <s0> "<to>" -p <slug>` with the
+    comment's SOURCE time (`""` removes the word). The captions, the subtitles and `files/words.md` follow.
+- **Sound:** lines say what in the sound the comment is about.
+  - A track (`music`, `fx`) is that bus of `source/sound.py` at that moment: change its arrangement or its level
+    there. The `voice` track is the voice itself: its level in the style, or a cut. The `clips` track is the clips'
+    own sound: the `volume` of the media playing at that moment, in `edit.json`.
+  - `every "<kind>"` is the sound `sound.py` designs for that kind: change it, every cue of the kind follows.
+  - One cue is a `cue()` of the scene. To change its sound only, give it its own data in the scene and let
+    `sound.py` read it. Move or remove the `cue()` when its timing is the problem.
+  - A change in `sound.py` or in a clip's `volume` alone needs no render: `audio`, then `final`.
+- **Visual:** lines name the parts of the picture the comment is about: find each `part()` in the scene by its kind,
+  name and times, and change what it wraps. `every "<kind>"` is every part of that kind (all the titles…): change
+  their shared class or helper. A `take` is a kept piece of the source, a `clip` a media of `edit.json`.
+- In the feedback file, set `"resolved": true` and write one sentence in `reply` saying what you changed.
+
+Then run `stills` if the change is visual, then the draft (`render --draft`, `final --draft`): it makes the next
+version, a draft, and the open studio offers to reload it. The full render (`render` with the project's `--blur`,
+then `final`) delivers the video once the user approves it.

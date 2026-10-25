@@ -192,7 +192,7 @@ export default function App() {
     }
   }
 
-  // a line of what the video shows, corrected in the transcript
+  // a line of what the video shows, or a spoken word ("" removes it), corrected in the transcript
   function fix(line: VWord, to: string) {
     save([...comments, comment(line.v0, line.v1, { words: "", from: "transcript", fix: { from: line.w, to } })])
     setRange(null)
@@ -434,7 +434,7 @@ export default function App() {
                   {" · "}
                   {meta("Rendered", when(ver.rendered))}
                   {" · "}
-                  {meta("Feedback", `v${ver.v}`)}
+                  {meta("Feedback", `v${ver.v}${ver.draft ? " (draft)" : ""}`)}
                 </>
               )}
               {project.rules.length > 0 && (

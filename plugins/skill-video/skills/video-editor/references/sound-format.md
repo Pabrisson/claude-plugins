@@ -3,8 +3,8 @@
 There are no presets. You compose the music and design the sounds of each video, in code, the way the scene is
 written: `source/sound.py` is a Python module (numpy and the standard library only) whose `sound(v)` returns the
 video's music and effects. The engine (`engine/audio.py`) runs it, then does the mixing:
-- with a voice, it edits the voice, ducks the music under it, and sets the music and the effects to the style's
-  levels;
+- with a voice, it edits the voice (each rush brought to the same level, no rumble under 80 Hz, a light denoise, a
+  gentle compression), ducks the music under it, and sets the music and the effects to the style's levels;
 - without a voice, it keeps your balance between music and effects;
 - it adds the media clips' own sound where the scene plays them, at the music bed's loudness times their `volume`
   (`edit.json`), ducked under the voice: you do not place them in `sound.py`;
@@ -48,11 +48,13 @@ never use the clock.
 | `adsr(d, a, dc, s, r)` | The envelope of a note held `d` seconds (attack, decay to sustain, release) |
 | `reverb(x, d=2, wet=.3, seed=0)` | `x` plus a `d`-second tail; mono comes back stereo |
 | `tape_stop(x, t, back, d=.6)` | Slows `x` down to a stop at `t`, silent until `back` (in place) |
-| `load(path)` | A 16-bit 48 kHz WAV as a stereo array, path relative to the video's folder: a track the user gives (`return load('assets/track.wav')`), a recorded sound to place |
+| `load(path)` | A sound file (WAV, MP3, M4A, FLAC…) as a stereo array at 48 kHz, path relative to the video's folder: a track the user gives (`return load('assets/track.mp3')`), a recorded sound to place |
 
 ## Composing for the picture
 
-- **Tempo first.** Pick a tempo for the mood, then time the scene's big moments on its grid. At 120 bpm a beat is
+- **Tempo first.** Pick a tempo for the mood, then time the scene's big moments on its grid. `video.mjs beats <bpm>`
+  lays it out in `files/beats.md` (a user's track: `beats <track> [--at <video s>]` measures its tempo, beats and
+  downbeats). At 120 bpm a beat is
   0.5 s and a bar is 2 s, so a reveal at 24.0 s falls on a downbeat. A cut on the beat feels intended, and one half
   a beat off feels like a mistake.
 - **Arrange on the story, not on a loop.** Follow the beats of About.md:

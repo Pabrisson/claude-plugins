@@ -69,9 +69,14 @@ seconds, and prints ✓ or ✗ for each. It sees the cuts, the clips and the `pa
 | `max_static` | `8` | No stretch longer than that without a cut, a clip or a `part()` starting or ending |
 | `shot` | `[1, 3]` | Each clip on screen from min to max seconds (until the next clip starts) |
 | `read` | `{"word": 0.3, "min": 1.2}` | Each on-screen line (`say()`, without speech) up for 0.3 s per word, 1.2 s at least |
-| `chapters` | `true` | YouTube's rules on the `part('sequence')`: 3 or more, the first at 0:00, each 10 s or more; prints the list for the description |
+| `chapters` | `true` | YouTube's rules on the `part('sequence')`: 3 or more, the first at 0:00, each 10 s or more; prints the list (`final` writes it into the description) |
+| `on_beat` | `true` | Each cut (a join of takes, a clip coming in) 0 to 3 frames before a beat or a half-beat of `files/beats.json` (`video.mjs beats`) |
 
-The cuts of `edit.json` are checked against the transcript whatever the pack: a cut inside a word is a ✗.
+Whatever the pack:
+- the cuts of `edit.json` are checked against the transcript: a cut inside a word is a ✗;
+- the layout of every format is sampled 4 times a second: a text in the platforms' interface zones (9:16), too small
+  for a phone (under 24 px at 1080 once scaled), cut by the frame (display type from 130 px may cross it), or over the
+  face the camera shows, for 0.75 s or more, is a ✗. Captions count; a `data-say=""` decoration does not.
 
 Any other key is read by Claude only, e.g. a threshold the checklists name.
 
@@ -90,3 +95,17 @@ nothing.
   never a full copy of the plugin's pack: a copy would no longer get its updates.
 - Check it with `video.mjs rules list` (it must appear, with its origin and no `broken` line), then
   `rules show <name>`.
+
+## The rules mode
+
+One pack per video, or none.
+- `rules`: run `video.mjs rules list`. Tell the user about any pack it flags as broken.
+- `rules show [<name>]`: run `video.mjs rules show <name>`, or `rules show -p <slug>` for the project's pack.
+- `rules use <name|none>`: run `video.mjs rules use … -p <slug>`. With a source, rerun `prepare` then `rough`.
+- `rules set <key>=<value>`: run `video.mjs rules set … -p <slug>`, for this project only. After `transcribe`,
+  `face_framing`, `speed` or `breaths`, rerun `prepare` then `rough`.
+- `rules new <name>`: ask a few questions (Writing a pack, above), and write `.rules/<name>.md` in the projects
+  folder. Check that it appears in `rules list`.
+- `rules edit <name>`: write the changes in the projects folder's `.rules/<name>.md`, with `extends: <name>` in its
+  frontmatter (create it if it is not there). Never copy the plugin's pack, and never edit the packs inside the
+  plugin: updates replace them.

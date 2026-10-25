@@ -12,7 +12,8 @@ plugin, whose updates replace its folder:
 | `site/` | What `video.mjs site <url>` saw of the brand's site: `screen-NN.jpg`, `svgs.jpg` and `svg-NN.svg`, `site.json` (colors ranked by surface, fonts, images). It stays here: `init` does not copy it |
 
 Each project copies `style.json` at `init` (`source/style.json`, and `source/STYLE.md`): a later change of style
-never changes a project already made. To bring a project up to date on purpose, copy the two files again.
+never changes a project already made. To bring a project up to date on purpose, copy the two files again. To change
+one project's copy only (a guest's name in `creator.vocabulary`), add `-p <slug>` to `style set` or `style note`.
 
 Any field left out takes the engine default below. `style set` parses a value as JSON when it can (`-21`, `true`,
 `["a","b"]`), otherwise keeps it as text (`#2563eb`, `@pab`). Quote values with spaces:
@@ -24,6 +25,7 @@ Any field left out takes the engine default below. `style set` parses a value as
 | `creator.handle` | `""` | `@handle` |
 | `creator.lang` | `"fr"` | Language of captions, titles, CTA, numbers (`11 726`, `106,3`) and of the talk with the user |
 | `creator.niche`, `creator.audience` | | What the channel is about, who watches: they steer tone and examples |
+| `creator.vocabulary` | `[]` | The names the transcript must spell right: brands, products, people (`["Secursus", "Pierre Alain"]`). Whisper gets them as the prompt of every window |
 | `creator.avatar` | `null` | An image of `.style/` (`avatar.png`), for CTA cards; in a project it is `source/<file>` (in the scene: `` `project/source/${style.creator.avatar}` ``) |
 | `creator.cta.sub` | `""` | The CTA's line under the name ("L'IA pour les devs") |
 | `creator.cta.button`, `creator.cta.done` | `"S'abonner"`, `"Abonné"` | The subscribe button, before and after the click |
@@ -52,5 +54,5 @@ For a brand, run `video.mjs site <url>` first and read what it saved: the palett
 there. Otherwise ask in the user's language, a few questions at a time (AskUserQuestion where the answers are
 choices), and offer sensible defaults: name and handle; language; niche and audience; CTA line and button texts;
 palette (propose two or three palettes, or take their brand colors); font (Inter, or a file they give, or a free font
-you download into `.style/fonts/`); the mood of the music, in their words. Then one `style set` with every answer, a
+you download into `.style/fonts/`); the mood of the music, in their words; the names the transcript must spell right. Then one `style set` with every answer, a
 `style note` per preference they stated, and show the resulting STYLE.md.

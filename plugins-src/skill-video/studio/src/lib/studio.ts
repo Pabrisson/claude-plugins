@@ -10,6 +10,8 @@ export type VideoItem = { slug: string; versions: number; rendered: string | nul
 export type Version = {
   v: number
   rough?: boolean
+  // a review draft (render --draft): the main format in 720p, sharp
+  draft?: boolean
   rendered: string
   duration: number
   timeline: { speed: number; segments: [number, number][] } | null
@@ -252,7 +254,11 @@ export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
       ? "Types: CUT = remove the range (it goes in `cut`, in SOURCE time); COMMENT = any other request (visual, text, caption, sound, pace), at a moment or over a range."
       : "Types: CUT = remove the range from the video (it goes in `cut` in source/edit.json, in SCENE time: the scene's own seconds); COMMENT = any other request (visual, text, sound, pace), at a moment or over a range.",
     ...(open.some((c) => c.fix)
-      ? ["Text fix: the user corrected a line of what the video shows: write the new text in the scene at that moment, as given, and change nothing else."]
+      ? [
+          p.words?.[0]?.screen
+            ? "Text fix: the user corrected a line of what the video shows: write the new text in the scene at that moment, as given, and change nothing else."
+            : `Text fix: the user corrected a word of the transcript (the captions and subtitles show it): run \`video.mjs fix <SOURCE seconds> "<new text>" -p ${p.slug}\` with the comment's SOURCE time; "" removes the word.`,
+        ]
       : []),
     ...(open.some((c) => c.sounds?.length)
       ? [`Sound: a track is a part of the mix (voice, sound.py's music or fx bus, or clips: the media clips' own sound, set by their volume in edit.json) over the comment's time; a cue is the scene's cue(kind, t, data) call, heard as the sound sound.py designs for its kind ("every" means all the cues of that kind). This version's cues and track levels: ${p.dir}/files/sound/v${ver.v}.json.`]
@@ -262,7 +268,7 @@ export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
       : []),
     "",
     `Feedback file: ${p.dir}/files/reviews/v${ver.v}.json (video version v${ver.v}, same ids). For each change applied, set "resolved": true and write what you did in one sentence in "reply", the studio shows it.`,
-    `Change only these points and keep the rest of the edit identical. Times are VIDEO time (or ${p.source ? "SOURCE" : "SCENE"} when stated). Rerun the steps needed (${p.source ? "prepare, rough, " : ""}stills, render, audio, final): the new render opens the next version, and the open studio offers to reload it.`
+    `Change only these points and keep the rest of the edit identical. Times are VIDEO time (or ${p.source ? "SOURCE" : "SCENE"} when stated). Rerun the steps needed (${p.source ? "prepare, rough, " : ""}stills, render --draft, audio, final --draft): the new draft opens the next version, and the open studio offers to reload it.`
   )
   return lines.join("\n")
 }

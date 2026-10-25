@@ -28,12 +28,15 @@ export function camera(job, tl) {
     }
     return warm.get(n)
   }
+  // the face at source time s: [x, y of the eyes, its height] in source pixels
   function focusAt(s) {
-    if (!faces.length) return [S.width / 2, S.height * 0.42]
+    if (!faces.length) return [S.width / 2, S.height * 0.42, 0]
     const i = faces.findLastIndex(f => f[0] <= s), a = faces[Math.max(i, 0)], b = faces[Math.min(i + 1, faces.length - 1)]
     const p = b[0] > a[0] ? clamp((s - a[0]) / (b[0] - a[0])) : 0
-    return [a[1] + (b[1] - a[1]) * p, a[2] + (b[2] - a[2]) * p]
+    return [1, 2, 3].map(k => a[k] + (b[k] - a[k]) * p)
   }
+  // the crop of the last update (source pixels at the box's left and top, box pixels per source pixel)
+  let crop = null
   box.update = async v => {
     const n = frameAt(v)
     for (let j = 1; j <= 4; j++) decode(frameAt(v + j / job.fps))
@@ -52,25 +55,36 @@ export function camera(job, tl) {
     rw /= box.view.zoom
     rh /= box.view.zoom
     const rx = clamp(fx - rw / 2, 0, S.width - rw), ry = clamp(fy - rh * 0.42, 0, S.height - rh), s = w / rw
+    crop = { v, rx, ry, s }
     img.style.width = `${S.width * s}px`
     img.style.height = `${S.height * s}px`
     img.style.transform = `translate(${-rx * s}px, ${-ry * s}px)`
+  }
+  // the face on screen now, in page pixels (its part inside the box), or null: no face found, not in the box, hidden
+  box.face = () => {
+    if (!faces.length || !crop || !box.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null
+    const [x, y, fh] = focusAt(tl.toSource(crop.v)), r = box.getBoundingClientRect(), z = (r.width / box.clientWidth) * crop.s
+    const cx = r.left + (x - crop.rx) * z, cy = r.top + (y - crop.ry) * z, f = [cx - 0.4 * fh * z, cy - 0.4 * fh * z, cx + 0.4 * fh * z, cy + 0.6 * fh * z]
+    const c = [Math.max(f[0], r.left), Math.max(f[1], r.top), Math.min(f[2], r.right), Math.min(f[3], r.bottom)]
+    return c[2] > c[0] && c[3] > c[1] && (c[2] - c[0]) * (c[3] - c[1]) >= 0.5 * (f[2] - f[0]) * (f[3] - f[1]) ? c : null
   }
   return box
 }
 
 // A clip of edit.json's media (B-roll, screen recording) as frames, playing from `start` (video seconds) at its own
-// pace, covering its box; its last frame holds.
-export function clip(job, id, start = 0) {
+// pace, covering its box; its last frame holds. A synced media (`video.mjs sync`: a second camera) shows instead the
+// frame of the source's instant, like the camera, cuts and speed included.
+export function clip(job, id, start = 0, tl) {
   const m = job.media?.[id]
   if (!m) throw new Error(`no media ${id} in source/edit.json`)
+  const at = m.sync == null || !tl ? v => (v - start) * m.fps : v => (tl.toSource(v) + m.sync - m.from) * m.fps
   const box = document.createElement('div'), img = new Image()
   box.className = 've-clip'
   box.style.cssText = 'position:absolute;inset:0;overflow:hidden;background:#000'
   img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block'
   box.append(img)
   box.update = async v => {
-    const n = clamp(Math.floor((v - start) * m.fps), 0, m.count - 1) + 1
+    const n = clamp(Math.floor(at(v)), 0, m.count - 1) + 1
     if (img.dataset.n === String(n)) return
     img.src = `project/.cache/media/${id}/${pad(n)}.jpg`
     img.dataset.n = n

@@ -14,7 +14,8 @@ export function logical(format, source) {
 
 // the engine's look when style.json leaves a field out
 export const STYLE = {
-  creator: { name: '', handle: '', lang: 'fr', avatar: null, cta: { sub: '', button: "S'abonner", done: 'Abonné' } },
+  // vocabulary: the names and brands the transcript must spell right (the prompt of every whisper window)
+  creator: { name: '', handle: '', lang: 'fr', avatar: null, vocabulary: [], cta: { sub: '', button: "S'abonner", done: 'Abonné' } },
   look: {
     palette: { paper: '#f2ede3', ink: '#171512', accent: '#2563eb', muted: '#857e72', card: '#fffdf8' },
     font: 'Inter',

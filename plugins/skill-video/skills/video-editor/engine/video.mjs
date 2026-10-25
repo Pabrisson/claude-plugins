@@ -10,9 +10,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { shownTexts } from './lib/actors.js'
-import { PARAMS, checkEdit, effective, listPacks, mergeParams, paramErrors } from './lib/rules.js'
+import { description, speechCues, srt, vtt } from './lib/deliver.js'
+import { PARAMS, checkEdit, checkLayout, effective, listPacks, mergeParams, paramErrors } from './lib/rules.js'
 import { FORMATS, STYLE, logical, styleOf } from './lib/runtime.js'
-import { keepSegments, makeTimeline, stillStretches } from './lib/timeline.js'
+import { audible, keepSegments, makeTimeline, rushGains, silences, stillStretches, windowDb } from './lib/timeline.js'
 
 const SELF = fileURLToPath(import.meta.url)
 // the code this process runs: a studio server started from an older video.mjs gets replaced
@@ -68,6 +69,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     variants: { type: 'string' },
     at: { type: 'string' },
     blur: { type: 'string' },
+    draft: { type: 'boolean' },
     force: { type: 'boolean' },
     open: { type: 'boolean' },
   },
@@ -97,11 +99,14 @@ const packs = () => listPacks([['plugin', path.join(ENGINE, '../rules')], ['pers
 // --rules and rules use: one pack per video, or none
 const onePack = v => list(v).length > 1 ? die(`one pack per video, not ${v}`) : !v || v === 'none' ? [] : [v.trim()]
 
-// engine/renders.json, then the projects folder's .renders.json field by field
+// the review draft (render --draft): the main format in 720p, H.264, sharp, never delivered
+const DRAFT = { description: 'review draft', short: 720, video_kbps: [5000, 7500], audio_kbps: 160 }
+
+// engine/renders.json, then the projects folder's .renders.json field by field, and the draft
 function renders() {
   const base = readJson(path.join(ENGINE, 'renders.json')), own = path.join(HOME, '.renders.json')
   const mine = fs.existsSync(own) ? readJson(own) : {}
-  return Object.fromEntries(Object.keys({ ...base, ...mine }).map(k => [k, { ...base[k], ...mine[k] }]))
+  return { ...Object.fromEntries(Object.keys({ ...base, ...mine }).map(k => [k, { ...base[k], ...mine[k] }])), draft: DRAFT }
 }
 
 // a render is a resolution (renders.json: 1080p…), named after its short side
@@ -113,7 +118,7 @@ function renderShort(type) {
 
 function encoderFor(p, type, [w, h]) {
   // video_kbps: YouTube's recommended upload bitrates, [≤ 30 fps, > 30 fps]
-  const family = p.codec ?? 'h264', c = CODECS[family], v = renders()[type].video_kbps, kbps = Array.isArray(v) ? v[p.fps > 30 ? 1 : 0] : v
+  const family = type === 'draft' ? 'h264' : p.codec ?? 'h264', c = CODECS[family], v = renders()[type].video_kbps, kbps = Array.isArray(v) ? v[p.fps > 30 ? 1 : 0] : v
   const mbs = Math.ceil(w / 16) * Math.ceil(h / 16), level = LEVELS.find(l => mbs <= l.mbs && mbs * p.fps <= l.rate) ?? LEVELS.at(-1)
   // closed GOP of half a second (YouTube's recommendation), every chunk starts on a keyframe
   return { family, codec: c.codec(level), bitrate: Math.round(kbps * 1000 * c.factor), gop: Math.max(1, Math.round(p.fps / 2)) }
@@ -149,12 +154,29 @@ function probe(file) {
   }
 }
 
-function fetchSource(src, dest) {
-  if (/^https?:\/\//.test(src)) return run('uvx', ['yt-dlp', '-f', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b', '--merge-output-format', 'mp4', '-o', dest.replace(/\.mp4$/, '.%(ext)s'), src])
-  if (/\.mp4$/i.test(src)) return fs.copyFileSync(src, dest, fs.constants.COPYFILE_FICLONE)
-  const io = ['-y', '-v', 'error', '-i', src, '-map', '0:v:0', '-map', '0:a:0?']
+// A rush and the part of it the video keeps: `file.mp4#t=750,840` or `#t=12:30,14:10` (a W3C media fragment: from,
+// to; `#t=750` runs to the end). Only that part is copied, framed and transcribed: an hour of podcast for one clip.
+const secsOf = x => x.split(':').reduce((a, b) => a * 60 + +b, 0)
+function rushOf(spec) {
+  const m = spec.match(/^(.*)#t=([\d:.]*)(?:,([\d:.]+))?$/)
+  const r = m ? { src: m[1], from: m[2] ? secsOf(m[2]) : 0, to: m[3] ? secsOf(m[3]) : null } : { src: spec, from: 0, to: null }
+  if (!(r.from >= 0) || (r.to !== null && !(r.to > r.from))) die(`${spec}: the range is #t=<from>,<to> in seconds or mm:ss, <to> after <from>`)
+  return r
+}
+
+function fetchSource(spec, dest) {
+  const { src, from, to } = rushOf(spec), part = from > 0 || to !== null
+  if (/^https?:\/\//.test(src)) {
+    return run('uvx', ['yt-dlp', '-f', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b', '--merge-output-format', 'mp4',
+      ...(part ? ['--download-sections', `*${from}-${to ?? 'inf'}`, '--force-keyframes-at-cuts'] : []), '-o', dest.replace(/\.mp4$/, '.%(ext)s'), src])
+  }
+  if (!part && /\.mp4$/i.test(src)) return fs.copyFileSync(src, dest, fs.constants.COPYFILE_FICLONE)
+  const io = ['-y', '-v', 'error', ...(from ? ['-ss', `${from}`] : []), ...(to !== null ? ['-to', `${to}`] : []), '-i', src, '-map', '0:v:0', '-map', '0:a:0?']
+  const encode = ['-c:v', 'libx264', '-crf', '16', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '320k', dest]
+  // a stream copy cuts on keyframes: a part is encoded, so it starts on its very frame
+  if (part) return run('ffmpeg', [...io, ...encode])
   try { run('ffmpeg', [...io, '-c', 'copy', dest]) }
-  catch { run('ffmpeg', [...io, '-c:v', 'libx264', '-crf', '16', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '320k', dest]) }
+  catch { run('ffmpeg', [...io, ...encode]) }
 }
 
 // Several rushes become one source, end to end in the given order: each one fitted (letterboxed) into the frame and
@@ -210,35 +232,18 @@ function readWav(file) {
   return new Int16Array(buf.buffer.slice(buf.byteOffset + i, buf.byteOffset + buf.length - ((buf.length - i) % 2)))
 }
 
-// Silent stretches (≥ 120 ms) in 10 ms windows: quieter than 35 dB under the speech level, yet 10 dB over
-// the noise floor. null when there is no speech-like contrast (silence, steady noise).
-// ponytail: fixed dB knobs tuned on clean voice, expose them in the pack's params if real rooms need it
-function silences(pcm) {
-  const win = RATE / 100, db = []
-  for (let i = 0; i + win <= pcm.length; i += win) {
-    let s = 0
-    for (let j = i; j < i + win; j++) s += pcm[j] * pcm[j]
-    db.push(10 * Math.log10(s / win / 32768 ** 2 + 1e-12))
-  }
-  const sorted = db.toSorted((a, b) => a - b)
-  const floor = sorted[Math.floor(sorted.length * 0.1)], loud = sorted[Math.floor(sorted.length * 0.95)]
-  if (!db.length || loud - floor < 20) return null
-  const thr = Math.max(floor + 10, loud - 35), found = []
-  let start = -1
-  for (let i = 0; i <= db.length; i++) {
-    const quiet = i < db.length && db[i] < thr
-    if (quiet && start < 0) start = i
-    if (!quiet && start >= 0) { if (i - start >= 12) found.push([start / 100, i / 100]); start = -1 }
-  }
-  return found
+// the source's sound, mono 48 kHz: the transcript, the silences, the voice and sync read it
+function sourceWav(dir) {
+  const wav = path.join(dir, 'assets/source.wav')
+  if (opt.force || !fs.existsSync(wav)) run('ffmpeg', ['-y', '-v', 'error', '-i', path.join(dir, 'assets/source.mp4'), '-vn', '-ac', '1', '-ar', `${RATE}`, '-c:a', 'pcm_s16le', '-bitexact', '-map_metadata', '-1', wav])
+  return wav
 }
 
-function transcribe(wav, lang, cache) {
-  console.log(`transcribing with mlx-whisper ${WHISPER} (the first run downloads the model, ~1.6 GB)…`)
+// whisper.py: mlx-whisper with the style's vocabulary (names, brands) as the prompt of every window
+function transcribe(wav, lang, cache, vocabulary) {
+  console.log(`transcribing with mlx-whisper ${WHISPER} (the first run downloads the model, ~1.6 GB)${vocabulary ? `, vocabulary: ${vocabulary}` : ''}…`)
   fs.mkdirSync(cache, { recursive: true })
-  run('uvx', ['--from', 'mlx-whisper', 'mlx_whisper', wav, '--model', WHISPER, '--language', lang,
-    '--word-timestamps', 'True', '--condition-on-previous-text', 'False', '--hallucination-silence-threshold', '2',
-    '--output-format', 'json', '--output-dir', cache, '--output-name', 'whisper', '--verbose', 'False'])
+  run('uv', ['run', '--quiet', path.join(ENGINE, 'whisper.py'), wav, path.join(cache, 'whisper.json'), lang, WHISPER, vocabulary])
   const words = []
   for (const w of readJson(path.join(cache, 'whisper.json')).segments.flatMap(s => s.words ?? [])) {
     const text = w.word.trim(), prev = words.at(-1)
@@ -295,13 +300,23 @@ async function screenTranscript(dir, page, base, j) {
     words.map(w => `- **${clock(w.t0)} → ${clock(w.t1)}** ${w.w}`).join('\n') + '\n')
 }
 
-// voice.wav: the kept segments joined with 8 ms fades (no click at the joins), then sped up by atempo.
-// Each segment keeps its exact length, padded with silence where the audio track ends before the picture.
+// the voice's cleanup: no rumble under 80 Hz, a light denoise that follows the room's noise, a gentle compression
+// that evens loud and soft words, its gain made up (the rough cut keeps the source's level; the mix sets its own)
+const VOICE = ['highpass=f=80', 'afftdn=nr=10:nf=-50:tn=1', 'acompressor=threshold=-24dB:ratio=3:attack=5:release=120:makeup=2.5']
+
+// voice.wav: the kept segments joined with 8 ms fades (no click at the joins), each rush brought to the level of the
+// quietest one (several rushes), then cleaned and sped up by atempo. Each segment keeps its exact length, padded
+// with silence where the audio track ends before the picture.
 function buildVoice(dir, tl) {
-  const pcm = readWav(path.join(dir, 'assets/source.wav')), fade = RATE * 0.008
+  const pcm = readWav(path.join(dir, 'assets/source.wav')), fade = RATE * 0.008, files = readJson(path.join(dir, 'source/project.json')).source.files ?? []
+  const gains = files.length > 1 ? rushGains(windowDb(pcm), files.map(x => [x.at, x.at + x.duration])) : [1], starts = files.map(x => Math.round(x.at * RATE))
   const parts = tl.segments.map(([a, b]) => {
-    const [s0, s1] = [Math.round(a * RATE), Math.round(b * RATE)], seg = new Int16Array(s1 - s0)
-    seg.set(pcm.subarray(s0, s1))
+    const [s0, s1] = [Math.round(a * RATE), Math.round(b * RATE)], seg = new Float32Array(s1 - s0)
+    // the rush of each sample: a segment may run across a join
+    for (let i = 0, r = Math.max(0, starts.findLastIndex(s => s <= s0)); i < seg.length; i++) {
+      while (r + 1 < starts.length && s0 + i >= starts[r + 1]) r++
+      seg[i] = ((pcm[s0 + i] ?? 0) / 32768) * gains[r]
+    }
     for (let i = 0; i < Math.min(fade, seg.length / 2); i++) {
       seg[i] *= i / fade
       seg[seg.length - 1 - i] *= i / fade
@@ -309,8 +324,8 @@ function buildVoice(dir, tl) {
     return Buffer.from(seg.buffer)
   })
   const file = path.join(dir, 'assets/voice.wav')
-  run('ffmpeg', ['-y', '-v', 'error', '-f', 's16le', '-ar', `${RATE}`, '-ac', '1', '-i', 'pipe:0',
-    ...(tl.speed !== 1 ? ['-af', `atempo=${tl.speed}`] : []), '-c:a', 'pcm_s16le', file], Buffer.concat(parts))
+  run('ffmpeg', ['-y', '-v', 'error', '-f', 'f32le', '-ar', `${RATE}`, '-ac', '1', '-i', 'pipe:0',
+    '-af', [...VOICE, ...(tl.speed !== 1 ? [`atempo=${tl.speed}`] : [])].join(','), '-c:a', 'pcm_s16le', file], Buffer.concat(parts))
   return file
 }
 
@@ -367,14 +382,16 @@ function extractMedia(dir, media, p) {
     if (!/^[\w-]+$/.test(id)) die(`media id ${id}: letters, digits, - and _ only`)
     const src = mediaFile(dir, m)
     if (!fs.existsSync(src)) die(`media ${id}: ${src} not found`)
-    const dest = path.join(dir, '.cache/media', id), metaFile = path.join(dest, 'meta.json')
-    const want = { src, mtime: fs.statSync(src).mtimeMs, from: m.from ?? 0, dur: m.dur ?? null, fps: p.fps, width: m.width ?? null, short: need }
+    const dest = path.join(dir, '.cache/media', id), metaFile = path.join(dest, 'meta.json'), synced = m.sync != null && p.source
+    // a synced media (sync: the second of its file at the source's 0) covers the source, its sound is the source's
+    const [from, dur] = synced ? [Math.max(0, m.sync), p.source.duration - Math.max(0, -m.sync)] : [m.from ?? 0, m.dur ?? null]
+    const want = { src, mtime: fs.statSync(src).mtimeMs, from, dur, sync: synced ? m.sync : null, fps: p.fps, width: m.width ?? null, short: need }
     if (fs.existsSync(metaFile) && JSON.stringify(readJson(metaFile).want) === JSON.stringify(want)) continue
     fs.rmSync(dest, { recursive: true, force: true })
     fs.mkdirSync(dest, { recursive: true })
     const info = probe(src), cut = ['-ss', `${want.from}`, ...(want.dur ? ['-t', `${want.dur}`] : []), '-i', src]
     run('ffmpeg', ['-y', '-v', 'error', ...cut, '-vf', `fps=${p.fps}${m.width ? `,scale=${m.width}:-2` : shrinkTo(info, need)}`, '-q:v', '4', path.join(dest, '%05d.jpg')])
-    if (info.audio) run('ffmpeg', ['-y', '-v', 'error', ...cut, '-vn', '-ac', '2', '-ar', `${RATE}`, '-c:a', 'pcm_s16le', '-bitexact', '-map_metadata', '-1', path.join(dest, 'audio.wav')])
+    if (info.audio && !synced) run('ffmpeg', ['-y', '-v', 'error', ...cut, '-vn', '-ac', '2', '-ar', `${RATE}`, '-c:a', 'pcm_s16le', '-bitexact', '-map_metadata', '-1', path.join(dest, 'audio.wav')])
     const v = probe(path.join(dest, '00001.jpg'))
     writeJson(metaFile, { want, count: fs.readdirSync(dest).filter(x => x.endsWith('.jpg')).length, fps: p.fps, ar: v.width / v.height })
   }
@@ -384,14 +401,15 @@ function readMedia(dir) {
   const root = path.join(dir, '.cache/media')
   if (!fs.existsSync(root)) return {}
   return Object.fromEntries(fs.readdirSync(root).filter(id => fs.existsSync(path.join(root, id, 'meta.json')))
-    .map(id => { const m = readJson(path.join(root, id, 'meta.json')); return [id, { count: m.count, fps: m.fps, ar: m.ar }] }))
+    .map(id => { const m = readJson(path.join(root, id, 'meta.json')); return [id, { count: m.count, fps: m.fps, ar: m.ar, from: m.want.from, sync: m.want.sync ?? null }] }))
 }
 
-// everything a page needs to draw one format: sizes, timeline, transcript, faces, style, rules, actors, encoder (when rendering)
-function buildJob(dir, format, type) {
+// everything a page needs to draw one format: sizes, timeline, transcript, faces, style, rules, actors, encoder (when
+// rendering). The thumbnail is drawn in 16:9 whatever the project's formats
+function buildJob(dir, format, type, thumbnail = false) {
   const f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), edit = loadEdit(dir)
   if (!fs.existsSync(f('source/scene.js'))) throw new Error('no source/scene.js yet (see references/scene-format.md)')
-  if (!p.formats.includes(format)) throw new Error(`format ${format} is not one of this project's (${p.formats.join(', ')})`)
+  if (!p.formats.includes(format) && !(thumbnail && format === '16:9')) throw new Error(`format ${format} is not one of this project's (${p.formats.join(', ')})`)
   const params = effective(readJson(f('source/rules.json')), () => {}), style = styleOf(readJson(f('source/style.json')))
   const src = p.source, [lw, lh] = logical(format, src), short = type ? renderShort(type) : 720
   const size = [even((lw * short) / 1080), even((lh * short) / 1080)]
@@ -418,22 +436,33 @@ function buildJob(dir, format, type) {
     faces: params.face_framing && fs.existsSync(f('assets/frames.json')) ? readJson(f('assets/frames.json')).faces : null,
     style, params, media: readMedia(dir), actors: loadActors(dir), scene: { css: fs.existsSync(css), mtime: Math.round(mtime), duration: src ? null : edit.duration },
     encoder: type ? encoderFor(p, type, size) : null,
-    // motion blur: sub-frames averaged per frame (render --blur N), 1 = sharp
-    blur: type ? Math.max(1, Math.min(16, Math.round(+opt.blur || 1))) : 1,
+    thumbnail,
+    // motion blur: sub-frames averaged per frame (render --blur N), 1 = sharp (stills, drafts)
+    blur: type && type !== 'draft' ? Math.max(1, Math.min(16, Math.round(+opt.blur || 1))) : 1,
   }
 }
 
-// Chunks of ~2 s on keyframes. A scene is code, so its key covers all it can read: the engine, the job, every file of
-// source/, actors/ and assets/ (names and dates; not the sound, nor edit.json and words.json, whose parts the scene
-// sees are in the job). Nothing changed: the chunk is kept; anything changed: all render again.
-function chunkPlan(dir, job) {
-  const files = root => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).filter(x => !/\.wav$|^(edit|words)\.json$/.test(x)).sort().map(x => [x, fs.statSync(path.join(root, x)).mtimeMs]) : [])
+// What a render depends on. A scene is code, so it covers all it can read: the engine, the job, every file of
+// source/, actors/ and assets/ (names and dates). Not the sound, nor what the scene sees through the job (edit.json,
+// words.json), nor what never reaches the picture (the versions in project.json, the mix's levels, the review's
+// drawings, Python's bytecode of sound.py).
+function sceneKey(dir, job) {
+  const files = root => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).filter(x => !/\.wav$|^(edit|words|project|mix)\.json$|^review\/|__pycache__/.test(x)).sort().map(x => [x, fs.statSync(path.join(root, x)).mtimeMs]) : [])
   const engine = ['lib/page.js', 'lib/kit.js', 'lib/runtime.js', 'lib/actors.js', 'lib/paper.js', 'lib/timeline.js', 'page/render.html'].map(x => fs.readFileSync(path.join(ENGINE, x), 'utf8')).join()
-  const global = hash(engine + JSON.stringify([job, ...['source', 'actors', 'assets'].map(x => files(path.join(dir, x)))]))
-  const total = Math.round(job.duration * job.fps), size = job.encoder.gop * Math.max(1, Math.round((2 * job.fps) / job.encoder.gop)), plan = []
-  for (let a = 0; a < total; a += size) plan.push({ a, b: Math.min(total, a + size), key: hash(`${global}${a}`) })
-  return plan
+  // the motion blur is how it is rendered, not what: the chunks' keys add it
+  return hash(engine + JSON.stringify([{ ...job, blur: null }, ...['source', 'actors', 'assets'].map(x => files(path.join(dir, x)))]))
 }
+
+// Chunks of ~2 s on keyframes, under the scene's key: nothing changed, the chunk is kept; anything changed, all
+// render again
+function chunkPlan(dir, job) {
+  const key = sceneKey(dir, job), total = Math.round(job.duration * job.fps), size = job.encoder.gop * Math.max(1, Math.round((2 * job.fps) / job.encoder.gop)), plan = []
+  for (let a = 0; a < total; a += size) plan.push({ a, b: Math.min(total, a + size), key: hash(`${key}${job.blur}${a}`) })
+  return Object.assign(plan, { key })
+}
+
+// render --draft: the main format (or --format) in the draft resolution; otherwise --format and --type, all by default
+const renderSet = p => opt.draft ? [pick(opt.format ?? p.formats[0], p.formats, 'format'), ['draft']] : [pick(opt.format, p.formats, 'format'), pick(opt.type, p.renders, 'type')]
 
 async function playwright() {
   if (!fs.existsSync(path.join(ENGINE, 'node_modules/playwright-core'))) {
@@ -513,18 +542,18 @@ ${!src ? '- No source video: made from scratch in motion design'
 }
 
 function init(slug) {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url> [--source <file|url>…]] [--rules <pack>|none]')
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url>[#t=from,to] …] [--rules <pack>|none]')
   if (opt.fps && !(+opt.fps > 0 && +opt.fps <= 120)) die('--fps: frames per second, e.g. 24, 25, 30, 50 or 60')
   if (opt.codec && !CODECS[opt.codec]) die(`--codec: one of ${Object.keys(CODECS).join(', ')}`)
   const dir = path.join(HOME, slug)
   if (fs.existsSync(dir)) die(`${dir} already exists`)
   const formats = list(opt.formats), types = list(opt.renders), known = renders(), sources = opt.source ?? []
   if (!formats.length || formats.some(f => !FORMATS[f] && !(f === 'source' && sources.length))) die(`--formats: one or more of ${Object.keys(FORMATS).join(', ')}, source (with --source)`)
-  if (!types.length || types.some(t => !known[t])) die(`--renders: one or more of ${Object.keys(known).join(', ')}`)
+  if (!types.length || types.some(t => !known[t] || t === 'draft')) die(`--renders: one or more of ${Object.keys(known).filter(t => t !== 'draft').join(', ')}`)
   const active = onePack(opt.rules)
   let params
   try { params = mergeParams(packs(), active[0]) } catch (e) { die(e.message) }
-  for (const s of sources) if (!/^https?:\/\//.test(s) && !fs.existsSync(s)) die(`source not found: ${s}`)
+  for (const s of sources) if (!/^https?:\/\//.test(s) && !fs.existsSync(rushOf(s).src)) die(`source not found: ${rushOf(s).src}`)
 
   for (const d of ['assets/images', 'assets/logos', 'assets/review', 'files/reviews', 'output', 'source', 'stills']) fs.mkdirSync(path.join(dir, d), { recursive: true })
   let source = null
@@ -566,24 +595,23 @@ async function prepare() {
     if (!params.shots) die('this project has no source video and its pack scans no clips: nothing to prepare')
     return
   }
-  const lang = readJson(f('source/style.json')).creator?.lang ?? 'fr'
+  const { creator } = styleOf(readJson(f('source/style.json')))
 
-  let quiet = null
-  if (p.source.audio) {
-    if (opt.force || !fs.existsSync(f('assets/source.wav'))) run('ffmpeg', ['-y', '-v', 'error', '-i', f('assets/source.mp4'), '-vn', '-ac', '1', '-ar', `${RATE}`, '-c:a', 'pcm_s16le', '-bitexact', '-map_metadata', '-1', f('assets/source.wav')])
-    quiet = silences(readWav(f('assets/source.wav')))
-  }
+  // the levels decide the silences to cut; the transcript only needs something to hear (a voice under noise or
+  // music has no clear pause, yet words)
+  const db = p.source.audio ? windowDb(readWav(sourceWav(dir))) : null, quiet = db && silences(db)
 
   let words = []
   if (!params.transcribe) for (const x of ['assets/words.json', 'files/words.md']) fs.rmSync(f(x), { force: true })
   else if (!opt.force && fs.existsSync(f('assets/words.json'))) words = readJson(f('assets/words.json')).filter(w => !w.screen)
   else {
-    if (quiet) words = transcribe(f('assets/source.wav'), lang, f('.cache'))
+    if (db && audible(db)) words = transcribe(f('assets/source.wav'), creator.lang, f('.cache'), creator.vocabulary.join(', '))
     writeJson(f('assets/words.json'), words)
     fs.writeFileSync(f('files/words.md'), wordsMd(words, p.slug))
   }
 
   const { duration, fps } = p.source
+  if (params.breaths && words.length && !quiet) console.warn('warning: no clear pause between the words (noise or music under the voice): breaths not applied, cut by hand in source/edit.json')
   const segments = params.breaths && quiet && words.length ? keepSegments(quiet, words, params.breaths, duration) : [[0, duration]]
   writeJson(f('assets/timeline.json'), { fps, speed: params.speed, segments })
   const tl = makeTimeline(readJson(f('assets/timeline.json')), loadEdit(dir).cut)
@@ -660,8 +688,8 @@ function readyToDraw(dir) {
   return p
 }
 
-const job = (dir, format, type) => {
-  try { return buildJob(dir, format, type) } catch (e) { die(e.message) }
+const job = (dir, format, type, thumbnail) => {
+  try { return buildJob(dir, format, type, thumbnail) } catch (e) { die(e.message) }
 }
 
 // the scene's sound cues (video seconds), the same in every format, for sound.py, and where its media clips play,
@@ -717,7 +745,7 @@ async function stills() {
 
 async function render() {
   const dir = projectDir(), f = rel => path.join(dir, rel), p = readyToDraw(dir)
-  const formats = pick(opt.format, p.formats, 'format'), types = pick(opt.type, p.renders, 'type'), n = workers(), started = Date.now()
+  const [formats, types] = renderSet(p), n = workers(), started = Date.now()
   fs.mkdirSync(f('.cache/render'), { recursive: true })
   await withChrome(p.slug, n, async (pages, base) => {
     await screenTranscript(dir, pages[0], base, job(dir, p.formats[0], ''))
@@ -754,12 +782,14 @@ async function render() {
       fs.writeFileSync(stream, Buffer.concat(parts))
       // a raw stream has no timestamps: -r on the input sets them (Chrome's own stream timing is not usable)
       run('ffmpeg', ['-y', '-v', 'error', ...(c.input ? [...c.input, '-r', `${j.fps}`] : []), '-i', stream, '-c', 'copy', ...(c.tag ?? []), '-movflags', '+faststart', f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.mp4`)])
+      // the scene it shows, so final knows a render older than the scene
+      fs.writeFileSync(f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.key`), plan.key)
       fs.rmSync(stream)
       const frames = plan.at(-1).b, took = (Date.now() - t0) / 1000
       console.log(`${fmt} ${type}: ${j.size.join('×')} ${c.label} ${[...hw].join('/') || 'cached'}${j.blur > 1 ? `, motion blur ×${j.blur}` : ''}, ${frames} frames, ${count}/${plan.length} chunks rendered in ${took.toFixed(1)} s` + (count ? ` (${Math.round((frames * count) / plan.length / took)} fps, ${Math.min(n, count)} workers)` : ''))
     }
   })
-  console.log(`render done in ${secs(started)} s. Next: final`)
+  console.log(`render done in ${secs(started)} s. Next: final${opt.draft ? ' --draft' : ''}`)
 }
 
 // assets/mix.wav: the edited voice, the music of edit.json, the scene's cues (.cache/cues.json, from render) and the
@@ -811,32 +841,30 @@ function audio() {
   console.log(`${n} sound variants (8 s from ${at} s) in ${secs(started)} s: ${path.join(dir, 'stills/sound')}`)
 }
 
-// each render with its sound (mix.wav, rebuilt when stale), posters, then a new version
+// each render with its sound (mix.wav, rebuilt when stale), then a new version. The delivery (all the renders) also
+// gets the posters, the subtitles and the description; a draft (--draft) is the main format alone, to review
 function final() {
   const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), edit = loadEdit(dir)
-  const j = job(dir, p.formats[0], ''), tl = makeTimeline(j.timeline), started = Date.now()
+  const j = job(dir, p.formats[0], ''), tl = makeTimeline(j.timeline), started = Date.now(), draft = !!opt.draft
+  const formats = draft ? renderSet(p)[0] : p.formats, types = draft ? ['draft'] : p.renders
   const audio = mix(dir)
   // AAC once per bitrate (Apple's encoder when ffmpeg has it: ten times faster), then every file is a copy
   const aac = out('ffmpeg', ['-hide_banner', '-encoders']).includes(' aac_at ') ? 'aac_at' : 'aac', tracks = {}
   const track = kbps => (tracks[kbps] ??= (run('ffmpeg', ['-y', '-v', 'error', '-i', audio, '-c:a', aac, '-b:a', `${kbps}k`, '-ar', '48000', '-ac', '2', f(`.cache/audio-${kbps}.m4a`)]), f(`.cache/audio-${kbps}.m4a`)))
   const files = {}, made = []
-  for (const fmt of p.formats) for (const type of p.renders) {
-    const video = f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.mp4`)
-    if (!fs.existsSync(video)) die(`no render for ${fmt} ${type}: run render first`)
-    if (fs.statSync(video).mtimeMs < fs.statSync(f('source/scene.js')).mtimeMs) console.warn(`warning: ${fmt} ${type} was rendered before the last change of scene.js`)
+  for (const fmt of formats) for (const type of types) {
+    const video = f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.mp4`), key = f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.key`), again = `render${draft ? ' --draft' : ''}`
+    if (!fs.existsSync(video)) die(`no render for ${fmt} ${type}: run ${again} first`)
+    if (!fs.existsSync(key) || fs.readFileSync(key, 'utf8') !== sceneKey(dir, job(dir, fmt, type))) console.warn(`warning: ${fmt} ${type} was rendered before the last change of the scene: run ${again} again`)
     const file = f(`output/${p.slug}-${ratio(fmt)}-${type}.mp4`)
     run('ffmpeg', ['-y', '-v', 'error', '-i', video, ...(audio ? ['-i', track(renders()[type].audio_kbps), '-map', '0:v', '-map', '1:a', '-shortest'] : ['-an']),
       '-c', 'copy', '-movflags', '+faststart', file])
     files[fmt] ??= path.basename(file)
     made.push(file)
   }
-  const at = edit.poster != null ? tl.toVideo(edit.poster) : Math.min(1.5, j.duration / 2)
-  for (const fmt of p.formats) {
-    const poster = f(`output/${p.slug}-${ratio(fmt)}-poster.jpg`)
-    run('ffmpeg', ['-y', '-v', 'error', '-ss', `${at}`, '-i', f(`output/${files[fmt]}`), '-frames:v', '1', '-q:v', '2', poster])
-    made.push(poster)
-  }
-  const v = addVersion(dir, p, { duration: ms(j.duration), files, timeline: j.timeline })
+  const parts = fs.existsSync(f('.cache/parts.json')) ? readJson(f('.cache/parts.json')) : []
+  if (!draft) made.push(...deliver(dir, p, j, tl, edit, files, parts))
+  const v = addVersion(dir, p, { ...(draft && { draft: true }), duration: ms(j.duration), files, timeline: j.timeline })
   // what the studio's sound panel shows of this version: the cues and each track's level (audio.py's mix.json)
   if (audio) {
     fs.mkdirSync(f('files/sound'), { recursive: true })
@@ -846,16 +874,40 @@ function final() {
   // (one every `every` s, `cols` per row of the sheet)
   const every = Math.max(0.5, j.duration / 400), count = Math.ceil(j.duration / every), cols = 10, strips = {}
   fs.mkdirSync(f('files/video'), { recursive: true })
-  for (const fmt of p.formats) {
+  for (const fmt of formats) {
     const [a, b] = fmt.split(':').map(Number), w = 2 * Math.round((72 * a) / b), file = `files/video/v${v}-${ratio(fmt)}.jpg`
     run('ffmpeg', ['-y', '-v', 'error', '-i', f(`output/${files[fmt]}`), '-vf', `fps=1/${every},scale=${w}:144,tile=${cols}x${Math.ceil(count / cols)}`, '-frames:v', '1', '-q:v', '5', f(file)])
     strips[fmt] = { file, every, count, cols, w, h: 144 }
   }
   const takes = p.source ? (j.timeline?.segments ?? [[0, j.duration]]).map(([a, b], i) => ({ kind: 'take', t0: ms(tl.toVideo(a)), t1: ms(tl.toVideo(b - 0.001)), name: `take ${i + 1}`, source: [a, b] })) : []
-  const parts = fs.existsSync(f('.cache/parts.json')) ? readJson(f('.cache/parts.json')) : []
   fs.writeFileSync(f(`files/video/v${v}.json`), JSON.stringify({ parts: [...takes, ...parts], strips }))
   console.log(made.join('\n'))
-  console.log(`final v${v} in ${secs(started)} s (${audio ? path.basename(audio) : 'no audio'}). Reload the studio`)
+  console.log(`final v${v}${draft ? ' (draft)' : ''} in ${secs(started)} s (${audio ? path.basename(audio) : 'no audio'}). Reload the studio`)
+}
+
+// what goes with the MP4s of a delivery: a poster per format, the subtitles (SRT and WebVTT, the same for every
+// format) and the description to paste under the video
+function deliver(dir, p, j, tl, edit, files, parts) {
+  const f = rel => path.join(dir, rel), made = []
+  const at = edit.poster != null ? tl.toVideo(edit.poster) : Math.min(1.5, j.duration / 2)
+  for (const fmt of p.formats) {
+    const poster = f(`output/${p.slug}-${ratio(fmt)}-poster.jpg`)
+    run('ffmpeg', ['-y', '-v', 'error', '-ss', `${at}`, '-i', f(`output/${files[fmt]}`), '-frames:v', '1', '-q:v', '2', poster])
+    made.push(poster)
+  }
+  // the speech as it is heard (kept words, on video time), or the lines of what the video shows
+  const segs = j.timeline?.segments, spoken = j.words.filter(w => !w.screen && (!segs || segs.some(([a, b]) => w.t1 > a && w.t0 < b)))
+  const cues = spoken.length ? speechCues(spoken.map(w => ({ w: w.w, v0: tl.toVideo(w.t0), v1: tl.toVideo(w.t1) })))
+    : j.words.filter(w => w.screen).map(w => ({ v0: tl.toVideo(w.t0), v1: tl.toVideo(w.t1), text: w.w })).filter(c => c.v1 > c.v0)
+  for (const [ext, write] of [['srt', srt], ['vtt', vtt]]) {
+    const file = f(`output/${p.slug}.${ext}`)
+    if (cues.length) fs.writeFileSync(file, write(cues)), made.push(file)
+    else fs.rmSync(file, { force: true })
+  }
+  const text = description(fs.readFileSync(f('About.md'), 'utf8'), parts), file = f(`output/${p.slug}-description.txt`)
+  if (text) fs.writeFileSync(file, text + '\n'), made.push(file)
+  else fs.rmSync(file, { force: true })
+  return made
 }
 
 // every reviewable render is a new version, with its own feedback file (files/reviews/vN.json);
@@ -865,6 +917,73 @@ function addVersion(dir, p, version) {
   p.versions = [...(p.versions ?? []), { v, rendered: new Date().toISOString(), ...version }]
   writeJson(path.join(dir, 'source/project.json'), p)
   return v
+}
+
+// thumbnail [--at <source s>]: the YouTube thumbnail, 1280×720 (output/<slug>-thumbnail.jpg). The scene draws it in
+// 16:9 when it receives `thumbnail: true`, at the poster's time by default (scene-format.md)
+async function thumbnail() {
+  const dir = projectDir(), f = rel => path.join(dir, rel), p = readyToDraw(dir), edit = loadEdit(dir), j = job(dir, '16:9', '', true), tl = makeTimeline(j.timeline)
+  const s = opt.at ?? edit.poster, v = Math.min(s != null ? tl.toVideo(+s) : Math.min(1.5, j.duration / 2), j.duration - 1 / j.fps)
+  await withChrome(p.slug, 1, async ([page], base) => {
+    await openPage(page, `${base}render?format=16%3A9&type=&thumbnail=1`, j)
+    await page.evaluate(shots => window.renderStills(shots), [{ v, file: 'stills/thumbnail.jpg' }])
+  })
+  fs.copyFileSync(f('stills/thumbnail.jpg'), f(`output/${p.slug}-thumbnail.jpg`))
+  console.log(`thumbnail: ${f(`output/${p.slug}-thumbnail.jpg`)} (1280×720, ${Math.round(fs.statSync(f('stills/thumbnail.jpg')).size / 1024)} KB, at ${ms(v)} s)`)
+}
+
+// fix <source s> "<text>": the spoken word at that time (a Text fix on the speech, in the studio) now reads text, ""
+// removes it; the captions, the subtitles and files/words.md follow
+function fixWord(at, text) {
+  const dir = projectDir(), f = rel => path.join(dir, rel), t = +at
+  if (!(t >= 0) || text === undefined || !fs.existsSync(f('assets/words.json'))) die('usage: fix <source seconds> "<text>" -p <slug> (after prepare: it fixes the transcript)')
+  const words = readJson(f('assets/words.json')), spoken = words.filter(w => !w.screen)
+  const w = spoken.reduce((a, x) => (!a || Math.abs(x.t0 - t) < Math.abs(a.t0 - t) ? x : a), null)
+  if (!w || Math.abs(w.t0 - t) > 0.5) die(`no spoken word at ${t} s (files/words.md gives their times)`)
+  const was = w.w
+  if (text.trim()) w.w = text.trim()
+  else words.splice(words.indexOf(w), 1)
+  writeJson(f('assets/words.json'), words)
+  fs.writeFileSync(f('files/words.md'), wordsMd(words.filter(x => !x.screen), readJson(f('source/project.json')).slug))
+  console.log(`fix: "${was}" at ${w.t0} s ${text.trim() ? `now reads "${w.w}"` : 'removed'}. Render again for the captions`)
+}
+
+// sync <media>: where a media of edit.json (a second camera, another mic) sits in the source, found by their sound.
+// Its `sync` (the second of its file at the source's 0) makes clip() show it in step with the source, cuts and speed
+// included
+function syncMedia(id) {
+  const dir = projectDir(), p = readJson(path.join(dir, 'source/project.json')), edit = loadEdit(dir), m = edit.media?.[id]
+  if (!m) die(`usage: sync <media id> -p <slug> (media of source/edit.json: ${Object.keys(edit.media ?? {}).join(', ') || 'none'})`)
+  if (!p.source?.audio) die('sync needs a source video with sound')
+  const { sync, r } = JSON.parse(out('uv', ['run', '--quiet', path.join(ENGINE, 'audio.py'), '--sync', sourceWav(dir), mediaFile(dir, m)]))
+  if (r < 0.7) die(`media ${id}: its sound does not match the source's (r ${r}): another moment, or no sound to compare`)
+  edit.media[id] = { ...m, sync }
+  writeJson(path.join(dir, 'source/edit.json'), edit)
+  console.log(`media ${id}: sync ${sync} (r ${r}), ${sync >= 0 ? `the source starts ${sync} s into its file` : `its file starts ${-sync} s into the source`}. clip('${id}') now follows the source`)
+}
+
+// beats <track | bpm> [--at <video s>]: the music's grid in VIDEO seconds, measured on a track (placed at --at in the
+// video, 0 by default) or laid out from a tempo; files/beats.md to read it, files/beats.json for check's on_beat
+function beatGrid(what) {
+  const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), j = job(dir, p.formats[0], ''), at = +(opt.at ?? 0)
+  let bpm, times, down = 0, from
+  if (/^\d+(\.\d+)?$/.test(what ?? '')) {
+    bpm = +what
+    times = Array.from({ length: Math.floor(((j.duration - at) * bpm) / 60) + 1 }, (_, i) => (i * 60) / bpm)
+    from = `${bpm} bpm`
+  } else {
+    const file = path.resolve(dir, what ?? '')
+    if (!what || !fs.existsSync(file)) die('usage: beats <track file | bpm> [--at <video seconds>] -p <slug>')
+    ;({ bpm, beats: times, downbeat: down } = JSON.parse(out('uv', ['run', '--quiet', path.join(ENGINE, 'audio.py'), '--beats', file])))
+    from = path.relative(dir, file)
+  }
+  // each beat with its bar (4/4 from the downbeat; a pickup before it is bar 0)
+  const grid = times.map((t, i) => ({ t: ms(t + at), bar: Math.floor((i - down) / 4) + 1 })).filter(x => x.t >= 0 && x.t <= j.duration)
+  writeJson(f('files/beats.json'), { from, bpm, at, beats: grid.map(x => x.t) })
+  const bars = Object.groupBy(grid, x => x.bar)
+  fs.writeFileSync(f('files/beats.md'), `# Beats: ${p.slug}\n\n${from}: ${ms(bpm)} bpm, a beat every ${ms(60 / bpm)} s, a bar every ${ms(240 / bpm)} s (4/4). VIDEO seconds${at ? `, the track from ${at} s` : ''}.\n\n` +
+    Object.entries(bars).map(([n, xs]) => `- bar ${n}: ${xs.map(x => clock(x.t)).join(' · ')}`).join('\n') + '\n')
+  console.log(`beats: ${ms(bpm)} bpm, ${grid.length} beats in ${Object.keys(bars).length} bars → files/beats.md`)
 }
 
 // the encoders this Chrome has, at 1080p30
@@ -996,7 +1115,7 @@ async function handle(req, res, write = false) {
     }))
   }
   if (sub === 'api/job') {
-    try { return reply(res, 200, buildJob(dir, url.searchParams.get('format'), url.searchParams.get('type') ?? '')) } catch (e) { return reply(res, 400, { error: e.message }) }
+    try { return reply(res, 200, buildJob(dir, url.searchParams.get('format'), url.searchParams.get('type') ?? '', url.searchParams.get('thumbnail') === '1')) } catch (e) { return reply(res, 400, { error: e.message }) }
   }
   if (m) {
     const file = path.join(dir, `files/reviews/v${m[1]}.json`)
@@ -1096,7 +1215,7 @@ A project keeps the copy taken at its init (source/style.json, source/STYLE.md).
 - ${c.name || '(no name)'}${c.handle ? ` (${c.handle})` : ''}, language \`${c.lang}\`: captions, titles and CTA are written in it
 - Niche: ${c.niche || '-'} · audience: ${c.audience || '-'}
 - CTA: ${c.cta.sub || '-'} · button "${c.cta.button}", then "${c.cta.done}"${c.avatar ? ` · avatar ${c.avatar}` : ''}
-
+${c.vocabulary.length ? `- Vocabulary of the transcript: ${c.vocabulary.join(', ')}\n` : ''}
 ## Look
 - Palette: ${Object.entries(l.palette).map(([k, v]) => `${k} \`${v}\``).join(', ')} (each one is \`var(--name)\` in the scene)
 - Font: ${l.font}${Object.keys(l.fonts).length ? ` (files: ${Object.entries(l.fonts).map(([f, file]) => `${f} ${file}`).join(', ')})` : ''}
@@ -1112,9 +1231,10 @@ ${s.notes.length ? s.notes.map(n => `- ${n}`).join('\n') : '- (none yet)'}
 `
 }
 
-// style [show] | style set a.b=value … | style note "text": the value is JSON when it parses (numbers, arrays), else text
+// style [show] | style set a.b=value … | style note "text": the value is JSON when it parses (numbers, arrays), else text.
+// The projects folder's style, or with -p the copy a project froze at its init (source/)
 function style(sub, ...rest) {
-  const dir = path.join(HOME, '.style'), file = path.join(dir, 'style.json'), s = fs.existsSync(file) ? readJson(file) : {}
+  const dir = opt.project ? path.join(projectDir(), 'source') : path.join(HOME, '.style'), file = path.join(dir, 'style.json'), s = fs.existsSync(file) ? readJson(file) : {}
   if (sub === 'set' && rest.length && rest.every(x => /^[\w.]+=/.test(x))) {
     for (const x of rest) {
       const [key, ...v] = x.split('='), keys = key.split('.'), last = keys.pop()
@@ -1133,8 +1253,8 @@ function style(sub, ...rest) {
 }
 
 // before init (the starting questions): size, rate, length and matching format of a file (ffprobe) or a URL (yt-dlp, no download)
-function probeSource(src) {
-  const url = /^https?:\/\//.test(src ?? '')
+function probeSource(spec) {
+  const src = spec && rushOf(spec).src, url = /^https?:\/\//.test(src ?? '')
   if (!url && !fs.existsSync(src ?? '')) die(`usage: probe <file|url> (${src ?? 'nothing given'} not found)`)
   let s
   try {
@@ -1324,9 +1444,10 @@ function rules(sub, ...rest) {
   } else die('usage: rules [list] | rules show [<pack>] | rules use <pack|none> | rules set <key>=<value>…')
 }
 
-// the active pack's numbers measured on the edit (rules-format.md), after stills: they save the scene's parts
-function check() {
-  const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json'))
+// the active pack's numbers measured on the edit (rules-format.md), after stills: they save the scene's parts. Then,
+// whatever the pack, the layout of every format sampled 4 times a second in the page
+async function check() {
+  const dir = projectDir(), f = rel => path.join(dir, rel), p = readyToDraw(dir)
   const j = job(dir, p.formats[0], ''), tl = makeTimeline(j.timeline), saved = fs.statSync(f('.cache/parts.json'), { throwIfNoEntry: false })
   if (!saved || saved.mtimeMs < fs.statSync(f('source/scene.js')).mtimeMs) die('run stills first: they save the parts of the current scene')
   const words = fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : []
@@ -1334,13 +1455,22 @@ function check() {
     duration: j.duration, cuts: loadEdit(dir).cut ?? [], joins: (j.timeline?.segments ?? []).slice(1).map(([a]) => tl.toVideo(a)),
     words: p.source ? words.filter(w => !w.screen) : [], screen: words.filter(w => w.screen).map(w => ({ w: w.w, v0: tl.toVideo(w.t0), v1: tl.toVideo(w.t1) })),
     parts: readJson(f('.cache/parts.json')), scene: fs.readFileSync(f('source/scene.js'), 'utf8'),
+    beats: fs.existsSync(f('files/beats.json')) ? readJson(f('files/beats.json')).beats : null, fps: p.fps,
   })
+  found.push(...(await withChrome(p.slug, p.formats.length, (pages, base) => Promise.all(p.formats.map(async (fmt, i) => {
+    await openPage(pages[i], `${base}render?format=${encodeURIComponent(fmt)}&type=`, job(dir, fmt, ''))
+    return checkLayout(await pages[i].evaluate(step => window.sampleLayout(step), 0.25), 0.25, fmt)
+  })))).flat())
   for (const [ok, msg] of found) console.log(`${ok ? '✓' : '✗'} ${msg}`)
   const failed = found.filter(([ok]) => !ok).length, active = readJson(f('source/rules.json')).active
   console.log(found.length ? `${failed ? `${failed} to fix` : 'nothing to fix'} (rules: ${active.join(', ') || 'none'}). The stills show the rest` : 'nothing to measure for this pack: the stills show the rest')
   if (failed) process.exit(1)
 }
 
-const commands = { doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs, style: () => style(...args), serve, rules: () => rules(...args), check }
+const commands = {
+  doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs,
+  style: () => style(...args), serve, rules: () => rules(...args), check, sync: () => syncMedia(args[0]), beats: () => beatGrid(args[0]), thumbnail,
+  fix: () => fixWord(args[0], args[1]),
+}
 if (!commands[cmd]) die(`usage: video.mjs <${Object.keys(commands).join(' | ')}> [--project <slug>]`)
 await commands[cmd]()

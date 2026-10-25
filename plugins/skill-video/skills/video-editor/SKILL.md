@@ -71,7 +71,8 @@ Otherwise, interview the user briefly in their language, using AskUserQuestion w
 - CTA line and button texts;
 - palette;
 - font;
-- the mood of the music.
+- the mood of the music;
+- the names the transcript must spell right: brands, products, people (`creator.vocabulary`).
 
 Then write everything with one `video.mjs style set a.b=value …`. Add a `style note "…"` only for a preference the
 user stated, such as the music's mood when they give one. Show the resulting STYLE.md.
@@ -93,6 +94,10 @@ design: do not ask for footage. Sort the rushes in two groups:
 
 When nothing tells you which rush is which, the ones with speech are the source and the others are clips. A montage
 without speech takes every rush as a clip, so that the scene can order its shots freely.
+
+When the video uses only part of a long rush (a podcast clip out of an hour), give the source its range:
+`file.mp4#t=12:30,14:10` (seconds or mm:ss; `#t=750` runs to the end). Only that part is copied, framed and
+transcribed.
 
 Other files, links or claude.ai artifacts in the request are **content sources**: the facts, numbers and visuals
 the video talks about.
@@ -144,11 +149,18 @@ video.mjs init <slug> --formats 9:16,1:1 --renders 1080p,720p --fps 30 --codec h
 ```
 
 Use `--rules none` for no pack, and leave `--fps` out to keep the source's rate. Give one `--source` per rush of the
-source, in the order of the video. `init` joins them and prints where each one starts. A rush of another shape
-than the first is letterboxed into it: put first the one with the main shape, or make the odd one a clip.
+source, in the order of the video, each with its range when it has one. `init` joins them and prints where each one
+starts. A rush of another shape than the first is letterboxed into it: put first the one with the main shape, or
+make the odd one a clip.
 
 Declare the clips in `source/edit.json`'s `media`, with the path of each file. Download a clip given as a URL into
-`<slug>/assets/clips/` first, with `uvx yt-dlp`.
+`<slug>/assets/clips/` first, with `uvx yt-dlp`. A clip that recorded the same moment as the source (a second
+camera, the other speaker's camera) gets synced by its sound: `video.mjs sync <media id> -p <slug>`. `clip()` then
+shows it in step with the source, cuts and speed included, without its sound (the source carries it).
+
+Names this video only needs spelled right (a guest, a product) go into the project's copy of the style before
+`prepare`: `video.mjs style set 'creator.vocabulary=["…"]' -p <slug>` (keep the style's own names in the list; after
+`prepare`, `prepare --force` transcribes again).
 
 With a source, run `video.mjs prepare -p <slug>`, then `video.mjs rough -p <slug>`:
 - `prepare` transcribes the speech, cuts the silences when a pack says so, and frames the face when a pack says so.
@@ -257,6 +269,9 @@ Write `source/scene.css` first: the design system of the Direction. Then write `
 format only** (the first one). Give it the whole frame: the other formats come in step 9, and composing three
 frames at once leads to small, safe layouts.
 - Anchor every moment on the speech with `at(source seconds)`, so cuts never break the sync.
+- With music, lay its grid first: `video.mjs beats <bpm> -p <slug>` for the tempo you will compose on, or
+  `video.mjs beats <track> [--at <video s>]` for a track the user gives. `files/beats.md` lists each bar's beats in
+  VIDEO seconds: put the cuts and the big moments on them. `check` measures the cuts with the `on_beat` param.
 - Show the source with `camera()` and play the clips with `clip(id, start)`: each one brings its sound, at its
   `volume` in `edit.json`.
 - Put a `cue(kind, t, data)` on every event that should be heard, with what the sound needs (`dur`, `x`…).
@@ -273,7 +288,9 @@ This is where the quality comes from, so take the time it needs: usually four to
   `video.mjs stills <source s…> -p <slug> --format <main>`. Take both sides of every transition, the middle of the
   fast moves, and the peak and last frame of each sequence.
 - **Measure** with `video.mjs check -p <slug>`: the pack's numbers on the edit (length, hook, CTA, stretches without
-  a change, cuts inside a word…). Fix what it flags.
+  a change, cuts inside a word, cuts on the beat…), then the layout of every format: a text in the platforms'
+  interface zones, too small for a phone, cut by the frame, or over a face. Fix what it flags. A text that is
+  decoration, not meant to be read, takes `data-say=""`.
 - **Read the sheets and hunt the defects**:
   - something that pops, flickers at a cut, or does not animate (`preview` shows the motion live);
   - overlaps and texts cut by the frame;
@@ -304,16 +321,27 @@ sound. Read `references/sound-format.md` first.
 - Design one sound for each kind of cue.
 - The clips play their own sound by themselves: set each one's `volume` in `edit.json`.
 
+The voice needs nothing: the engine levels the rushes, cuts the rumble, denoises lightly and compresses it.
+
 Run `video.mjs audio -p <slug>` and measure: the balance of the bands, effects starting on their cues, a quiet
 break, and the clips' level against the voice.
 
 ### 11. Render and deliver
 
+Write first a `## Description` section in About.md, in the style's language: a title, two or three lines and the
+platform's hashtags.
+
 Run `video.mjs render -p <slug> --blur 4`, then `video.mjs final -p <slug>`.
 - `--blur 4` gives motion blur to the graphics (never to the footage). The render is four times slower, and it is
   worth it with `lead`. With `support`, use `--blur 1`, or `--blur 2` when the graphics move a lot. Keep the same
-  value for every later render of the project.
-- `final` mixes the sound and makes a new version.
+  value for every later full render of the project.
+- `final` mixes the sound and makes a new version. With it come a poster per format, the subtitles
+  (`output/<slug>.srt` and `.vtt`) and `output/<slug>-description.txt`: the Description section, then the chapters
+  when YouTube would show them.
+
+For a video meant for YouTube (16:9), compose its thumbnail: the scene receives `thumbnail: true` and then builds
+that one frame instead of the video (scene-format.md). `video.mjs thumbnail -p <slug> [--at <source s>]` writes
+`output/<slug>-thumbnail.jpg` (1280×720).
 
 Check what you deliver. Extract about 20 frames of the main MP4 across its length (`ffmpeg -ss <t> -i … -frames:v 1`)
 into one sheet and read it, and check that the sound lands on the cuts. Then run
@@ -321,7 +349,7 @@ into one sheet and read it, and check that the sound lands on the cuts. Then run
 
 Give the user:
 - the studio URL;
-- the files in `output/`;
+- the files in `output/`: the videos, the subtitles, the description and the thumbnail;
 - a three-line summary that names the formats, the resolutions and the active pack;
 - anything you would still improve.
 
@@ -329,46 +357,19 @@ Update « État » in About.md.
 
 ## apply this feedback
 
-The pasted prompt lists changes, each with an `[id …]`, and names the feedback file `files/reviews/vN.json`.
-Read `references/review-format.md`, and read every attached image: its ratio says which format it shows, or the
-shape of a reference. Then handle each id:
-- **CUT**: add `[s0, s1]` to `cut` in `source/edit.json`: SOURCE seconds, or SCENE seconds (the scene's own time)
-  for a video without a source. Check in `files/words.md` that the cut falls between words or moments.
-- **COMMENT**: change the scene at that moment.
-  - `Text fix: "<from>" → "<to>"`: the user corrected that line of what the video shows: write `to` in its place,
-    as given.
-  - `[format …]` is the format the user was looking at. Change that format only when the request is about its
-    composition (placement, size, framing, what the frame cuts). A change of content, text, numbers, timing or
-    sound applies to every format.
-  - Change only what is asked and keep the rest identical: the user has already approved it.
-- **Sound:** lines say what in the sound the comment is about.
-  - A track (`music`, `fx`) is that bus of `source/sound.py` at that moment: change its arrangement or its level there.
-    The `voice` track is the voice itself: its level in the style, or a cut. The `clips` track is the clips' own
-    sound: the `volume` of the media playing at that moment, in `edit.json`.
-  - `every "<kind>"` is the sound `sound.py` designs for that kind: change it, every cue of the kind follows.
-  - One cue is a `cue()` of the scene. To change its sound only, give it its own data in the scene and let `sound.py`
-    read it. Move or remove the `cue()` when its timing is the problem.
-  - A change in `sound.py` or in a clip's `volume` alone needs no render: `audio`, then `final`.
-- **Visual:** lines name the parts of the picture the comment is about: find each `part()` in the scene by its kind,
-  name and times, and change what it wraps. `every "<kind>"` is every part of that kind (all the titles…): change
-  their shared class or helper. A `take` is a kept piece of the source, a `clip` a media of `edit.json`.
-- In the feedback file, set `"resolved": true` and write one sentence in `reply` saying what you changed.
+Read `references/review-format.md` and every image the prompt attaches, then follow its « Applying it »: each id gets
+its change, then `resolved` and `reply` in the feedback file.
 
-Then run `stills` if the change is visual, then `render` (with the project's `--blur`) and `final`. Update « État » in About.md and tell the
-user the new version is ready: the open studio offers to reload it.
+The review rounds run on drafts: `video.mjs render --draft -p <slug>`, then `video.mjs final --draft -p <slug>` (the
+main format in 720p, sharp, without the deliverables; add `--format <f>` to both for a change to another format's
+composition). A change in `sound.py` or in a clip's `volume` alone needs no render: `audio`, then `final --draft`.
+When the user approves the video or asks for the files, deliver it with step 11's full render and `final`.
+
+Update « État » in About.md and tell the user the new version is ready: the open studio offers to reload it.
 
 ## variations <element>
 
-Show 6 to 9 numbered options of one element, for example the counter's typography or the caption look.
-- **Visual**: make the scene read `variant` around that element only, then run
-  `video.mjs stills <source s> --variants N -p <slug>`. Read `stills/<ratio>/variants/contact.jpg` and show the
-  user its path.
-- **Sound** (music or effects): make `source/sound.py` read `v.variant` around that part only, then run
-  `video.mjs audio -p <slug> --at <source s> --variants N`. It writes 8 s per option into `stills/sound/<n>.wav`;
-  give the user the paths to listen to.
-
-Once the user picks, write the choice into the scene or `edit.json` with no `variant` left. Then ask whether the
-choice should become the user's default. If yes, record it as the learning rule below says.
+Read the Variations section of `references/scene-format.md` and follow it.
 
 ## preview
 
@@ -377,17 +378,7 @@ the playhead. R reloads it after you edit the scene.
 
 ## rules
 
-Read `references/rules-format.md` before writing a pack. One pack per video, or none.
-- `rules`: run `video.mjs rules list`. Tell the user about any pack it flags as broken.
-- `rules show [<name>]`: run `video.mjs rules show <name>`, or `rules show -p <slug>` for the project's pack.
-- `rules use <name|none>`: run `video.mjs rules use … -p <slug>`. With a source, rerun `prepare` then `rough`.
-- `rules set <key>=<value>`: run `video.mjs rules set … -p <slug>`, for this project only. After `transcribe`,
-  `face_framing`, `speed` or `breaths`, rerun `prepare` then `rough`.
-- `rules new <name>`: ask a few questions, and write `.rules/<name>.md` in the projects folder. Check that it
-  appears in `rules list`.
-- `rules edit <name>`: write the changes in the projects folder's `.rules/<name>.md`, with `extends: <name>` in its
-  frontmatter (create it if it is not there). Never copy the plugin's pack, and never edit the packs inside the
-  plugin: updates replace them.
+Read `references/rules-format.md` and follow its « The rules mode ». One pack per video, or none.
 
 ## Learning
 

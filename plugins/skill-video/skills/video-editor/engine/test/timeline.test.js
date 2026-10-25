@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { keepSegments, makeTimeline, stillStretches } from '../lib/timeline.js'
+import { audible, keepSegments, makeTimeline, rushGains, silences, stillStretches, windowDb } from '../lib/timeline.js'
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`)
 
@@ -49,4 +49,31 @@ test('still stretches as they play once cut: the seconds kept and the words left
     { a: 2, b: 7, kept: 3, said: 'on' },
     { a: 11.5, b: 15, kept: 3.5, said: 'encore' },
   ])
+})
+
+// 10 s at 48 kHz: 1 s of a 200 Hz "voice" every 2 s, over seeded noise of the given amplitude (0 to 1)
+function talk(noise, voice = 0.3) {
+  let seed = 7
+  const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31) * 2 - 1
+  return Int16Array.from({ length: 480000 }, (_, i) => 32767 * Math.max(-1, Math.min(1, (i % 96000 < 48000 ? voice * Math.sin(i / 38.2) : 0) + noise * rand())))
+}
+
+test('a voice under steady noise has no silence to cut, but still gets transcribed', () => {
+  const clean = windowDb(talk(0.001)), noisy = windowDb(talk(0.12)), mute = windowDb(new Int16Array(480000))
+  assert.equal(silences(clean).length, 5)
+  assert.ok(audible(clean))
+  // about 13 dB of signal over noise: no clear pause, yet a voice to hear
+  assert.equal(silences(noisy), null)
+  assert.ok(audible(noisy))
+  assert.equal(audible(mute), false)
+  assert.equal(silences(mute), null)
+})
+
+test("each rush's voice comes down to the quietest one, a silent rush stays as is", () => {
+  const loud = windowDb(talk(0.001)), quiet = windowDb(talk(0.0005, 0.15)), db = Float64Array.from([...loud, ...quiet, ...new Float64Array(1000).fill(-120)])
+  const [a, b, c] = rushGains(db, [[0, 10], [10, 20], [20, 30]])
+  near(Math.round(20 * Math.log10(a)), -6)
+  assert.equal(b, 1)
+  assert.equal(c, 1)
+  assert.equal(rushGains(db, [[0, 10], [10, 20]]).length, 2)
 })

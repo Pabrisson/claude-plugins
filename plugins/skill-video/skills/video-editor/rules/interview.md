@@ -10,8 +10,8 @@ params: {"face_framing": true, "breaths": {"sentence": 0.35, "comma": 0.18}, "mu
   video. Remove whole questions or answers with `cut`, and say in About.md's Beats which rush each beat comes from.
 - Cut on the sound, not the picture: let a voice start under the previous image (J-cut) or finish over the next one
   (L-cut), with B-roll or a clip of the other rush (`volume` 0) over the join, so the cuts go unnoticed.
-- With a camera per person, the listener's reaction (a nod, a smile) for one beat on a strong line, as a clip with
-  `volume` 0.
+- With a camera per person recording the same conversation, sync each other camera with `video.mjs sync <id>`:
+  its clip then follows the source. Show the listener's reaction (a nod, a smile) for one beat on a strong line.
 - Questions: keep the interviewer's voice when it frames the answer. Otherwise remove it and put the question on
   screen as a short text card.
 - A lower third with each speaker's name and role at their first appearance, in STYLE.md's palette and font, and

@@ -84,7 +84,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 | `style` | style.json merged with the defaults (`creator`, `look`, `notes`) |
 | `pick(land, port, tall)` | The value for this format |
 | `camera()` | The source camera (below), or `null` without a source |
-| `clip(id, start)` | A clip of `edit.json`'s `media` as a box playing from video time `start`, its sound with it |
+| `clip(id, start)` | A clip of `edit.json`'s `media` as a box playing from video time `start`, its sound with it. A synced media (`video.mjs sync <id>`) shows instead the frame of the source's instant, like `camera()`, without its sound |
 | `captions(opts)` | Word-by-word sticker captions of the speech (below) |
 | `paper()` | `Promise<string>`: a paper texture as a CSS background, only when the style asks for a paper look |
 | `cue(kind, t, data)` | A named sound moment at video time `t`, for sound.py: any kind and data (`{ dur, x, … }`) |
@@ -95,6 +95,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 | `rng(seed)` | A seeded random generator |
 | `actors()` | The actors canvas (when `actors/` exists), to place it at a chosen depth; otherwise it goes on top |
 | `variant` | `0` in renders; `1…N` in `stills <s> --variants N` (see Variations) |
+| `thumbnail` | `true` only when `video.mjs thumbnail` draws the YouTube thumbnail (see The thumbnail) |
 
 ### camera()
 
@@ -141,6 +142,9 @@ play: B-roll, cutaways, a screen recording, a second camera.
 - `from` and `dur` (seconds) take a piece of the file.
 - Frames are extracted at the project's rate and as large as the largest resolution needs. `width` (px) forces a
   smaller size for a clip that only ever plays in a small box.
+- `sync` (seconds, written by `video.mjs sync <id>`): the second of its file at the source's 0, for a recording of
+  the same moment as the source (a second camera). Its frames then follow the source, cuts and speed included, and
+  its sound is left out (the source carries it); `from` and `dur` do not apply.
 - **Sound**: a clip plays its own sound where the scene plays its picture. It is brought to the music bed's
   loudness and goes down under the voice like the music. `volume` scales it: `1` by default, `0.3` for ambience
   under the voice, `2` (+6 dB) when its sound is the moment, `0` to mute it (a second camera of the same take).
@@ -168,7 +172,8 @@ With one `say()` or more, the transcript is exactly these lines. Without any, th
 - it groups each moment's texts on one line.
 
 Rolling words, split letters and mock interfaces still come out rough. Correct a group with `data-say="…"` (its
-text replaces what is inside), and leave decoration out with `data-say=""`.
+text replaces what is inside), and leave decoration out with `data-say=""`: it is not read, so `check`'s layout
+measures skip it too.
 
 ## Sound
 
@@ -197,20 +202,44 @@ A `clip()` is a part of its own (`kind: 'clip'`), and with a source `final` adds
 TikTok, Reels and Shorts draw their interface over a vertical video: the tabs at the top, the buttons on the right,
 the account and the caption at the bottom. Keep texts, captions, faces and the key visual out of about 14 % at the
 top, 22 % at the bottom, 13 % on the right and 6 % on the left (270, 420, 140 and 65 px at 1080×1920).
-Backgrounds and motion may run under them.
+Backgrounds and motion may run under them. `check` flags a text, the captions included, that stays there.
 
 ## Checking
 
 `video.mjs stills [source seconds…] --format all`: images and a contact sheet per format (without times: one per
 beat of the timeline). Ask for the moments that matter: both sides of every transition, the middle of fast moves,
 the last frame of each sequence. `video.mjs check`, after `stills`: the active pack's numbers measured on the edit
-(length, hook, CTA, longest stretch without a change, cuts inside a word…). `video.mjs preview`: the scene live in
+(length, hook, CTA, longest stretch without a change, cuts inside a word, cuts on the beat…), then the layout of every
+format, 4 times a second: a text in the platforms' zones, too small for a phone, cut by the frame (display type may
+cross it), or over the face the camera shows (not when a solid card hides the camera). `video.mjs preview`: the scene live in
 Chrome, with the tweens and cues around the playhead; R reloads it. Renders run at about 175 to 280 frames per second, four times slower with `--blur 4`.
+
+## The thumbnail
+
+`video.mjs thumbnail -p <slug> [--at <source s>]` draws the scene once in 16:9 (whatever the project's formats) with
+`thumbnail: true`, at the poster's time by default, into `output/<slug>-thumbnail.jpg` (1280×720). Build that frame
+in the scene before the timeline, and return:
+
+```js
+if (thumbnail) {
+  stage.append(camera())   // the face at its peak: --at picks the instant
+  stage.insertAdjacentHTML('beforeend', `<h1 class="thumb-title">3 mots forts</h1>`)
+  return
+}
+```
+
+A thumbnail is read small and fast: one face or one object, three to five words in display type, the brand's field,
+strong contrast. It promises what the video delivers.
 
 ## Variations
 
-To let the user choose how one element looks, make the scene read `variant` around that element only, then render
-the options on one numbered sheet:
+Show 6 to 9 numbered options of one element, for example the counter's typography or the caption look.
+- **Visual**: make the scene read `variant` around that element only, then run
+  `video.mjs stills <source s> --variants N -p <slug>`. Read `stills/<ratio>/variants/contact.jpg` (`#1`…`#N`) and
+  show the user its path.
+- **Sound** (music or effects): make `source/sound.py` read `v.variant` around that part only, then run
+  `video.mjs audio -p <slug> --at <source s> --variants N`. It writes 8 s of the mix per option into
+  `stills/sound/<n>.wav`; give the user the paths to listen to.
 
 ```js
 // 0 is the edit (the current choice); 1…6 are the options shown on the sheet
@@ -218,7 +247,6 @@ const look = [2, 1, 2, 3, 4, 5, 6][variant]
 counter.className = `counter look-${look}`
 ```
 
-`video.mjs stills 12.4 --variants 6` → `stills/<ratio>/variants/contact.jpg` (`#1`…`#6`) and one image each. Once
-the user picks, write the choice into the scene without `variant` (the edit must not depend on it). For the sound,
-`sound.py` reads `v.variant` the same way, and `video.mjs audio --at 12.4 --variants 4` renders 8 s of the mix per
-option into `stills/sound/<n>.wav`.
+Once the user picks, write the choice into the scene, `sound.py` or `edit.json` with no `variant` left (the edit must
+not depend on it). Then ask whether the choice should become the user's default; if yes, record it as SKILL.md's
+Learning says.

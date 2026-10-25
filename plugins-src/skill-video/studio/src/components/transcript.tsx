@@ -17,7 +17,8 @@ const seqAt = (seqs: Part[] | undefined, t: number) => seqs?.findLastIndex((s) =
 const span = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, k) => a + k)
 
 // Follows the playback until it is scrolled by hand. Speech: paragraphs cut at the pauses; a click on a word seeks
-// there, a drag across words selects their range. Without speech the transcript is what the video shows, one line per moment with its frame: a
+// there, a drag across words selects their range, a double-click corrects the word (emptied, it goes). Without
+// speech the transcript is what the video shows, one line per moment with its frame: a
 // click selects the moment, a drag several, a double-click corrects its text. Rows sit under their sequence, whose
 // name selects all of it. What open comments cover carries their number (#2): a click on it shows them.
 export function Transcript({
@@ -232,26 +233,49 @@ export function Transcript({
                   <p className="flex-1 leading-[1.9] tracking-wide">
                     {span(first, last).map((i) => (
                       <Fragment key={i}>
-                        <span
-                          ref={follow(i)}
-                          data-v0={words[i].v0}
-                          data-v1={words[i].v1}
-                          className={cn(
-                            // no fade: while one fades out and the next fades in, two words look lit and the light seems to step back
-                            "cursor-pointer rounded-md px-1 py-0.5 text-muted-foreground",
-                            words[i].v1 <= time && "text-foreground",
-                            marks[i] && "underline decoration-foreground/50 decoration-dotted decoration-2 underline-offset-[7px]",
-                            // one band over the selection, spaces included
-                            sel[i] && "rounded-none bg-highlight/40 text-foreground",
-                            sel[i] && !sel[i - 1] && "rounded-l-md",
-                            sel[i] && !sel[i + 1] && "rounded-r-md",
-                            i === current && !sel[i] && "bg-foreground text-background"
-                          )}
-                          onPointerDown={press(i)}
-                          onPointerEnter={() => drag && setDrag({ ...drag, b: i })}
-                        >
-                          {words[i].w}
-                        </span>
+                        {editing === i ? (
+                          <input
+                            autoFocus
+                            defaultValue={words[i].w}
+                            aria-label="The corrected word"
+                            className="rounded-md bg-background px-1 py-0.5 text-foreground ring-1 ring-highlight outline-none"
+                            style={{ width: `${Math.max(4, words[i].w.length + 2)}ch` }}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onBlur={() => setEditing(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") setEditing(null)
+                              if (e.key !== "Enter" || e.nativeEvent.isComposing) return
+                              e.preventDefault()
+                              const to = e.currentTarget.value.trim()
+                              if (to !== words[i].w) onFix?.(words[i], to)
+                              setEditing(null)
+                            }}
+                          />
+                        ) : (
+                          <span
+                            ref={follow(i)}
+                            data-v0={words[i].v0}
+                            data-v1={words[i].v1}
+                            title={onFix ? "Double-click to correct the word" : undefined}
+                            className={cn(
+                              // no fade: while one fades out and the next fades in, two words look lit and the light seems to step back
+                              "cursor-pointer rounded-md px-1 py-0.5 text-muted-foreground",
+                              words[i].v1 <= time && "text-foreground",
+                              marks[i] && "underline decoration-foreground/50 decoration-dotted decoration-2 underline-offset-[7px]",
+                              // one band over the selection, spaces included
+                              sel[i] && "rounded-none bg-highlight/40 text-foreground",
+                              sel[i] && !sel[i - 1] && "rounded-l-md",
+                              sel[i] && !sel[i + 1] && "rounded-r-md",
+                              i === current && !sel[i] && "bg-foreground text-background"
+                            )}
+                            onPointerDown={press(i)}
+                            onPointerEnter={() => drag && setDrag({ ...drag, b: i })}
+                            onDoubleClick={() => onFix && setEditing(i)}
+                          >
+                            {words[i].w}
+                          </span>
+                        )}
                         {/* the number once, after the last word a comment covers */}
                         {marks[i] && marks[i + 1]?.label !== marks[i].label && <Mark marks={marks[i]} className="ml-1 align-[1px]" />}
                         <span className={cn(sel[i] && sel[i + 1] && "bg-highlight/40")}> </span>

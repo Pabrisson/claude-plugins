@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { DEFAULTS, checkEdit, effective, listPacks, mergeParams, paramErrors, parsePack } from '../lib/rules.js'
+import { DEFAULTS, checkEdit, checkLayout, effective, listPacks, mergeParams, paramErrors, parsePack } from '../lib/rules.js'
 
 const shipped = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../rules')
 const perso = fs.mkdtempSync(path.join(os.tmpdir(), 'video-rules-'))
@@ -93,4 +93,25 @@ test("check measures the pack's numbers on the edit", () => {
   })
   assert.deepEqual(good.filter(([ok]) => !ok), [])
   assert.match(good.map(([, msg]) => msg).join('\n'), /00:00 Hook\n00:12 Why\n00:25 How/)
+})
+
+test('on_beat: every cut 0 to 3 frames before a beat or a half-beat of the grid', () => {
+  const beats = [0, 0.5, 1, 1.5, 2, 2.5, 3], parts = t => t.map((t0, i) => ({ kind: 'clip', id: `c${i}`, t0, t1: t0 + 0.5 }))
+  const run = (cuts, b = beats) => checkEdit({ on_beat: true }, { duration: 3.2, cuts: [], words: [], screen: [], joins: [], parts: parts(cuts), scene: '', beats: b, fps: 30 })
+  assert.deepEqual(run([0, 0.95, 1.25, 1.97]).map(([ok]) => ok), [true])
+  const [[ok, msg]] = run([0.8, 1.6])
+  assert.equal(ok, false)
+  assert.match(msg, /cut at 0\.8 s is 2 frame\(s\) after the beat at 0\.75 s; cut at 1\.6 s is 3 frame\(s\) after the beat at 1\.5 s/)
+  assert.match(run([1], null)[0][1], /no beat grid/)
+})
+
+test('layout: an issue counts when it lasts 0.75 s, each run with its times', () => {
+  const at = (v, ...issues) => [v, issues]
+  const samples = [at(0, ['zone', '"Bas"']), at(0.25, ['zone', '"Bas"'], ['cut', '"Vol"']), at(0.5, ['zone', '"Bas"']), at(0.75), at(2, ['small', 'the captions']),
+    at(2.25, ['small', 'the captions']), at(2.5, ['small', 'the captions'])]
+  const lines = checkLayout(samples, 0.25, '9:16')
+  assert.deepEqual(lines.map(([ok]) => ok), [false, false])
+  assert.match(lines[0][1], /^9:16: "Bas" in the platforms' interface zones from 00:00\.00 to 00:00\.75$/)
+  assert.match(lines[1][1], /the captions too small to read on a phone .* from 00:02\.00 to 00:02\.75/)
+  assert.deepEqual(checkLayout([at(0), at(0.25)], 0.25, '16:9'), [[true, "16:9: no text in the platforms' zones, too small, cut by the frame or over a face"]])
 })

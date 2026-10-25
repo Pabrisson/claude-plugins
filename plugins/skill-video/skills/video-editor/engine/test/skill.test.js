@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -90,6 +90,48 @@ test('one pack per video; rules show gives it with its personal lines, rules set
 })
 
 const ffmpeg = (...argv) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { cwd: home })
+const failing = (...argv) => { try { return cli(...argv) } catch (e) { return e.stdout } }
+
+test('check samples the layout of every format: platform zones, tiny text, text cut by the frame', { timeout: 300000 }, () => {
+  cli('init', 'lay', '--formats', '9:16,16:9', '--renders', '720p', '--rules', 'none')
+  fs.writeFileSync(path.join(home, 'lay/source/edit.json'), JSON.stringify({ duration: 3 }))
+  fs.writeFileSync(path.join(home, 'lay/source/scene.js'), `export default async function scene({ stage, format }) {
+    stage.innerHTML = format === '9:16'
+      ? '<p style="position:absolute;left:100px;top:1700px;margin:0;font-size:60px">Bas de écran</p>' +
+        '<p style="position:absolute;left:100px;top:800px;margin:0;font-size:14px">minuscule</p>' +
+        '<p style="position:absolute;left:300px;top:1000px;margin:0;font-size:60px;white-space:nowrap">Coupé par le bord droit du cadre</p>' +
+        '<h1 style="position:absolute;left:-200px;top:400px;margin:0;font-size:400px;white-space:nowrap">GÉANT</h1>' +
+        '<p data-say="" style="position:absolute;left:100px;top:1800px;margin:0;font-size:12px">décor</p>'
+      : '<h1 style="position:absolute;left:200px;top:300px;margin:0;font-size:120px">Propre</h1>'
+  }`)
+  cli('stills', '-p', 'lay')
+  const log = failing('check', '-p', 'lay')
+  assert.match(log, /✗ 9:16: "Bas de écran" in the platforms' interface zones from 00:00\.00 to 00:03\.00/)
+  assert.match(log, /✗ 9:16: "minuscule" too small to read on a phone/)
+  assert.match(log, /✗ 9:16: "Coupé par le bord droit du cadre" cut by the frame/)
+  assert.doesNotMatch(log, /GÉANT|décor/)
+  assert.match(log, /✓ 16:9: no text in the platforms' zones, too small, cut by the frame or over a face/)
+})
+
+test('check flags a text over the face the camera shows, not one over a card that hides it', { timeout: 300000 }, () => {
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=640x360:r=25:d=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', 'face.mp4')
+  cli('init', 'face', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--source', path.join(home, 'face.mp4'))
+  cli('rules', 'set', 'face_framing=true', '-p', 'face')
+  // a face found at the middle of the frame, eyes at 150 px, 120 px tall (no detection: the file is there)
+  fs.writeFileSync(path.join(home, 'face/assets/frames.json'), JSON.stringify({ fps: 5, faces: [[0, 320, 150, 120], [4, 320, 150, 120]] }))
+  cli('prepare', '-p', 'face')
+  fs.writeFileSync(path.join(home, 'face/source/scene.js'), `export default async function scene({ stage, tl, camera }) {
+    stage.append(camera())
+    stage.insertAdjacentHTML('beforeend', '<h2 id="t" style="position:absolute;left:700px;top:400px;margin:0;font-size:80px;color:#fff">Sur le visage</h2>' +
+      '<div id="card" style="position:absolute;inset:0;background:#123;opacity:0"><h2 style="position:absolute;left:700px;top:400px;margin:0;font-size:80px;color:#fff">Sur la carte</h2></div>')
+    tl.set('#card', { opacity: 1 }, 2)
+    tl.set('#t', { opacity: 0 }, 2)
+  }`)
+  cli('stills', '-p', 'face')
+  const log = failing('check', '-p', 'face')
+  assert.match(log, /✗ 16:9: "Sur le visage" over the face from 00:00\.00 to 00:02\.00/)
+  assert.doesNotMatch(log, /Sur la carte/)
+})
 
 test('prepare lists the still screens of the source (freezes) and the shots of the clips (shots, even without a source)', { timeout: 120000 }, () => {
   // 2 s moving, 3 s of a still red screen, 2 s moving again
@@ -118,6 +160,15 @@ test('several sources are joined end to end, in order, each fitted into the firs
   assert.match(log, /video 2: .*r2\.mov from 2 s of the source/)
   assert.match(read('rushes/About.md'), /- Video 3: .*r3\.mp4 \(from 3\.533 s of the source, 1\.2 s\)/)
   assert.deepEqual(fs.readdirSync(path.join(home, 'rushes/assets')).filter(x => x.endsWith('.mp4')), ['source.mp4'])
+})
+
+test('a rush keeps only its #t= range, alone or joined to others', { timeout: 120000 }, () => {
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=640x360:r=25:d=4', '-f', 'lavfi', '-i', 'sine=f=440:r=48000:d=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'long.mp4')
+  cli('init', 'part', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--source', `${path.join(home, 'long.mp4')}#t=1.5,2.5`)
+  assert.ok(Math.abs(JSON.parse(read('part/source/project.json')).source.duration - 1) < 0.05)
+  cli('init', 'parts2', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--source', `${path.join(home, 'long.mp4')}#t=0:03`, '--source', `${path.join(home, 'long.mp4')}#t=0,0.4`)
+  assert.deepEqual(JSON.parse(read('parts2/source/project.json')).source.files.map(x => x.duration), [1, 0.4])
+  assert.throws(() => cli('init', 'bad', '--formats', '16:9', '--renders', '720p', '--source', `${path.join(home, 'long.mp4')}#t=3,2`), /range/)
 })
 
 test("a media clip's own sound plays where the scene plays it, a cut inside it included", { timeout: 300000 }, () => {
@@ -156,4 +207,66 @@ test("final keeps the scene's parts and a strip of thumbnails per format for the
   assert.deepEqual(Object.keys(v.strips), ['16:9', '9:16'])
   assert.equal(v.strips['9:16'].count, 6)
   assert.ok(fs.statSync(path.join(home, 'parts', v.strips['9:16'].file)).size > 1000)
+})
+
+test('a draft is the main format alone, sharp, in 720p; the delivery gets subtitles and the description', { timeout: 300000 }, () => {
+  fs.appendFileSync(path.join(home, 'parts/About.md'), '\n## Description\nHey, the title\n#demo\n')
+  cli('render', '-p', 'parts', '--type', '720p', '--format', '16:9')
+  cli('final', '-p', 'parts')
+  assert.match(read('parts/output/parts.srt'), /^1\n00:00:00,\d{3} --> 00:00:0\d,\d{3}\nHey\n/)
+  assert.match(read('parts/output/parts.vtt'), /^WEBVTT\n\n00:00:00\.\d{3} --> /)
+  assert.equal(read('parts/output/parts-description.txt'), 'Hey, the title\n#demo\n')
+  const scene = path.join(home, 'parts/source/scene.js')
+  fs.writeFileSync(scene, fs.readFileSync(scene, 'utf8').replace('Hey', 'Ho'))
+  // the scene changed since the render: final says so
+  const stale = spawnSync(process.execPath, [engine, 'final', '-p', 'parts'], { env: { ...process.env, VIDEO_EDITOR_DIR: home }, encoding: 'utf8' })
+  assert.match(stale.stderr, /16:9 720p was rendered before the last change of the scene: run render again/)
+  cli('render', '-p', 'parts', '--draft', '--blur', '4')
+  const log = cli('final', '-p', 'parts', '--draft')
+  assert.match(log, /final v4 \(draft\)/)
+  const { versions } = JSON.parse(read('parts/source/project.json'))
+  assert.deepEqual([versions.at(-1).draft, versions.at(-1).files], [true, { '16:9': 'parts-16x9-draft.mp4' }])
+  assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path.join(home, 'parts/output/parts-16x9-draft.mp4')], { encoding: 'utf8' }), /^1280,720/)
+})
+
+test('sync places a second camera by its sound; it follows the source, silent', { timeout: 300000 }, () => {
+  // the same sound twice: bursts of noise, the second camera started 0.7 s before the source
+  const sound = "aevalsrc='(random(0)-0.5)*gt(sin(2*PI*1.3*t)*sin(2*PI*0.37*t)\\,0.2)':s=48000:d=8"
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=640x360:r=25:d=8', '-f', 'lavfi', '-i', sound, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', 'main.mp4')
+  ffmpeg('-f', 'lavfi', '-i', 'mandelbrot=s=640x360:r=25', '-f', 'lavfi', '-i', sound, '-filter_complex', '[1]adelay=700|700[a]', '-map', '0', '-map', '[a]', '-t', '9', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'cam2.mp4')
+  cli('init', 'duo', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--source', path.join(home, 'main.mp4'))
+  fs.writeFileSync(path.join(home, 'duo/source/edit.json'), JSON.stringify({ cut: [], media: { cam2: { src: path.join(home, 'cam2.mp4') } } }))
+  assert.throws(() => cli('sync', 'nope', '-p', 'duo'), /cam2/)
+  assert.match(cli('sync', 'cam2', '-p', 'duo'), /media cam2: sync 0\.7\d* \(r (1|0\.9\d*)\), the source starts 0\.7\d* s into its file/)
+  assert.ok(Math.abs(JSON.parse(read('duo/source/edit.json')).media.cam2.sync - 0.7) < 0.01)
+  fs.writeFileSync(path.join(home, 'duo/assets/words.json'), '[]')
+  fs.writeFileSync(path.join(home, 'duo/assets/timeline.json'), JSON.stringify({ fps: 25, speed: 1, segments: [[0, 8]] }))
+  cli('prepare', '-p', 'duo')
+  fs.writeFileSync(path.join(home, 'duo/source/scene.js'), `export default async function scene({ stage, camera, clip }) { stage.append(camera(), clip('cam2', 2)) }`)
+  cli('stills', '2', '-p', 'duo')
+  // its frames start where the source does, 0.7 s into its file, and the source carries the sound
+  assert.deepEqual(JSON.parse(read('duo/.cache/media/cam2/meta.json')).want.from, 0.7)
+  assert.deepEqual(JSON.parse(read('duo/.cache/clips.json')), [])
+})
+
+test('beats lays the grid of a tempo or measures a track; fix corrects a spoken word; thumbnail composes 16:9', { timeout: 300000 }, () => {
+  cli('init', 'beat', '--formats', '9:16', '--renders', '720p', '--rules', 'montage')
+  fs.writeFileSync(path.join(home, 'beat/source/edit.json'), JSON.stringify({ duration: 6 }))
+  fs.writeFileSync(path.join(home, 'beat/source/scene.js'), `export default async function scene({ stage, thumbnail }) {
+    stage.innerHTML = thumbnail ? '<h1 style="font-size:200px">Miniature</h1>' : '<h1>Short</h1>'
+  }`)
+  cli('beats', '120', '--at', '0.5', '-p', 'beat')
+  assert.deepEqual(JSON.parse(read('beat/files/beats.json')).beats, [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6])
+  assert.match(read('beat/files/beats.md'), /120 bpm, a beat every 0\.5 s, a bar every 2 s \(4\/4\)\. VIDEO seconds, the track from 0\.5 s\.\n\n- bar 1: 00:00\.50 · 00:01\.00 · 00:01\.50 · 00:02\.00\n/)
+  ffmpeg('-f', 'lavfi', '-i', "aevalsrc='if(lt(mod(t-0.25\\,0.5)\\,0.02)\\,sin(2*PI*3000*t)\\,0)':s=48000:d=10", 'clicks.mp3')
+  cli('beats', path.join(home, 'clicks.mp3'), '-p', 'beat')
+  assert.ok(Math.abs(JSON.parse(read('beat/files/beats.json')).bpm - 120) < 1)
+  cli('thumbnail', '-p', 'beat')
+  assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path.join(home, 'beat/output/beat-thumbnail.jpg')], { encoding: 'utf8' }), /^1280,720/)
+  fs.writeFileSync(path.join(home, 'face/assets/words.json'), JSON.stringify([{ w: 'Sécur', t0: 1, t1: 1.3 }, { w: 'sus.', t0: 1.3, t1: 1.5 }, { w: 'Merci', t0: 2, t1: 2.4 }]))
+  cli('fix', '1.02', 'Secursus.', '-p', 'face')
+  cli('fix', '1.3', '', '-p', 'face')
+  assert.deepEqual(JSON.parse(read('face/assets/words.json')).map(w => w.w), ['Secursus.', 'Merci'])
+  assert.match(read('face/files/words.md'), /Secursus\.\n- \*\*00:02\.00\*\* Merci/)
+  assert.throws(() => cli('fix', '30', 'x', '-p', 'face'), /no spoken word/)
 })

@@ -1,12 +1,13 @@
 ---
 name: montage
 description: Montages carried by music (travel, vlog, event, aftermovie, sport, product shots): cuts on the beat, natural sound moments, few words
-params: {"music": true, "graphics": "support", "max_static": 3, "shot": [1, 3], "shots": true}
+params: {"music": true, "graphics": "support", "max_static": 3, "shot": [1, 3], "shots": true, "on_beat": true}
 ---
 ## When writing the scene
-- The music leads. Choose its tempo first (Direction), then put every cut on a beat or a bar. A track the user gives
-  goes through `load()` in `sound.py`: measure its tempo and first downbeat (onsets, with numpy) before placing the
-  cuts.
+- The music leads. Choose its tempo first (Direction), then put every cut on a beat or a bar. Lay the grid before
+  the scene: `video.mjs beats <bpm>` for music you compose, `video.mjs beats <track> [--at <video s>]` for a track the
+  user gives (it measures its tempo, beats and downbeats; `sound.py` plays it with `load()`). `files/beats.md` gives
+  each bar's beats.
 - Cut 1 to 2 frames before the beat: the eye takes that long, and the cut then feels on it. Vary the grid with the
   energy: on the bar when the music is calm, on every beat or half-beat at the peak, a shot held across a break.
 - Find each rush's shots before choosing: declare every rush as one `media` entry, then run `prepare`.
@@ -31,6 +32,6 @@ params: {"music": true, "graphics": "support", "max_static": 3, "shot": [1, 3], 
 
 ## Self-review: sound and timing (check, audio, files/words.md)
 - [ ] `video.mjs check` reports nothing, or only establishing shots held on purpose
-- [ ] Every cut falls on the grid, 1 to 2 frames before its beat (the cuts' times against the music's tempo)
+- [ ] Every cut falls on the grid, 1 to 2 frames before its beat (`check`'s `on_beat`)
 - [ ] The natural sound moments come through, the music dipping under them
 - [ ] The end resolves with the music, no note cut off

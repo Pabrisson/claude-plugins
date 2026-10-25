@@ -6,12 +6,13 @@ params: {"face_framing": true, "speed": 1.05, "breaths": {"sentence": 0.15, "com
 ## When writing the scene
 - One moment that stands alone without the episode: a strong opinion, a story with its punchline, a surprising
   number. Find it in `files/words.md`; when the request does not name it, propose two or three with their times
-  and let the user choose.
+  and let the user choose. Then give the source only that moment, with a margin: `--source episode.mp4#t=12:20,14:20`
+  (`init` again in a new project), so an hour of episode is not framed for one minute of clip.
 - Start on the strongest sentence, even mid-conversation: cut the run-up. Put the question on screen when the answer
   needs it. Declare the opening with `part('hook', …)`.
 - End on the punchline or a laugh, never on a trailing sentence.
-- Show who speaks. A second camera (the other speaker) is a clip of `edit.json` with `volume` 0, aligned on the
-  source by its sound (cross-correlate the two tracks with numpy), played over the source while that person speaks.
+- Show who speaks. A second camera (the other speaker) is a clip of `edit.json`, synced on the source by its sound
+  with `video.mjs sync <id>`: `clip()` then follows the source, silent. Show it while that person speaks.
   Switch when the voice changes, letting the new voice start just before the picture (J-cut).
 - One camera for two people: reframe on whoever speaks with `cam.view` (`x`, `y`), or split the portrait frame in two
   when both react.

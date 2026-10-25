@@ -8,6 +8,8 @@ voice, the mix goes to -14 LUFS with peaks under -1 dBFS. It is also the kit sou
 placement, filters, noise, oscillators, envelopes, reverb, tape stop. numpy only, no audio file.
 
   uv run audio.py <plan.json> [--variant n] [--at <s> --len 8] [--out x.wav]
+  uv run audio.py --sync <reference> <other>     where the other recording sits in the reference (JSON)
+  uv run audio.py --beats <track>                tempo, beats and downbeat of a music track (JSON)
   uv run audio.py --selftest
 
 The plan, written by video.mjs audio (every time in VIDEO seconds):
@@ -16,11 +18,14 @@ The plan, written by video.mjs audio (every time in VIDEO seconds):
    "clips": [{"id": "arc", "wav": "…/.cache/media/arc/audio.wav", "t": 3.2, "from": 0, "dur": 4, "gain": 1}],
    "levels": {"music": -21, "sfx": -28.5, "duck": 0.5}, "out": "…/assets/mix.wav"}
 """
-import argparse, importlib.util, json, os, sys, tempfile, time, wave
+import argparse, importlib.util, json, os, subprocess, sys, tempfile, time, wave
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+
+# no __pycache__ next to the project's sound.py
+sys.dont_write_bytecode = True
 
 __all__ = ['SR', 'np', 'secs', 'hz', 'bus', 'place', 'filt', 'band_noise', 'sweep', 'osc', 'adsr', 'reverb', 'tape_stop', 'load']
 
@@ -116,13 +121,22 @@ def tape_stop(x, t, back, d=.6):
     x[:, j:j + f] *= np.linspace(0, 1, f)
 
 
+def decode(path, channels=2, rate=SR):
+    """Any sound ffmpeg reads (a video's track too) as float32 samples, interleaved."""
+    r = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(path), '-vn', '-f', 'f32le', '-ac', str(channels), '-ar', str(rate), '-'], capture_output=True)
+    if r.returncode: raise SystemExit(f'{path}: {r.stderr.decode().strip()}')
+    return np.frombuffer(r.stdout, '<f4')
+
+
 def load(path):
-    """A 16-bit 48 kHz WAV (path relative to the video's folder) as a stereo array: a given track, a recorded sound.
-    Convert anything else first: ffmpeg -i in.mp3 -ar 48000 -c:a pcm_s16le assets/x.wav"""
-    with wave.open(str(path)) as w:
-        if w.getsampwidth() != 2 or w.getframerate() != SR: raise SystemExit(f'{path}: 16-bit {SR} Hz expected (convert it with ffmpeg)')
-        x = np.frombuffer(w.readframes(w.getnframes()), '<i2').reshape(-1, w.getnchannels()).T / 32768
-    return x[[0, -1]]
+    """A sound file (WAV, MP3, M4A, FLAC…, path relative to the video's folder) as a stereo array at 48 kHz: a track
+    the user gives, a recorded sound to place."""
+    try:
+        with wave.open(str(path)) as w:
+            if w.getsampwidth() == 2 and w.getframerate() == SR:
+                return (np.frombuffer(w.readframes(w.getnframes()), '<i2').reshape(-1, w.getnchannels()).T / 32768)[[0, -1]]
+    except (wave.Error, EOFError): pass
+    return decode(path).reshape(-1, 2).T.astype(float)
 
 
 # ── loudness and mix ────────────────────────────────────────────────────────
@@ -256,6 +270,82 @@ def tracks(parts, step=.05):
     return {'step': step, 'tracks': {k: np.round(np.maximum(20 * np.log10(r / top + 1e-9), -60), 1).tolist() for k, r in rms.items()}}
 
 
+# ── sync and beats ──────────────────────────────────────────────────────────
+def envelope(x, rate):
+    """Log energy in 10 ms windows, centered and scaled: what two recordings of one moment share."""
+    h = rate // 100
+    e = np.log10((x[:len(x) // h * h].reshape(-1, h).astype(float) ** 2).mean(1) + 1e-8)
+    # a steady sound (a tone, a hum) has no shape to match
+    return (e - e.mean()) / e.std() if e.std() > .05 else np.zeros_like(e)
+
+
+def xcorr(a, b):
+    """c[k] = sum of a[t] * b[t + k] for every lag k from -len(a) to len(b) (FFT), with its lags."""
+    n = 1 << (len(a) + len(b)).bit_length()
+    c = np.fft.irfft(np.conj(np.fft.rfft(a, n)) * np.fft.rfft(b, n), n)
+    return np.concatenate([c[n - len(a) + 1:], c[:len(b)]]), np.arange(-len(a) + 1, len(b))
+
+
+def sync(a, b, rate=8000):
+    """Where recording b sits in recording a (mono, same rate): b's time = a's time + lag. The envelopes find it over
+    the whole length (10 ms), then the waveforms settle it to the sample on 20 s of their overlap. Returns (lag in
+    seconds, r: how well the envelopes match there, 0 to 1: two mics of one room match, two moments do not)."""
+    ea, eb = envelope(a, rate), envelope(b, rate)
+    c, lags = xcorr(ea, eb)
+    # the correlation per lag over its overlap, which must be 5 s or half the shorter one: a few seconds match anything
+    over = np.minimum(len(ea), len(eb) - lags) - np.maximum(0, -lags)
+    r = np.where(over >= min(500, min(len(ea), len(eb)) // 2), c / np.maximum(over, 1), -1)
+    i = int(np.argmax(r))
+    coarse = int(lags[i]) * (rate // 100)
+    # 20 s of the overlap, from its middle, against b with 50 ms either side
+    lo, hi = max(0, -coarse), min(len(a), len(b) - coarse)
+    w, pad = min(20 * rate, hi - lo), rate // 20
+    s0 = lo + max(0, (hi - lo - w) // 2)
+    start = max(0, s0 + coarse - pad)
+    c, lags = xcorr(a[s0:s0 + w], b[start:s0 + coarse + w + pad])
+    return (start + int(lags[np.argmax(c)]) - s0) / rate, float(np.clip(r[i], 0, 1))
+
+
+def beats(x):
+    """Tempo and beats of a music track (mono at SR). The onset strength (spectral flux, 100 frames a second), its
+    tempo by autocorrelation (70 to 180 bpm, nearer 120 when two fit), the beat phase the onsets fit best, then each
+    beat on its local peak, so a played tempo may drift. The downbeat is the beat of a 4/4 bar with the most bass.
+    Returns (bpm, beat times in seconds, index of the first downbeat)."""
+    hop, win = SR // 100, 1024
+    n = len(x) // hop
+    x = np.pad(x.astype(np.float32), (win // 2, win))  # frame k is centered on k * 10 ms
+    w, flux, bass, last = np.hanning(win).astype(np.float32), np.zeros(n), np.zeros(n), None
+    for s in range(0, n, 2000):
+        idx = np.arange(s, min(n, s + 2000))[:, None] * hop + np.arange(win)
+        mag = np.abs(np.fft.rfft(x[idx] * w, axis=1))
+        spec = np.log1p(100 * mag)
+        prev = np.vstack([spec[:1] if last is None else last, spec[:-1]])
+        flux[s:s + len(spec)] = np.maximum(spec - prev, 0).sum(1)
+        bass[s:s + len(spec)] = mag[:, 1:4].sum(1)  # under 150 Hz
+        last = spec[-1:]
+    flux -= np.convolve(flux, np.ones(50) / 50, 'same')
+    flux = np.maximum(flux, 0)
+    f = flux - flux.mean()
+    ac = np.correlate(f, f, 'full')[len(f) - 1:] if len(f) < 20000 else np.fft.irfft(np.abs(np.fft.rfft(f, 2 * len(f))) ** 2)[:len(f)]
+    lags = np.arange(6000 // 180, 6000 // 70 + 1)
+    score = ac[lags] * np.exp(-.5 * (np.log2(lags / 50) / 1.0) ** 2)
+    i = int(np.argmax(score))
+    # the period between frames: a parabola through the peak and its neighbours
+    y0, y1, y2 = ac[lags[i] - 1], ac[lags[i]], ac[lags[i] + 1]
+    period = lags[i] + (.5 * (y0 - y2) / (y0 - 2 * y1 + y2) if y0 - 2 * y1 + y2 < 0 else 0)
+    phase = max(range(int(period)), key=lambda p: flux[np.round(np.arange(p, n - 1, period)).astype(int)].sum())
+    out, t, r = [], float(phase), max(1, int(period * .1))
+    while t < n:
+        k = int(round(t))
+        lo, hi = max(0, k - r), min(n, k + r + 1)
+        if flux[lo:hi].max() > 0: k = lo + int(np.argmax(flux[lo:hi]))
+        out.append(k)
+        t = k + period
+    down = max(range(4), key=lambda q: bass[out[q::4]].sum())
+    times = [k / 100 for k in out]
+    return (60 / float(np.median(np.diff(times))) if len(times) > 8 else 6000 / period), times, down
+
+
 SELFTEST_SOUND = '''
 from audio import *
 
@@ -309,19 +399,52 @@ def selftest():
         level = lambda x, t: lufs(x[:, int(t * SR):int((t + .5) * SR)])
         assert abs(level(clip, 4) - LEVELS['music']) < 1, f'clip at {level(clip, 4):.1f} LUFS'
         assert level(piece(plan['voice'], 5), 5) < LEVELS['music'] - 3, 'clip sound not down under the voice'
-    print(f'selftest ok in {time.time() - started:.1f} s: exact length, no clipping, -14 LUFS with and without a voice, music down under it, effects on their cues, track levels, variants, clip sound in place, deterministic')
+        # any rate and format comes in at 48 kHz, through ffmpeg
+        with wave.open(f'{tmp}/44k.wav', 'wb') as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(44100)
+            w.writeframes((8000 * np.sin(2 * np.pi * 440 * np.arange(44100) / 44100)).astype('<i2').tobytes())
+        assert abs(load(f'{tmp}/44k.wav').shape[1] - SR) < 10, 'load at 44.1 kHz'
+    # sync: the same bursts recorded twice, one starting earlier, the other later, each with its own noise
+    rng, rate = np.random.default_rng(3), 8000
+    ref = rng.standard_normal(60 * rate) * np.repeat(rng.random(600) > .6, rate // 10)
+    for lag, other in ((.5, np.concatenate([np.zeros(rate // 2), ref])), (-1.2345, ref[int(1.2345 * rate):])):
+        got, r = sync(ref, other + .2 * rng.standard_normal(len(other)), rate)
+        assert abs(got - lag) <= 2 / rate and r > .8, f'sync {got:.4f} s instead of {lag} (r {r:.2f})'
+    # beats: hats on every beat at 128 bpm from 0.3 s, a kick on each bar's first
+    bpm, t0 = 128, .3
+    x, truth = .002 * rng.standard_normal(24 * SR), np.arange(t0, 23.5, 60 / bpm)
+    for i, b in enumerate(truth):
+        k = int(b * SR)
+        x[k:k + 2400] += .3 * filt(rng.standard_normal(2400), 6000) * np.exp(-np.arange(2400) / 300)
+        if i % 4 == 0:
+            s, tt = sweep(.3, 160, 48, 28)
+            x[k:k + len(s)] += .8 * s * np.exp(-tt * 12)
+    got, times, down = beats(x)
+    assert abs(got - bpm) < 1, f'{got:.1f} bpm instead of {bpm}'
+    on = [b for b in times if b < truth[-1] + .1]  # the grid goes on to the end of the track
+    assert max(np.min(np.abs(truth - b)) for b in on) < .015 and len(on) == len(truth), 'beats off the clicks'
+    assert abs(((times[down] - t0) / (240 / bpm) + .5) % 1 - .5) < .02, f'downbeat at {times[down]} s'
+    print(f'selftest ok in {time.time() - started:.1f} s: exact length, no clipping, -14 LUFS with and without a voice, music down under it, effects on their cues, track levels, variants, clip sound in place, deterministic, any file loaded, sync, beats')
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description='The video sound: runs source/sound.py, mixes it with the voice, loudness.')
     ap.add_argument('plan', nargs='?')
     ap.add_argument('--selftest', action='store_true')
+    ap.add_argument('--sync', nargs=2, metavar=('REFERENCE', 'OTHER'), help='where the other recording sits in the reference: {"sync": s, "r": 0..1}')
+    ap.add_argument('--beats', metavar='TRACK', help='tempo, beats and downbeat of a track: {"bpm", "beats": [s…], "downbeat": i}')
     ap.add_argument('--variant', type=int, help="the value sound.py reads as v.variant (sound variations)")
     ap.add_argument('--at', type=float, help='an extract from this video second instead of the whole mix')
     ap.add_argument('--len', type=float, default=8, help='length of the extract (s)')
     ap.add_argument('--out', help="output wav (default: the plan's out)")
     a = ap.parse_args()
     if a.selftest: sys.exit(selftest())
+    if a.sync:
+        lag, r = sync(*(decode(f, 1, 8000) for f in a.sync))
+        sys.exit(print(json.dumps({'sync': round(lag, 4), 'r': round(r, 3)})))
+    if a.beats:
+        bpm, times, down = beats(decode(a.beats, 1))
+        sys.exit(print(json.dumps({'bpm': round(bpm, 2), 'beats': [round(t, 3) for t in times], 'downbeat': down})))
     if not a.plan: ap.error('a plan, or --selftest')
     started, plan = time.time(), json.loads(Path(a.plan).read_text())
     if a.variant is not None: plan['variant'] = a.variant

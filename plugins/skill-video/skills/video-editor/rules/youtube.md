@@ -9,8 +9,8 @@ params: {"face_framing": true, "breaths": {"sentence": 0.22, "comma": 0.1}, "mus
 - `prepare` shrinks the silences but keeps a breath long enough for a long video. Do not speed the voice up.
 - Chapters: one `part('sequence', …)` per chapter with its name, and a chapter card or a title at each one. YouTube
   shows them only when the first starts at 0:00, there are 3 or more, and each lasts 10 s or more: the hook is in
-  the first one. `video.mjs check` prints the list (mm:ss and name): copy it into About.md's État, for the
-  description.
+  the first one. `video.mjs check` prints the list (mm:ss and name); `final` writes it, after About.md's
+  `## Description`, into `output/<slug>-description.txt`.
 - Open each chapter on a question it answers, as a re-hook. No filler that announces what comes next.
 - The camera carries the video, full frame in 16:9. Change the framing every 10 to 30 s: a punch-in
   (`cam.view.zoom` 1.1 to 1.25) on a key sentence, then back. Never two zooms in a row.
@@ -23,16 +23,17 @@ params: {"face_framing": true, "breaths": {"sentence": 0.22, "comma": 0.1}, "mus
 - Music: a quiet bed in `sound.py` that changes or pauses at the chapters, and a soft cue on each graphic entrance.
 - End: the CTA of STYLE.md (`part('cta', …)`), then `end_screen` s of end screen (`part('end-screen', …)`) with
   room for YouTube's elements (two video slots, subscribe).
-- `poster` in edit.json on an expressive frame (the face at its peak, the key visual): the thumbnail starts there.
+- `poster` in edit.json on an expressive frame (the face at its peak, the key visual), then the thumbnail: the scene
+  composes it when it gets `thumbnail: true`, `video.mjs thumbnail` writes it (scene-format.md).
 
 ## Self-review: picture (stills/contact.jpg)
 - [ ] The promise is shown on screen during the hook
 - [ ] Every chapter has its card or title
 - [ ] No raw jump cut left where B-roll could cover it
 - [ ] The end screen leaves YouTube's zones free
-- [ ] The poster frame reads as a thumbnail
+- [ ] The thumbnail reads small: one face or object, three to five words, strong contrast
 
 ## Self-review: sound and timing (check, audio, files/words.md)
-- [ ] `video.mjs check` reports nothing, and its chapter list is in About.md
+- [ ] `video.mjs check` reports nothing, and `output/<slug>-description.txt` has the chapters
 - [ ] Every cut lands on a breath
 - [ ] The music changes or pauses at the chapters and never covers the voice
