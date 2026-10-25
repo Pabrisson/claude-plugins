@@ -10,7 +10,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { shownTexts } from './lib/actors.js'
-import { effective, listPacks, mergeParams } from './lib/rules.js'
+import { PARAMS, checkEdit, effective, listPacks, mergeParams, paramErrors } from './lib/rules.js'
 import { FORMATS, STYLE, logical, styleOf } from './lib/runtime.js'
 import { keepSegments, makeTimeline } from './lib/timeline.js'
 
@@ -88,6 +88,8 @@ const run = (bin, argv, input) => execFileSync(bin, argv, { input, stdio: [input
 const out = (bin, argv) => execFileSync(bin, argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] })
 
 const packs = () => listPacks([['plugin', path.join(ENGINE, '../rules')], ['perso', path.join(HOME, '.rules')]])
+// --rules and rules use: one pack per video, or none
+const onePack = v => list(v).length > 1 ? die(`one pack per video, not ${v}`) : !v || v === 'none' ? [] : [v.trim()]
 
 // engine/renders.json, then the projects folder's .renders.json field by field
 function renders() {
@@ -504,7 +506,7 @@ ${!src ? '- No source video: made from scratch in motion design'
 }
 
 function init(slug) {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url> [--source <file|url>…]] [--rules a,b|none]')
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url> [--source <file|url>…]] [--rules <pack>|none]')
   if (opt.fps && !(+opt.fps > 0 && +opt.fps <= 120)) die('--fps: frames per second, e.g. 24, 25, 30, 50 or 60')
   if (opt.codec && !CODECS[opt.codec]) die(`--codec: one of ${Object.keys(CODECS).join(', ')}`)
   const dir = path.join(HOME, slug)
@@ -512,9 +514,9 @@ function init(slug) {
   const formats = list(opt.formats), types = list(opt.renders), known = renders(), sources = opt.source ?? []
   if (!formats.length || formats.some(f => !FORMATS[f] && !(f === 'source' && sources.length))) die(`--formats: one or more of ${Object.keys(FORMATS).join(', ')}, source (with --source)`)
   if (!types.length || types.some(t => !known[t])) die(`--renders: one or more of ${Object.keys(known).join(', ')}`)
-  const active = opt.rules === 'none' ? [] : list(opt.rules)
+  const active = onePack(opt.rules)
   let params
-  try { params = mergeParams(packs(), active) } catch (e) { die(e.message) }
+  try { params = mergeParams(packs(), active[0]) } catch (e) { die(e.message) }
   for (const s of sources) if (!/^https?:\/\//.test(s) && !fs.existsSync(s)) die(`source not found: ${s}`)
 
   for (const d of ['assets/images', 'assets/logos', 'assets/review', 'files/reviews', 'output', 'source', 'stills']) fs.mkdirSync(path.join(dir, d), { recursive: true })
@@ -1237,21 +1239,61 @@ function doctor() {
   if (checks.some(c => !c[1])) process.exit(1)
 }
 
-function rules(sub, arg) {
-  const all = packs()
+// rules [list] | show [<pack>] | use <pack|none> | set <key>=<value>…: the packs, and the project's one with its overrides
+function rules(sub, ...rest) {
+  const all = packs(), [arg] = rest
   if (!sub || sub === 'list') {
     const dir = projectDir(false), active = dir && readJson(path.join(dir, 'source/rules.json')).active
-    for (const pk of Object.values(all)) console.log(`${active ? (active.includes(pk.name) ? '● ' : '○ ') : ''}${pk.name}: ${pk.description ?? ''} [${pk.origin}] ${pk.file}`)
+    for (const pk of Object.values(all)) console.log(`${active ? (active.includes(pk.name) ? '● ' : '○ ') : ''}${pk.name}: ${pk.description ?? ''} [${pk.origin}${pk.extends ? `, extends ${pk.extends}` : ''}] ${pk.file}${pk.errors.length ? `\n  broken, init and rules use refuse it: ${pk.errors.join('; ')}` : ''}`)
     if (active) console.log(`\nactive on ${path.basename(dir)}: ${active.join(', ') || 'none'}`)
+  } else if (sub === 'show') {
+    // the pack's text with the lines of the packs it extends, and on a project the params it follows
+    const r = arg ? null : readJson(path.join(projectDir(), 'source/rules.json')), name = arg ?? r.active[0], pk = all[name]
+    if (name && !pk) die(`unknown rules pack: ${name}`)
+    console.log(pk ? `pack: ${pk.name} [${pk.origin}] ${pk.file}` : 'pack: none')
+    console.log(`params: ${JSON.stringify(r ? effective(r, () => {}) : pk.params)}`)
+    if (Object.keys(r?.overrides ?? {}).length) console.log(`overrides of the project: ${JSON.stringify(r.overrides)}`)
+    if (pk) console.log(`\n${pk.body.trim()}`)
   } else if (sub === 'use' && arg) {
-    const dir = projectDir(), file = path.join(dir, 'source/rules.json'), active = arg === 'none' ? [] : list(arg)
+    const dir = projectDir(), file = path.join(dir, 'source/rules.json'), active = onePack(arg)
     let params
-    try { params = mergeParams(all, active) } catch (e) { die(e.message) }
+    try { params = mergeParams(all, active[0]) } catch (e) { die(e.message) }
     writeJson(file, { active, params, overrides: readJson(file).overrides ?? {} })
     console.log(`rules: ${active.join(', ') || 'none'}. ${readJson(path.join(dir, 'source/project.json')).source ? 'Now run prepare, then rough' : 'Now update the scene, then stills'}`)
-  } else die('usage: rules [list] | rules use <a,b|none>')
+  } else if (sub === 'set' && rest.length && rest.every(x => /^\w+=/.test(x))) {
+    // the project's overrides, over its pack's params: the value is JSON when it parses, else text
+    const dir = projectDir(), file = path.join(dir, 'source/rules.json'), r = readJson(file)
+    r.overrides ??= {}
+    for (const x of rest) {
+      const [k, ...v] = x.split('=')
+      try { r.overrides[k] = JSON.parse(v.join('=')) } catch { r.overrides[k] = v.join('=') }
+      if (!PARAMS[k] && !(k in r.params)) console.log(`note: ${k} is neither a param of the engine nor of the pack: only Claude reads it`)
+    }
+    const errors = paramErrors(r.overrides)
+    if (errors.length) die(`rules set: ${errors.join('; ')}`)
+    writeJson(file, r)
+    console.log(`overrides of the project: ${JSON.stringify(r.overrides)}\nparams: ${JSON.stringify(effective(r))}`)
+    if (rest.some(x => /^(transcribe|face_framing|speed|breaths)=/.test(x)) && readJson(path.join(dir, 'source/project.json')).source) console.log('Now run prepare, then rough')
+  } else die('usage: rules [list] | rules show [<pack>] | rules use <pack|none> | rules set <key>=<value>…')
 }
 
-const commands = { doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs, style: () => style(...args), serve, rules: () => rules(...args) }
+// the active pack's numbers measured on the edit (rules-format.md), after stills: they save the scene's parts
+function check() {
+  const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json'))
+  const j = job(dir, p.formats[0], ''), tl = makeTimeline(j.timeline), saved = fs.statSync(f('.cache/parts.json'), { throwIfNoEntry: false })
+  if (!saved || saved.mtimeMs < fs.statSync(f('source/scene.js')).mtimeMs) die('run stills first: they save the parts of the current scene')
+  const words = fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : []
+  const found = checkEdit(j.params, {
+    duration: j.duration, cuts: loadEdit(dir).cut ?? [], joins: (j.timeline?.segments ?? []).slice(1).map(([a]) => tl.toVideo(a)),
+    words: p.source ? words.filter(w => !w.screen) : [], screen: words.filter(w => w.screen).map(w => ({ w: w.w, v0: tl.toVideo(w.t0), v1: tl.toVideo(w.t1) })),
+    parts: readJson(f('.cache/parts.json')), scene: fs.readFileSync(f('source/scene.js'), 'utf8'),
+  })
+  for (const [ok, msg] of found) console.log(`${ok ? '✓' : '✗'} ${msg}`)
+  const failed = found.filter(([ok]) => !ok).length, active = readJson(f('source/rules.json')).active
+  console.log(found.length ? `${failed ? `${failed} to fix` : 'nothing to fix'} (rules: ${active.join(', ') || 'none'}). The stills show the rest` : 'nothing to measure for this pack: the stills show the rest')
+  if (failed) process.exit(1)
+}
+
+const commands = { doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs, style: () => style(...args), serve, rules: () => rules(...args), check }
 if (!commands[cmd]) die(`usage: video.mjs <${Object.keys(commands).join(' | ')}> [--project <slug>]`)
 await commands[cmd]()

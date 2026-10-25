@@ -69,6 +69,26 @@ test('a pack dropped in .rules/ is listed and applies at init, with the style fr
   assert.ok(!fs.existsSync(path.join(home, 'demo/source/site')))
 })
 
+test('one pack per video; rules show gives it with its personal lines, rules set the overrides, check measures the edit', () => {
+  fs.mkdirSync(path.join(home, '.rules'), { recursive: true })
+  fs.writeFileSync(path.join(home, '.rules/shorts.md'), '---\nextends: shorts\nparams: {"speed": 1.05}\n---\n- Never a tape stop.\n')
+  assert.throws(() => cli('init', 'two', '--formats', '9:16', '--renders', '720p', '--rules', 'shorts,youtube'), /one pack per video/)
+  cli('init', 'chk', '--formats', '9:16', '--renders', '720p', '--rules', 'shorts')
+  assert.match(cli('rules', 'show', '-p', 'chk'), /pack: shorts \[perso \(overrides plugin\)\][\s\S]*"speed":1\.05[\s\S]*hook[\s\S]*Never a tape stop/)
+  assert.throws(() => cli('rules', 'set', 'speed=fast', '-p', 'chk'), /speed/)
+  cli('rules', 'set', 'speed=1.1', 'hook=2', '-p', 'chk')
+  assert.deepEqual(JSON.parse(read('chk/source/rules.json')).overrides, { speed: 1.1, hook: 2 })
+  fs.writeFileSync(path.join(home, 'chk/source/edit.json'), JSON.stringify({ duration: 20, cut: [] }))
+  fs.writeFileSync(path.join(home, 'chk/source/scene.js'), 'export default async function scene({ captions }) { captions() }')
+  assert.throws(() => cli('check', '-p', 'chk'), /run stills first/)
+  fs.mkdirSync(path.join(home, 'chk/.cache'))
+  fs.writeFileSync(path.join(home, 'chk/.cache/parts.json'), JSON.stringify([{ kind: 'hook', t0: 0, t1: 2 }, { kind: 'cta', t0: 17, t1: 20 }]))
+  const log = (() => { try { return cli('check', '-p', 'chk') } catch (e) { return e.stdout } })()
+  assert.match(log, /✗ duration: 20 s, the pack wants 30 to 75 s/)
+  assert.match(log, /✓ hook: part\('hook'\) starts at 0 s/)
+  assert.match(log, /✓ CTA ends at 20 s/)
+})
+
 const ffmpeg = (...argv) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { cwd: home })
 
 test('several sources are joined end to end, in order, each fitted into the first one and cut to whole frames', { timeout: 120000 }, () => {

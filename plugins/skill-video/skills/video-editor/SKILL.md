@@ -120,7 +120,8 @@ Before asking, read the size and frame rate of the first rush (the source's firs
   - `480p` and the other resolutions of `renders.json` go through Other.
 - **Règles** (header `Règles`, **single choice**: one pack per video): « Aucune règle (recommandé) » first, the
   default, then the packs from `video.mjs rules list` with their descriptions. A pack is a genre: `shorts`,
-  `youtube`, `interview`, `tutorial`, `montage`, `corporate`, `motion-design`, and the user's own.
+  `youtube`, `interview`, `podcast-clip`, `tutorial`, `montage`, `corporate`, `ad`, `motion-design`, and the user's
+  own.
   - After « Aucune règle », the three packs closest to the request. The user types the others through Other.
 
 **Call 2 (single choice):**
@@ -178,7 +179,7 @@ Then continue.
 ### 6. Art direction, before any code
 
 Read `references/scene-format.md`, the project's `source/STYLE.md` (its notes included) and the **active pack**
-(`rules list` gives its file; its params are in `source/rules.json`).
+with `video.mjs rules show -p <slug>`: its text, the user's own lines, and the params the project follows.
 
 The style gives you material: the brand's palette, type and symbols, and what the user asked for in its notes. The
 look of this video is yours to invent here. The other videos of the projects folder are not a reference: do not open
@@ -267,6 +268,8 @@ This is where the quality comes from, so take the time it needs: usually four to
 - **Render the stills that matter**, not only the beats:
   `video.mjs stills <source s…> -p <slug> --format <main>`. Take both sides of every transition, the middle of the
   fast moves, and the peak and last frame of each sequence.
+- **Measure** with `video.mjs check -p <slug>`: the pack's numbers on the edit (length, hook, CTA, stretches without
+  a change, cuts inside a word…). Fix what it flags.
 - **Read the sheets and hunt the defects**:
   - something that pops, flickers at a cut, or does not animate (`preview` shows the motion live);
   - overlaps and texts cut by the frame;
@@ -278,6 +281,7 @@ This is where the quality comes from, so take the time it needs: usually four to
     sequences? Do the fields follow the color story?
   - with footage: a weak or badly framed shot left in, a raw jump cut, a grade that changes between rushes, a
     graphic over a face or the action, a clip that hides what the speaker shows;
+  - every line of the active pack's two checklists (picture, then sound and timing);
   - anything below the bar of step 6.
 - **Fix, and look again.**
 
@@ -369,22 +373,29 @@ the playhead. R reloads it after you edit the scene.
 
 ## rules
 
-- `rules`: run `video.mjs rules list`.
-- `rules use <a,b|none>`: run `video.mjs rules use … -p <slug>`. With a source, rerun `prepare` then `rough`.
-- `rules new <name>`: read `references/rules-format.md`, ask a few questions, and write
-  `.rules/<name>.md` in the projects folder. Check that it appears in `rules list`.
-- `rules edit <name>`: copy the plugin's pack into the projects folder's `.rules/` if it is not there yet, then edit the
-  copy. Never edit the packs inside the plugin: updates replace them.
+Read `references/rules-format.md` before writing a pack. One pack per video, or none.
+- `rules`: run `video.mjs rules list`. Tell the user about any pack it flags as broken.
+- `rules show [<name>]`: run `video.mjs rules show <name>`, or `rules show -p <slug>` for the project's pack.
+- `rules use <name|none>`: run `video.mjs rules use … -p <slug>`. With a source, rerun `prepare` then `rough`.
+- `rules set <key>=<value>`: run `video.mjs rules set … -p <slug>`, for this project only. After `transcribe`,
+  `face_framing`, `speed` or `breaths`, rerun `prepare` then `rough`.
+- `rules new <name>`: ask a few questions, and write `.rules/<name>.md` in the projects folder. Check that it
+  appears in `rules list`.
+- `rules edit <name>`: write the changes in the projects folder's `.rules/<name>.md`, with `extends: <name>` in its
+  frontmatter (create it if it is not there). Never copy the plugin's pack, and never edit the packs inside the
+  plugin: updates replace them.
 
 ## Learning
 
 When the user states a lasting preference ("always", "never", "I don't like this kind of…", a variation they
 picked), offer to save it in the right place:
 - **Identity, look or sound**: the style, with `video.mjs style set …` or `style note "…"`, in the user's words.
-- **How to edit** (pace, cuts, density, what to show): the personal copy of the active pack concerned, in
-  `.rules/`. If several packs are active, ask which one.
+- **How to edit** (pace, cuts, density, what to show): the active pack's personal lines, in `.rules/<name>.md`
+  with `extends: <name>` (create it if it is not there).
+- **For this video only**: `video.mjs rules set …` on the project.
 
-Finished projects keep their frozen style and packs. Nothing changes them after the fact.
+Finished projects keep their frozen style and their pack's params. The pack's text is not frozen: `rules show`
+gives its current lines.
 
 ## Good to know
 

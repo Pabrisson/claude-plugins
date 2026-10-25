@@ -189,12 +189,23 @@ part('title', at(26.2), at(27.8), { name: 'Figural' })
 A `clip()` is a part of its own (`kind: 'clip'`), and with a source `final` adds the kept takes (`kind: 'take'`).
 `render` and `stills` export the parts into `.cache/parts.json`; `final` keeps them in `files/video/vN.json`.
 
+`video.mjs check` reads three kinds by name when the pack asks for them (rules-format.md): `part('hook', …)`,
+`part('cta', …)` and `part('end-screen', …)`.
+
+## The platforms' interface (9:16)
+
+TikTok, Reels and Shorts draw their interface over a vertical video: the tabs at the top, the buttons on the right,
+the account and the caption at the bottom. Keep texts, captions, faces and the key visual out of about 14 % at the
+top, 22 % at the bottom, 13 % on the right and 6 % on the left (270, 420, 140 and 65 px at 1080×1920).
+Backgrounds and motion may run under them.
+
 ## Checking
 
 `video.mjs stills [source seconds…] --format all`: images and a contact sheet per format (without times: one per
 beat of the timeline). Ask for the moments that matter: both sides of every transition, the middle of fast moves,
-the last frame of each sequence. `video.mjs preview`: the scene live in Chrome, with the tweens and cues around the
-playhead; R reloads it. Renders run at about 175 to 280 frames per second, four times slower with `--blur 4`.
+the last frame of each sequence. `video.mjs check`, after `stills`: the active pack's numbers measured on the edit
+(length, hook, CTA, longest stretch without a change, cuts inside a word…). `video.mjs preview`: the scene live in
+Chrome, with the tweens and cues around the playhead; R reloads it. Renders run at about 175 to 280 frames per second, four times slower with `--blur 4`.
 
 ## Variations
 
