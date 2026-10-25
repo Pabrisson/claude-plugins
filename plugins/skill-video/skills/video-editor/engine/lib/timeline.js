@@ -60,3 +60,12 @@ export function keepSegments(silences, words, breaths, duration) {
   if (duration > t) segs.push([ms(t), ms(duration)])
   return segs
 }
+
+// The source's still stretches [[a, b], …] as they play once cut: the seconds kept of each (video) and the words
+// left over them, for the ones kept `min` s or more.
+export function stillStretches(freezes, tl, words, min) {
+  return freezes.map(([a, b]) => ({
+    a, b, kept: ms(tl.toVideo(b) - tl.toVideo(a)),
+    said: words.filter(w => w.t1 > a && w.t0 < b && tl.toVideo(w.t1) > tl.toVideo(w.t0)).map(w => w.w).join(' '),
+  })).filter(x => x.kept >= min)
+}

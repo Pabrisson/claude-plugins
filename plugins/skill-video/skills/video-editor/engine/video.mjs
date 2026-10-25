@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // video-editor CLI. Every time read or written here is in SOURCE seconds (identical to video seconds without a source).
 // Project commands work on the current directory, or on --project <slug|path>.
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
@@ -12,7 +12,7 @@ import { parseArgs } from 'node:util'
 import { shownTexts } from './lib/actors.js'
 import { PARAMS, checkEdit, effective, listPacks, mergeParams, paramErrors } from './lib/rules.js'
 import { FORMATS, STYLE, logical, styleOf } from './lib/runtime.js'
-import { keepSegments, makeTimeline } from './lib/timeline.js'
+import { keepSegments, makeTimeline, stillStretches } from './lib/timeline.js'
 
 const SELF = fileURLToPath(import.meta.url)
 // the code this process runs: a studio server started from an older video.mjs gets replaced
@@ -86,6 +86,12 @@ const writeJson = (f, v) => fs.writeFileSync(f, JSON.stringify(v, null, 2) + '\n
 const hash = s => createHash('sha1').update(s).digest('hex')
 const run = (bin, argv, input) => execFileSync(bin, argv, { input, stdio: [input ? 'pipe' : 'ignore', 'inherit', 'inherit'], maxBuffer: Infinity })
 const out = (bin, argv) => execFileSync(bin, argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] })
+// the log of an ffmpeg pass that only analyzes (its filters print to stderr)
+const ffmpegLog = argv => {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', ...argv], { encoding: 'utf8', maxBuffer: Infinity })
+  if (r.status) die(`ffmpeg: ${r.stderr.trim().split('\n').at(-1)}`)
+  return r.stderr
+}
 
 const packs = () => listPacks([['plugin', path.join(ENGINE, '../rules')], ['perso', path.join(HOME, '.rules')]])
 // --rules and rules use: one pack per video, or none
@@ -185,6 +191,7 @@ function centerCrop({ width: w, height: h }, r) {
 }
 
 // source/edit.json: the data the engine reads besides the scene (duration without a source, cut, poster, media, music)
+const mediaFile = (dir, m) => path.resolve(dir, String(m.src).replace(/^~(?=\/)/, os.homedir()))
 const loadEdit = dir => {
   const file = path.join(dir, 'source/edit.json')
   return fs.existsSync(file) ? readJson(file) : {}
@@ -358,7 +365,7 @@ function extractMedia(dir, media, p) {
   const need = Math.max(...p.renders.map(t => renderShort(t)))
   for (const [id, m] of Object.entries(media ?? {})) {
     if (!/^[\w-]+$/.test(id)) die(`media id ${id}: letters, digits, - and _ only`)
-    const src = path.resolve(dir, String(m.src).replace(/^~(?=\/)/, os.homedir()))
+    const src = mediaFile(dir, m)
     if (!fs.existsSync(src)) die(`media ${id}: ${src} not found`)
     const dest = path.join(dir, '.cache/media', id), metaFile = path.join(dest, 'meta.json')
     const want = { src, mtime: fs.statSync(src).mtimeMs, from: m.from ?? 0, dur: m.dur ?? null, fps: p.fps, width: m.width ?? null, short: need }
@@ -552,8 +559,13 @@ function init(slug) {
 
 async function prepare() {
   const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json'))
-  if (!p.source) die('this project has no source video: nothing to prepare')
   const params = effective(readJson(f('source/rules.json')))
+  if (params.shots) scanShots(dir, p)
+  else fs.rmSync(f('files/shots.md'), { force: true })
+  if (!p.source) {
+    if (!params.shots) die('this project has no source video and its pack scans no clips: nothing to prepare')
+    return
+  }
   const lang = readJson(f('source/style.json')).creator?.lang ?? 'fr'
 
   let quiet = null
@@ -580,8 +592,43 @@ async function prepare() {
   if (params.face_framing) {
     if (opt.force || !fs.existsSync(f('assets/frames.json'))) await detectFaces(dir, p)
   } else fs.rmSync(f('assets/frames.json'), { force: true })
+
+  // freezes: where the picture stays still (a screen recording waiting), as it plays once cut, with what is said
+  if (params.freezes) {
+    if (opt.force || !fs.existsSync(f('assets/freezes.json'))) {
+      const log = ffmpegLog(['-i', f('assets/source.mp4'), '-vf', 'scale=320:-2,freezedetect=n=0.003:d=1', '-an', '-f', 'null', '-'])
+      const ends = [...log.matchAll(/freeze_end: ([\d.]+)/g)].map(m => +m[1])
+      writeJson(f('assets/freezes.json'), [...log.matchAll(/freeze_start: ([\d.]+)/g)].map((m, i) => [ms(+m[1]), ms(ends[i] ?? duration)]))
+    }
+    const still = stillStretches(readJson(f('assets/freezes.json')), tl, words, params.freezes)
+    fs.writeFileSync(f('files/freezes.md'), `# Still screen: ${p.slug}\n\nWhere the picture stays still for ${params.freezes} s or more once cut (SOURCE seconds, as of the last prepare),\nwith what is said over it.\n\n` +
+      (still.map(x => `- **${clock(x.a)} → ${clock(x.b)}** ${x.kept} s kept, ${x.said ? `said: "${x.said}"` : 'nothing said'}`).join('\n') || '- (none)') + '\n')
+    console.log(`still screen: ${still.length} stretch(es) of ${params.freezes} s or more → files/freezes.md`)
+  } else fs.rmSync(f('files/freezes.md'), { force: true })
   console.log(`transcript: ${!params.transcribe ? 'off (rules)' : words.length ? `${words.length} words → files/words.md` : 'no speech found'}`)
   console.log(`timeline: ${tl.segments.length} segment(s), ${duration} s → ${ms(tl.duration)} s (speed ×${tl.speed}). Next: rough`)
+}
+
+// shots: where each clip of edit.json's media cuts to a new shot (seconds of its file), to pick their from and dur
+function scanShots(dir, p) {
+  const f = rel => path.join(dir, rel), cache = fs.existsSync(f('assets/shots.json')) ? readJson(f('assets/shots.json')) : {}
+  const files = new Map(Object.values(loadEdit(dir).media ?? {}).map(m => [mediaFile(dir, m), m.src]))
+  if (!files.size) return console.log('shots: no clip in edit.json media yet')
+  const started = Date.now(), lines = []
+  for (const [file, src] of files) {
+    if (!fs.existsSync(file)) die(`media ${src}: ${file} not found`)
+    const mtime = fs.statSync(file).mtimeMs
+    if (opt.force || cache[file]?.mtime !== mtime) {
+      // ponytail: one scene threshold (0.3) for every footage, a param when soft cuts go unseen
+      const log = ffmpegLog(['-i', file, '-vf', "scale=320:-2,select='gt(scene,0.3)',showinfo", '-an', '-f', 'null', '-'])
+      cache[file] = { mtime, duration: probe(file).duration, cuts: [...log.matchAll(/pts_time:([\d.]+)/g)].map(m => ms(+m[1])) }
+    }
+    const marks = [0, ...cache[file].cuts, cache[file].duration]
+    lines.push(`## ${src} (${cache[file].duration} s)`, ...marks.slice(1).map((t, i) => `- ${clock(marks[i])} → ${clock(t)} (${ms(t - marks[i])} s)`), '')
+  }
+  writeJson(f('assets/shots.json'), cache)
+  fs.writeFileSync(f('files/shots.md'), `# Shots: ${p.slug}\n\nThe shots of each file of edit.json's media, in seconds of the file: take a media's \`from\` and \`dur\` inside one\nshot.\n\n${lines.join('\n')}`)
+  console.log(`shots: ${lines.filter(l => l.startsWith('- ')).length} shots in ${files.size} file(s) → files/shots.md (${secs(started)} s)`)
 }
 
 function rough() {

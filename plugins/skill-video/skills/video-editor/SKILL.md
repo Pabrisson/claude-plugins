@@ -152,7 +152,11 @@ Declare the clips in `source/edit.json`'s `media`, with the path of each file. D
 
 With a source, run `video.mjs prepare -p <slug>`, then `video.mjs rough -p <slug>`:
 - `prepare` transcribes the speech, cuts the silences when a pack says so, and frames the face when a pack says so.
+  When the pack asks, it also lists the still screens of the source (`files/freezes.md`) and the shots of the clips
+  (`files/shots.md`).
 - `rough` gives `output/<slug>-rough.mp4` (version v1).
+
+Without a source, run `prepare` only when the pack has `shots`, once the clips are declared.
 
 ### 4. Brief
 

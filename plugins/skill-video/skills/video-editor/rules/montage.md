@@ -1,7 +1,7 @@
 ---
 name: montage
 description: Montages carried by music (travel, vlog, event, aftermovie, sport, product shots): cuts on the beat, natural sound moments, few words
-params: {"music": true, "graphics": "support", "max_static": 3, "shot": [1, 3]}
+params: {"music": true, "graphics": "support", "max_static": 3, "shot": [1, 3], "shots": true}
 ---
 ## When writing the scene
 - The music leads. Choose its tempo first (Direction), then put every cut on a beat or a bar. A track the user gives
@@ -9,8 +9,8 @@ params: {"music": true, "graphics": "support", "max_static": 3, "shot": [1, 3]}
   cuts.
 - Cut 1 to 2 frames before the beat: the eye takes that long, and the cut then feels on it. Vary the grid with the
   energy: on the bar when the music is calm, on every beat or half-beat at the peak, a shot held across a break.
-- Find each rush's shots before choosing: `ffmpeg -i <rush> -vf "select='gt(scene,0.3)',showinfo" -an -f null -
-  2>&1 | grep -o "pts_time:[0-9.]*"` lists where the shot changes; then look at the contact sheet of each shot.
+- Find each rush's shots before choosing: declare every rush as one `media` entry, then run `prepare`.
+  `files/shots.md` lists the shots of each file; look at the contact sheet of each shot.
 - The rushes are clips: one `media` entry per shot you keep (`from`, `dur`), placed with `clip()` on the beats, in
   the order you choose. A voice-over or a rush with speech, when there is one, is the source. Keep only the best
   seconds of each shot (`shot` s, longer for a wide establishing shot), and cut on movement: a turn, a step, a pan

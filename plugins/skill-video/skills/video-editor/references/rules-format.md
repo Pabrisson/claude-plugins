@@ -51,6 +51,8 @@ keeps getting the plugin's updates and holds only the user's own lines.
 | `captions` | `false` | Tells Claude to put `captions()` in the scene; `check` makes sure it is there |
 | `music` | `false` | Tells Claude to compose music in `source/sound.py` |
 | `sfx` | `false` | Tells Claude to put `cue()` on key moments and design their sounds in `source/sound.py` |
+| `freezes` | none | `prepare` lists in `files/freezes.md` where the source's picture stays still for that many seconds or more once cut, with what is said over it (a screen recording waiting) |
+| `shots` | `false` | `prepare` lists in `files/shots.md` the shots of every file of `edit.json`'s media, to pick each clip's `from` and `dur`; it then runs without a source too |
 | `graphics` | none | Tells Claude what carries the video: `lead` (the motion design: the showreel bar of the skill's Direction) or `support` (the footage: the graphics serve it, the footage bar). Without it, Claude decides from the video and writes the choice in the Direction |
 
 ## Params `check` measures

@@ -15,7 +15,7 @@ export const PARAMS = {
   speed: [v => typeof v === 'number' && v >= 0.5 && v <= 2, 'a number from 0.5 to 2'],
   breaths: [v => v === null || (isObject(v) && Object.values(v).every(x => typeof x === 'number' && x >= 0)), '{"sentence": s, "comma": s} or null'],
   graphics: [v => v === 'lead' || v === 'support', '"lead" or "support"'],
-  max_static: secs, hook: secs, end_screen: secs, duration: range, shot: range,
+  max_static: secs, hook: secs, end_screen: secs, freezes: secs, duration: range, shot: range, shots: bool,
   read: [v => isObject(v) && secs[0](v.word) && secs[0](v.min), '{"word": s, "min": s}'],
 }
 

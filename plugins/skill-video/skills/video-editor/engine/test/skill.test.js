@@ -91,6 +91,21 @@ test('one pack per video; rules show gives it with its personal lines, rules set
 
 const ffmpeg = (...argv) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { cwd: home })
 
+test('prepare lists the still screens of the source (freezes) and the shots of the clips (shots, even without a source)', { timeout: 120000 }, () => {
+  // 2 s moving, 3 s of a still red screen, 2 s moving again
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=320x240:r=25:d=2', '-f', 'lavfi', '-i', 'color=c=red:s=320x240:r=25:d=3', '-f', 'lavfi', '-i', 'mandelbrot=s=320x240:r=25',
+    '-filter_complex', '[2]trim=duration=2,setpts=PTS-STARTPTS[m];[0][1][m]concat=n=3:v=1:a=0', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', 'shots.mp4')
+  cli('init', 'screen', '--formats', '16:9', '--renders', '720p', '--rules', 'tutorial', '--source', path.join(home, 'shots.mp4'))
+  assert.match(cli('prepare', '-p', 'screen'), /still screen: 1 stretch/)
+  assert.match(read('screen/files/freezes.md'), /\*\*00:02\.00 → 00:05\.00\*\* 3 s kept, nothing said/)
+  assert.throws(() => cli('prepare', '-p', 'demo'), /nothing to prepare/)
+  cli('init', 'trip', '--formats', '16:9', '--renders', '720p', '--rules', 'montage')
+  fs.writeFileSync(path.join(home, 'trip/source/edit.json'), JSON.stringify({ duration: 5, media: { a: { src: path.join(home, 'shots.mp4') }, b: { src: path.join(home, 'shots.mp4'), from: 2 } } }))
+  cli('prepare', '-p', 'trip')
+  assert.match(read('trip/files/shots.md'), /shots\.mp4 \([\d.]+ s\)\n- 00:00\.00 → 00:02\.00 \(2 s\)\n- 00:02\.00 → 00:05\.00 \(3 s\)\n- 00:05\.00 → 00:0[67]/)
+  assert.equal(read('trip/files/shots.md').match(/^## /gm).length, 1)
+})
+
 test('several sources are joined end to end, in order, each fitted into the first one and cut to whole frames', { timeout: 120000 }, () => {
   ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=1280x720:r=30:d=2', '-f', 'lavfi', '-i', 'sine=f=440:r=44100:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', 'r1.mp4')
   ffmpeg('-f', 'lavfi', '-i', 'testsrc=s=720x1280:r=25:d=1.52', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', 'r2.mov')

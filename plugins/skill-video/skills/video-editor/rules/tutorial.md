@@ -1,14 +1,14 @@
 ---
 name: tutorial
 description: Tutorials, screen recordings and courses: every step kept and clear, zooms on the action, callouts, chapters
-params: {"breaths": {"sentence": 0.2, "comma": 0.1}, "music": true, "sfx": true, "graphics": "support", "max_static": 10}
+params: {"breaths": {"sentence": 0.2, "comma": 0.1}, "music": true, "sfx": true, "graphics": "support", "max_static": 10, "freezes": 2}
 ---
 ## When writing the scene
 - The screen recording is the source, or a `media` clip when the face cam is the source. Every step the viewer must
   reproduce stays, in order. Cut the waiting (loading, typing a long text) rather than speeding the voice up.
-- Find the waiting: `ffmpeg -i assets/source.mp4 -vf freezedetect=n=0.003:d=2 -an -f null - 2>&1 | grep -o
-  "freeze_[a-z]*: [0-9.]*"` lists where the screen stays still for 2 s or more (SOURCE seconds). Cut it when nothing
-  is said; when the voice goes on, zoom or add a callout so the picture moves.
+- `files/freezes.md` (written by `prepare`) lists where the screen stays still for `freezes` s or more once cut, with
+  what is said over it. Cut it when nothing is said; when the voice goes on, zoom or add a callout so the picture
+  moves.
 - Show the final result in the first 10 s, as the promise, then build it step by step.
 - Zoom on the action: `cam.view = { zoom, x, y }` on the area being clicked or typed into (source pixels), held
   while it is used, then back to the whole screen between steps. Smooth moves (0.4 to 0.6 s, `power2.inOut`), never
@@ -33,5 +33,5 @@ params: {"breaths": {"sentence": 0.2, "comma": 0.1}, "music": true, "sfx": true,
 
 ## Self-review: sound and timing (check, audio, files/words.md)
 - [ ] `video.mjs check` reports nothing
-- [ ] No waiting left: every still screen without speech is cut
+- [ ] No waiting left: every stretch of `files/freezes.md` is cut or made to move
 - [ ] The voice explains each step while it is on screen, not before or after

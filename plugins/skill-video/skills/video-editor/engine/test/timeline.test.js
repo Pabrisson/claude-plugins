@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { keepSegments, makeTimeline } from '../lib/timeline.js'
+import { keepSegments, makeTimeline, stillStretches } from '../lib/timeline.js'
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`)
 
@@ -40,4 +40,13 @@ test('silences shrink to a breath chosen by punctuation', () => {
 test('a silence inside a word is kept', () => {
   const words = [{ w: 'aptitude', t0: 1, t1: 2 }]
   assert.deepEqual(keepSegments([[1.4, 1.6]], words, { sentence: 0.08, comma: 0.05 }, 3), [[0, 3]])
+})
+
+test('still stretches as they play once cut: the seconds kept and the words left over them', () => {
+  const tl = makeTimeline({ fps: 25, speed: 1, segments: [[0, 20]] }, [[4, 6]])
+  const words = [{ w: 'on', t0: 3, t1: 3.2 }, { w: 'attend', t0: 4.5, t1: 5 }, { w: 'encore', t0: 12, t1: 12.4 }]
+  assert.deepEqual(stillStretches([[2, 7], [10, 11], [11.5, 15]], tl, words, 2), [
+    { a: 2, b: 7, kept: 3, said: 'on' },
+    { a: 11.5, b: 15, kept: 3.5, said: 'encore' },
+  ])
 })
