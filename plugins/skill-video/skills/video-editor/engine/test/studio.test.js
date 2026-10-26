@@ -64,6 +64,22 @@ test('nothing outside the project, no foreign site', async () => {
   assert.equal((await fetch(`http://127.0.0.1:${port}/nope/api/project`)).status, 404)
 })
 
+test('only a version whose preview is on disk can be compared', async () => {
+  const project = path.join(dir, 'source/project.json'), before = fs.readFileSync(project, 'utf8')
+  const versions = [1, 2, 3].map(v => ({ v, files: { '9:16': 'demo-9x16-1080p.mp4' }, timeline: null }))
+  fs.writeFileSync(project, JSON.stringify({ ...JSON.parse(before), versions }))
+  fs.mkdirSync(path.join(dir, 'files/versions'), { recursive: true })
+  fs.writeFileSync(path.join(dir, 'files/versions/v1-9x16.mp4'), Buffer.alloc(500, 1))
+  try {
+    const p = await (await fetch(base + 'api/project')).json()
+    assert.deepEqual(p.versions.map(v => v.preview && [v.preview.format, v.preview.url.replace(/\?.*/, '')]), [['9:16', 'project/files/versions/v1-9x16.mp4'], null, null])
+    assert.equal((await fetch(base + p.versions[0].preview.url, { headers: { Range: 'bytes=0-9' } })).status, 206)
+  } finally {
+    fs.writeFileSync(project, before)
+    fs.rmSync(path.join(dir, 'files/versions'), { recursive: true })
+  }
+})
+
 test('videos answer byte ranges', async () => {
   const r = await fetch(base + 'video/demo-rough.mp4', { headers: { Range: 'bytes=100-199' } })
   assert.equal(r.status, 206)

@@ -16,6 +16,9 @@ export type Version = {
   duration: number
   timeline: { speed: number; segments: [number, number][] } | null
   files: Record<string, VideoFile | null>
+  // its 720p preview while it is on disk (files/versions/), to compare with: the main format only. Missing from an
+  // older server
+  preview?: { format: string; url: string } | null
 }
 // what is being done on the video (the project's .cache/progress.json): the engine's commands and Claude's own steps
 export type Step = {

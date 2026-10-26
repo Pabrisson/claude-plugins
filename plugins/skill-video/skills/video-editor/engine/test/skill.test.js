@@ -152,6 +152,9 @@ test('the scene knows the resolution it draws, by name and in pixels', { timeout
   assert.deepEqual(JSON.parse(read('res/.cache/cues.json')), [{ kind: 'res', t: 0, resolution: '', size: [720, 1280] }])
   cli('render', '-p', 'res')
   assert.deepEqual(JSON.parse(read('res/.cache/cues.json')), [{ kind: 'res', t: 0, resolution: '1080p', size: [1080, 1920] }])
+  // the version kept for the studio's comparison is a 720p preview, not a second 1080p
+  cli('final', '-p', 'res')
+  assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path.join(home, 'res/files/versions/v1-9x16.mp4')], { encoding: 'utf8' }), /^720,1280/)
 })
 
 test('a chunk whose page Chrome loses renders again on a new page', { timeout: 120000 }, async () => {
@@ -291,6 +294,8 @@ test("final keeps the scene's parts and a strip of thumbnails per format for the
   assert.deepEqual(Object.keys(v.strips), ['16:9', '9:16'])
   assert.equal(v.strips['9:16'].count, 6)
   assert.ok(fs.statSync(path.join(home, 'parts', v.strips['9:16'].file)).size > 1000)
+  // and its preview, kept once output/ is overwritten: the main format only
+  assert.deepEqual(fs.readdirSync(path.join(home, 'parts/files/versions')), ['v1-16x9.mp4'])
 })
 
 test('a draft is the main format alone, sharp, in 720p; the delivery gets subtitles and the description', { timeout: 300000 }, () => {
@@ -319,6 +324,8 @@ test('a draft is the main format alone, sharp, in 720p; the delivery gets subtit
   const { versions } = JSON.parse(read('parts/source/project.json'))
   assert.deepEqual([versions.at(-1).draft, versions.at(-1).files], [true, { '16:9': 'parts-16x9-draft.mp4' }])
   assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path.join(home, 'parts/output/parts-16x9-draft.mp4')], { encoding: 'utf8' }), /^1280,720/)
+  // with its sound
+  assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', path.join(home, 'parts/files/versions/v5-16x9.mp4')], { encoding: 'utf8' }), /^video\naudio/)
 })
 
 test('sync places a second camera by its sound; it follows the source, silent', { timeout: 300000 }, () => {
@@ -435,6 +442,7 @@ test('ElevenLabs (faked): only what elevenlabs.json turns on; a voice-over becom
   assert.ok(!fs.existsSync(path.join(home, 'vo/assets/frames.json')))
   cli('rough', '-p', 'vo')
   assert.ok(fs.existsSync(path.join(home, 'vo/output/vo-rough.mp4')))
+  assert.ok(fs.existsSync(path.join(home, 'vo/files/versions/v1-9x16.mp4')))
 
   cli('init', 'sc', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--source', path.join(home, 'talk.mp4'))
   cli('elevenlabs', 'set', 'transcript=true', '-p', 'sc')

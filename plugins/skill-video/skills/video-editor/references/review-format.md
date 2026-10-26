@@ -5,7 +5,9 @@ engine's steps (with the renders' progress) and Claude's (`video.mjs status`). I
 version lands.
 
 Every render (`rough`, `final`, `final --draft`) is a version `vN` of the project (`source/project.json` `versions`;
-a draft has `draft: true` and the main format only). The studio
+a draft has `draft: true` and the main format only). Each one also keeps a 720p preview of its main format
+(`files/versions/vN-<ratio>.mp4`), since the next render overwrites `output/`: the studio compares the version with an
+earlier one whose preview is still on disk (V). The studio
 (`video.mjs studio`, http://127.0.0.1:41187/<slug>/, or the next free port when another projects folder has its own
 studio there; the root opens the first video of the folder, the grid button
 switches to another) shows one version; the user comments, cuts and draws on it,

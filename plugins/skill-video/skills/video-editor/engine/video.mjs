@@ -880,6 +880,7 @@ function rough() {
     '-vf', vf, '-map', '0:v:0', ...(voice ? ['-map', '1:a', '-c:a', 'aac', '-b:a', '160k'] : ['-an']),
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-shortest', file])
   const v = addVersion(dir, p, { rough: true, duration: ms(tl.duration), files: { [p.formats[0]]: path.basename(file) }, timeline: { speed: tl.speed, segments: tl.segments } })
+  keepPreview(dir, v, p.formats[0], file)
   console.log(`rough cut v${v}: ${file} (${p.formats[0]}, ${ms(p.fps)} fps, ${clock(tl.duration)}, built in ${secs(started)} s)`)
 }
 
@@ -1114,6 +1115,9 @@ function final() {
   }
   const takes = p.source ? (j.timeline?.segments ?? [[0, j.duration]]).map(([a, b], i) => ({ kind: 'take', t0: ms(tl.toVideo(a)), t1: ms(tl.toVideo(b - 0.001)), name: `take ${i + 1}`, source: [a, b] })) : []
   fs.writeFileSync(f(`files/video/v${v}.json`), JSON.stringify({ parts: [...takes, ...parts], strips }))
+  // its preview, from its smallest render: no 4K to decode when a 1080p is there
+  const small = types.reduce((a, b) => (renderShort(a) <= renderShort(b) ? a : b))
+  keepPreview(dir, v, formats[0], f(`output/${p.slug}-${ratio(formats[0])}-${small}.mp4`))
   console.log(made.join('\n'))
   console.log(`final v${v}${draft ? ' (draft)' : ''} in ${secs(started)} s (${audio ? path.basename(audio) : 'no audio'}). Reload the studio`)
 }
@@ -1150,6 +1154,15 @@ function addVersion(dir, p, version) {
   p.versions = [...(p.versions ?? []), { v, rendered: new Date().toISOString(), ...version }]
   writeJson(path.join(dir, 'source/project.json'), p)
   return v
+}
+
+// the next render overwrites output/: the studio compares with the earlier versions through their preview, the main
+// format in 720p at most (files/versions/vN-<ratio>.mp4)
+function keepPreview(dir, v, fmt, video) {
+  const file = path.join(dir, `files/versions/v${v}-${ratio(fmt)}.mp4`)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  run('ffmpeg', ['-y', '-v', 'error', '-i', video, '-map', '0:v:0', '-map', '0:a?', '-vf', "scale='trunc(iw*min(1,720/min(iw,ih))/2)*2':-2",
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${DRAFT.audio_kbps}k`, '-movflags', '+faststart', file])
 }
 
 // status "<what Claude does now>": a step of Claude's own (the brief, the direction, the scene, a review pass…), shown
@@ -1265,6 +1278,14 @@ function projectInfo(dir) {
       return { file, url: `video/${encodeURIComponent(file)}?t=${Math.round(st.mtimeMs)}`, size: st.size, mtime: st.mtime }
     } catch { return null }
   }
+  // the version's preview, only while it is on disk (keepPreview): null for a version made before them, or deleted
+  const preview = v => {
+    for (const format of Object.keys(v.files)) {
+      const rel = `files/versions/v${v.v}-${ratio(format)}.mp4`, st = fs.statSync(f(rel), { throwIfNoEntry: false })
+      if (st) return { format, url: `project/${rel}?t=${Math.round(st.mtimeMs)}` }
+    }
+    return null
+  }
   return {
     slug: p.slug,
     dir,
@@ -1276,7 +1297,7 @@ function projectInfo(dir) {
     rules: rules.active,
     // null: no transcript (turned off by a pack, or not made yet)
     words: effective(rules, () => {}).transcribe && fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : null,
-    versions: (p.versions ?? []).map(v => ({ ...v, files: Object.fromEntries(Object.entries(v.files).map(([k, file]) => [k, video(file)])) })),
+    versions: (p.versions ?? []).map(v => ({ ...v, files: Object.fromEntries(Object.entries(v.files).map(([k, file]) => [k, video(file)])), preview: preview(v) })),
   }
 }
 

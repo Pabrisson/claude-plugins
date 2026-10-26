@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react"
 import {
+  ArrowLeftRightIcon,
+  CheckIcon,
+  ChevronDownIcon,
   FlagTriangleLeftIcon,
   FlagTriangleRightIcon,
   MaximizeIcon,
@@ -14,14 +17,23 @@ import {
 
 import { DrawLayer } from "@/components/draw"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { clock, numberOf, type Comment, type Range } from "@/lib/studio"
+import { clock, numberOf, when, type Comment, type Range, type Version } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 // the playing time, read every frame (timeupdate only fires a few times a second). The media clock steps back a few
@@ -78,6 +90,7 @@ export function Player({
   onDraw,
   onAttach,
   onFocus,
+  compare,
 }: {
   video: RefObject<HTMLVideoElement | null>
   src: string
@@ -95,6 +108,9 @@ export function Player({
   onDraw: (on: boolean) => void
   onAttach: (png: Blob) => void
   onFocus: (ids: string[]) => void
+  // the earlier versions to compare with (V), newest first: `other` is the one picked, `shown` while it plays here
+  // instead of this one (null goes back to it)
+  compare?: { current: number; earlier: Version[]; other: Version; shown: boolean; onView: (v: Version | null) => void }
 }) {
   const [paused, setPaused] = useState(true)
   const [muted, setMuted] = useState(false)
@@ -158,6 +174,13 @@ export function Player({
             {drawing && (
               <DrawLayer video={video} onClose={() => onDraw(false)} onAttach={onAttach} />
             )}
+            {compare?.shown && (
+              <Badge asChild className="absolute top-2 left-2 cursor-pointer border-red-500 bg-black/60 text-white backdrop-blur-sm hover:bg-black/80">
+                <button title={`Back to v${compare.current} (V)`} onClick={() => compare.onView(null)}>
+                  v{compare.other.v} · 720p preview · read only
+                </button>
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -212,10 +235,54 @@ export function Player({
           {clock(time)} <span className="text-muted-foreground">/ {clock(duration)}</span>
         </span>
         <div className="ml-auto flex items-center gap-1 @lg:gap-2">
-          <Button variant={drawing ? "secondary" : "outline"} size="sm" aria-label="Draw" onClick={() => onDraw(!drawing)}>
-            <PenLineIcon data-icon="inline-start" />
-            <span className="hidden @lg:inline">Draw</span> <Kbd className="hidden @lg:inline-flex">P</Kbd>
-          </Button>
+          {compare && (
+            <div className="flex items-center">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={compare.shown ? "secondary" : "outline"}
+                    size="sm"
+                    className={cn("font-mono", compare.earlier.length > 1 && "rounded-r-none")}
+                    aria-label={compare.shown ? `Back to v${compare.current}` : `Compare with v${compare.other.v}`}
+                    onClick={() => compare.onView(compare.shown ? null : compare.other)}
+                  >
+                    <span className={cn(compare.shown && "text-muted-foreground")}>v{compare.current}</span>
+                    <ArrowLeftRightIcon />
+                    <span className={cn(!compare.shown && "text-muted-foreground")}>v{compare.other.v}</span>
+                    <Kbd className="hidden @lg:inline-flex">V</Kbd>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{compare.shown ? `Back to v${compare.current}` : `Compare with v${compare.other.v}, at the same moment`} (V)</TooltipContent>
+              </Tooltip>
+              {compare.earlier.length > 1 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon-sm" className="rounded-l-none border-l-0" aria-label="Compare with">
+                      <ChevronDownIcon />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-auto">
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Compare with</DropdownMenuLabel>
+                    <DropdownMenuGroup>
+                      {compare.earlier.map((v) => (
+                        <DropdownMenuItem key={v.v} className="gap-3" onSelect={() => compare.onView(v)}>
+                          <span className="font-mono">v{v.v}</span>
+                          <span className="text-xs text-muted-foreground">{[v.rough && "rough", v.draft && "draft", when(v.rendered)].filter(Boolean).join(" · ")}</span>
+                          {v === compare.other && <CheckIcon className="ml-auto" />}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          )}
+          {!compare?.shown && (
+            <Button variant={drawing ? "secondary" : "outline"} size="sm" aria-label="Draw" onClick={() => onDraw(!drawing)}>
+              <PenLineIcon data-icon="inline-start" />
+              <span className="hidden @lg:inline">Draw</span> <Kbd className="hidden @lg:inline-flex">P</Kbd>
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

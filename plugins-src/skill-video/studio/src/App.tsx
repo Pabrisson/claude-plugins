@@ -54,6 +54,7 @@ import {
   type Range,
   type Sound,
   type SoundRef,
+  type Version,
   type VideoItem,
   type Visual,
   type VisualRef,
@@ -61,6 +62,8 @@ import {
 } from "@/lib/studio"
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000
+// a moment of one version in another: its source (or scene) seconds carry it across
+const carry = (t: number, from: Version, to: Version) => r3(timeline(to).toVideo(timeline(from).toSource(t)))
 const ratioOf = (format: string) => {
   const [w, h] = format.split(":").map(Number)
   return w && h ? w / h : 16 / 9
@@ -89,6 +92,9 @@ export default function App() {
   const [progress, setProgress] = useState<Progress | null>(null)
   // the prompt shown in the dialog before copying, null when closed
   const [prompt, setPrompt] = useState<string | null>(null)
+  // the earlier version picked to compare with (null: the one before), and whether the player shows it (V)
+  const [against, setAgainst] = useState<number | null>(null)
+  const [comparing, setComparing] = useState(false)
   const video = useRef<HTMLVideoElement>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
   const time = useVideoTime(video)
@@ -146,12 +152,44 @@ export default function App() {
   const sequences = useMemo(() => visual?.parts.filter((p) => p.kind === "sequence"), [visual])
   const comments = useMemo(() => (ver && reviews[ver.v]) || [], [ver, reviews])
   const open = comments.filter((c) => !c.resolved)
-  const src = ver?.files[format]?.url
+  // the earlier versions whose preview is on disk in this format, newest first
+  const earlier = useMemo(() => project?.versions.slice(0, -1).filter((v) => v.preview?.format === format).reverse() ?? [], [project, format])
+  const other = earlier.find((v) => v.v === against) ?? earlier[0]
+  // the earlier version the player shows instead of this one: the tabs and the feedback stay on this one, at its moment
+  const before = comparing && other ? other : null
+  const now = before && ver ? carry(time, before, ver) : time
+  const src = before ? before.preview!.url : ver?.files[format]?.url
 
   const seek = useCallback((t: number) => {
     const v = video.current
     if (v) v.currentTime = Math.min(Math.max(t, 0), v.duration || t)
   }, [])
+  // a moment of this version, in the one the player shows
+  const seekHere = (t: number) => seek(before && ver ? carry(t, ver, before) : t)
+
+  // the player shows another version (null: this one) at the same moment, or at `at` (that version's time), playing
+  // or not
+  function view(next: Version | null, at?: number) {
+    const v = video.current, from = before ?? ver, to = next ?? ver
+    if (!v || !from || !to) return
+    const t = at ?? carry(time, from, to)
+    if (to === from) return seek(t)
+    const playing = !v.paused
+    v.addEventListener("loadedmetadata", () => {
+      seek(t)
+      if (playing) void v.play()
+    }, { once: true })
+    if (next) setAgainst(next.v)
+    setComparing(!!next)
+    setRange(null)
+    setDrawing(false)
+  }
+
+  // an earlier version is only watched: the feedback goes on this one
+  function readOnly() {
+    if (before && ver) toast(`v${before.v} is only shown to compare: back to v${ver.v} (V) to give feedback.`)
+    return !!before
+  }
 
   function save(next: Comment[]) {
     if (!ver) return
@@ -160,7 +198,7 @@ export default function App() {
   }
 
   function add(kind: Kind, text: string) {
-    if (!project || !ver) return false
+    if (!project || !ver || readOnly()) return false
     const r = range && range.t1 > range.t0 ? range : null
     if (kind === "cut" && !r) {
       toast("Select what to cut: drag on the timeline or across the transcript.")
@@ -212,6 +250,7 @@ export default function App() {
 
   // a line of what the video shows, or a spoken word ("" removes it), corrected in the transcript
   function fix(line: VWord, to: string) {
+    if (readOnly()) return
     save([...comments, comment(line.v0, line.v1, { words: "", from: "transcript", fix: { from: line.w, to } })])
     setRange(null)
     toast(`Feedback added · Text fix at ${clock(line.v0)}`)
@@ -260,12 +299,23 @@ export default function App() {
       ? c
       : { ...c, t0: r3(timeline(ver).toVideo(c.s0)), t1: r3(timeline(ver).toVideo(c.s1 ?? c.s0)) }
 
+  // a click on a feedback: its own version at its moment while that version's preview is on disk (in the main
+  // format), else this version at the same moment
+  function go(c: Comment) {
+    const own = project?.versions.find((v) => v !== ver && reviews[v.v]?.includes(c))
+    if (own?.preview) {
+      setFormat(own.preview.format)
+      view(own, c.t0)
+    } else if (before) view(null, here(c).t0)
+    else select(here(c))
+  }
+
   function select(c: Comment, at = c.t0) {
-    if (c.format && c.format !== format && ver?.files[c.format]) {
+    if (!before && c.format && c.format !== format && ver?.files[c.format]) {
       setFormat(c.format)
       // the other format's file loads first: the seek waits for it
       video.current?.addEventListener("loadedmetadata", () => seek(at), { once: true })
-    } else seek(at)
+    } else seekHere(at)
   }
 
   // a badge of a comment: its tab opens, the playhead goes there and what it names flashes
@@ -291,7 +341,8 @@ export default function App() {
     return () => cancelAnimationFrame(raf)
   }, [spot])
 
-  // shortcuts: Space play · C write · P draw · F full screen · I/O selection in/out · ⌫ cut the selection · Esc close or clear
+  // shortcuts: Space play · F full screen · V compare · C write · P draw · I/O selection in/out · ⌫ cut the selection ·
+  // Esc close or clear
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // the prompt dialog has its own keys (Esc, ⌘↵)
@@ -305,9 +356,11 @@ export default function App() {
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === " ") toggle(video.current)
+      else if (e.key === "f") fullscreen(video.current)
+      else if (e.key === "v" && other) view(before ? null : other)
+      else if (before) return
       else if (e.key === "c") composer.current?.focus()
       else if (e.key === "p") setDrawing((d) => !d)
-      else if (e.key === "f") fullscreen(video.current)
       else if (e.key === "i" || e.key === "o") setRange(mark(e.key === "i" ? "in" : "out", time, range))
       else if ((e.key === "Backspace" || e.key === "Delete") && range) add("cut", "")
       else return
@@ -387,7 +440,7 @@ export default function App() {
   ]
   const shown = tabs.find((t) => t.value === tab)?.value ?? tabs[0]?.value
   // the sequence on screen, named in the Clip tab's header
-  const playing = visual?.parts.findLast((p) => p.kind === "sequence" && p.t0 <= time && time < p.t1)
+  const playing = visual?.parts.findLast((p) => p.kind === "sequence" && p.t0 <= now && now < p.t1)
 
   const meta = (label: string, value: string) => (
     <>
@@ -501,17 +554,18 @@ export default function App() {
                 src={src}
                 ratio={ratioOf(format)}
                 format={format}
-                formats={project.formats.map((f) => ({ value: f, ready: !!ver?.files[f] }))}
+                formats={before ? [] : project.formats.map((f) => ({ value: f, ready: !!ver?.files[f] }))}
                 onFormat={setFormat}
                 time={time}
-                comments={comments}
-                range={range}
+                comments={before ? [] : comments}
+                range={before ? null : range}
                 drawing={drawing}
                 onSeek={seek}
-                onRange={setRange}
+                onRange={before ? () => {} : setRange}
                 onDraw={setDrawing}
                 onAttach={attach}
                 onFocus={show}
+                compare={ver && other ? { current: ver.v, earlier, other, shown: !!before, onView: view } : undefined}
               />
             ) : !ver ? (
               <Waiting progress={progress} />
@@ -549,10 +603,10 @@ export default function App() {
                     visual={visual}
                     format={format}
                     duration={ver.duration}
-                    time={time}
+                    time={now}
                     range={range}
                     picked={visuals}
-                    onSeek={seek}
+                    onSeek={seekHere}
                     onRange={setRange}
                     onPick={pickVisual}
                     comments={comments}
@@ -562,10 +616,10 @@ export default function App() {
                   <SoundTimeline
                     sound={sound}
                     duration={ver.duration}
-                    time={time}
+                    time={now}
                     range={range}
                     picked={sounds}
-                    onSeek={seek}
+                    onSeek={seekHere}
                     onRange={setRange}
                     onPick={pick}
                     comments={comments}
@@ -577,10 +631,10 @@ export default function App() {
                       words={words}
                       sequences={sequences}
                       strip={visual ? (visual.strips[format] ?? Object.values(visual.strips)[0]) : undefined}
-                      time={time}
+                      time={now}
                       range={range}
                       marked={(w) => markOf(comments, (c) => c.t1 > c.t0 && w.v1 > c.t0 && w.v0 < c.t1, show)}
-                      onSeek={seek}
+                      onSeek={seekHere}
                       onRange={(r) => setRange(r && { ...r, from: "transcript" })}
                       onFix={fix}
                     />
@@ -603,14 +657,14 @@ export default function App() {
                 .map((v) => ({ v: v.v, comments: reviews[v.v] ?? [] }))
                 .filter((p) => p.comments.length)}
               multiFormat={project.formats.length > 1}
-              time={time}
+              time={now}
               range={range}
               rangeWords={range && words ? wordsIn(words, range) : ""}
               images={images}
               sounds={sounds}
               visuals={visuals}
               composer={composer}
-              onSelect={(c) => select(here(c))}
+              onSelect={go}
               onSave={save}
               onAdd={add}
               onRemoveImage={(img) => setImages(images.filter((i) => i !== img))}
