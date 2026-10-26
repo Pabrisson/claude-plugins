@@ -384,7 +384,7 @@ test('the progress log: the commands and Claude log their steps, a command that 
   assert.throws(() => cli('status', '-p', 'wait'), /usage: status/)
 })
 
-test('ElevenLabs (faked): a voice-over becomes the source, timed by the voice and never transcribed; Scribe v2 transcribes a source with the vocabulary; music is made once, a refused effect says so', { timeout: 120000 }, () => {
+test('ElevenLabs (faked): only what elevenlabs.json turns on; a voice-over becomes the source, timed by the voice and never transcribed; Scribe v2 transcribes with the vocabulary; music is made once, a refused effect says so; credits estimates', { timeout: 120000 }, () => {
   const mock = path.join(home, 'eleven.mjs'), calls = path.join(home, 'eleven.log'), text = 'Bonjour à tous, voici Secursus.'
   ffmpeg('-f', 'lavfi', '-i', 'sine=f=220:d=3', 'tts.mp3')
   ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=320x240:r=25:d=3', '-f', 'lavfi', '-i', 'sine=f=300:d=3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', 'talk.mp4')
@@ -402,8 +402,19 @@ test('ElevenLabs (faked): a voice-over becomes the source, timed by the voice an
   const eleven = (...argv) => execFileSync(process.execPath, ['--import', mock, engine, ...argv], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: 'k-test' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   const log = () => read('eleven.log').trim().split('\n').map(l => JSON.parse(l))
 
-  assert.throws(() => cli('init', 'both', '--formats', '9:16', '--renders', '720p', '--rules', 'none', '--voice', 'v1', '--source', path.join(home, 'talk.mp4')), /voice-over becomes the source/)
-  cli('init', 'vo', '--formats', '9:16', '--renders', '720p', '--rules', 'none', '--voice', 'v1')
+  cli('init', 'both', '--formats', '9:16', '--renders', '720p', '--rules', 'none', '--source', path.join(home, 'talk.mp4'))
+  assert.throws(() => cli('elevenlabs', 'set', 'voice=v1', '-p', 'both'), /voice-over becomes the source/)
+  cli('init', 'vo', '--formats', '9:16', '--renders', '720p', '--rules', 'none')
+  // nothing goes to ElevenLabs before the user chose, nor what they turned off
+  assert.match(cli('elevenlabs', '-p', 'vo'), /not chosen for this video yet/)
+  assert.throws(() => eleven('voice', '-p', 'vo'), /not chosen for this video yet/)
+  assert.throws(() => cli('elevenlabs', 'set', 'music=yes', '-p', 'vo'), /music is true or false/)
+  assert.throws(() => cli('elevenlabs', 'set', 'look=true', '-p', 'vo'), /look is not one of transcript, voice, music, sfx/)
+  assert.match(cli('elevenlabs', 'set', 'voice=v1', 'sfx=true', '-p', 'vo'), /transcript off · voice v1 · music off · sfx on/)
+  assert.deepEqual(JSON.parse(read('vo/source/elevenlabs.json')), { transcript: false, voice: 'v1', music: false, sfx: true })
+  assert.ok(!/elevenlabs|voice/.test(read('vo/source/style.json') + read('vo/source/project.json')))
+  assert.throws(() => eleven('music', 'Warm pads', '--length', '3', '-p', 'vo'), /music by ElevenLabs is off for this video/)
+  assert.ok(!fs.existsSync(calls))
   assert.throws(() => eleven('voice', '-p', 'vo'), /source\/voice\.txt/)
   fs.writeFileSync(path.join(home, 'vo/source/voice.txt'), text + '\n')
   assert.match(eleven('voice', '-p', 'vo'), /voice-over: 5 words/)
@@ -423,7 +434,8 @@ test('ElevenLabs (faked): a voice-over becomes the source, timed by the voice an
   cli('rough', '-p', 'vo')
   assert.ok(fs.existsSync(path.join(home, 'vo/output/vo-rough.mp4')))
 
-  cli('init', 'sc', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--scribe', '--source', path.join(home, 'talk.mp4'))
+  cli('init', 'sc', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--source', path.join(home, 'talk.mp4'))
+  cli('elevenlabs', 'set', 'transcript=true', '-p', 'sc')
   cli('style', 'set', 'creator.vocabulary=["Secursus","a name far too long to be a keyterm of Scribe v2 at all"]', '-p', 'sc')
   assert.match(eleven('prepare', '-p', 'sc'), /Scribe v2, keyterms: Secursus[\s\S]*transcript: 2 words/)
   const stt = log().at(-1)
@@ -432,12 +444,18 @@ test('ElevenLabs (faked): a voice-over becomes the source, timed by the voice an
   assert.deepEqual(stt.form.keyterms, ['Secursus'])
   assert.deepEqual(JSON.parse(read('sc/assets/words.json')), [{ w: 'Bonjour', t0: 0.2, t1: 0.6 }, { w: 'Secursus.', t0: 1, t1: 1.6 }])
   // the music and the effects: a file for sound.py's load(), never made again without --force; a refusal is the key's
+  cli('elevenlabs', 'set', 'music=true', '-p', 'vo')
   assert.match(eleven('music', 'Warm pads, 120 bpm', '--length', '3', '-p', 'vo'), /music: assets\/sound\/music\.mp3 \(3[.\d]* s\)/)
   assert.deepEqual(JSON.parse(log().at(-1).form), { prompt: 'Warm pads, 120 bpm', music_length_ms: 3000, force_instrumental: true, model_id: 'music_v2_5' })
   assert.throws(() => eleven('music', 'Warm pads', '--length', '3', '-p', 'vo'), /music\.mp3 exists: --force/)
   assert.throws(() => eleven('music', 'Warm pads', '-p', 'vo'), /--length <3 to 600 s>/)
   assert.throws(() => eleven('sfx', 'Soft whoosh', '--length', '0.8', '--name', 'whoosh', '-p', 'vo'), /401 .*missing the permission sound_generation/)
   assert.ok(!fs.existsSync(path.join(home, 'vo/assets/sound/whoosh.mp3')))
+  // the estimate before spending: 330 credits a minute of transcript (+20 % with keyterms), 1 a character, 900 a minute
+  // of music, 40 a second of effect (200 when ElevenLabs picks the length)
+  assert.match(cli('credits', 'transcript=60', 'voice=900', 'music=60', 'sfx=1,0.5,auto', '-p', 'sc'),
+    /transcript \(Scribe v2, 60 s, keyterms \+20 %\): 396 credits\nvoice-over \(900 characters\): 900 credits\nmusic \(60 s\): 900 credits\nsound effects \(1 s, 0\.5 s, auto\): 260 credits\ntotal: about 2456 credits/)
+  assert.throws(() => cli('credits', 'sfx=40'), /0\.5 to 30/)
   // without a key, the engine says so instead of calling
   assert.throws(() => execFileSync(process.execPath, [engine, 'voices'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, stdio: 'pipe' }), /no ElevenLabs key/)
 })

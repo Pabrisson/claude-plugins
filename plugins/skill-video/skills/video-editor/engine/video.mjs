@@ -69,10 +69,8 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     variants: { type: 'string' },
     at: { type: 'string' },
     blur: { type: 'string' },
-    voice: { type: 'string' },
     length: { type: 'string' },
     name: { type: 'string' },
-    scribe: { type: 'boolean' },
     draft: { type: 'boolean' },
     force: { type: 'boolean' },
     open: { type: 'boolean' },
@@ -269,9 +267,9 @@ function sourceWav(dir) {
   return wav
 }
 
-// ElevenLabs' API, with the key of $ELEVENLABS_API_KEY (the plugin's secret, exported by its SessionStart hook): the transcript by Scribe v2 and the voice-over on the user's
-// choice at the start of a video (they send the source's sound, or the narration's text); the music and the sound
-// effects whenever the key may make them. JSON, or the audio it made
+// ElevenLabs' API, with the key of $ELEVENLABS_API_KEY (the plugin's secret, exported by its SessionStart hook), for
+// what the user chose for the video (source/elevenlabs.json): the transcript by Scribe v2 (it sends the source's
+// sound), the voice-over (the narration's text), the music and the sound effects. JSON, or the audio it made
 async function eleven(route, init = {}) {
   const key = process.env.ELEVENLABS_API_KEY
   if (!key) die('no ElevenLabs key (the plugin\'s secret, /plugin configure skill-video@pabrisson, or ELEVENLABS_API_KEY): the transcript stays with Whisper, no voice-over, and the kit makes the sound')
@@ -292,6 +290,21 @@ async function scribe(wav, lang, cache, vocabulary) {
   const j = await eleven('/v1/speech-to-text', { method: 'POST', body: form })
   fs.rmSync(flac)
   return j.words.filter(w => w.type === 'word').map(w => ({ word: w.text, start: w.start, end: w.end }))
+}
+
+// source/elevenlabs.json, like the style but per video: what ElevenLabs makes for it, chosen with the user at its
+// start (elevenlabs set). null until then
+const ELEVEN = { transcript: false, voice: false, music: false, sfx: false }
+const elevenOf = dir => {
+  const file = path.join(dir, 'source/elevenlabs.json')
+  return fs.existsSync(file) ? { ...ELEVEN, ...readJson(file) } : null
+}
+// what a command may ask ElevenLabs for: the user's choice for this video, else stop before spending a credit
+const chosen = (dir, what) => {
+  const e = elevenOf(dir)
+  if (!e) die('ElevenLabs is not chosen for this video yet: ask the user (the ElevenLabs questions), then elevenlabs set')
+  if (!e[what]) die(`${what} by ElevenLabs is off for this video (source/elevenlabs.json): ${what === 'voice' ? 'no voice-over' : 'the kit makes it'}`)
+  return e[what]
 }
 
 // whisper.py: mlx-whisper with the style's vocabulary (names, brands) as the prompt of every window; or Scribe v2
@@ -608,7 +621,7 @@ ${!src ? '- No source video: made from scratch in motion design'
 }
 
 function init(slug) {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url>[#t=from,to] …] [--rules <pack>|none] [--scribe] [--voice <voice_id>]')
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url>[#t=from,to] …] [--rules <pack>|none]')
   if (opt.fps && !(+opt.fps > 0 && +opt.fps <= 120)) die('--fps: frames per second, e.g. 24, 25, 30, 50 or 60')
   if (opt.codec && !CODECS[opt.codec]) die(`--codec: one of ${Object.keys(CODECS).join(', ')}`)
   const dir = path.join(HOME, slug)
@@ -620,7 +633,6 @@ function init(slug) {
   let params
   try { params = mergeParams(packs(), active[0]) } catch (e) { die(e.message) }
   for (const s of sources) if (!/^https?:\/\//.test(s) && !fs.existsSync(rushOf(s).src)) die(`source not found: ${rushOf(s).src}`)
-  if (opt.voice && sources.length) die('--voice: the voice-over becomes the source, give the rushes as clips (edit.json media)')
 
   for (const d of ['assets/images', 'assets/logos', 'assets/review', 'files/reviews', 'output', 'source', 'stills']) fs.mkdirSync(path.join(dir, d), { recursive: true })
   let source = null
@@ -636,8 +648,7 @@ function init(slug) {
     source = { from: sources.join(' + '), ...probe(file), ...(files && { files }) }
   }
   // output frame rate: asked at the start, else the source's, else 30
-  const p = { slug, formats, renders: types, fps: opt.fps ? +opt.fps : source?.fps ?? 30, codec: opt.codec ?? 'h264', source,
-    ...(opt.scribe && { scribe: true }), ...(opt.voice && { voice: opt.voice }), created: new Date().toISOString() }
+  const p = { slug, formats, renders: types, fps: opt.fps ? +opt.fps : source?.fps ?? 30, codec: opt.codec ?? 'h264', source, created: new Date().toISOString() }
   writeJson(path.join(dir, 'source/project.json'), p)
   // frozen copies: a later change of style or pack never touches this project
   // the whole style folder: style.json, fonts/, the avatar… (their paths in style.json are relative to it, then to source/)
@@ -679,7 +690,7 @@ async function prepare() {
   else {
     if (db && audible(db)) {
       const s = step(dir, 'Transcribing the speech')
-      words = await transcribe(f('assets/source.wav'), creator.lang, f('.cache'), creator.vocabulary, p.scribe)
+      words = await transcribe(f('assets/source.wav'), creator.lang, f('.cache'), creator.vocabulary, !!elevenOf(dir)?.transcript)
       s.end()
     }
     writeJson(f('assets/words.json'), words)
@@ -717,24 +728,23 @@ async function prepare() {
   console.log(`timeline: ${tl.segments.length} segment(s), ${duration} s → ${ms(tl.duration)} s (speed ×${tl.speed}). Next: rough`)
 }
 
-// voice [--voice <id>]: source/voice.txt read by an ElevenLabs voice (eleven_v4) becomes the source: its sound over a
+// voice: source/voice.txt read by the voice of source/elevenlabs.json (eleven_v4) becomes the source: its sound over a
 // black picture of the main format, its words timed by the voice itself. Again after a change of the text: every time
 // moves, files/words.md gives the new ones
 async function voiceOver() {
   const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json'))
   if (p.source && !p.source.voice) die('this video has a source with its own sound: a voice-over is for a video without one')
-  p.voice = opt.voice ?? p.voice
-  const text = fs.existsSync(f('source/voice.txt')) ? fs.readFileSync(f('source/voice.txt'), 'utf8').trim() : ''
-  if (!p.voice || !text) die('usage: voice [--voice <voice_id>] -p <slug>, with the narration in source/voice.txt (voices lists the voices)')
+  const id = chosen(dir, 'voice'), text = fs.existsSync(f('source/voice.txt')) ? fs.readFileSync(f('source/voice.txt'), 'utf8').trim() : ''
+  if (!text) die('write the narration in source/voice.txt first')
   const s = step(dir, 'Recording the voice-over'), { creator } = styleOf(readJson(f('source/style.json')))
-  const j = await eleven(`/v1/text-to-speech/${encodeURIComponent(p.voice)}/with-timestamps`, {
+  const j = await eleven(`/v1/text-to-speech/${encodeURIComponent(id)}/with-timestamps`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, model_id: 'eleven_v4', language_code: creator.lang }),
   })
   fs.writeFileSync(f('assets/voice.mp3'), Buffer.from(j.audio_base64, 'base64'))
   const [w, h] = logical(p.formats[0])
   run('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `color=black:s=${w}x${h}:r=${p.fps}`, '-i', f('assets/voice.mp3'), '-shortest',
     '-c:v', 'libx264', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '320k', f('assets/source.mp4')])
-  p.source = { from: `voice-over (ElevenLabs ${p.voice})`, voice: true, ...probe(f('assets/source.mp4')) }
+  p.source = { from: `voice-over (ElevenLabs ${id})`, voice: true, ...probe(f('assets/source.mp4')) }
   writeJson(f('source/project.json'), p)
   // what was made from the previous voice
   for (const x of ['assets/source.wav', 'assets/timeline.json', 'frames/cam']) fs.rmSync(f(x), { recursive: true, force: true })
@@ -763,6 +773,7 @@ async function generate(kind, prompt) {
   const [min, max] = kind === 'music' ? [3, 600] : [0.5, 30]
   if (!prompt?.trim() || !/^[\w-]+$/.test(name) || ((kind === 'music' || opt.length !== undefined) && !(length >= min && length <= max)))
     die(`usage: ${kind} "<prompt>" ${kind === 'music' ? '--length' : '[--length'} <${min} to ${max} s>${kind === 'music' ? '' : ']'} [--name <name>] [--force] -p <slug>`)
+  chosen(dir, kind)
   if (fs.existsSync(file) && !opt.force) die(`${rel} exists: --force makes it again (it costs credits), --name makes another`)
   const s = step(dir, kind === 'music' ? 'Composing the music (ElevenLabs)' : `Sound effect "${name}" (ElevenLabs)`)
   const [route, body] = kind === 'music' ? ['/v1/music', { prompt, music_length_ms: Math.round(length * 1000), force_instrumental: true, model_id: 'music_v2_5' }]
@@ -773,6 +784,48 @@ async function generate(kind, prompt) {
   s.end()
   const secs = +out('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file])
   console.log(`${kind}: ${rel} (${ms(secs)} s). In sound.py: load('${rel}')`)
+}
+
+// elevenlabs [set <key>=<value>…]: what ElevenLabs makes for this video (source/elevenlabs.json): transcript (Scribe
+// v2), voice (the voice-over's voice id, or false), music, sfx. A key left out keeps its value, false at first
+function elevenlabs(sub, ...rest) {
+  const dir = projectDir(), file = path.join(dir, 'source/elevenlabs.json')
+  if (sub === 'set' && rest.length && rest.every(x => /^\w+=/.test(x))) {
+    const e = { ...ELEVEN, ...elevenOf(dir) }
+    for (const x of rest) {
+      const [k, ...v] = x.split('='), val = v.join('=')
+      if (!(k in ELEVEN)) die(`elevenlabs set: ${k} is not one of ${Object.keys(ELEVEN).join(', ')}`)
+      if (k === 'voice') e.voice = val === 'false' || !val ? false : val
+      else if (val === 'true' || val === 'false') e[k] = val === 'true'
+      else die(`elevenlabs set: ${k} is true or false`)
+    }
+    const { source } = readJson(path.join(dir, 'source/project.json'))
+    if (e.voice && source && !source.voice) die('elevenlabs set: voice is for a video without speech, its voice-over becomes the source')
+    writeJson(file, e)
+  } else if (sub) die('usage: elevenlabs [set transcript=true|false voice=<voice_id>|false music=true|false sfx=true|false] -p <slug>')
+  const e = elevenOf(dir)
+  console.log(!e ? 'elevenlabs: not chosen for this video yet' : `elevenlabs: ${Object.entries(e).map(([k, v]) => `${k} ${v === true ? 'on' : v || 'off'}`).join(' · ')}`)
+}
+
+// credits [transcript=<s>] [voice=<characters>] [music=<s>] [sfx=<s>|auto,…]: what ElevenLabs would charge, at its
+// public rates; the transcript costs 20 % more with keyterms (a vocabulary in the style)
+// ponytail: rates of the pricing page and the docs on 2026-10-26, to update here when ElevenLabs changes them
+const CREDITS = { transcript: 330 / 60, keyterms: 1.2, voice: 1, music: 900 / 60, sfx: 40, sfx_auto: 200 }
+function credits(...items) {
+  const want = Object.fromEntries(items.map(x => x.split('=')))
+  const num = k => (want[k] === undefined ? 0 : +want[k] >= 0 ? +want[k] : die(`credits: ${k} is a number`))
+  const sfx = (want.sfx ?? '').split(',').filter(Boolean).map(x => (x === 'auto' ? x : +x >= 0.5 && +x <= 30 ? +x : die('credits: sfx lists each effect\'s seconds (0.5 to 30), or auto')))
+  if (!items.length || Object.keys(want).some(k => !['transcript', 'voice', 'music', 'sfx'].includes(k))) die('usage: credits [transcript=<s>] [voice=<characters>] [music=<s>] [sfx=<s>|auto,…] [-p <slug>]')
+  const styleFile = opt.project ? path.join(projectDir(), 'source/style.json') : path.join(HOME, '.style/style.json')
+  const keyterms = fs.existsSync(styleFile) && styleOf(readJson(styleFile)).creator.vocabulary.length > 0
+  const lines = [
+    want.transcript && [`transcript (Scribe v2, ${num('transcript')} s${keyterms ? ', keyterms +20 %' : ''})`, num('transcript') * CREDITS.transcript * (keyterms ? CREDITS.keyterms : 1)],
+    want.voice && [`voice-over (${num('voice')} characters)`, num('voice') * CREDITS.voice],
+    want.music && [`music (${num('music')} s)`, num('music') * CREDITS.music],
+    sfx.length && [`sound effects (${sfx.map(x => (x === 'auto' ? x : `${x} s`)).join(', ')})`, sfx.reduce((a, x) => a + (x === 'auto' ? CREDITS.sfx_auto : x * CREDITS.sfx), 0)],
+  ].filter(Boolean)
+  for (const [what, n] of lines) console.log(`${what}: ${Math.ceil(n)} credits`)
+  console.log(`total: about ${lines.reduce((a, [, n]) => a + Math.ceil(n), 0)} credits (ElevenLabs' rates of 2026-10-26; each regeneration costs as much again)`)
 }
 
 // shots: where each clip of edit.json's media cuts to a new shot (seconds of its file), to pick their from and dur
@@ -1720,6 +1773,7 @@ const commands = {
   doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs,
   style: () => style(...args), serve, rules: () => rules(...args), check, sync: () => syncMedia(args[0]), beats: () => beatGrid(args[0]), thumbnail,
   fix: () => fixWord(args[0], args[1]), status: () => status(...args), voice: voiceOver, voices: () => voices(args[0]),
+  elevenlabs: () => elevenlabs(...args), credits: () => credits(...args),
   music: () => generate('music', args[0]), sfx: () => generate('sfx', args[0]),
 }
 if (!commands[cmd]) die(`usage: video.mjs <${Object.keys(commands).join(' | ')}> [--project <slug>]`)

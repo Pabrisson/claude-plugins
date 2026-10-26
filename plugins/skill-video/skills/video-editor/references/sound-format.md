@@ -54,8 +54,9 @@ never use the clock.
 
 ## With ElevenLabs
 
-When `doctor` says the ElevenLabs key is set, ElevenLabs makes the music and the effects, and `sound.py` places
-them: the kit only shapes them (fades, filters, pan) and makes what ElevenLabs refuses.
+When the video's `source/elevenlabs.json` turns on `music` or `sfx` (the user's choice at its start), ElevenLabs
+makes them and `sound.py` places them: the kit only shapes them (fades, filters, pan) and makes the rest. The
+commands refuse what the file leaves off.
 - **The music**: `video.mjs music "<prompt>" --length <video s> -p <slug>` writes an instrumental track to
   `assets/sound/music.mp3`. Write the prompt as the score you would compose: the mood of the style's notes, the
   Direction's tempo (« 120 bpm »), the instruments, and the arrangement on the story with its times (« sparse intro,
