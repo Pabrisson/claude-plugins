@@ -160,7 +160,8 @@ Skip Musique or Effets only when the video will have none (the request or the pa
 - the music, on the length of the video;
 - the effects, one of about 1 s per kind of cue you expect (about five for a short).
 
-Once the user has answered, tell them the estimated total of what they chose before going on.
+Once the user has answered, tell them the estimated total of what they chose and what the account has left (the last
+line of `credits`, when the key may read it) before going on.
 
 The first format chosen is the main one: the rough cut and the studio use it.
 
@@ -424,7 +425,7 @@ Read `references/review-format.md` and every image the prompt attaches, then fol
 its change, then `resolved` and `reply` in the feedback file.
 
 Before a change that goes through ElevenLabs (the voice-over's text, the music or an effect made again, a transcript
-again with Scribe v2), give the user its estimated credits with `video.mjs credits`, then go on.
+again with Scribe v2), give the user its estimated credits and what the account has left with `video.mjs credits`, then go on.
 
 When a comment changes what the voice-over says (not how a word is spelled, which `fix` corrects), edit
 `source/voice.txt`, run `voice` then `prepare` again, and move the scene's `at()` and `edit.json`'s cuts onto the new

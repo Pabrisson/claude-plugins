@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url'
 // the CLI on a throwaway projects folder, as the skill drives it
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'video-skill-'))
 const engine = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'video.mjs')
-const cli = (...argv) => execFileSync(process.execPath, [engine, ...argv], { env: { ...process.env, VIDEO_EDITOR_DIR: home }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+// (never ElevenLabs: the session's key is left out)
+const cli = (...argv) => execFileSync(process.execPath, [engine, ...argv], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 const read = rel => fs.readFileSync(path.join(home, rel), 'utf8')
 test.after(() => fs.rmSync(home, { recursive: true, force: true }))
 
@@ -394,6 +395,7 @@ test('ElevenLabs (faked): only what elevenlabs.json turns on; a voice-over becom
       fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ u, key: init.headers['xi-api-key'], form }) + '\\n')
       const chars = [...${JSON.stringify(text)}], at = chars.map((_, i) => i * 0.09)
       if (u.endsWith('/v1/music')) return new Response(fs.readFileSync(${JSON.stringify(path.join(home, 'tts.mp3'))}), { headers: { 'content-type': 'audio/mpeg' } })
+      if (u.endsWith('/v1/user/subscription')) return Response.json({ character_count: 1000, character_limit: 10000, next_character_count_reset_unix: 1794787200 })
       if (u.endsWith('/v1/sound-generation')) return Response.json({ detail: { message: 'The API key you used is missing the permission sound_generation to execute this operation.' } }, { status: 401 })
       return Response.json(u.includes('/text-to-speech/') ? { audio_base64: fs.readFileSync(${JSON.stringify(path.join(home, 'tts.mp3'))}).toString('base64'),
           alignment: { characters: chars, character_start_times_seconds: at, character_end_times_seconds: at.map(t => t + 0.08) } }
@@ -456,6 +458,11 @@ test('ElevenLabs (faked): only what elevenlabs.json turns on; a voice-over becom
   assert.match(cli('credits', 'transcript=60', 'voice=900', 'music=60', 'sfx=1,0.5,auto', '-p', 'sc'),
     /transcript \(Scribe v2, 60 s, keyterms \+20 %\): 396 credits\nvoice-over \(900 characters\): 900 credits\nmusic \(60 s\): 900 credits\nsound effects \(1 s, 0\.5 s, auto\): 260 credits\ntotal: about 2456 credits/)
   assert.throws(() => cli('credits', 'sfx=40'), /0\.5 to 30/)
+  // then what the account has left (user_read), alone without an estimate; nothing without a key
+  assert.match(eleven('credits', 'music=600'), /music \(600 s\): 9000 credits\ntotal: about 9000 credits .*\naccount: 9000 credits left of 10000, renewed on 2026-11-16\n$/)
+  assert.match(eleven('credits', 'music=601'), /account: 9000 credits left of 10000, renewed on 2026-11-16: not enough for this estimate/)
+  assert.equal(eleven('credits'), 'account: 9000 credits left of 10000, renewed on 2026-11-16\n')
+  assert.equal(cli('credits'), '')
   // without a key, the engine says so instead of calling
   assert.throws(() => execFileSync(process.execPath, [engine, 'voices'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, stdio: 'pipe' }), /no ElevenLabs key/)
 })

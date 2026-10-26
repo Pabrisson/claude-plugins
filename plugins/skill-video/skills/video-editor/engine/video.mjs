@@ -808,14 +808,15 @@ function elevenlabs(sub, ...rest) {
 }
 
 // credits [transcript=<s>] [voice=<characters>] [music=<s>] [sfx=<s>|auto,…]: what ElevenLabs would charge, at its
-// public rates; the transcript costs 20 % more with keyterms (a vocabulary in the style)
+// public rates (the transcript costs 20 % more with keyterms, a vocabulary in the style), then what the account has
+// left; with nothing, only what it has left
 // ponytail: rates of the pricing page and the docs on 2026-10-26, to update here when ElevenLabs changes them
 const CREDITS = { transcript: 330 / 60, keyterms: 1.2, voice: 1, music: 900 / 60, sfx: 40, sfx_auto: 200 }
-function credits(...items) {
+async function credits(...items) {
   const want = Object.fromEntries(items.map(x => x.split('=')))
   const num = k => (want[k] === undefined ? 0 : +want[k] >= 0 ? +want[k] : die(`credits: ${k} is a number`))
   const sfx = (want.sfx ?? '').split(',').filter(Boolean).map(x => (x === 'auto' ? x : +x >= 0.5 && +x <= 30 ? +x : die('credits: sfx lists each effect\'s seconds (0.5 to 30), or auto')))
-  if (!items.length || Object.keys(want).some(k => !['transcript', 'voice', 'music', 'sfx'].includes(k))) die('usage: credits [transcript=<s>] [voice=<characters>] [music=<s>] [sfx=<s>|auto,…] [-p <slug>]')
+  if (Object.keys(want).some(k => !['transcript', 'voice', 'music', 'sfx'].includes(k))) die('usage: credits [transcript=<s>] [voice=<characters>] [music=<s>] [sfx=<s>|auto,…] [-p <slug>]')
   const styleFile = opt.project ? path.join(projectDir(), 'source/style.json') : path.join(HOME, '.style/style.json')
   const keyterms = fs.existsSync(styleFile) && styleOf(readJson(styleFile)).creator.vocabulary.length > 0
   const lines = [
@@ -824,8 +825,17 @@ function credits(...items) {
     want.music && [`music (${num('music')} s)`, num('music') * CREDITS.music],
     sfx.length && [`sound effects (${sfx.map(x => (x === 'auto' ? x : `${x} s`)).join(', ')})`, sfx.reduce((a, x) => a + (x === 'auto' ? CREDITS.sfx_auto : x * CREDITS.sfx), 0)],
   ].filter(Boolean)
+  const total = lines.reduce((a, [, n]) => a + Math.ceil(n), 0)
   for (const [what, n] of lines) console.log(`${what}: ${Math.ceil(n)} credits`)
-  console.log(`total: about ${lines.reduce((a, [, n]) => a + Math.ceil(n), 0)} credits (ElevenLabs' rates of 2026-10-26; each regeneration costs as much again)`)
+  if (lines.length) console.log(`total: about ${total} credits (ElevenLabs' rates of 2026-10-26; each regeneration costs as much again)`)
+  // the account's credits left: its subscription (the key's user_read permission), never a reason to stop
+  const key = process.env.ELEVENLABS_API_KEY
+  if (!key) return
+  const r = await fetch('https://api.elevenlabs.io/v1/user/subscription', { headers: { 'xi-api-key': key } }).catch(e => ({ ok: false, status: e.message, json: async () => ({}) }))
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) return console.log(`account: credits left unknown (${j.detail?.message ?? `ElevenLabs answered ${r.status}`})`)
+  const left = j.character_limit - j.character_count, reset = j.next_character_count_reset_unix
+  console.log(`account: ${left} credits left of ${j.character_limit}${reset ? `, renewed on ${new Date(reset * 1000).toISOString().slice(0, 10)}` : ''}${total > left ? ': not enough for this estimate' : ''}`)
 }
 
 // shots: where each clip of edit.json's media cuts to a new shot (seconds of its file), to pick their from and dur

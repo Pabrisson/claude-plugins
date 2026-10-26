@@ -228,8 +228,21 @@ Graphics: `lead`, the motion design carries the video; `support`, the footage ca
 - **Studio**: local review on `127.0.0.1`, from port 41187, one server per projects folder, open from the start of each video: until the first version it shows what is being done (Claude's steps, the engine's, the renders' progress) and reloads by itself on the video. Feedback goes back to Claude as a prompt to paste.
 - **Folders**: the current folder (or `$VIDEO_EDITOR_DIR`) holds one folder per video (`<slug>/`), the project's style (`.style/`) and its own rule packs (`.rules/`).
 - **Learning**: stated preferences go into the style (`style set`, `style note`) or into the active pack's personal lines (`.rules/<name>.md` with `extends: <name>`).
-- **ElevenLabs** (optional): with the plugin's secret `ElevenLabs API key` (asked when the plugin is enabled, or `/plugin configure skill-video@pabrisson`, kept in the Keychain; restart the session after setting it) or `ELEVENLABS_API_KEY` in the environment, each new video asks what ElevenLabs makes for it: Scribe v2 for the transcript, or a voice-over read by a voice of the account for a video without speech, the music, the sound effects. Every ElevenLabs option shows its estimated credits (`credits`), and Claude gives the estimate again before a change that goes through ElevenLabs. The answers live in the video's `source/elevenlabs.json` (`elevenlabs set`); the engine sends nothing it leaves off, and a video made before is asked when it first needs it. The local tools stay the first option; what the key may not make (permission, plan, credits) is synthesized as before.
+- **ElevenLabs** (optional): with the plugin's secret `ElevenLabs API key` (asked when the plugin is enabled, or `/plugin configure skill-video@pabrisson`, kept in the Keychain; restart the session after setting it) or `ELEVENLABS_API_KEY` in the environment, each new video asks what ElevenLabs makes for it: Scribe v2 for the transcript, or a voice-over read by a voice of the account for a video without speech, the music, the sound effects. Every ElevenLabs option shows its estimated credits (`credits`), and Claude gives the estimate, with the credits left on the account, again before a change that goes through ElevenLabs. The answers live in the video's `source/elevenlabs.json` (`elevenlabs set`); the engine sends nothing it leaves off, and a video made before is asked when it first needs it. The local tools stay the first option; what the key may not make (permission, plan, credits) is synthesized as before.
 - **First runs**: the first transcription downloads the Whisper model (~1.5 GB), the first render installs `playwright-core`.
+
+The ElevenLabs key needs these permissions (as ElevenLabs names them in its API and its errors), and a restricted key only those the videos use:
+
+| Permission | Used by |
+|---|---|
+| `voices_read` | `voices`: the voices offered for a voice-over |
+| `text_to_speech` | `voice`: the voice-over |
+| `speech_to_text` | `prepare`: the transcript by Scribe v2 |
+| `music_generation` | `music`: the music, on a paid plan only (the Music API refuses free accounts) |
+| `sound_generation` | `sfx`: the sound effects |
+| `user_read` | `credits`: the credits left on the account, given with each estimate |
+
+A request the key may not make is refused at no cost: the music and the effects then fall back to the synthesized kit, and for the transcript and the voice-over Claude relays ElevenLabs' message.
 
 Everything stays on the machine, except what the video's `source/elevenlabs.json` turns on: the source's sound for Scribe v2, the narration's text for a voice-over, the prompts of the music and the effects.
 
