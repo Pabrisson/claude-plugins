@@ -9,7 +9,7 @@ import { RulesDialog } from "@/components/rules-dialog"
 import { fullscreen, mark, Player, toggle, useVideoTime } from "@/components/player"
 import { SoundTimeline } from "@/components/sound"
 import { VideoTimeline } from "@/components/video"
-import { Transcript } from "@/components/transcript"
+import { Transcript, TranscriptDownload } from "@/components/transcript"
 import { Waiting } from "@/components/waiting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -360,6 +360,7 @@ export default function App() {
             info: words[0]?.screen
               ? "What the video shows, moment by moment, under its sequence. Click a line to select it, drag across lines to select several, then comment. Double-click a line to correct its text. Click a sequence's name to select all of it."
               : "Paragraphs at each pause, under their sequence. Click a word to jump there. Drag across words to select their range, then cut it or comment on it.",
+            actions: <TranscriptDownload words={words} name={`${project.slug}-v${ver?.v}`} />,
           },
         ]
       : []),

@@ -10,7 +10,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { clock, type Range } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
-export type Tab = { value: string; label: string; badge?: string; info: string }
+// actions: the tab's own buttons, in the header while it is shown
+export type Tab = { value: string; label: string; badge?: string; info: string; actions?: ReactNode }
 
 // a size the user dragged or expanded, kept across reloads; null: the layout's default
 export function useStoredSize(key: string) {
@@ -160,6 +161,7 @@ export function Panel({
               </Button>
             </>
           )}
+          {current.actions}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-xs" aria-label={height ? "Reset the size" : "Expand"} onClick={() => keep(height ? null : room())}>

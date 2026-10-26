@@ -3,7 +3,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { description, joinChunks, speechCues, srt, vtt } from '../lib/deliver.js'
+import { description, speechCues, srt, vtt } from '../lib/deliver.js'
+import { joinChunks } from '../lib/join.js'
 
 test('a stream past 2 GiB (a long 4K render) joins its chunks', { timeout: 60000 }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'video-join-')), chunk = path.join(dir, 'chunk'), dest = path.join(dir, 'stream')

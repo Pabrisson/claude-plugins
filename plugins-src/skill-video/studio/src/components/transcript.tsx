@@ -1,11 +1,20 @@
 import { Fragment, useEffect, useRef, useState } from "react"
-import { LocateFixedIcon } from "lucide-react"
+import { DownloadIcon, LocateFixedIcon } from "lucide-react"
+import { speechCues, srt, vtt } from "@engine/deliver.js"
 
 import { Mark } from "@/components/lanes"
 import { Thumb } from "@/components/video"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { minutes, type Marks, type Part, type Range, type Strip, type VWord } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
@@ -15,6 +24,47 @@ const pause = (a: VWord, b: VWord) => b.t0 - a.t1 >= (/[.!?…]["»”)]*$/.test
 // the sequence playing at t, -1 before the first
 const seqAt = (seqs: Part[] | undefined, t: number) => seqs?.findLastIndex((s) => s.t0 <= t + 0.01) ?? -1
 const span = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, k) => a + k)
+
+// the transcript as plain text: the speech's paragraphs, or one line per moment
+const plain = (words: VWord[]) =>
+  words.map((w, i) => (!i ? "" : w.screen ? "\n" : pause(words[i - 1], w) ? "\n\n" : " ") + w.w).join("") + "\n"
+// the subtitles as `final` writes them: the speech's lines, or the lines of what the video shows
+const cues = (words: VWord[]) =>
+  words[0]?.screen ? words.filter((w) => w.v1 > w.v0).map((w) => ({ v0: w.v0, v1: w.v1, text: w.w })) : speechCues(words)
+
+function save(file: string, text: string) {
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }))
+  a.download = file
+  a.click()
+  // once the download has started
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
+// The Transcript tab's downloads, from the version shown (name: the files' name, without the extension)
+export function TranscriptDownload({ words, name }: { words: VWord[]; name: string }) {
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-xs" aria-label="Download">
+              <DownloadIcon />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Download</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="w-auto">
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => save(`${name}.txt`, plain(words))}>Raw transcript (.txt)</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => save(`${name}.srt`, srt(cues(words)))}>Subtitles (.srt)</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => save(`${name}.vtt`, vtt(cues(words)))}>Subtitles (.vtt)</DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 // Follows the playback until it is scrolled by hand. Speech: paragraphs cut at the pauses; a click on a word seeks
 // there, a drag across words selects their range, a double-click corrects the word (emptied, it goes). Without

@@ -1,13 +1,5 @@
 // What a video is delivered with besides its MP4s: subtitles (SRT, WebVTT) and its description with YouTube's chapters.
-// Every time here is in VIDEO seconds. And the render's raw stream, joined from its chunks.
-import fs from 'node:fs'
-
-// the head (IVF's file header, or nothing), then every chunk, one at a time: a long 4K stream outgrows the 2 GiB a
-// single write takes
-export function joinChunks(dest, files, head = Buffer.alloc(0)) {
-  fs.writeFileSync(dest, head)
-  for (const x of files) fs.appendFileSync(dest, fs.readFileSync(x))
-}
+// Every time here is in VIDEO seconds. Shared by Node and the browser (the studio's downloads).
 
 const r2 = x => Math.round(x * 100) / 100
 const pad = (n, k = 2) => String(n).padStart(k, '0')
