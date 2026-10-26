@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type RefObject } from "react"
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react"
 import {
   AudioWaveformIcon,
   CheckIcon,
@@ -313,6 +313,7 @@ function Item({
 export function Feedback({
   version,
   newer,
+  working,
   comments,
   focus,
   onPoint,
@@ -336,6 +337,8 @@ export function Feedback({
   version: number
   // this video with a version newer than the one shown, once a render lands
   newer: VideoItem | null
+  // the next version being made, shown until it lands
+  working: ReactNode
   comments: Comment[]
   // the comments a mark points at (n: the click, so a second one flashes again)
   focus: { ids: string[]; n: number } | null
@@ -429,7 +432,7 @@ export function Feedback({
         </Tabs>
       </div>
 
-      {newer && (
+      {newer ? (
         <div className="border-b p-2">
           <Alert>
             <RefreshCwIcon />
@@ -444,6 +447,8 @@ export function Feedback({
             </AlertAction>
           </Alert>
         </div>
+      ) : (
+        working
       )}
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-1 p-2">

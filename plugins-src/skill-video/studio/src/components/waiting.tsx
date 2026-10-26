@@ -31,20 +31,29 @@ function groupSteps(steps: Step[], now: number): Group[] {
   return groups
 }
 
-// Nothing to review yet: what is being done on the video, newest last, with the total time. Claude's own steps (the
-// brief, the scene, a review pass…) lead, the engine's (transcription, renders with their progress) fold under them:
-// only the step being done stays open. The layout grows downwards, the title stays put. The page reloads by itself
-// when the first version lands. No news for 30 minutes: the work stopped (the session ended, or it waits).
-export function Waiting({ progress }: { progress: Progress | null }) {
+// the clock the running times follow
+function useNow() {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
+  return now
+}
+// the last news: a logged step, or a file Claude changed since. None for 30 minutes: the work stopped (the session
+// ended, or it waits)
+const lastNews = (p: Progress | null) => Math.max(Date.parse(p?.updated ?? "") || 0, Date.parse(p?.touched?.mtime ?? "") || 0)
+const isLive = (last: number, now: number) => !!last && now - last < 30 * 60_000
+
+// Nothing to review yet: what is being done on the video, newest last, with the total time. Claude's own steps (the
+// brief, the scene, a review pass…) lead, the engine's (transcription, renders with their progress) fold under them:
+// only the step being done stays open. The layout grows downwards, the title stays put. The page reloads by itself
+// when the first version lands.
+export function Waiting({ progress }: { progress: Progress | null }) {
+  const now = useNow()
   const steps = progress?.steps ?? []
-  // the last news: a logged step, or a file Claude changed since
-  const last = Math.max(Date.parse(progress?.updated ?? "") || 0, Date.parse(progress?.touched?.mtime ?? "") || 0)
-  const live = !!last && now - last < 30 * 60_000
+  const last = lastNews(progress)
+  const live = isLive(last, now)
   const current = live ? steps.findLast((s) => s.by === "claude" && s.state === "running") : undefined
   // from the project's creation (an older project: the oldest step kept), to now or to the last news
   const start = Date.parse(progress?.started ?? "") || Date.parse(steps[0]?.t0 ?? "") || 0
@@ -73,30 +82,7 @@ export function Waiting({ progress }: { progress: Progress | null }) {
           </EmptyDescription>
         )}
       </EmptyHeader>
-      {groups.length > 0 && (
-        <ol className="flex w-full max-w-lg flex-col gap-0.5 text-left text-sm">
-          {groups.map((g, i) => (
-            <li key={g.head.step.id}>
-              {g.subs.length ? (
-                <details open={i === groups.length - 1} className="group">
-                  <summary className="cursor-pointer list-none rounded-md hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
-                    <Row line={g.head} live={live} fold warnings={g.subs.filter((x) => x.handled).length} />
-                  </summary>
-                  <ol className="flex flex-col gap-0.5">
-                    {g.subs.map((x) => (
-                      <li key={x.step.id}>
-                        <Row line={x} live={live} sub />
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-              ) : (
-                <Row line={g.head} live={live} />
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
+      {groups.length > 0 && <Steps groups={groups} live={live} className="max-w-lg" />}
       <footer className="flex flex-col gap-1 text-xs text-muted-foreground">
         {progress?.touched && (
           <p>
@@ -106,6 +92,66 @@ export function Waiting({ progress }: { progress: Progress | null }) {
         <p>The video opens here by itself once its first version is rendered.</p>
       </footer>
     </Empty>
+  )
+}
+
+// The next version being made (a feedback applied, a change asked in the conversation), above the feedback: the
+// totals and the last step, the rest unfolds. Only while it runs, a step started since the version shown still
+// running with news in the last 30 minutes: the rest of the time the feedback keeps the room. When the version lands,
+// the alert that offers to reload takes over.
+export function Working({ progress, since, next }: { progress: Progress | null; since: string; next: number }) {
+  const now = useNow()
+  const steps = progress?.steps.filter((s) => Date.parse(s.t0) > Date.parse(since)) ?? []
+  if (!isLive(lastNews(progress), now) || !steps.some((s) => s.state === "running")) return null
+  const groups = groupSteps(steps, now), g = groups.at(-1)!, last = g.subs.at(-1) ?? g.head
+  return (
+    <div className="border-b p-2">
+      <details className="group/working rounded-lg border bg-card">
+        <summary className="cursor-pointer list-none rounded-lg hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+          <div className="flex items-center gap-2 px-3 py-2 text-sm">
+            <span className="size-2 shrink-0 animate-pulse rounded-full bg-done" />
+            <span className="shrink-0 font-medium">Working on v{next}</span>
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground tabular-nums">
+              · Total {span(now - Date.parse(steps[0].t0))} · {steps.length} step{steps.length > 1 ? "s" : ""}
+            </span>
+            <Warnings n={groups.flatMap((x) => [x.head, ...x.subs]).filter((x) => x.handled).length} />
+            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open/working:rotate-90" />
+          </div>
+          <div className="pb-1 group-open/working:hidden">
+            <Row line={last} live sub={last !== g.head} />
+          </div>
+        </summary>
+        <Steps groups={groups} live className="max-h-[40vh] overflow-y-auto pb-1" />
+      </details>
+    </div>
+  )
+}
+
+// Claude's steps with the engine's folded under them, the last one open
+function Steps({ groups, live, className }: { groups: Group[]; live: boolean; className?: string }) {
+  return (
+    <ol className={cn("flex w-full flex-col gap-0.5 text-left text-sm", className)}>
+      {groups.map((g, i) => (
+        <li key={g.head.step.id}>
+          {g.subs.length ? (
+            <details open={i === groups.length - 1} className="group">
+              <summary className="cursor-pointer list-none rounded-md hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+                <Row line={g.head} live={live} fold warnings={g.subs.filter((x) => x.handled).length} />
+              </summary>
+              <ol className="flex flex-col gap-0.5">
+                {g.subs.map((x) => (
+                  <li key={x.step.id}>
+                    <Row line={x} live={live} sub />
+                  </li>
+                ))}
+              </ol>
+            </details>
+          ) : (
+            <Row line={g.head} live={live} />
+          )}
+        </li>
+      ))}
+    </ol>
   )
 }
 
@@ -129,12 +175,7 @@ function Row({ line: { step: s, count, ms, handled }, live, fold, sub, warnings 
           {s.label}
           {count > 1 && <span className="text-muted-foreground"> ×{count}</span>}
         </span>
-        {warnings > 0 && (
-          <span className="flex shrink-0 items-center gap-1 text-xs text-amber-500 tabular-nums" title={`${warnings} failed check${warnings > 1 ? "s" : ""}, fixed after`}>
-            <TriangleAlertIcon className="size-3.5" />
-            {warnings}
-          </span>
-        )}
+        <Warnings n={warnings} />
         <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
           {s.total ? `${s.done ?? 0}/${s.total} · ` : ""}
           {running && !live ? hour(s.t0) : span(ms)}
@@ -147,5 +188,16 @@ function Row({ line: { step: s, count, ms, handled }, live, fold, sub, warnings 
         </div>
       )}
     </div>
+  )
+}
+
+// the failed checks Claude fixed after
+function Warnings({ n }: { n: number }) {
+  if (!n) return null
+  return (
+    <span className="flex shrink-0 items-center gap-1 text-xs text-amber-500 tabular-nums" title={`${n} failed check${n > 1 ? "s" : ""}, fixed after`}>
+      <TriangleAlertIcon className="size-3.5" />
+      {n}
+    </span>
   )
 }

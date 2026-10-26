@@ -120,8 +120,8 @@ const ffmpegLog = argv => {
   return r.stderr
 }
 
-// .cache/progress.json: what is being done on the video, for the studio while there is nothing to review yet. The
-// commands log their steps (with done/total when they count), Claude its own with `status`:
+// .cache/progress.json: what is being done on the video, for the studio until the first version and while the next one
+// is made. The commands log their steps (with done/total when they count), Claude its own with `status`:
 // { updated, steps: [{ id, label, by: engine|claude, state: running|done|failed, t0, t1, done, total }] }, the last 60.
 // ponytail: read-modify-write without a lock, two commands writing at the same instant may lose a line
 const now = () => new Date().toISOString()

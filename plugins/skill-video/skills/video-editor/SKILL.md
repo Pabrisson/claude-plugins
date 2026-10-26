@@ -434,8 +434,9 @@ Update « État » in About.md.
 
 ## apply this feedback
 
-Read `references/review-format.md` and every image the prompt attaches, then follow its « Applying it »: each id gets
-its change, then `resolved` and `reply` in the feedback file.
+Start with `video.mjs status "Feedback v<n>: <count> changes" -p <slug>`: while the next version is made, the studio
+shows its steps above the feedback. Then read `references/review-format.md` and every image the prompt attaches, and
+follow its « Applying it »: each id gets its change, then `resolved` and `reply` in the feedback file.
 
 Before a change that goes through ElevenLabs (the voice-over's text, the music or an effect made again, a transcript
 again with Scribe v2), give the user its estimated credits and what the account has left with `video.mjs credits`, then go on.
@@ -457,8 +458,9 @@ Update « État » in About.md and tell the user the new version is ready: the o
 ## A change asked in the conversation
 
 When the user asks for a change to a video that has a version, in the conversation rather than with the studio's
-prompt (a variation they pick included), note each request on the version they saw, so that the studio shows it in
-that version's feedback. Once the change is made, before `render` and `final` (they make the next version):
+prompt (a variation they pick included), start with `video.mjs status "<the change, in a few words>" -p <slug>`, and
+note each request on the version they saw, so that the studio shows it in that version's feedback. Once the change
+is made, before `render` and `final` (they make the next version):
 `video.mjs feedback "<the request, in the user's words>" "<what changed, one sentence>" [--at <s>[,<s>]] -p <slug>`.
 - One per request. `--at` is the moment or the range it is about, in SOURCE seconds like `at()`; leave it out for a
   change of the whole video (the music, the grade, every title). Add `--format <f>` only for a change of that format's
