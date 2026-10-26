@@ -354,6 +354,9 @@ test('a draft is the main format alone, sharp, in 720p; the delivery gets subtit
   assert.match(log, /final v5 \(draft\)/)
   const { versions } = JSON.parse(read('parts/source/project.json'))
   assert.deepEqual([versions.at(-1).draft, versions.at(-1).files], [true, { '16:9': 'parts-16x9-draft.mp4' }])
+  // added once its files are written: the studio offers it complete
+  for (const file of ['files/versions/v5-16x9.mp4', 'files/video/v5.json'])
+    assert.ok(Math.floor(fs.statSync(path.join(home, 'parts', file)).mtimeMs) <= Date.parse(versions.at(-1).rendered), file)
   assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path.join(home, 'parts/output/parts-16x9-draft.mp4')], { encoding: 'utf8' }), /^1280,720/)
   // with its sound
   assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', path.join(home, 'parts/files/versions/v5-16x9.mp4')], { encoding: 'utf8' }), /^video\naudio/)
@@ -420,6 +423,9 @@ test('the progress log: the commands and Claude log their steps, a command that 
     ['Delivering the video', 'engine', 'failed', null, null],
     ['Rendering 16:9 720p', 'engine', 'done', 3, 3],
   ])
+  // a version delivered ends Claude's step: the studio offers it once every step of its work is over
+  cli('final', '-p', 'wait')
+  assert.deepEqual(steps().filter(x => x[1] === 'claude').map(x => x[2]), ['done', 'done'])
   assert.throws(() => cli('status', '-p', 'wait'), /usage: status/)
 })
 

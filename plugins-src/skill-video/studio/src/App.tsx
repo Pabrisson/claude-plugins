@@ -10,7 +10,7 @@ import { fullscreen, mark, Player, toggle, useVideoTime } from "@/components/pla
 import { SoundTimeline } from "@/components/sound"
 import { VideoTimeline } from "@/components/video"
 import { Transcript, TranscriptDownload } from "@/components/transcript"
-import { Waiting, Working } from "@/components/waiting"
+import { busy, Waiting, Working } from "@/components/waiting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -117,16 +117,17 @@ export default function App() {
       .catch((e) => setError(e.message))
   }, [])
 
-  // what is being done on the video, and a version that lands: the first one reloads the page by itself, the next
-  // ones are offered
+  // what is being done on the video, and a version that lands, once every step of the work that made it is over (final
+  // ends Claude's own): the first one reloads the page by itself, the next ones are offered
   useEffect(() => {
     if (!project) return
     const poll = () =>
       Promise.all([api.projects(), api.progress()]).then(([vs, g]) => {
-        const me = vs.find((v) => v.slug === project.slug)
-        if (!project.versions.length && me?.versions) return location.reload()
-        if (me && me.versions > project.versions.length) setNewer(me)
         setProgress(g)
+        const me = vs.find((v) => v.slug === project.slug)
+        if (!me || me.versions <= project.versions.length || busy(g, project.versions.at(-1)?.rendered, me.rendered)) return
+        if (project.versions.length) setNewer(me)
+        else location.reload()
       }, () => {})
     poll()
     const id = setInterval(poll, 2000)

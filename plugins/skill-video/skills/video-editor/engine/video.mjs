@@ -997,8 +997,9 @@ function rough() {
   run('ffmpeg', ['-y', '-v', 'error', '-i', f('assets/source.mp4'), ...(voice ? ['-i', voice] : []),
     '-vf', vf, '-map', '0:v:0', ...(voice ? ['-map', '1:a', '-c:a', 'aac', '-b:a', '160k'] : ['-an']),
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-shortest', file])
-  const v = addVersion(dir, p, { rough: true, duration: ms(tl.duration), files: { [p.formats[0]]: path.basename(file) }, timeline: { speed: tl.speed, segments: tl.segments } })
+  const v = nextVersion(p)
   keepPreview(dir, v, p.formats[0], file)
+  addVersion(dir, p, { rough: true, duration: ms(tl.duration), files: { [p.formats[0]]: path.basename(file) }, timeline: { speed: tl.speed, segments: tl.segments } })
   console.log(`rough cut v${v}: ${file} (${p.formats[0]}, ${ms(p.fps)} fps, ${clock(tl.duration)}, built in ${secs(started)} s)`)
 }
 
@@ -1218,7 +1219,7 @@ function final() {
   }
   const parts = fs.existsSync(f('.cache/parts.json')) ? readJson(f('.cache/parts.json')) : []
   if (!draft) made.push(...deliver(dir, p, j, tl, edit, files, parts))
-  const v = addVersion(dir, p, { ...(draft && { draft: true }), duration: ms(j.duration), files, timeline: j.timeline })
+  const v = nextVersion(p)
   // what the studio's sound panel shows of this version: the cues and each track's level (audio.py's mix.json)
   if (audio) {
     fs.mkdirSync(f('files/sound'), { recursive: true })
@@ -1238,6 +1239,7 @@ function final() {
   // its preview, from its smallest render: no 4K to decode when a 1080p is there
   const small = types.reduce((a, b) => (renderShort(a) <= renderShort(b) ? a : b))
   keepPreview(dir, v, formats[0], f(`output/${p.slug}-${ratio(formats[0])}-${small}.mp4`))
+  addVersion(dir, p, { ...(draft && { draft: true }), duration: ms(j.duration), files, timeline: j.timeline })
   console.log(made.join('\n'))
   console.log(`final v${v}${draft ? ' (draft)' : ''} in ${secs(started)} s (${audio ? path.basename(audio) : 'no audio'}). Reload the studio`)
 }
@@ -1268,12 +1270,14 @@ function deliver(dir, p, j, tl, edit, files, parts) {
 }
 
 // every reviewable render is a new version, with its own feedback file (files/reviews/vN.json);
-// its timeline is kept so the studio maps that version's times back to the source
+// its timeline is kept so the studio maps that version's times back to the source.
+// Added last, once its files are written (its sound, Clip tab and preview, named after nextVersion). It ends Claude's
+// step: the studio offers to reload once every step of the work that made it is over
+const nextVersion = p => (p.versions?.length ?? 0) + 1
 function addVersion(dir, p, version) {
-  const v = (p.versions?.length ?? 0) + 1
-  p.versions = [...(p.versions ?? []), { v, rendered: new Date().toISOString(), ...version }]
+  logSteps(dir, endClaude)
+  p.versions = [...(p.versions ?? []), { v: nextVersion(p), rendered: new Date().toISOString(), ...version }]
   writeJson(path.join(dir, 'source/project.json'), p)
-  return v
 }
 
 // the next render overwrites output/: the studio compares with the earlier versions through their preview, the main
@@ -1286,12 +1290,13 @@ function keepPreview(dir, v, fmt, video) {
 }
 
 // status "<what Claude does now>": a step of Claude's own (the brief, the direction, the scene, a review pass…), shown
-// in the studio until the next one
+// in the studio until the next one, or until a version is delivered (addVersion)
+const endClaude = steps => { for (const x of steps) if (x.by === 'claude' && x.state === 'running') Object.assign(x, { state: 'done', t1: now() }) }
 function status(...words) {
   const dir = projectDir(), label = words.join(' ').trim()
   if (!label) die('usage: status "<what you are doing now>" -p <slug>')
   logSteps(dir, steps => {
-    for (const x of steps) if (x.by === 'claude' && x.state === 'running') Object.assign(x, { state: 'done', t1: now() })
+    endClaude(steps)
     steps.push({ id: `${process.pid}-${Date.now()}`, label, by: 'claude', state: 'running', t0: now() })
   })
   console.log(`status: ${label}`)

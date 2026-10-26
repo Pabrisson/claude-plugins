@@ -44,6 +44,10 @@ function useNow() {
 // ended, or it waits)
 const lastNews = (p: Progress | null) => Math.max(Date.parse(p?.updated ?? "") || 0, Date.parse(p?.touched?.mtime ?? "") || 0)
 const isLive = (last: number, now: number) => !!last && now - last < 30 * 60_000
+// a step of the span still runs (started after `from`, before `to`, ISO times), with news in the last 30 minutes
+export const busy = (p: Progress | null, from?: string | null, to?: string | null) =>
+  isLive(lastNews(p), Date.now()) &&
+  !!p?.steps.some((s) => s.state === "running" && (!from || Date.parse(s.t0) > Date.parse(from)) && (!to || Date.parse(s.t0) < Date.parse(to)))
 
 // Nothing to review yet: what is being done on the video, newest last, with the total time. Claude's own steps (the
 // brief, the scene, a review pass…) lead, the engine's (transcription, renders with their progress) fold under them:
@@ -96,14 +100,22 @@ export function Waiting({ progress }: { progress: Progress | null }) {
 }
 
 // The next version being made (a feedback applied, a change asked in the conversation), above the feedback: the
-// totals and the last step, the rest unfolds. Only while it runs, a step started since the version shown still
+// totals and the step under way, the rest unfolds; a render under way has its own card under it, with its chunks, and
+// joins the list once done. Only while it runs, a step started since the version shown still
 // running with news in the last 30 minutes: the rest of the time the feedback keeps the room. When the version lands,
 // the alert that offers to reload takes over.
 export function Working({ progress, since, next }: { progress: Progress | null; since: string; next: number }) {
   const now = useNow()
-  const steps = progress?.steps.filter((s) => Date.parse(s.t0) > Date.parse(since)) ?? []
-  if (!isLive(lastNews(progress), now) || !steps.some((s) => s.state === "running")) return null
-  const groups = groupSteps(steps, now), g = groups.at(-1)!, last = g.subs.at(-1) ?? g.head
+  // the change under way: from Claude's first step since the version shown (the `status` that opens it), without the
+  // engine's stray ones before it (a still, a check); with no step of Claude's, every step since that version
+  const all = progress?.steps.filter((s) => Date.parse(s.t0) > Date.parse(since)) ?? []
+  const steps = all.slice(Math.max(0, all.findIndex((s) => s.by === "claude")))
+  if (!busy(progress, since)) return null
+  // the renders under way: the engine's steps that count their chunks
+  const renders = steps.filter((s) => s.by === "engine" && s.state === "running" && !!s.total)
+  // folded, the step under way: Claude's that runs (a review pass, not its stills), never one of the engine's under it
+  const groups = groupSteps(steps.filter((s) => !renders.includes(s)), now)
+  const current = (groups.findLast((x) => x.head.step.state === "running") ?? groups.at(-1))?.head
   return (
     <div className="border-b p-2">
       <details className="group/working rounded-lg border bg-card">
@@ -117,18 +129,32 @@ export function Working({ progress, since, next }: { progress: Progress | null; 
             <Warnings n={groups.flatMap((x) => [x.head, ...x.subs]).filter((x) => x.handled).length} />
             <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open/working:rotate-90" />
           </div>
-          <div className="pb-1 group-open/working:hidden">
-            <Row line={last} live sub={last !== g.head} />
-          </div>
+          {current && (
+            <div className="pb-1 group-open/working:hidden">
+              <Row line={current} live small />
+            </div>
+          )}
         </summary>
-        <Steps groups={groups} live className="max-h-[40vh] overflow-y-auto pb-1" />
+        <Steps groups={groups} live small className="max-h-[40vh] overflow-y-auto pb-1" />
       </details>
+      {renders.map((s) => (
+        <div key={s.id} className="mt-2 flex flex-col gap-1.5 rounded-lg border bg-card px-3 py-2 text-xs">
+          <div className="flex items-center gap-2">
+            <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-highlight" />
+            <span className="min-w-0 flex-1 truncate font-medium">{s.label}</span>
+            <span className="shrink-0 font-mono text-muted-foreground tabular-nums">
+              {s.done ?? 0}/{s.total} · {span(now - Date.parse(s.t0))}
+            </span>
+          </div>
+          <Bar step={s} />
+        </div>
+      ))}
     </div>
   )
 }
 
-// Claude's steps with the engine's folded under them, the last one open
-function Steps({ groups, live, className }: { groups: Group[]; live: boolean; className?: string }) {
+// Claude's steps with the engine's folded under them, the last one open. small: a notch smaller, in the feedback column
+function Steps({ groups, live, small, className }: { groups: Group[]; live: boolean; small?: boolean; className?: string }) {
   return (
     <ol className={cn("flex w-full flex-col gap-0.5 text-left text-sm", className)}>
       {groups.map((g, i) => (
@@ -136,18 +162,18 @@ function Steps({ groups, live, className }: { groups: Group[]; live: boolean; cl
           {g.subs.length ? (
             <details open={i === groups.length - 1} className="group">
               <summary className="cursor-pointer list-none rounded-md hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
-                <Row line={g.head} live={live} fold warnings={g.subs.filter((x) => x.handled).length} />
+                <Row line={g.head} live={live} small={small} fold warnings={g.subs.filter((x) => x.handled).length} />
               </summary>
               <ol className="flex flex-col gap-0.5">
                 {g.subs.map((x) => (
                   <li key={x.step.id}>
-                    <Row line={x} live={live} sub />
+                    <Row line={x} live={live} small={small} sub />
                   </li>
                 ))}
               </ol>
             </details>
           ) : (
-            <Row line={g.head} live={live} />
+            <Row line={g.head} live={live} small={small} />
           )}
         </li>
       ))}
@@ -155,10 +181,17 @@ function Steps({ groups, live, className }: { groups: Group[]; live: boolean; cl
   )
 }
 
-function Row({ line: { step: s, count, ms, handled }, live, fold, sub, warnings = 0 }: { line: Line; live: boolean; fold?: boolean; sub?: boolean; warnings?: number }) {
+function Row({ line: { step: s, count, ms, handled }, live, fold, sub, small, warnings = 0 }: { line: Line; live: boolean; fold?: boolean; sub?: boolean; small?: boolean; warnings?: number }) {
   const running = s.state === "running"
   return (
-    <div className={cn("flex flex-col gap-1.5 rounded-md px-2 py-1.5", sub && "pl-14 text-xs", running && live && !sub && "bg-muted/60")}>
+    <div
+      className={cn(
+        "flex flex-col gap-1.5 rounded-md px-2 py-1.5",
+        sub && "pl-14 text-xs",
+        small && ["py-1 [&_svg]:size-3.5", sub ? "pl-12 text-[11px]" : "text-xs"],
+        running && live && !sub && "bg-muted/60"
+      )}
+    >
       <div className="flex items-center gap-2">
         {/* a step with the engine's under it folds: its chevron, the others keep the room so the labels line up */}
         {!sub && <ChevronRightIcon className={cn("size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90", !fold && "invisible")} />}
@@ -176,17 +209,13 @@ function Row({ line: { step: s, count, ms, handled }, live, fold, sub, warnings 
           {count > 1 && <span className="text-muted-foreground"> ×{count}</span>}
         </span>
         <Warnings n={warnings} />
-        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+        <span className={cn("shrink-0 font-mono text-xs text-muted-foreground tabular-nums", small && sub && "text-[11px]")}>
           {s.total ? `${s.done ?? 0}/${s.total} · ` : ""}
           {running && !live ? hour(s.t0) : span(ms)}
         </span>
       </div>
       {/* the renders count their chunks */}
-      {running && live && !!s.total && (
-        <div className="ml-6 h-1 overflow-hidden rounded-full bg-foreground/10">
-          <div className="h-full rounded-full bg-highlight transition-[width] duration-500" style={{ width: `${Math.round(((s.done ?? 0) / s.total) * 100)}%` }} />
-        </div>
-      )}
+      {running && live && !!s.total && <Bar step={s} className="ml-6" />}
     </div>
   )
 }
@@ -199,5 +228,14 @@ function Warnings({ n }: { n: number }) {
       <TriangleAlertIcon className="size-3.5" />
       {n}
     </span>
+  )
+}
+
+// a render's chunks done
+function Bar({ step: s, className }: { step: Step; className?: string }) {
+  return (
+    <div className={cn("h-1 overflow-hidden rounded-full bg-foreground/10", className)}>
+      <div className="h-full rounded-full bg-highlight transition-[width] duration-500" style={{ width: `${Math.round(((s.done ?? 0) / (s.total ?? 1)) * 100)}%` }} />
+    </div>
   )
 }
