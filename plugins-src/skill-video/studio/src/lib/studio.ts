@@ -44,6 +44,10 @@ export type Project = {
   words: Word[] | null
   versions: Version[]
 }
+// the project's pack (api/rules), as Claude reads it: its text, and the params the engine follows with the project's
+// overrides. body null: a pack no longer installed
+export type Pack = { name: string; description: string | null; origin: string | null; file: string | null; body: string | null }
+export type Rules = { params: Record<string, unknown>; overrides: Record<string, unknown>; packs: Pack[] }
 export type Kind = "comment" | "cut"
 // the parts of the mix: the voice, sound.py's music and effects buses, the media clips' own sound
 export type Track = "voice" | "music" | "fx" | "clips"
@@ -121,6 +125,7 @@ export const api = {
       body: JSON.stringify({ comments }),
     }).then(json),
   progress: (): Promise<Progress> => fetch("api/progress").then(json),
+  rules: (): Promise<Rules> => fetch("api/rules").then(json),
   image: (id: string, png: Blob): Promise<{ path: string }> =>
     fetch(`api/review-image?id=${id}`, { method: "POST", body: png }).then(json),
 }

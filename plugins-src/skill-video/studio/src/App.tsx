@@ -5,6 +5,7 @@ import { CheckIcon, CopyIcon, EllipsisIcon, FilmIcon, LayoutGridIcon, TriangleAl
 import { Feedback, type Point } from "@/components/feedback"
 import { Panel, type Tab } from "@/components/panel"
 import { PromptDialog } from "@/components/prompt-dialog"
+import { RulesDialog } from "@/components/rules-dialog"
 import { fullscreen, mark, Player, toggle, useVideoTime } from "@/components/player"
 import { SoundTimeline } from "@/components/sound"
 import { VideoTimeline } from "@/components/video"
@@ -457,7 +458,7 @@ export default function App() {
               {project.rules.length > 0 && (
                 <>
                   {" · "}
-                  {meta("Rules", project.rules.join(", "))}
+                  Rules <RulesDialog names={project.rules} />
                 </>
               )}
             </p>

@@ -1197,6 +1197,15 @@ async function handle(req, res, write = false) {
 
   const sub = rest.join('/'), m = sub.match(/^api\/reviews\/v(\d+)$/)
   if (sub === 'api/project') return reply(res, 200, projectInfo(dir))
+  // the project's pack as `rules show` prints it, for the studio's header: its text, and the params in effect
+  if (sub === 'api/rules') {
+    const r = readJson(path.join(dir, 'source/rules.json')), all = packs()
+    return reply(res, 200, {
+      params: effective(r, () => {}),
+      overrides: r.overrides ?? {},
+      packs: r.active.map(name => ({ name, description: all[name]?.description ?? null, origin: all[name]?.origin ?? null, file: all[name]?.file ?? null, body: all[name]?.body.trim() ?? null })),
+    })
+  }
   // the progress log, the file Claude changed last (the work goes on between two logged steps), and when the project
   // started: the total time, even once the log has dropped its first steps
   if (sub === 'api/progress') {

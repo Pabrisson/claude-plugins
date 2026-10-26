@@ -78,6 +78,16 @@ test('the root opens the first video, and the studio lists them all', async () =
   assert.deepEqual((await (await fetch(base + 'api/projects')).json()).map(x => [x.slug, x.versions]), [['demo', 1]])
 })
 
+test('the header reads the project\'s pack', async () => {
+  assert.deepEqual((await (await fetch(base + 'api/rules')).json()).packs, [])
+  fs.writeFileSync(path.join(dir, 'source/rules.json'), JSON.stringify({ active: ['shorts'], params: {}, overrides: { speed: 1 } }))
+  const r = await (await fetch(base + 'api/rules')).json()
+  fs.writeFileSync(path.join(dir, 'source/rules.json'), JSON.stringify({ active: [], params: {}, overrides: {} }))
+  assert.equal(r.packs[0].name, 'shorts')
+  assert.match(r.packs[0].body, /^## When writing the scene/)
+  assert.deepEqual([r.params.speed, r.overrides], [1, { speed: 1 }])
+})
+
 test('one studio server per projects folder, side by side', async () => {
   const p0 = 42000 + Math.floor(Math.random() * 400), other = fs.mkdtempSync(path.join(os.tmpdir(), 'video-studio-'))
   fs.cpSync(dir, path.join(other, 'demo'), { recursive: true })
