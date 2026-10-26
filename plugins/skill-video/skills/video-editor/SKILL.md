@@ -332,6 +332,9 @@ frames at once leads to small, safe layouts.
   `transition`…). The studio's Clip tab shows them, and the user's feedback points at them by kind and name.
 - Without speech, declare what the viewer reads with `say(text, from, to)`, one line per moment. It is the
   transcript the user reviews and quotes in the studio.
+- **Never cut a word or a letter**, whatever the pack. A text sits whole in every box that clips it (a mask, a
+  window, a roller, a card): as wide as its longest word in every format, and tall enough for its accents and
+  descenders (scene-format.md, « No word or letter is cut »). Only the frame may cut display type.
 
 Once the scene is written, go straight to the sound (step 8): no review pass before it.
 
@@ -368,12 +371,13 @@ quality comes from, so take the time it needs: usually four to eight passes. Eac
   fast moves, and the peak and last frame of each sequence.
 - **Measure** with `video.mjs check -p <slug>`: the pack's numbers on the edit (length, hook, CTA, stretches without
   a change, cuts inside a word, cuts on the beat…), then the layout of every format: a text in the platforms'
-  interface zones, too small for a phone, cut by the frame, or over a face. Fix what it flags. A text that is
+  interface zones, too small for a phone, cut by the frame or by its box, or over a face. Fix what it flags. A text that is
   decoration, not meant to be read, takes `data-say=""`. Then `video.mjs audio -p <slug>` once the stills are
   rendered (they saved the cues moved by your fixes), and the measures of step 8 again.
 - **Read the sheets and hunt the defects**:
   - something that pops, flickers at a cut, or does not animate (`preview` shows the motion live);
-  - overlaps and texts cut by the frame;
+  - overlaps, and a word or a letter cut by the frame or by its box (a mask, a roller, a card), accents and
+    descenders included;
   - empty or weak frames;
   - sizes unreadable on a phone;
   - timing that drags or rushes;
@@ -449,6 +453,19 @@ Then render it at once, without asking: `video.mjs render -p <slug>` with the pr
 instead: `render --draft`, then `final --draft` (the main format in 720p, sharp, without the deliverables).
 
 Update « État » in About.md and tell the user the new version is ready: the open studio offers to reload it.
+
+## A change asked in the conversation
+
+When the user asks for a change to a video that has a version, in the conversation rather than with the studio's
+prompt (a variation they pick included), note each request on the version they saw, so that the studio shows it in
+that version's feedback. Once the change is made, before `render` and `final` (they make the next version):
+`video.mjs feedback "<the request, in the user's words>" "<what changed, one sentence>" [--at <s>[,<s>]] -p <slug>`.
+- One per request. `--at` is the moment or the range it is about, in SOURCE seconds like `at()`; leave it out for a
+  change of the whole video (the music, the grade, every title). Add `--format <f>` only for a change of that format's
+  composition.
+- The studio shows it resolved, with your sentence as its reply and a conversation icon.
+
+Then render as for the studio's feedback, above.
 
 ## variations <element>
 

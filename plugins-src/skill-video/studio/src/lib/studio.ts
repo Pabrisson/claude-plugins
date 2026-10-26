@@ -88,8 +88,8 @@ export type Comment = {
   reply?: string
   created: string
   format?: string
-  // "transcript": made on a selection of the transcript
-  from?: "transcript"
+  // "transcript": made on a selection of the transcript; "chat": asked in the conversation with Claude, who wrote it
+  from?: "transcript" | "chat"
   // a line of what the video shows, corrected in the transcript
   fix?: { from: string; to: string }
 }

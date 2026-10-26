@@ -40,7 +40,7 @@ their levels, then one row per kind of cue: the user picks a part, a track, a cu
 | `t0`, `t1` | VIDEO seconds of **that version**; `t1 === t0` for a single moment |
 | `s0`, `s1` | SOURCE seconds, or SCENE seconds (the scene's own time) without a source: use them for `cut`, to find the words in `files/words.md`, and to find the moment in the scene |
 | `words` | What is said, or shown on screen, in the range |
-| `from` | `"transcript"` when the user made the comment on a selection of the transcript: it is about those words or lines. Absent otherwise |
+| `from` | `"transcript"` when the user made the comment on a selection of the transcript: it is about those words or lines. `"chat"` when Claude noted a change the user asked in the conversation (`video.mjs feedback`), already resolved: the studio marks it with a conversation icon. Absent otherwise |
 | `fix` | `{ "from", "to" }`: a line of what the video shows, or a spoken word, that the user corrected in the transcript (double-click on it; an emptied word goes). Absent otherwise |
 | `format` | The format the user was looking at. Only a request about that format's composition (placement, size, framing) stays in it; content, text, timing and sound changes apply to every format |
 | `images` | Frames the user drew on, or pictures they dropped (`assets/review/frame-<id>.png`), with their size in pixels and ratio: read them. Older files have bare paths |
@@ -48,8 +48,8 @@ their levels, then one row per kind of cue: the user picks a part, a track, a cu
 | `sounds` | What the comment is about in the sound: a whole track (`voice`, `clips`, `music`, `fx`), every cue of a kind (`{ "kind" }`), or one cue of the scene (`kind`, `t` in VIDEO seconds, its data). Absent when the comment is not about the sound |
 | `resolved`, `reply` | **Claude writes them**: `resolved: true` and one sentence on what changed. The studio shows the reply |
 
-The studio keeps an answer Claude wrote even when an older tab saves the file again. Edit only `resolved` and
-`reply`; leave the other fields as they are.
+The studio keeps an answer Claude wrote, and the changes noted from the conversation, even when an older tab saves the
+file again. Edit only `resolved` and `reply`; leave the other fields as they are.
 
 ## The Copy prompt
 

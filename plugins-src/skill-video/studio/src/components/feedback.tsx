@@ -7,6 +7,7 @@ import {
   FilmIcon,
   ClockIcon,
   MessageSquareTextIcon,
+  MessagesSquareIcon,
   MicIcon,
   MusicIcon,
   PencilIcon,
@@ -221,6 +222,14 @@ function Item({
             {range ? `${minutes(c.t0)} → ${minutes(c.t1)}` : minutes(c.t0)}
           </Badge>
           {multiFormat && c.format && <Badge variant="secondary">{c.format}</Badge>}
+          {c.from === "chat" && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <MessagesSquareIcon aria-label="Asked in the conversation" className="size-3.5 shrink-0 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>Asked in the conversation with Claude</TooltipContent>
+            </Tooltip>
+          )}
           {onChange && (
             <div className={cn("ml-auto flex opacity-0 group-hover/item:opacity-100", editing !== null && "opacity-100")} onClick={(e) => e.stopPropagation()}>
               {/* while it is edited, the pencil saves */}

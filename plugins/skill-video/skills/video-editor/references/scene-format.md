@@ -25,7 +25,7 @@ copy.
 .seq { position: absolute; inset: 0 }
 .seq.dark { background: var(--night); color: var(--cream) }
 .seq.red { background: var(--accent); color: #fff }
-.giant { font: 800 360px/0.85 var(--font); letter-spacing: -0.04em; white-space: nowrap }
+.giant { font: 800 360px/1.2 var(--font); letter-spacing: -0.04em; white-space: nowrap }
 ```
 
 ```js
@@ -34,6 +34,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
   seq.className = 'seq dark'
   seq.innerHTML = `<h1 class="giant">TRANSPORT</h1>`
   stage.append(seq)
+  // each mask is its letter's line box: .giant's line-height of 1.2 keeps the accents and descenders in
   const { chars } = SplitText.create(seq.firstChild, { type: 'chars', mask: 'chars' })
   // bigger than the frame: the word crosses it
   tl.fromTo(seq.firstChild, { x: W }, { x: -seq.firstChild.offsetWidth, duration: 2.4, ease: 'power2.inOut' }, at(0.4))
@@ -62,6 +63,13 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
   canvas at its bitmap size (`width`, `height`), whatever its CSS size: keep the two equal and scale it with a
   `transform`. Images, SVG (text included),
   CSS backgrounds, masks, clip-paths, filters, blend modes and shadows all capture normally.
+- **No word or letter is cut.** A text sits whole in every box that clips it: a mask (SplitText's `mask`), a window,
+  a roller, a card with an `overflow`. The box is as wide as its longest word in every format (a roller: the widest
+  of the words it shows), and as tall as its letters: a mask is its text's line box, so a masked text gets a
+  `line-height` of 1.2 or more, or a padding in its mask, or the accents and descenders (É, À, g, p, q) are cut. A
+  word that waits under a mask is hidden whole, not peeking. Only the frame may cut display type, and a word cut on
+  purpose, as decoration (a wall of words), takes `data-say=""`. `check` flags a text its box cuts at rest by 3 px or
+  more.
 - **Formats are recomposed, not shrunk.** The same scene builds every format; read `W`, `H`, `format` or use
   `pick(landscape, portrait, tall)` (portrait = 4:5 and up, tall = 9:16), and CSS on
   `#stage.landscape | .square | .portrait | .tall` or `#stage[data-format="9:16"]`. Same timings everywhere (one
@@ -218,7 +226,8 @@ beat of the timeline). Ask for the moments that matter: both sides of every tran
 the last frame of each sequence. `video.mjs check`, after `stills`: the active pack's numbers measured on the edit
 (length, hook, CTA, longest stretch without a change, cuts inside a word, cuts on the beat…), then the layout of every
 format, 4 times a second: a text in the platforms' zones, too small for a phone, cut by the frame (display type may
-cross it), or over the face the camera shows (not when a solid card hides the camera). `video.mjs preview`: the scene live in
+cross it), cut by its box at rest (a mask, a window, an overflow: the ink of its letters, display type included), or
+over the face the camera shows (not when a solid card hides the camera). `video.mjs preview`: the scene live in
 Chrome, with the tweens and cues around the playhead; R reloads it. Renders run at about 175 to 280 frames per second, four times slower with `--blur 4`.
 
 ## The thumbnail

@@ -199,25 +199,36 @@ test('a chunk whose page Chrome loses renders again on a new page', { timeout: 1
   assert.match(log, /240 frames, 4\/4 chunks rendered/)
 })
 
-test('check samples the layout of every format: platform zones, tiny text, text cut by the frame', { timeout: 300000 }, () => {
+test('check samples the layout of every format: platform zones, tiny text, text cut by the frame or by its box', { timeout: 300000 }, () => {
   cli('init', 'lay', '--formats', '9:16,16:9', '--renders', '720p', '--rules', 'none')
   fs.writeFileSync(path.join(home, 'lay/source/edit.json'), JSON.stringify({ duration: 3 }))
-  fs.writeFileSync(path.join(home, 'lay/source/scene.js'), `export default async function scene({ stage, format }) {
+  fs.writeFileSync(path.join(home, 'lay/source/scene.js'), `export default async function scene({ stage, format, tl }) {
     stage.innerHTML = format === '9:16'
       ? '<p style="position:absolute;left:100px;top:1700px;margin:0;font-size:60px">Bas de écran</p>' +
         '<p style="position:absolute;left:100px;top:800px;margin:0;font-size:14px">minuscule</p>' +
         '<p style="position:absolute;left:300px;top:1000px;margin:0;font-size:60px;white-space:nowrap">Coupé par le bord droit du cadre</p>' +
-        '<h1 style="position:absolute;left:-200px;top:400px;margin:0;font-size:400px;white-space:nowrap">GÉANT</h1>' +
+        '<section style="position:absolute;inset:0;overflow:hidden"><h1 style="position:absolute;left:-200px;top:400px;margin:0;font-size:400px;white-space:nowrap">GÉANT</h1>' +
+        '<p style="position:absolute;left:800px;top:1420px;margin:0;font-size:60px;white-space:nowrap">Rogné par le cadre</p></section>' +
+        '<div style="position:absolute;left:100px;top:1150px;width:150px;overflow:hidden"><p style="margin:0;font-size:80px;white-space:nowrap">Bloqué</p></div>' +
+        '<div style="position:absolute;left:100px;top:1300px;overflow:hidden"><p style="margin:0;font-size:80px;line-height:0.8">Pygmée</p></div>' +
+        '<div style="position:absolute;left:100px;top:600px;overflow:hidden"><p id="rev" style="margin:0;font-size:80px;line-height:1.3">Révélé</p></div>' +
         '<p data-say="" style="position:absolute;left:100px;top:1800px;margin:0;font-size:12px">décor</p>'
       : '<h1 style="position:absolute;left:200px;top:300px;margin:0;font-size:120px">Propre</h1>'
+    if (format === '9:16') tl.fromTo('#rev', { yPercent: 100 }, { yPercent: 0, duration: 3, ease: 'none' }, 0)
   }`)
   cli('stills', '-p', 'lay')
   const log = failing('check', '-p', 'lay')
   assert.match(log, /✗ 9:16: "Bas de écran" in the platforms' interface zones from 00:00\.00 to 00:03\.00/)
   assert.match(log, /✗ 9:16: "minuscule" too small to read on a phone/)
   assert.match(log, /✗ 9:16: "Coupé par le bord droit du cadre" cut by the frame/)
-  assert.doesNotMatch(log, /GÉANT|décor/)
-  assert.match(log, /✓ 16:9: no text in the platforms' zones, too small, cut by the frame or over a face/)
+  // in a full-frame sequence that clips, the frame's cut is still the frame's
+  assert.match(log, /✗ 9:16: "Rogné par le cadre" cut by the frame/)
+  assert.doesNotMatch(log, /"Rogné par le cadre" \(/)
+  // a roller narrower than its word, a mask tighter than its letters; not a reveal, nor display type the frame cuts
+  assert.match(log, /✗ 9:16: "Bloqué" \(\d+ % shown\) cut by its box .* from 00:00\.00 to 00:03\.00/)
+  assert.match(log, /✗ 9:16: "Pygmée" \(\d+ % shown\) cut by its box/)
+  assert.doesNotMatch(log, /GÉANT|décor|Révélé/)
+  assert.match(log, /✓ 16:9: no text in the platforms' zones, too small, cut by the frame or by its box, or over a face/)
 })
 
 test('check flags a text over the face the camera shows, not one over a card that hides it', { timeout: 300000 }, () => {

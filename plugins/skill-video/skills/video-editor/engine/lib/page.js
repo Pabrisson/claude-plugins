@@ -30,14 +30,58 @@ const bitmap = async url => {
   return createImageBitmap(await r.blob())
 }
 
+// The ink of a text node's glyphs in its font (canvas metrics, every line counted as the whole text), as shares of its
+// box from the top, [top, bottom]: the font's box (ascent and descent) is taller than the letters. Once per font and text
+const INK = new Map()
+let pen
+function ink(n) {
+  const cs = getComputedStyle(n.parentElement), font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+  const text = { uppercase: s => s.toUpperCase(), lowercase: s => s.toLowerCase() }[cs.textTransform]?.(n.textContent) ?? n.textContent, key = `${font}\u0000${text}`
+  if (!INK.has(key)) {
+    pen ??= document.createElement('canvas').getContext('2d')
+    pen.font = font
+    const m = pen.measureText(text), h = m.fontBoundingBoxAscent + m.fontBoundingBoxDescent
+    INK.set(key, h ? [(m.fontBoundingBoxAscent - m.actualBoundingBoxAscent) / h, (m.fontBoundingBoxAscent + m.actualBoundingBoxDescent) / h] : [0, 1])
+  }
+  return INK.get(key)
+}
+
 // Every block of text on the stage now: its own text (its text and inline children, not its child blocks), or a
 // data-say="…" group's; data-say="" is decoration and never counts. Its glyphs' box clipped by its masks and windows
 // (sliding panels), then by the stage, in stage pixels; `shown`, the share of its glyphs left visible; `inFrame`, the
-// share of what its masks show that the stage shows too (under 1: the frame cuts it); its size as seen (times every
-// scale up the tree; null for a group); its opacity; `caption` for the captions().
+// share of what its masks show that the stage shows too (under 1: the frame cuts it); `boxed`, the share of its
+// glyphs' ink in the frame that its own boxes leave, each glyph's ink clipped from its parent up, SplitText's masks
+// included (under 1: a mask, a window or an overflow cuts a word or the tops and tails of its letters), and `lost`, the
+// most a glyph loses on one side (stage px); its size as seen (times every scale up the tree; null for a group); its
+// opacity; `caption` for the captions().
 // ponytail: no occlusion test (opacity 0 layers catch the hit test), a text under an opaque card still counts
 function textBoxes(stage) {
   const sr = stage.getBoundingClientRect(), k = sr.width / stage.offsetWidth || 1
+  // what clips the boxes inside it: an element with an overflow or a clip-path (its box), else null; once per element
+  const clips = new Map(), clip = p => {
+    if (!clips.has(p)) { const cs = getComputedStyle(p); clips.set(p, cs.overflow !== 'visible' || cs.clipPath !== 'none' ? p.getBoundingClientRect() : null) }
+    return clips.get(p)
+  }
+  // a glyph box's ink ([top, bottom] shares of its height) in the frame, and what the boxes from `p` up to the stage
+  // leave of it (the frame's own cut aside): [its area, the area left, the most it loses on one side in stage px]
+  const cut = (x, p, [a, b]) => {
+    const mark = [Math.max(x.left, sr.left), Math.max(x.top + a * x.height, sr.top), Math.min(x.right, sr.right), Math.min(x.top + b * x.height, sr.bottom)]
+    let box = mark
+    for (let q; area(box) && p && p !== stage; p = p.parentElement) {
+      if ((q = clip(p))) box = [Math.max(box[0], q.left), Math.max(box[1], q.top), Math.min(box[2], q.right), Math.min(box[3], q.bottom)]
+    }
+    const left = area(box)
+    return [area(mark), left, (left ? Math.max(box[0] - mark[0], box[1] - mark[1], mark[2] - box[2], mark[3] - box[3]) : Math.min(mark[2] - mark[0], mark[3] - mark[1])) / k]
+  }
+  // under a rotation or a skew (all the transforms up the tree: a turn and its counter-turn cancel), a box is the
+  // bounding box of the turned glyphs, larger than their ink: not measured
+  // ponytail: a tilted text its box cuts goes unflagged; measure it in its own coordinates if that bites
+  const turns = new Map(), turn = p => {
+    if (!p || p === stage) return new DOMMatrix()
+    if (!turns.has(p)) { const t = getComputedStyle(p).transform; turns.set(p, t === 'none' ? turn(p.parentElement) : turn(p.parentElement).multiply(new DOMMatrix(t))) }
+    return turns.get(p)
+  }
+  const tilted = p => { const m = turn(p); return Math.abs(m.b) > 2e-3 * Math.hypot(m.a, m.b) || Math.abs(m.c) > 2e-3 * Math.hypot(m.c, m.d) }
   const block = el => !getComputedStyle(el).display.startsWith('inline')
   const own = el => [...el.childNodes].flatMap(n => (n.nodeType === 3 ? [n] : n.nodeType === 1 && !block(n) && !n.hasAttribute('data-say') ? own(n) : []))
   const rects = n => { const r = document.createRange(); r.selectNodeContents(n); return [...r.getClientRects()] }
@@ -57,26 +101,27 @@ function textBoxes(stage) {
     const nodes = say == null ? own(el) : null, inked = nodes?.filter(n => n.textContent.trim())
     if (inked && !inked.length) continue
     if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue
-    const boxes = inked ? inked.flatMap(rects) : [el.getBoundingClientRect()]
+    const parts = inked ? inked.flatMap(n => rects(n).map(x => [x, n.parentElement, ink(n)])) : [[el.getBoundingClientRect(), el.parentElement, [0, 1]]]
+    const boxes = parts.map(([x]) => x)
     if (!boxes.length) continue
     const glyphs = [Math.min(...boxes.map(x => x.left)), Math.min(...boxes.map(x => x.top)), Math.max(...boxes.map(x => x.right)), Math.max(...boxes.map(x => x.bottom))]
     if (!area(glyphs)) continue
     let o = 1, [l, t, r, b] = glyphs
     for (let p = el; p && p !== stage; p = p.parentElement) {
-      const cs = getComputedStyle(p)
-      o *= +cs.opacity
-      if (p !== el && (cs.overflow !== 'visible' || cs.clipPath !== 'none')) {
-        const q = p.getBoundingClientRect()
-        ;[l, t, r, b] = [Math.max(l, q.left), Math.max(t, q.top), Math.min(r, q.right), Math.min(b, q.bottom)]
-      }
+      o *= +getComputedStyle(p).opacity
+      const q = p !== el && clip(p)
+      // a box's edge on the frame's (a full-frame sequence) is the frame's cut, not a mask's
+      if (q) [l, t, r, b] = [q.left > sr.left + 1 ? Math.max(l, q.left) : l, q.top > sr.top + 1 ? Math.max(t, q.top) : t,
+        q.right < sr.right - 1 ? Math.min(r, q.right) : r, q.bottom < sr.bottom - 1 ? Math.min(b, q.bottom) : b]
     }
     const masked = [l, t, r, b], framed = [Math.max(l, sr.left), Math.max(t, sr.top), Math.min(r, sr.right), Math.min(b, sr.bottom)]
     // a wall of the same words is one text
     const text = (say ?? nodes.map(n => n.textContent).join('')).replace(/\s+/g, ' ').trim().replace(/^(.{4,}?)(?:\s*\1)+$/, '$1')
     if (!text) continue
+    const [whole, kept, lost] = parts.filter(([, p]) => !tilted(p)).map(([x, p, i]) => cut(x, p, i)).reduce(([a, b, c], [d, e, f]) => [a + d, b + e, Math.max(c, f)], [0, 0, 0])
     found.push({
       text, o, caption: !!el.closest('.ve-captions'), size: inked ? Math.max(...new Set(inked.map(n => n.parentElement)).values().map(seen)) : null,
-      shown: area(framed) / area(glyphs), inFrame: area(masked) ? area(framed) / area(masked) : 1,
+      shown: area(framed) / area(glyphs), inFrame: area(masked) ? area(framed) / area(masked) : 1, boxed: whole ? kept / whole : 1, lost,
       box: framed.map((x, i) => (x - (i % 2 ? sr.top : sr.left)) / k),
     })
   }
@@ -94,9 +139,10 @@ function visibleTexts(stage) {
 
 // What check flags at this instant, as [kind, what]: 'zone', a text in the platforms' interface (9:16: 14 % at the
 // top, 22 % at the bottom, 13 % on the right, 6 % on the left); 'small', a text under ~24 px at 1080 once scaled;
-// 'cut', a text the frame cuts (display type, 130 px and more, may cross it); 'face', a text over a face the camera
-// shows. Only texts a viewer reads count: opacity 0.4 and more, 60 % shown. drawn: the actors' texts (a canvas), which
-// only the frame cuts.
+// 'cut', a text the frame cuts (display type, 130 px and more, may cross it); 'clip', a text its own box cuts (a mask,
+// a window, an overflow), display type included; 'face', a text over a face the camera shows. Only texts a viewer reads
+// count: opacity 0.4 and more, 60 % shown ('cut' and 'clip' aside). drawn: the actors' texts (a canvas), which only the
+// frame cuts.
 function layoutIssues(stage, faces, drawn) {
   const W = stage.offsetWidth, H = stage.offsetHeight, short = Math.min(W, H), out = []
   const zones = H > 1.6 * W ? [[0, 0, W, 0.14 * H], [0, 0.78 * H, W, H], [0.87 * W, 0, W, H], [0, 0, 0.06 * W, H]] : []
@@ -110,6 +156,11 @@ function layoutIssues(stage, faces, drawn) {
     if (x.o < 0.4) continue
     const what = x.caption ? 'the captions' : `"${x.text.length > 60 ? `${x.text.slice(0, 57)}…` : x.text}"`, display = x.size >= 0.12 * short
     if (!display && x.inFrame > 0.05 && x.inFrame < 0.97) out.push(['cut', what])
+    // a glyph losing 3 px or more on one side (at 1080) shows, a pixel off an accent does not. The share shown is part
+    // of what is flagged: a reveal, moving under its mask, changes it at every sample and never lasts, a text at rest
+    // that its box cuts does
+    // ponytail: a text drifting slowly under its box changes it too, unflagged; compare it with the mask's move if that bites
+    if (x.boxed > 0.05 && x.lost >= 3) out.push(['clip', `${what} (${Math.round(x.boxed * 100)} % shown)`])
     if (x.shown < 0.6) continue
     if (x.size !== null && x.size < 0.022 * short) out.push(['small', what])
     if (!(display && x.inFrame < 0.97) && zones.some(z => inter(x.box, z) > 0.1 * area(x.box))) out.push(['zone', what])

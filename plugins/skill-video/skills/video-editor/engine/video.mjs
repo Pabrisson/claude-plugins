@@ -54,7 +54,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.mp4': 'video/mp4',
   '.wav': 'audio/wav', '.wasm': 'application/wasm',
 }
-const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range; from: "transcript" when the comment was made on a selection of the transcript. fix: {from, to}, a line of what the video shows that the user corrected in the transcript. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx, clips) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
+const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range; from: "transcript" when the comment was made on a selection of the transcript, "chat" when Claude noted a change the user asked in the conversation (already resolved). fix: {from, to}, a line of what the video shows that the user corrected in the transcript. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx, clips) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
 
 // codecs WebCodecs can put in an MP4. The resolutions' bitrates are H.264's: the others need less for the same look.
 const CODECS = {
@@ -1426,15 +1426,44 @@ function saveReview(dir, n, comments) {
   if (!ver || !Array.isArray(comments)) return false
   const file = path.join(dir, `files/reviews/v${n}.json`), video = Object.values(ver.files)[0]
   const st = fs.statSync(path.join(dir, 'output', video))
-  // Claude answers in the file: a studio tab opened before that (it has no reply) must not undo the answer
-  const answered = Object.fromEntries((fs.existsSync(file) ? readJson(file).comments : []).filter(c => c.reply).map(c => [c.id, c]))
+  // Claude answers in the file, and notes there what was asked in the conversation: a studio tab opened before that
+  // (it has no reply, nor those notes) must not undo either
+  // ponytail: a note from the conversation deleted in the studio comes back; a deleted list if that bites
+  const before = fs.existsSync(file) ? readJson(file).comments : [], ids = new Set(comments.map(c => c.id))
+  const answered = Object.fromEntries(before.filter(c => c.reply).map(c => [c.id, c]))
   fs.mkdirSync(path.dirname(file), { recursive: true })
   writeJson(file, {
     kind: 'video-review', v: 1, about: REVIEW_ABOUT, slug: p.slug, version: `v${n}`,
     video: { file: video, size: st.size, mtime: st.mtime },
-    comments: comments.map(c => answered[c.id] && !c.reply ? { ...c, reply: answered[c.id].reply, resolved: answered[c.id].resolved } : c),
+    comments: [...before.filter(c => c.from === 'chat' && !ids.has(c.id)), ...comments.map(c => answered[c.id] && !c.reply ? { ...c, reply: answered[c.id].reply, resolved: answered[c.id].resolved } : c)]
+      .sort((a, b) => (a.created ?? '').localeCompare(b.created ?? '')),
   })
   return true
+}
+
+// A change the user asked in the conversation, not through the studio's prompt: a comment on the version they saw (the
+// latest), resolved with what changed, so that the studio shows it in that version's feedback. --at: SOURCE seconds
+// (the scene's own without a source), a moment or a range; none: the whole video
+function feedback(text, answer) {
+  if (!text?.trim() || !answer?.trim()) die('usage: feedback "<the request, in the user\'s words>" "<what changed, one sentence>" [--at <s>[,<s>]] [--format <f>] -p <slug>')
+  const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), ver = p.versions?.at(-1)
+  if (!ver) die('no version yet: a feedback goes on a version the user saw, there is none to note it on')
+  if (opt.format) pick(opt.format, p.formats, 'format')
+  const tl = makeTimeline(ver.timeline), at = list(opt.at).map(Number)
+  if (at.some(x => !(x >= 0))) die('--at: SOURCE seconds, a moment or a range (12.5 or 12.5,14)')
+  const [s0, s1] = at.length ? [at[0], at[1] ?? at[0]] : [tl.toSource(0), tl.toSource(ver.duration)]
+  // what is said or shown there, as the studio writes it (around a moment: a second each side)
+  const words = at.length && fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : []
+  const [a, b] = s1 > s0 ? [s0, s1] : [s0 - 1, s0 + 1]
+  const comment = {
+    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, type: 'comment',
+    t0: ms(tl.toVideo(s0)), t1: ms(tl.toVideo(s1)), s0: ms(s0), s1: ms(s1), text: text.trim(),
+    words: words.filter(w => w.t1 > a && w.t0 < b).map(w => w.w).join(words[0]?.screen ? ' / ' : ' '), images: [],
+    resolved: true, reply: answer.trim(), created: new Date().toISOString(), ...(opt.format && p.formats.length > 1 && { format: opt.format }), from: 'chat',
+  }
+  const file = f(`files/reviews/v${ver.v}.json`)
+  saveReview(dir, ver.v, [...(fs.existsSync(file) ? readJson(file).comments : []), comment])
+  console.log(`feedback on v${ver.v} (from ${clock(comment.t0)} to ${clock(comment.t1)}): "${comment.text}" → ${comment.reply}`)
 }
 
 const reply = (res, code, body) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)) }
@@ -1943,7 +1972,7 @@ async function check() {
 const commands = {
   doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs,
   style: () => style(...args), serve, rules: () => rules(...args), check, sync: () => syncMedia(args[0]), beats: () => beatGrid(args[0]), thumbnail,
-  fix: () => fixWord(args[0], args[1]), status: () => status(...args), voice: voiceOver, voices: () => voices(args[0]),
+  fix: () => fixWord(args[0], args[1]), feedback: () => feedback(args[0], args[1]), status: () => status(...args), voice: voiceOver, voices: () => voices(args[0]),
   elevenlabs: () => elevenlabs(...args), credits: () => credits(...args),
   music: () => music(args[0]), sfx: () => sfx(...args), sounds,
 }

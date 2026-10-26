@@ -147,10 +147,13 @@ export function checkLayout(samples, step, format) {
       else list.push([v, v])
     }
   }
-  const say = { zone: "in the platforms' interface zones", small: 'too small to read on a phone (under 24 px at 1080)', cut: 'cut by the frame', face: 'over the face' }
+  const say = {
+    zone: "in the platforms' interface zones", small: 'too small to read on a phone (under 24 px at 1080)', cut: 'cut by the frame',
+    clip: 'cut by its box (a mask, a window or an overflow hides part of a word or of its letters)', face: 'over the face',
+  }
   for (const [key, list] of runs) {
     const [kind, what] = key.split('\u0000'), long = list.filter(([a, b]) => b + step - a >= 0.75)
     if (long.length) found.push([false, `${format}: ${what} ${say[kind]} ${long.map(([a, b]) => `from ${clock(a)} to ${clock(b + step)}`).join(', ')}`])
   }
-  return found.length ? found : [[true, `${format}: no text in the platforms' zones, too small, cut by the frame or over a face`]]
+  return found.length ? found : [[true, `${format}: no text in the platforms' zones, too small, cut by the frame or by its box, or over a face`]]
 }

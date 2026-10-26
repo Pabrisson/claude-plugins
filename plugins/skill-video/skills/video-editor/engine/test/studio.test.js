@@ -50,6 +50,18 @@ test("a stale studio tab keeps Claude's answers", async () => {
   assert.equal(onDisk().comments[0].resolved, false)
 })
 
+test('a change asked in the conversation goes on the version the user saw, and a stale tab keeps it', async () => {
+  const created = '2026-01-01T00:00:00.000Z'
+  fs.writeFileSync(path.join(dir, 'files/reviews/v1.json'), JSON.stringify({ comments: [{ id: 'a1', text: 'x', resolved: false, created }] }))
+  const log = execFileSync(process.execPath, [engine, 'feedback', 'Le titre en rouge', 'Le titre est passé en rouge.', '--at', '2,4', '-p', 'demo'], { env: { ...process.env, VIDEO_EDITOR_DIR: home }, encoding: 'utf8' })
+  assert.match(log, /feedback on v1 \(from 00:02\.00 to 00:04\.00\)/)
+  const chat = onDisk().comments.find(c => c.from === 'chat')
+  assert.deepEqual([chat.text, chat.reply, chat.resolved, chat.t0, chat.t1, chat.s0, chat.s1], ['Le titre en rouge', 'Le titre est passé en rouge.', true, 2, 4, 2, 4])
+  // a tab opened before the note saves its own list: the note stays, in the order they were made
+  await save([{ id: 'a1', text: 'x', resolved: true, created }])
+  assert.deepEqual(onDisk().comments.map(c => [c.id, c.resolved]), [['a1', true], [chat.id, true]])
+})
+
 test('only PNG frames, under a plain id', async () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])
   assert.equal((await fetch(base + 'api/review-image?id=abc123', { method: 'POST', body: png })).status, 200)
