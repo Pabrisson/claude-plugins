@@ -52,6 +52,40 @@ never use the clock.
 | `tape_stop(x, t, back, d=.6)` | Slows `x` down to a stop at `t`, silent until `back` (in place) |
 | `load(path)` | A sound file (WAV, MP3, M4A, FLAC…) as a stereo array at 48 kHz, path relative to the video's folder: a track the user gives (`return load('assets/track.mp3')`), a recorded sound to place |
 
+## With ElevenLabs
+
+When `doctor` says the ElevenLabs key is set, ElevenLabs makes the music and the effects, and `sound.py` places
+them: the kit only shapes them (fades, filters, pan) and makes what ElevenLabs refuses.
+- **The music**: `video.mjs music "<prompt>" --length <video s> -p <slug>` writes an instrumental track to
+  `assets/sound/music.mp3`. Write the prompt as the score you would compose: the mood of the style's notes, the
+  Direction's tempo (« 120 bpm »), the instruments, and the arrangement on the story with its times (« sparse intro,
+  builds from 4 s, a break at 9.5 s, full on the reveal at 10 s, resolves on a final chord at 15 s »). Never name an
+  artist. Make it the video's length, then `video.mjs beats assets/sound/music.mp3 -p <slug>` measures its grid for
+  the scene's cuts. When the video's length changes, make it again rather than cutting it off.
+- **The effects**: one per kind of cue, `video.mjs sfx "<prompt>" --length <s> --name <kind> -p <slug>` writes
+  `assets/sound/<kind>.mp3` (0.5 to 30 s; without `--length`, ElevenLabs picks). Describe the sound, not the
+  picture (« short airy whoosh, soft tail »), and give it the cue's `dur`. Find where it peaks in the file and place
+  that instant on the cue (a whoosh's loudest point, a riser's end).
+- **Each file is made once.** Making it again takes `--force` and costs credits again: change only the one a comment
+  is about.
+- **Refused**: when a command answers that the key may not (a missing permission, the plan, the credits), the kit
+  makes that part for the whole video, as without ElevenLabs, with no new attempt. Tell the user in the summary.
+
+```python
+from audio import *
+
+def sound(v):
+    music, fx = bus(v.n), bus(v.n)
+    place(music, 0, load('assets/sound/music.mp3'))
+    music[:, -SR // 2:] *= np.linspace(1, 0, SR // 2)        # no click if it runs past the end
+    whoosh = load('assets/sound/whoosh.mp3').mean(0)          # mono: place() pans it on the cue's x
+    peak = np.abs(whoosh).argmax() / SR
+    for c in v.cues:
+        if c['kind'] == 'whoosh':
+            place(fx, c['t'] - peak, whoosh, .8, c.get('x', 0))
+    return music, fx
+```
+
 ## Composing for the picture
 
 - **Tempo first.** Pick a tempo for the mood, then time the scene's big moments on its grid. `video.mjs beats <bpm>`

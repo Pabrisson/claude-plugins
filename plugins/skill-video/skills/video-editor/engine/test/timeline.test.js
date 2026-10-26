@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { audible, keepSegments, makeTimeline, rushGains, silences, stillStretches, windowDb } from '../lib/timeline.js'
+import { alignedWords, audible, keepSegments, makeTimeline, rushGains, silences, stillStretches, windowDb } from '../lib/timeline.js'
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`)
 
@@ -76,4 +76,14 @@ test("each rush's voice comes down to the quietest one, a silent rush stays as i
   assert.equal(b, 1)
   assert.equal(c, 1)
   assert.equal(rushGains(db, [[0, 10], [10, 20]]).length, 2)
+})
+
+test('a voice read by ElevenLabs: its characters become words, times from first to last letter', () => {
+  const chars = [..."Bonjour, d'autres  12\u202f025."]
+  const start = chars.map((_, i) => i * 0.1), end = chars.map((_, i) => i * 0.1 + 0.08)
+  assert.deepEqual(alignedWords({ characters: chars, character_start_times_seconds: start, character_end_times_seconds: end }), [
+    { w: 'Bonjour,', t0: 0, t1: 0.78 },
+    { w: "d'autres", t0: 0.9, t1: 1.68 },
+    { w: '12\u202f025.', t0: 1.9, t1: 2.58 },
+  ])
 })

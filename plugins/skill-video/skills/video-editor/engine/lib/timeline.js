@@ -1,6 +1,7 @@
 // Source ↔ video time, shared by Node and the browser. A source video keeps `segments` (source seconds)
 // minus the spec's manual `cut` ranges, played at `speed`. Without a source the timeline is the identity.
-// Also the levels of the source's sound that make the segments: its silences, and each rush's speech level.
+// Also the levels of the source's sound that make the segments: its silences, and each rush's speech level; and the
+// words of a generated voice.
 
 const ms = x => Math.round(x * 1000) / 1000
 const pct = (db, p) => db.toSorted((a, b) => a - b)[Math.floor(db.length * p)]
@@ -104,6 +105,19 @@ export function keepSegments(silences, words, breaths, duration) {
   }
   if (duration > t) segs.push([ms(t), ms(duration)])
   return segs
+}
+
+// The words of a voice ElevenLabs read, from its timing of each character: `{ w, t0, t1 }` in seconds of the voice.
+// A no-break space (12 000) keeps a word whole
+export function alignedWords({ characters, character_start_times_seconds: t0, character_end_times_seconds: t1 }) {
+  const words = []
+  let cur = null
+  characters.forEach((c, i) => {
+    if (/[^\S\u00a0\u202f]/.test(c)) cur = null
+    else if (cur) Object.assign(cur, { w: cur.w + c, t1: ms(t1[i]) })
+    else words.push((cur = { w: c, t0: ms(t0[i]), t1: ms(t1[i]) }))
+  })
+  return words
 }
 
 // The source's still stretches [[a, b], …] as they play once cut: the seconds kept of each (video) and the words

@@ -193,7 +193,7 @@ At each step it adopts the new structure, even when optional, with no backward-c
 
 ### `skill-video`
 
-`claude plugin install skill-video@pabrisson` — requires Node ≥ 22, `ffmpeg`/`ffprobe`, Google Chrome, `uv`; transcription (mlx-whisper) needs an Apple Silicon Mac. The skill runs `doctor` at the start of each conversation and gives the install command for anything missing.
+`claude plugin install skill-video@pabrisson` — requires Node ≥ 22, `ffmpeg`/`ffprobe`, Google Chrome, `uv`; transcription (mlx-whisper) needs an Apple Silicon Mac, or ElevenLabs. The skill runs `doctor` at the start of each conversation and gives the install command for anything missing.
 
 Claude becomes a video editor for any genre: one or several rushes (files or URLs) plus B-roll become a short, a long YouTube video, an interview, a tutorial, a montage on music or a brand film, with graphics that carry the video or serve the footage; or a brief becomes a motion-design video with no footage.
 
@@ -228,9 +228,10 @@ Graphics: `lead`, the motion design carries the video; `support`, the footage ca
 - **Studio**: local review on `127.0.0.1`, from port 41187, one server per projects folder, open from the start of each video: until the first version it shows what is being done (Claude's steps, the engine's, the renders' progress) and reloads by itself on the video. Feedback goes back to Claude as a prompt to paste.
 - **Folders**: the current folder (or `$VIDEO_EDITOR_DIR`) holds one folder per video (`<slug>/`), the project's style (`.style/`) and its own rule packs (`.rules/`).
 - **Learning**: stated preferences go into the style (`style set`, `style note`) or into the active pack's personal lines (`.rules/<name>.md` with `extends: <name>`).
+- **ElevenLabs** (optional): with `ELEVENLABS_API_KEY` in the environment (e.g. `env` in Claude Code's settings), the starting questions offer Scribe v2 for the transcript, or a voice-over read by a voice of the account for a video without speech (`voice`, `voices`); local Whisper and no voice-over stay the defaults. ElevenLabs also makes the music and the sound effects (`music`, `sfx`), placed by `sound.py`; what the key may not make (permission, plan, credits) is synthesized as before.
 - **First runs**: the first transcription downloads the Whisper model (~1.5 GB), the first render installs `playwright-core`.
 
-Everything stays on the machine.
+Everything stays on the machine, except what goes to ElevenLabs: the source's sound for Scribe v2 and the narration's text for a voice-over when chosen, the prompts of the music and the effects.
 
 ### `requesty`
 

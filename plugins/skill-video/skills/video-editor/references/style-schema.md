@@ -25,7 +25,7 @@ Any field left out takes the engine default below. `style set` parses a value as
 | `creator.handle` | `""` | `@handle` |
 | `creator.lang` | `"fr"` | Language of captions, titles, CTA, numbers (`11 726`, `106,3`) and of the talk with the user |
 | `creator.niche`, `creator.audience` | | What the channel is about, who watches: they steer tone and examples |
-| `creator.vocabulary` | `[]` | The names the transcript must spell right: brands, products, people (`["Secursus", "Pierre Alain"]`). Whisper gets them as the prompt of every window |
+| `creator.vocabulary` | `[]` | The names the transcript must spell right: brands, products, people (`["Secursus", "Pierre Alain"]`). Whisper gets them as the prompt of every window, Scribe v2 as its keyterms |
 | `creator.avatar` | `null` | An image of `.style/` (`avatar.png`), for CTA cards; in a project it is `source/<file>` (in the scene: `` `project/source/${style.creator.avatar}` ``) |
 | `creator.cta.sub` | `""` | The CTA's line under the name ("L'IA pour les devs") |
 | `creator.cta.button`, `creator.cta.done` | `"S'abonner"`, `"Abonné"` | The subscribe button, before and after the click |

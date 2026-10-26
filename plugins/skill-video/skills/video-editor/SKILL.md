@@ -31,6 +31,8 @@ Run `video.mjs doctor` once per conversation.
 - If it reports a missing tool, show the user its install command and stop. Never install anything yourself
   without saying so.
 - If it says there is no style yet, run **setup** first, then come back to the request.
+- Its `elevenlabs` line says whether `ELEVENLABS_API_KEY` is set. Only then do the starting questions offer
+  ElevenLabs, and does ElevenLabs make the music and the effects (step 8).
 
 Some installs happen on their own, and the user should hear about them:
 - The first transcription downloads the Whisper model (about 1.5 GB).
@@ -130,6 +132,14 @@ Before asking, read the size and frame rate of the first rush (the source's firs
   - After « Aucune règle », the three packs closest to the request. The user types the others through Other.
 
 **Call 2 (single choice):**
+- **ElevenLabs**, only when `doctor` says its key is set. Which question depends on the video:
+  - With a source that speaks: **Transcription** (header `Transcription`), « Whisper (local) » first, then
+    « Scribe v2 (ElevenLabs) » (more accurate, and the source's sound goes to ElevenLabs). Put Scribe v2 first when
+    `doctor` notes that Whisper cannot run here. Scribe v2 becomes `--scribe`.
+  - Without speech (no rush, or only clips): **Voix off** (header `Voix off`), « Sans voix off » first, then the
+    three voices of `video.mjs voices` that best fit the style's language and the video, with their labels as the
+    description. Other takes another name or a voice id. A voice becomes `--voice <voice_id>`. When `voices` is
+    refused (a key without the Voices read permission), say so and offer « Sans voix off », Other taking a voice id.
 - **Cadence** (header `Cadence`):
   - With footage: « Cadence d'origine (N i/s) » first, then `25`, `30` and `60`, without repeating the original
     rate.
@@ -148,10 +158,10 @@ Pick a short slug from the topic (`a-z0-9-`), then run:
 video.mjs init <slug> --formats 9:16,1:1 --renders 1080p,720p --fps 30 --codec h264 [--source <file|url> …] --rules shorts
 ```
 
-Use `--rules none` for no pack, and leave `--fps` out to keep the source's rate. Give one `--source` per rush of the
-source, in the order of the video, each with its range when it has one. `init` joins them and prints where each one
-starts. A rush of another shape than the first is letterboxed into it: put first the one with the main shape, or
-make the odd one a clip.
+Use `--rules none` for no pack, and leave `--fps` out to keep the source's rate. Add `--scribe` or
+`--voice <voice_id>` when the user chose ElevenLabs. Give one `--source` per rush of the source, in the order of the
+video, each with its range when it has one. `init` joins them and prints where each one starts. A rush of another
+shape than the first is letterboxed into it: put first the one with the main shape, or make the odd one a clip.
 
 Right after `init`, open the studio with `video.mjs studio -p <slug> --open` and give the user its URL. Until the
 first version it shows what is being done, then it reloads by itself on the video. The engine logs its own steps
@@ -184,6 +194,12 @@ Read the content sources and fill `<slug>/About.md`:
 - frontmatter: keep `status`, and set `updated`;
 - sections: Hook, Sources, Chiffres clés (every number with its source), État, Beats (the story, moment by
   moment).
+
+**With a voice-over** (`--voice`), write the narration from the beats into `source/voice.txt`: the text the voice
+reads, in the style's language, written to be heard (short sentences, one idea each). Run `video.mjs voice -p <slug>`:
+it becomes the source, its sound over a black picture, with its words already timed (no transcription). Then
+`prepare` and `rough` as with any source, and the video is cut on the voice's words. The picture is all graphics:
+never `camera()`, and the graphics lead.
 
 With a source, the beats follow `files/words.md`, which gives the words with their SOURCE times. With several
 rushes, say which one each beat comes from (About.md's Sources gives where each one starts). Without a source, the
@@ -282,8 +298,10 @@ format only** (the first one). Give it the whole frame: the other formats come i
 frames at once leads to small, safe layouts.
 - Anchor every moment on the speech with `at(source seconds)`, so cuts never break the sync.
 - With music, lay its grid first: `video.mjs beats <bpm> -p <slug>` for the tempo you will compose on, or
-  `video.mjs beats <track> [--at <video s>]` for a track the user gives. `files/beats.md` lists each bar's beats in
-  VIDEO seconds: put the cuts and the big moments on them. `check` measures the cuts with the `on_beat` param.
+  `video.mjs beats <track> [--at <video s>]` for a track the user gives. When ElevenLabs makes the music, make the
+  track now, before the scene, and measure it the same way (sound-format.md, « With ElevenLabs »). `files/beats.md`
+  lists each bar's beats in VIDEO seconds: put the cuts and the big moments on them. `check` measures the cuts with
+  the `on_beat` param.
 - Show the source with `camera()` and play the clips with `clip(id, start)`: each one brings its sound, at its
   `volume` in `edit.json`.
 - Put a `cue(kind, t, data)` on every event that should be heard, with what the sound needs (`dur`, `x`…).
@@ -304,6 +322,8 @@ asks for music or sound, write `source/sound.py`. A video without speech always 
 `references/sound-format.md` first.
 - Compose the score on the Direction's tempo and beats.
 - Design one sound for each kind of cue.
+- When `doctor` says the ElevenLabs key is set, ElevenLabs makes the music and the effects, and `sound.py` places
+  them (sound-format.md, « With ElevenLabs »). What the key may not make, the kit makes as before.
 - The clips play their own sound by themselves: set each one's `volume` in `edit.json`.
 
 The voice needs nothing: the engine levels the rushes, cuts the rumble, denoises lightly and compresses it.
@@ -386,6 +406,10 @@ Update « État » in About.md.
 Read `references/review-format.md` and every image the prompt attaches, then follow its « Applying it »: each id gets
 its change, then `resolved` and `reply` in the feedback file.
 
+When a comment changes what the voice-over says (not how a word is spelled, which `fix` corrects), edit
+`source/voice.txt`, run `voice` then `prepare` again, and move the scene's `at()` and `edit.json`'s cuts onto the new
+times of `files/words.md`.
+
 Then render it at once, without asking: `video.mjs render -p <slug>` with the project's `--blur`, then
 `video.mjs final -p <slug>`, which delivers every format and resolution again. A change in `sound.py` or in a clip's
 `volume` alone needs no render: `audio`, then `final`. Only when the user asks for a quick preview, render a draft
@@ -430,6 +454,7 @@ gives its current lines.
 - **When a command fails, read its message.** A scene error comes back with its stack, and the page warns about a
   `<canvas>` placed by layout or a tween placed before 0.
 - **Everything stays on the machine.** The studio server listens on 127.0.0.1 only. Do not upload the user's
-  footage anywhere.
+  footage anywhere. The only exception is ElevenLabs: Scribe v2 gets the source's sound and the voice-over the text
+  of `source/voice.txt` when the user chose them at the start, and the music and the effects get their prompts.
 - **One studio per projects folder.** `studio` reuses this folder's server, or starts one on the first free port from
   41187: other folders' studios keep running side by side. Give the user the URL it prints.

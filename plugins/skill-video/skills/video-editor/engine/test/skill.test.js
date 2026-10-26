@@ -383,3 +383,61 @@ test('the progress log: the commands and Claude log their steps, a command that 
   ])
   assert.throws(() => cli('status', '-p', 'wait'), /usage: status/)
 })
+
+test('ElevenLabs (faked): a voice-over becomes the source, timed by the voice and never transcribed; Scribe v2 transcribes a source with the vocabulary; music is made once, a refused effect says so', { timeout: 120000 }, () => {
+  const mock = path.join(home, 'eleven.mjs'), calls = path.join(home, 'eleven.log'), text = 'Bonjour à tous, voici Secursus.'
+  ffmpeg('-f', 'lavfi', '-i', 'sine=f=220:d=3', 'tts.mp3')
+  ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=320x240:r=25:d=3', '-f', 'lavfi', '-i', 'sine=f=300:d=3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', 'talk.mp4')
+  fs.writeFileSync(mock, `import fs from 'node:fs'
+    globalThis.fetch = async (url, init = {}) => {
+      const u = String(url), form = init.body instanceof FormData ? Object.fromEntries([...new Set(init.body.keys())].map(k => [k, init.body.getAll(k).map(String)])) : init.body
+      fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ u, key: init.headers['xi-api-key'], form }) + '\\n')
+      const chars = [...${JSON.stringify(text)}], at = chars.map((_, i) => i * 0.09)
+      if (u.endsWith('/v1/music')) return new Response(fs.readFileSync(${JSON.stringify(path.join(home, 'tts.mp3'))}), { headers: { 'content-type': 'audio/mpeg' } })
+      if (u.endsWith('/v1/sound-generation')) return Response.json({ detail: { message: 'The API key you used is missing the permission sound_generation to execute this operation.' } }, { status: 401 })
+      return Response.json(u.includes('/text-to-speech/') ? { audio_base64: fs.readFileSync(${JSON.stringify(path.join(home, 'tts.mp3'))}).toString('base64'),
+          alignment: { characters: chars, character_start_times_seconds: at, character_end_times_seconds: at.map(t => t + 0.08) } }
+        : { words: [{ text: 'Bonjour', type: 'word', start: 0.2, end: 0.6 }, { text: ' ', type: 'spacing', start: 0.6, end: 0.7 }, { text: '(rires)', type: 'audio_event', start: 0.7, end: 1 }, { text: 'Secursus.', type: 'word', start: 1, end: 1.6 }] })
+    }`)
+  const eleven = (...argv) => execFileSync(process.execPath, ['--import', mock, engine, ...argv], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: 'k-test' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  const log = () => read('eleven.log').trim().split('\n').map(l => JSON.parse(l))
+
+  assert.throws(() => cli('init', 'both', '--formats', '9:16', '--renders', '720p', '--rules', 'none', '--voice', 'v1', '--source', path.join(home, 'talk.mp4')), /voice-over becomes the source/)
+  cli('init', 'vo', '--formats', '9:16', '--renders', '720p', '--rules', 'none', '--voice', 'v1')
+  assert.throws(() => eleven('voice', '-p', 'vo'), /source\/voice\.txt/)
+  fs.writeFileSync(path.join(home, 'vo/source/voice.txt'), text + '\n')
+  assert.match(eleven('voice', '-p', 'vo'), /voice-over: 5 words/)
+  const [tts] = log(), p = JSON.parse(read('vo/source/project.json'))
+  assert.match(tts.u, /\/v1\/text-to-speech\/v1\/with-timestamps$/)
+  assert.equal(tts.key, 'k-test')
+  assert.deepEqual(JSON.parse(tts.form), { text, model_id: 'eleven_v4', language_code: 'fr' })
+  assert.deepEqual([p.source.voice, p.source.width, p.source.height, p.source.audio], [true, 1080, 1920, true])
+  assert.ok(Math.abs(p.source.duration - 3) < 0.1, `${p.source.duration}`)
+  const words = read('vo/assets/words.json')
+  assert.deepEqual(JSON.parse(words).map(w => w.w), ['Bonjour', 'à', 'tous,', 'voici', 'Secursus.'])
+  // prepare (even --force) keeps the voice's words: no transcription, no face to frame on a black picture
+  cli('rules', 'set', 'face_framing=true', '-p', 'vo')
+  cli('prepare', '--force', '-p', 'vo')
+  assert.equal(read('vo/assets/words.json'), words)
+  assert.ok(!fs.existsSync(path.join(home, 'vo/assets/frames.json')))
+  cli('rough', '-p', 'vo')
+  assert.ok(fs.existsSync(path.join(home, 'vo/output/vo-rough.mp4')))
+
+  cli('init', 'sc', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--scribe', '--source', path.join(home, 'talk.mp4'))
+  cli('style', 'set', 'creator.vocabulary=["Secursus","a name far too long to be a keyterm of Scribe v2 at all"]', '-p', 'sc')
+  assert.match(eleven('prepare', '-p', 'sc'), /Scribe v2, keyterms: Secursus[\s\S]*transcript: 2 words/)
+  const stt = log().at(-1)
+  assert.match(stt.u, /\/v1\/speech-to-text$/)
+  assert.deepEqual(stt.form.model_id, ['scribe_v2'])
+  assert.deepEqual(stt.form.keyterms, ['Secursus'])
+  assert.deepEqual(JSON.parse(read('sc/assets/words.json')), [{ w: 'Bonjour', t0: 0.2, t1: 0.6 }, { w: 'Secursus.', t0: 1, t1: 1.6 }])
+  // the music and the effects: a file for sound.py's load(), never made again without --force; a refusal is the key's
+  assert.match(eleven('music', 'Warm pads, 120 bpm', '--length', '3', '-p', 'vo'), /music: assets\/sound\/music\.mp3 \(3[.\d]* s\)/)
+  assert.deepEqual(JSON.parse(log().at(-1).form), { prompt: 'Warm pads, 120 bpm', music_length_ms: 3000, force_instrumental: true, model_id: 'music_v2_5' })
+  assert.throws(() => eleven('music', 'Warm pads', '--length', '3', '-p', 'vo'), /music\.mp3 exists: --force/)
+  assert.throws(() => eleven('music', 'Warm pads', '-p', 'vo'), /--length <3 to 600 s>/)
+  assert.throws(() => eleven('sfx', 'Soft whoosh', '--length', '0.8', '--name', 'whoosh', '-p', 'vo'), /401 .*missing the permission sound_generation/)
+  assert.ok(!fs.existsSync(path.join(home, 'vo/assets/sound/whoosh.mp3')))
+  // without a key, the engine says so instead of calling
+  assert.throws(() => execFileSync(process.execPath, [engine, 'voices'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, stdio: 'pipe' }), /ELEVENLABS_API_KEY is not set/)
+})

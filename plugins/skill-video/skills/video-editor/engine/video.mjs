@@ -13,7 +13,7 @@ import { shownTexts } from './lib/actors.js'
 import { description, joinChunks, speechCues, srt, vtt } from './lib/deliver.js'
 import { PARAMS, checkEdit, checkLayout, effective, listPacks, mergeParams, paramErrors } from './lib/rules.js'
 import { FORMATS, STYLE, logical, resolveActors, styleOf } from './lib/runtime.js'
-import { audible, keepSegments, makeTimeline, rushGains, silences, stillStretches, windowDb } from './lib/timeline.js'
+import { alignedWords, audible, keepSegments, makeTimeline, rushGains, silences, stillStretches, windowDb } from './lib/timeline.js'
 
 const SELF = fileURLToPath(import.meta.url)
 // the code this process runs: a studio server started from an older video.mjs gets replaced
@@ -69,6 +69,10 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     variants: { type: 'string' },
     at: { type: 'string' },
     blur: { type: 'string' },
+    voice: { type: 'string' },
+    length: { type: 'string' },
+    name: { type: 'string' },
+    scribe: { type: 'boolean' },
     draft: { type: 'boolean' },
     force: { type: 'boolean' },
     open: { type: 'boolean' },
@@ -265,13 +269,45 @@ function sourceWav(dir) {
   return wav
 }
 
-// whisper.py: mlx-whisper with the style's vocabulary (names, brands) as the prompt of every window
-function transcribe(wav, lang, cache, vocabulary) {
-  console.log(`transcribing with mlx-whisper ${WHISPER} (the first run downloads the model, ~1.6 GB)${vocabulary ? `, vocabulary: ${vocabulary}` : ''}…`)
+// ElevenLabs' API, with the key of $ELEVENLABS_API_KEY: the transcript by Scribe v2 and the voice-over on the user's
+// choice at the start of a video (they send the source's sound, or the narration's text); the music and the sound
+// effects whenever the key may make them. JSON, or the audio it made
+async function eleven(route, init = {}) {
+  const key = process.env.ELEVENLABS_API_KEY
+  if (!key) die('ELEVENLABS_API_KEY is not set: the transcript stays with Whisper, no voice-over, and the kit makes the sound')
+  const r = await fetch(`https://api.elevenlabs.io${route}`, { ...init, headers: { 'xi-api-key': key, ...init.headers } })
+  if (!r.ok) die(`ElevenLabs ${route.split('?')[0]}: ${r.status} ${await r.text()}`)
+  return /json/.test(r.headers.get('content-type') ?? '') ? r.json() : Buffer.from(await r.arrayBuffer())
+}
+
+// Scribe v2 on the source's sound (16 kHz FLAC: a tenth of the WAV to upload), the vocabulary as its keyterms (under
+// 50 characters and 5 words each), in whisper's shape
+// ponytail: one synchronous request, its webhook when a long source outlasts fetch's 300 s wait for an answer
+async function scribe(wav, lang, cache, vocabulary) {
+  const flac = path.join(cache, 'scribe.flac'), form = new FormData()
+  run('ffmpeg', ['-y', '-v', 'error', '-i', wav, '-ar', '16000', '-c:a', 'flac', flac])
+  for (const [k, v] of Object.entries({ model_id: 'scribe_v2', language_code: lang, timestamps_granularity: 'word', tag_audio_events: 'false' })) form.append(k, v)
+  for (const k of vocabulary.filter(k => k.length < 50 && k.split(/\s+/).length <= 5)) form.append('keyterms', k)
+  form.append('file', await fs.openAsBlob(flac), 'source.flac')
+  const j = await eleven('/v1/speech-to-text', { method: 'POST', body: form })
+  fs.rmSync(flac)
+  return j.words.filter(w => w.type === 'word').map(w => ({ word: w.text, start: w.start, end: w.end }))
+}
+
+// whisper.py: mlx-whisper with the style's vocabulary (names, brands) as the prompt of every window; or Scribe v2
+async function transcribe(wav, lang, cache, vocabulary, withScribe) {
   fs.mkdirSync(cache, { recursive: true })
-  run('uv', ['run', '--quiet', path.join(ENGINE, 'whisper.py'), wav, path.join(cache, 'whisper.json'), lang, WHISPER, vocabulary])
+  let found
+  if (withScribe) {
+    console.log(`transcribing with ElevenLabs Scribe v2${vocabulary.length ? `, keyterms: ${vocabulary.join(', ')}` : ''}…`)
+    found = await scribe(wav, lang, cache, vocabulary)
+  } else {
+    console.log(`transcribing with mlx-whisper ${WHISPER} (the first run downloads the model, ~1.6 GB)${vocabulary.length ? `, vocabulary: ${vocabulary.join(', ')}` : ''}…`)
+    run('uv', ['run', '--quiet', path.join(ENGINE, 'whisper.py'), wav, path.join(cache, 'whisper.json'), lang, WHISPER, vocabulary.join(', ')])
+    found = readJson(path.join(cache, 'whisper.json')).segments.flatMap(s => s.words ?? [])
+  }
   const words = []
-  for (const w of readJson(path.join(cache, 'whisper.json')).segments.flatMap(s => s.words ?? [])) {
+  for (const w of found) {
     const text = w.word.trim(), prev = words.at(-1)
     // whisper splits elisions and compounds: d + 'autres, vingt + -trois
     if (prev && /^['’-]/.test(text)) Object.assign(prev, { w: prev.w + text, t1: ms(w.end) })
@@ -572,7 +608,7 @@ ${!src ? '- No source video: made from scratch in motion design'
 }
 
 function init(slug) {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url>[#t=from,to] …] [--rules <pack>|none]')
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug ?? '')) die('usage: init <slug> --formats 9:16,1:1 --renders 1080p,720p [--fps 30] [--codec h264] [--source <file|url>[#t=from,to] …] [--rules <pack>|none] [--scribe] [--voice <voice_id>]')
   if (opt.fps && !(+opt.fps > 0 && +opt.fps <= 120)) die('--fps: frames per second, e.g. 24, 25, 30, 50 or 60')
   if (opt.codec && !CODECS[opt.codec]) die(`--codec: one of ${Object.keys(CODECS).join(', ')}`)
   const dir = path.join(HOME, slug)
@@ -584,6 +620,7 @@ function init(slug) {
   let params
   try { params = mergeParams(packs(), active[0]) } catch (e) { die(e.message) }
   for (const s of sources) if (!/^https?:\/\//.test(s) && !fs.existsSync(rushOf(s).src)) die(`source not found: ${rushOf(s).src}`)
+  if (opt.voice && sources.length) die('--voice: the voice-over becomes the source, give the rushes as clips (edit.json media)')
 
   for (const d of ['assets/images', 'assets/logos', 'assets/review', 'files/reviews', 'output', 'source', 'stills']) fs.mkdirSync(path.join(dir, d), { recursive: true })
   let source = null
@@ -599,7 +636,8 @@ function init(slug) {
     source = { from: sources.join(' + '), ...probe(file), ...(files && { files }) }
   }
   // output frame rate: asked at the start, else the source's, else 30
-  const p = { slug, formats, renders: types, fps: opt.fps ? +opt.fps : source?.fps ?? 30, codec: opt.codec ?? 'h264', source, created: new Date().toISOString() }
+  const p = { slug, formats, renders: types, fps: opt.fps ? +opt.fps : source?.fps ?? 30, codec: opt.codec ?? 'h264', source,
+    ...(opt.scribe && { scribe: true }), ...(opt.voice && { voice: opt.voice }), created: new Date().toISOString() }
   writeJson(path.join(dir, 'source/project.json'), p)
   // frozen copies: a later change of style or pack never touches this project
   // the whole style folder: style.json, fonts/, the avatar… (their paths in style.json are relative to it, then to source/)
@@ -634,13 +672,14 @@ async function prepare() {
   // music has no clear pause, yet words)
   const db = p.source.audio ? windowDb(readWav(sourceWav(dir))) : null, quiet = db && silences(db)
 
+  // a voice-over's words are the narration's (voice), never transcribed
   let words = []
-  if (!params.transcribe) for (const x of ['assets/words.json', 'files/words.md']) fs.rmSync(f(x), { force: true })
-  else if (!opt.force && fs.existsSync(f('assets/words.json'))) words = readJson(f('assets/words.json')).filter(w => !w.screen)
+  if (!params.transcribe && !p.source.voice) for (const x of ['assets/words.json', 'files/words.md']) fs.rmSync(f(x), { force: true })
+  else if ((!opt.force || p.source.voice) && fs.existsSync(f('assets/words.json'))) words = readJson(f('assets/words.json')).filter(w => !w.screen)
   else {
     if (db && audible(db)) {
       const s = step(dir, 'Transcribing the speech')
-      words = transcribe(f('assets/source.wav'), creator.lang, f('.cache'), creator.vocabulary.join(', '))
+      words = await transcribe(f('assets/source.wav'), creator.lang, f('.cache'), creator.vocabulary, p.scribe)
       s.end()
     }
     writeJson(f('assets/words.json'), words)
@@ -654,7 +693,7 @@ async function prepare() {
   const tl = makeTimeline(readJson(f('assets/timeline.json')), loadEdit(dir).cut)
   extractFrames(dir, p)
 
-  if (params.face_framing) {
+  if (params.face_framing && !p.source.voice) {
     if (opt.force || !fs.existsSync(f('assets/frames.json'))) {
       const s = step(dir, 'Framing the face')
       await detectFaces(dir, p)
@@ -676,6 +715,64 @@ async function prepare() {
   } else fs.rmSync(f('files/freezes.md'), { force: true })
   console.log(`transcript: ${!params.transcribe ? 'off (rules)' : words.length ? `${words.length} words → files/words.md` : 'no speech found'}`)
   console.log(`timeline: ${tl.segments.length} segment(s), ${duration} s → ${ms(tl.duration)} s (speed ×${tl.speed}). Next: rough`)
+}
+
+// voice [--voice <id>]: source/voice.txt read by an ElevenLabs voice (eleven_v4) becomes the source: its sound over a
+// black picture of the main format, its words timed by the voice itself. Again after a change of the text: every time
+// moves, files/words.md gives the new ones
+async function voiceOver() {
+  const dir = projectDir(), f = rel => path.join(dir, rel), p = readJson(f('source/project.json'))
+  if (p.source && !p.source.voice) die('this video has a source with its own sound: a voice-over is for a video without one')
+  p.voice = opt.voice ?? p.voice
+  const text = fs.existsSync(f('source/voice.txt')) ? fs.readFileSync(f('source/voice.txt'), 'utf8').trim() : ''
+  if (!p.voice || !text) die('usage: voice [--voice <voice_id>] -p <slug>, with the narration in source/voice.txt (voices lists the voices)')
+  const s = step(dir, 'Recording the voice-over'), { creator } = styleOf(readJson(f('source/style.json')))
+  const j = await eleven(`/v1/text-to-speech/${encodeURIComponent(p.voice)}/with-timestamps`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, model_id: 'eleven_v4', language_code: creator.lang }),
+  })
+  fs.writeFileSync(f('assets/voice.mp3'), Buffer.from(j.audio_base64, 'base64'))
+  const [w, h] = logical(p.formats[0])
+  run('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `color=black:s=${w}x${h}:r=${p.fps}`, '-i', f('assets/voice.mp3'), '-shortest',
+    '-c:v', 'libx264', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '320k', f('assets/source.mp4')])
+  p.source = { from: `voice-over (ElevenLabs ${p.voice})`, voice: true, ...probe(f('assets/source.mp4')) }
+  writeJson(f('source/project.json'), p)
+  // what was made from the previous voice
+  for (const x of ['assets/source.wav', 'assets/timeline.json', 'frames/cam']) fs.rmSync(f(x), { recursive: true, force: true })
+  const words = alignedWords(j.alignment ?? j.normalized_alignment)
+  writeJson(f('assets/words.json'), words)
+  fs.writeFileSync(f('files/words.md'), wordsMd(words, p.slug))
+  s.end()
+  console.log(`voice-over: ${words.length} words, ${p.source.duration} s → files/words.md. Next: prepare, then rough`)
+}
+
+// voices [<search>]: the voices of the ElevenLabs account, with their labels and languages, to pick the voice-over's
+async function voices(search) {
+  const j = await eleven(`/v2/voices?page_size=100${search ? `&search=${encodeURIComponent(search)}` : ''}`)
+  for (const v of j.voices) {
+    const langs = [...new Set((v.verified_languages ?? []).map(l => l.language))]
+    console.log(`${v.voice_id}  ${v.name} [${v.category}] ${Object.values(v.labels ?? {}).join(', ')}${langs.length ? ` · ${langs.join('/')}` : ''}${v.description ? ` — ${v.description}` : ''}`)
+  }
+  console.log(j.voices.length ? (j.has_more ? 'more voices: narrow with voices <search>' : '') : 'no voice found')
+}
+
+// music "<prompt>" --length <s> | sfx "<prompt>" [--length <s>]: an instrumental track or a sound effect made by
+// ElevenLabs, into assets/sound/<name>.mp3 for sound.py's load(). An existing file is made again only with --force:
+// each one costs credits
+async function generate(kind, prompt) {
+  const dir = projectDir(), name = opt.name ?? kind, rel = `assets/sound/${name}.mp3`, file = path.join(dir, rel), length = +opt.length
+  const [min, max] = kind === 'music' ? [3, 600] : [0.5, 30]
+  if (!prompt?.trim() || !/^[\w-]+$/.test(name) || ((kind === 'music' || opt.length !== undefined) && !(length >= min && length <= max)))
+    die(`usage: ${kind} "<prompt>" ${kind === 'music' ? '--length' : '[--length'} <${min} to ${max} s>${kind === 'music' ? '' : ']'} [--name <name>] [--force] -p <slug>`)
+  if (fs.existsSync(file) && !opt.force) die(`${rel} exists: --force makes it again (it costs credits), --name makes another`)
+  const s = step(dir, kind === 'music' ? 'Composing the music (ElevenLabs)' : `Sound effect "${name}" (ElevenLabs)`)
+  const [route, body] = kind === 'music' ? ['/v1/music', { prompt, music_length_ms: Math.round(length * 1000), force_instrumental: true, model_id: 'music_v2_5' }]
+    : ['/v1/sound-generation', { text: prompt, ...(opt.length !== undefined && { duration_seconds: length }) }]
+  const audio = await eleven(route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, audio)
+  s.end()
+  const secs = +out('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file])
+  console.log(`${kind}: ${rel} (${ms(secs)} s). In sound.py: load('${rel}')`)
 }
 
 // shots: where each clip of edit.json's media cuts to a new shot (seconds of its file), to pick their from and dur
@@ -1550,7 +1647,8 @@ function doctor() {
     ['uv and uvx', has('uv') && has('uvx'), 'brew install uv'],
   ]
   for (const [name, ok, fix] of checks) console.log(`${ok ? 'ok     ' : 'MISSING'} ${name}${ok ? '' : `: ${fix}`}`)
-  if (process.arch !== 'arm64') console.log('note: transcription (mlx-whisper) needs Apple Silicon; use a pack with "transcribe": false here')
+  if (process.arch !== 'arm64') console.log('note: transcription (mlx-whisper) needs Apple Silicon; use Scribe v2 (ElevenLabs) or a pack with "transcribe": false here')
+  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Scribe v2 transcript, voice-over, music, sound effects)' : 'elevenlabs: no ELEVENLABS_API_KEY (Whisper transcript, no voice-over, the kit makes the sound)')
   console.log(`projects: ${HOME}`)
   console.log(fs.existsSync(path.join(HOME, '.style/style.json')) ? `style: ${path.join(HOME, '.style/STYLE.md')}` : 'style: none yet, run the setup interview')
   if (checks.some(c => !c[1])) process.exit(1)
@@ -1621,7 +1719,8 @@ async function check() {
 const commands = {
   doctor, probe: () => probeSource(args[0]), site: () => site(args[0]), init: () => init(args[0]), prepare, rough, stills, render, audio, final, studio, preview, codecs,
   style: () => style(...args), serve, rules: () => rules(...args), check, sync: () => syncMedia(args[0]), beats: () => beatGrid(args[0]), thumbnail,
-  fix: () => fixWord(args[0], args[1]), status: () => status(...args),
+  fix: () => fixWord(args[0], args[1]), status: () => status(...args), voice: voiceOver, voices: () => voices(args[0]),
+  music: () => generate('music', args[0]), sfx: () => generate('sfx', args[0]),
 }
 if (!commands[cmd]) die(`usage: video.mjs <${Object.keys(commands).join(' | ')}> [--project <slug>]`)
 await commands[cmd]()
