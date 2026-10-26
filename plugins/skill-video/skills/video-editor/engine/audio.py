@@ -557,4 +557,4 @@ if __name__ == '__main__':
     if a.at is None: Path(dest).with_suffix('.json').write_text(json.dumps(tracks(info['parts'])))
     parts = [x for x, on in (('voice', plan.get('voice')), ('sound.py', plan.get('sound')), ('clips', plan.get('clips'))) if on]
     print(f"{dest}: {out.shape[1] / SR:.2f} s, {lufs(out):.1f} LUFS, true peak {20 * np.log10(true_peak(out).max() + 1e-9):.1f} dBTP"
-          f" ({', '.join(parts) or 'silence'}{f', variant {plan.get('variant')}' if plan.get('variant') else ''}) in {time.time() - started:.1f} s")
+          f" ({', '.join(parts) or 'silence'}{', variant ' + str(plan.get('variant')) if plan.get('variant') else ''}) in {time.time() - started:.1f} s")

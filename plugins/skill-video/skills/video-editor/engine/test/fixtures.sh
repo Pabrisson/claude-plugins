@@ -15,7 +15,7 @@ mkdir -p assets
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-say -v Thomas -o "$tmp/voice.aiff" "[[slnc 1200]] Bonjour, et bienvenue dans ce test de montage. [[slnc 300]] \
+text="[[slnc 1200]] Bonjour, et bienvenue dans ce test de montage. [[slnc 300]] \
 Cette vidéo sert à vérifier les coupes automatiques. [[slnc 1200]] \
 Entre chaque phrase, il y a une pause de longueur différente. [[slnc 500]] \
 Certaines sont courtes, [[slnc 250]] d'autres sont beaucoup plus longues. [[slnc 1800]] \
@@ -28,8 +28,16 @@ On teste aussi les virgules, [[slnc 350]] les hésitations, [[slnc 450]] et les 
 Un bon montage enlève les silences, mais il garde le sens. [[slnc 900]] \
 Il faut aussi que la voix reste naturelle, sans clic entre les morceaux. [[slnc 1300]] \
 Une dernière phrase, pour finir proprement. [[slnc 800]] Merci, et à bientôt. [[slnc 1500]]"
+if command -v say >/dev/null; then
+  voice="$tmp/voice.aiff"
+  say -v Thomas -o "$voice" "$text"
+else
+  # Linux, Windows: espeak-ng, the same pauses as SSML breaks
+  voice="$tmp/voice.wav"
+  espeak-ng -m -v fr -w "$voice" "$(printf %s "$text" | sed 's/\[\[slnc \([0-9]*\)\]\]/<break time="\1ms"\/>/g')"
+fi
 
-ffmpeg -y -v error -f lavfi -i testsrc=size=1920x1080:rate=30 -i "$tmp/voice.aiff" -shortest \
+ffmpeg -y -v error -f lavfi -i testsrc=size=1920x1080:rate=30 -i "$voice" -shortest \
   -c:v libx264 -preset veryfast -crf 30 -pix_fmt yuv420p -c:a aac -b:a 128k -ar 48000 speech.mp4
 ffmpeg -y -v error -f lavfi -i testsrc=size=1920x1080:rate=30:duration=60 -f lavfi -i anullsrc=r=48000:cl=stereo -shortest \
   -c:v libx264 -preset veryfast -crf 30 -pix_fmt yuv420p -c:a aac -b:a 128k silent.mp4

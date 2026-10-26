@@ -145,8 +145,7 @@ Before asking, read the size and frame rate of the first rush (the source's firs
 **Call 3, ElevenLabs (single choice)**, only when `doctor` says its key is set. The local option comes first, and
 each ElevenLabs option gives its estimated credits in its description.
 - With a source that speaks: **Transcription** (header `Transcription`), « Whisper (local) », then « Scribe v2
-  (ElevenLabs) » (more accurate, and the source's sound goes to ElevenLabs). Put Scribe v2 first when `doctor` notes
-  that Whisper cannot run here. It becomes `transcript=true`.
+  (ElevenLabs) » (more accurate, and the source's sound goes to ElevenLabs). It becomes `transcript=true`.
 - Without speech (no rush, or only clips): **Voix off** (header `Voix off`), « Sans voix off », then the three voices
   of `video.mjs voices` that best fit the style's language and the video, with their labels as the description.
   Other takes another name or a voice id. A voice becomes `voice=<voice_id>`. When `voices` is refused (a key

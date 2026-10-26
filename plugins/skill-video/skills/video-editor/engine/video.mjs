@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // video-editor CLI. Every time read or written here is in SOURCE seconds (identical to video seconds without a source).
 // Project commands work on the current directory, or on --project <slug|path>.
-import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { execFileSync, execSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
@@ -46,7 +46,6 @@ __pycache__/
 `
 // what git must keep, to check against the .gitignore: the rushes, the clips, the music and the effects
 const KEPT = ['.sound/whoosh.wav', 'video/assets/source.mp4', 'video/assets/clips/clip.mp4', 'video/assets/sound/music.mp3', 'video/assets/sound/whoosh.mp3']
-const WHISPER = 'mlx-community/whisper-large-v3-turbo'
 const PORT = +(process.env.VIDEO_EDITOR_PORT || 41187)
 // the review studio, built from plugins-src/skill-video/studio and served as is
 const STUDIO = path.join(ENGINE, 'studio/dist')
@@ -100,6 +99,8 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
 })
 
 const die = msg => { console.error(`error: ${msg}`); process.exit(1) }
+// the value for this OS: macOS, Linux (and any other), Windows
+const byOs = (mac, linux, win) => ({ darwin: mac, win32: win })[process.platform] ?? linux
 const list = s => (s ?? '').split(',').map(x => x.trim()).filter(Boolean)
 const even = x => Math.floor(x / 2) * 2
 const ms = x => Math.round(x * 1000) / 1000
@@ -329,7 +330,8 @@ const chosen = (dir, what) => {
   return e[what]
 }
 
-// whisper.py: mlx-whisper with the style's vocabulary (names, brands) as the prompt of every window; or Scribe v2
+// whisper.py: Whisper large-v3-turbo (mlx-whisper on Apple Silicon, faster-whisper elsewhere) with the style's
+// vocabulary (names, brands) as the prompt of every window; or Scribe v2
 async function transcribe(wav, lang, cache, vocabulary, withScribe) {
   fs.mkdirSync(cache, { recursive: true })
   let found
@@ -337,8 +339,8 @@ async function transcribe(wav, lang, cache, vocabulary, withScribe) {
     console.log(`transcribing with ElevenLabs Scribe v2${vocabulary.length ? `, keyterms: ${vocabulary.join(', ')}` : ''}…`)
     found = await scribe(wav, lang, cache, vocabulary)
   } else {
-    console.log(`transcribing with mlx-whisper ${WHISPER} (the first run downloads the model, ~1.6 GB)${vocabulary.length ? `, vocabulary: ${vocabulary.join(', ')}` : ''}…`)
-    run('uv', ['run', '--quiet', path.join(ENGINE, 'whisper.py'), wav, path.join(cache, 'whisper.json'), lang, WHISPER, vocabulary.join(', ')])
+    console.log(`transcribing with Whisper large-v3-turbo (the first run downloads the model, ~1.6 GB)${vocabulary.length ? `, vocabulary: ${vocabulary.join(', ')}` : ''}…`)
+    run('uv', ['run', '--quiet', path.join(ENGINE, 'whisper.py'), wav, path.join(cache, 'whisper.json'), lang, vocabulary.join(', ')])
     found = readJson(path.join(cache, 'whisper.json')).segments.flatMap(s => s.words ?? [])
   }
   const words = []
@@ -434,7 +436,8 @@ const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_detecto
 async function detectFaces(dir, p) {
   if (!fs.existsSync(path.join(ENGINE, 'node_modules/@mediapipe/tasks-vision'))) {
     console.log('face_framing: installing @mediapipe/tasks-vision in the engine…')
-    execFileSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: ENGINE, stdio: 'inherit' })
+    // through the shell: npm is npm.cmd on Windows
+    execSync('npm install --no-audit --no-fund', { cwd: ENGINE, stdio: 'inherit' })
   }
   const model = path.join(ENGINE, 'models/blaze_face_short_range.tflite')
   if (!fs.existsSync(model)) {
@@ -547,7 +550,8 @@ function buildJob(dir, format, type, thumbnail = false) {
 // (edit.json, words.json), nor what never reaches the picture (the versions in project.json, the mix's levels, the
 // review's drawings, Python's bytecode of sound.py, its effects in assets/sound/).
 function sceneKey(dir, job) {
-  const files = root => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).filter(x => !/\.wav$|^(edit|words|project|mix)\.json$|^sound\.py$|^sound\/|^review\/|__pycache__/.test(x)).sort().map(x => [x, fs.statSync(path.join(root, x)).mtimeMs]) : [])
+  // names with / on every OS (Windows lists them with \)
+  const files = root => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).map(x => x.replaceAll(path.sep, '/')).filter(x => !/\.wav$|^(edit|words|project|mix)\.json$|^sound\.py$|^sound\/|^review\/|__pycache__/.test(x)).sort().map(x => [x, fs.statSync(path.join(root, x)).mtimeMs]) : [])
   const engine = ['lib/page.js', 'lib/kit.js', 'lib/runtime.js', 'lib/actors.js', 'lib/paper.js', 'lib/timeline.js', 'page/render.html'].map(x => fs.readFileSync(path.join(ENGINE, x), 'utf8')).join()
   // the motion blur is how it is rendered, not what: the chunks' keys add it
   return hash(engine + JSON.stringify([{ ...job, blur: null }, ...['source', 'actors', 'assets'].map(x => files(path.join(dir, x)))]))
@@ -567,14 +571,18 @@ const renderSet = p => opt.draft ? [pick(opt.format ?? p.formats[0], p.formats, 
 async function playwright() {
   if (!fs.existsSync(path.join(ENGINE, 'node_modules/playwright-core'))) {
     console.log('first run: installing playwright-core in the engine…')
-    execFileSync('npm', ['install', '--omit=optional', '--no-audit', '--no-fund'], { cwd: ENGINE, stdio: 'inherit' })
+    execSync('npm install --omit=optional --no-audit --no-fund', { cwd: ENGINE, stdio: 'inherit' })
   }
   return import('playwright-core')
 }
 
 // Headless system Chrome (it has the H.264 encoder Chromium lacks) with the HTML-in-canvas API, no frame rate cap;
 // one context per worker, pages served by a private server that also takes their output.
-const needChrome = () => process.platform === 'darwin' && !fs.existsSync('/Applications/Google Chrome.app') && die('Google Chrome is needed in /Applications: https://www.google.com/chrome/')
+const CHROME_FIX = byOs('brew install --cask google-chrome', 'https://www.google.com/chrome/', 'winget install Google.Chrome')
+// where Playwright's chrome channel finds it
+const hasChrome = () => byOs(['/Applications/Google Chrome.app'], ['/opt/google/chrome/chrome'], [process.env.LOCALAPPDATA, process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)']]
+  .filter(Boolean).map(d => path.join(d, 'Google/Chrome/Application/chrome.exe'))).some(f => fs.existsSync(f))
+const needChrome = () => !hasChrome() && die(`Google Chrome is needed: ${CHROME_FIX}`)
 // a page's errors and warnings go to the terminal
 const watch = page => {
   page.on('pageerror', e => console.error(`page: ${e.message}`))
@@ -1512,7 +1520,7 @@ async function handle(req, res, write = false) {
     let log = { updated: null, steps: [] }
     try { log = readJson(path.join(dir, '.cache/progress.json')) } catch {}
     log.started = readJson(path.join(dir, 'source/project.json')).created ?? null
-    const touched = ['About.md', ...fs.readdirSync(path.join(dir, 'source'), { recursive: true }).map(x => path.join('source', x))]
+    const touched = ['About.md', ...fs.readdirSync(path.join(dir, 'source'), { recursive: true }).map(x => `source/${x.replaceAll(path.sep, '/')}`)]
       .filter(x => !/__pycache__|^source\/(project|rules|style)\.json$|^source\/STYLE\.md$/.test(x))
       .map(x => [x, fs.statSync(path.join(dir, x), { throwIfNoEntry: false })]).filter(([, st]) => st?.isFile())
       .reduce((a, b) => (!a || b[1].mtimeMs > a[1].mtimeMs ? b : a), null)
@@ -1576,6 +1584,7 @@ function watchOwner(pid) {
 }
 
 // the Claude Code (or Claude app) this command runs under: the nearest ancestor named claude, null outside one
+// ponytail: null on Windows (no ps -o), its server runs until Windows logs off; Get-CimInstance Win32_Process if that bothers
 function claudePid() {
   try {
     const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' }).trim().split('\n').map(l => {
@@ -1614,7 +1623,7 @@ async function findServer() {
   // a port taken by something that is not a studio fails to start: the next one is tried
   for (; i < ports.length; i++) {
     if (lives[i]) continue
-    spawn(process.execPath, [SELF, 'serve'], { cwd: HOME, env: { ...process.env, VIDEO_EDITOR_DIR: HOME, VIDEO_EDITOR_PORT: `${ports[i]}` }, detached: true, stdio: ['ignore', log, log] }).unref()
+    spawn(process.execPath, [SELF, 'serve'], { cwd: HOME, env: { ...process.env, VIDEO_EDITOR_DIR: HOME, VIDEO_EDITOR_PORT: `${ports[i]}` }, detached: true, windowsHide: true, stdio: ['ignore', log, log] }).unref()
     let live = null
     for (let k = 0; k < 50 && !(live = await ping(ports[i])); k++) await sleep(100)
     if (live?.home === HOME) return base(ports[i])
@@ -1633,7 +1642,13 @@ async function studio() {
   if (!fs.existsSync(path.join(STUDIO, 'index.html'))) die(`the studio is not built (${STUDIO})`)
   const dir = servedProject(), url = `${await ensureServer()}${path.basename(dir)}/`
   console.log(`studio: ${url}`)
-  if (opt.open) run('open', [url])
+  if (opt.open) openUrl(url)
+}
+
+// a URL in the default browser, or in Chrome; never fatal, the URL is printed anyway
+function openUrl(url, chrome = false) {
+  const [bin, ...argv] = byOs(['open', ...(chrome ? ['-a', 'Google Chrome'] : [])], [chrome ? 'google-chrome' : 'xdg-open'], ['cmd', '/c', 'start', ...(chrome ? ['chrome'] : [])])
+  spawn(bin, [...argv, url], { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref()
 }
 
 // the live debug page in a visible Chrome: the same scene, no encoding, R reloads it
@@ -1642,7 +1657,7 @@ async function preview() {
   pick(format, p.formats, 'format')
   job(dir, format, '')
   const url = `${await ensureServer()}${p.slug}/preview?format=${encodeURIComponent(format)}`
-  if (process.platform === 'darwin') run('open', ['-a', 'Google Chrome', url])
+  openUrl(url, true)
   console.log(`preview: ${url}`)
 }
 
@@ -1836,15 +1851,16 @@ async function site(url) {
 
 // the tools the engine needs, with the command that installs a missing one; the projects folder and its style
 function doctor() {
-  const has = bin => { try { return !!out('which', [bin]).trim() } catch { return false } }
+  // found on the PATH: it starts (its exit code does not matter)
+  const has = bin => !spawnSync(bin, ['-version'], { stdio: 'ignore' }).error
   const checks = [
-    ['node 22 or later', +process.versions.node.split('.')[0] >= 22, 'brew install node'],
-    ['ffmpeg and ffprobe', has('ffmpeg') && has('ffprobe'), 'brew install ffmpeg'],
-    ['Google Chrome', fs.existsSync('/Applications/Google Chrome.app') || process.platform !== 'darwin', 'brew install --cask google-chrome'],
-    ['uv and uvx', has('uv') && has('uvx'), 'brew install uv'],
+    ['node 22 or later', +process.versions.node.split('.')[0] >= 22, byOs('brew install node', 'https://nodejs.org/en/download', 'winget install OpenJS.NodeJS.LTS')],
+    ['ffmpeg and ffprobe', has('ffmpeg') && has('ffprobe'), byOs('brew install ffmpeg', 'sudo apt install ffmpeg', 'winget install Gyan.FFmpeg')],
+    ['Google Chrome', hasChrome(), CHROME_FIX],
+    ['uv and uvx', has('uv') && has('uvx'), byOs('brew install uv', 'curl -LsSf https://astral.sh/uv/install.sh | sh', 'winget install astral-sh.uv')],
   ]
   for (const [name, ok, fix] of checks) console.log(`${ok ? 'ok     ' : 'MISSING'} ${name}${ok ? '' : `: ${fix}`}`)
-  if (process.arch !== 'arm64') console.log('note: transcription (mlx-whisper) needs Apple Silicon; use Scribe v2 (ElevenLabs) or a pack with "transcribe": false here')
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') console.log('note: Whisper transcribes on the CPU here (faster-whisper), slower than on Apple Silicon; Scribe v2 (ElevenLabs) is faster')
   console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Scribe v2 transcript, voice-over, music, sound effects)' : 'elevenlabs: no key (Whisper transcript, no voice-over, the kit makes the sound); the plugin\'s secret: /plugin configure skill-video@pabrisson')
   console.log(`projects: ${HOME}`)
   // in a git repository: nothing of what makes the videos ignored
