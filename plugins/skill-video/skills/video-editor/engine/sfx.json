@@ -1,0 +1,110 @@
+{
+  "whoosh": {
+    "about": "a move across the frame, a transition",
+    "dur": 0.8, "gain": 0.8, "stretch": true,
+    "prompt": "a single short airy whoosh of a fast swipe past the listener, mid-range, no hiss, quick tail, isolated, studio quality",
+    "aliases": ["swoosh", "slide", "glide", "sweep", "wipe", "move", "zoom", "lift", "morph", "scroll", "send", "swirl", "yank", "snatch", "iris", "chapter"]
+  },
+  "swish": {
+    "about": "a quick small move: a line drawn, a bar that fills, a card that swaps",
+    "dur": 0.5, "gain": 0.6, "stretch": true,
+    "prompt": "a single quick bright swish of a thin cane cutting through the air, crisp, isolated, studio quality",
+    "aliases": ["draw", "fill", "bar", "slash", "swap", "split", "wiggle", "flick"]
+  },
+  "riser": {
+    "about": "a build-up whose climax lands on the cue",
+    "dur": 1.5, "gain": 0.7, "stretch": true,
+    "prompt": "a rising tension riser, filtered noise and a tone climbing fast, ends abruptly, isolated, studio quality",
+    "aliases": ["rise", "grow", "swell", "suck"]
+  },
+  "drop": {
+    "about": "something that falls or goes down",
+    "dur": 0.6, "gain": 0.7, "stretch": true,
+    "prompt": "a short descending pitch drop of a small object falling, soft landing, isolated, studio quality",
+    "aliases": ["dive", "fall"]
+  },
+  "impact": {
+    "about": "the big hit of a reveal or a turn",
+    "dur": 1.5, "gain": 1.0,
+    "prompt": "a deep cinematic impact boom, punchy sub hit, short dry tail, isolated, studio quality",
+    "aliases": ["slam", "reveal", "crack", "strike", "implode", "sting", "boom"]
+  },
+  "hit": {
+    "about": "a small dry hit: a cut, a snap, a word that lands",
+    "dur": 0.5, "gain": 0.8,
+    "prompt": "a single short dry punchy percussive hit, tight snap, no reverb, isolated, studio quality",
+    "aliases": ["snap", "slap", "clap", "cut", "knock"]
+  },
+  "thud": {
+    "about": "something set down, docked, stacked or closed",
+    "dur": 0.5, "gain": 0.8,
+    "prompt": "a single soft muffled thud of a small box set down on a wooden table, close-miked, isolated, studio quality",
+    "aliases": ["layer", "stack", "dock", "close", "step", "stop", "land"]
+  },
+  "stamp": {
+    "about": "a stamp, a seal, a validation pressed on",
+    "dur": 0.5, "gain": 0.8,
+    "prompt": "a rubber stamp pressed firmly on paper, a single hit, close-miked, isolated, studio quality",
+    "aliases": ["seal"]
+  },
+  "pop": {
+    "about": "an element that appears: a bubble, a tag, a chip",
+    "dur": 0.5, "gain": 0.7,
+    "prompt": "a soft round bubble pop, short and warm, isolated, studio quality",
+    "aliases": ["bubble", "chip", "tag", "spread", "cascade", "appear"]
+  },
+  "click": {
+    "about": "an interface click: a button, a key, a switch, a selection",
+    "dur": 0.5, "gain": 0.7,
+    "prompt": "a single crisp computer mouse click, close-miked, isolated, studio quality, no background noise",
+    "aliases": ["key", "press", "select", "tab", "switch", "lock", "shutter", "snip", "toggle"]
+  },
+  "type": {
+    "about": "one keystroke of typed text (a cue per key or per word)",
+    "dur": 0.5, "gain": 0.4,
+    "prompt": "a single mechanical keyboard keystroke, close and dry, isolated, studio quality",
+    "aliases": ["letters", "typing", "keystroke"]
+  },
+  "tick": {
+    "about": "a counter, a clock, rolling digits (a cue's i of n climbs an octave)",
+    "dur": 0.5, "gain": 0.5,
+    "prompt": "a single short crisp high wooden clock tick, close-miked, isolated, studio quality",
+    "aliases": ["ticks", "count", "counter", "countup", "countdown", "clock", "roll"]
+  },
+  "blip": {
+    "about": "a short electronic beep: a signal, a pulse, a sonar",
+    "dur": 0.5, "gain": 0.5,
+    "prompt": "a short soft electronic blip, a digital interface beep, isolated, studio quality",
+    "aliases": ["pulse", "sonar", "ripple", "beep"]
+  },
+  "chime": {
+    "about": "a success, a notification, a bright resolve",
+    "dur": 1.0, "gain": 0.6,
+    "prompt": "a bright sparkling success chime, glassy and short, isolated, studio quality",
+    "aliases": ["ding", "bell", "ok", "done", "check", "resolve", "notif", "glass", "success"]
+  },
+  "error": {
+    "about": "a failure, a loss, an alarm",
+    "dur": 0.6, "gain": 0.6,
+    "prompt": "a short negative error buzz, two low descending tones, isolated, studio quality",
+    "aliases": ["alarm", "loss", "fail", "wrong", "buzz"]
+  },
+  "shimmer": {
+    "about": "a shine, a sparkle, a scan of light",
+    "dur": 1.0, "gain": 0.5,
+    "prompt": "a magical shimmer sparkle, high glittering and airy, isolated, studio quality",
+    "aliases": ["shine", "sparkle", "scan", "glint"]
+  },
+  "glitch": {
+    "about": "a digital glitch: scrambled text, a rewind, a scratch",
+    "dur": 0.5, "gain": 0.6,
+    "prompt": "a short digital glitch, stuttering data noise, isolated, studio quality",
+    "aliases": ["scramble", "rewind", "scratch", "stutter"]
+  },
+  "paper": {
+    "about": "paper: a flap, a tear, a page flipped, a print",
+    "dur": 0.5, "gain": 0.6,
+    "prompt": "a quick paper flip, a single page turned, crisp, close-miked, isolated, studio quality",
+    "aliases": ["flap", "tear", "flip", "print", "printer", "page"]
+  }
+}

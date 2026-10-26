@@ -27,6 +27,25 @@ const HOME = (() => {
   return process.cwd()
 })()
 const RATE = 48000
+// the sound effects: the catalog's kinds (sfx.json) with the old names each stands for, and the projects folder's
+// library, which every video plays (its own assets/sound/ overrides it)
+const CATALOG = JSON.parse(fs.readFileSync(path.join(ENGINE, 'sfx.json'), 'utf8'))
+const KIND = Object.fromEntries(Object.entries(CATALOG).flatMap(([k, e]) => [[k, k], ...e.aliases.map(a => [a, k])]))
+const LIBRARY = path.join(HOME, '.sound')
+// the projects folder's .gitignore, written by init when there is none: git keeps the style, the packs, the sound
+// library and every video's source, rushes, clips, music and effects; only what the engine makes again is left out
+const GITIGNORE = `# What the engine makes again. Everything else is kept: the style (.style/), the rule packs (.rules/), the sound
+# library (.sound/) and each video's source/, rushes and clips, music and effects (assets/) and versions (files/).
+.cache/
+output/
+stills/
+__pycache__/
+.studio.log
+*.log
+.DS_Store
+`
+// what git must keep, to check against the .gitignore: the rushes, the clips, the music and the effects
+const KEPT = ['.sound/whoosh.wav', 'video/assets/source.mp4', 'video/assets/clips/clip.mp4', 'video/assets/sound/music.mp3', 'video/assets/sound/whoosh.mp3']
 const WHISPER = 'mlx-community/whisper-large-v3-turbo'
 const PORT = +(process.env.VIDEO_EDITOR_PORT || 41187)
 // the review studio, built from plugins-src/skill-video/studio and served as is
@@ -72,6 +91,8 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     blur: { type: 'string' },
     length: { type: 'string' },
     name: { type: 'string' },
+    local: { type: 'boolean' },
+    here: { type: 'boolean' },
     draft: { type: 'boolean' },
     force: { type: 'boolean' },
     open: { type: 'boolean' },
@@ -524,9 +545,9 @@ function buildJob(dir, format, type, thumbnail = false) {
 // What a render depends on. A scene is code, so it covers all it can read: the engine, the job, every file of
 // source/, actors/ and assets/ (names and dates). Not the sound (sound.py), nor what the scene sees through the job
 // (edit.json, words.json), nor what never reaches the picture (the versions in project.json, the mix's levels, the
-// review's drawings, Python's bytecode of sound.py).
+// review's drawings, Python's bytecode of sound.py, its effects in assets/sound/).
 function sceneKey(dir, job) {
-  const files = root => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).filter(x => !/\.wav$|^(edit|words|project|mix)\.json$|^sound\.py$|^review\/|__pycache__/.test(x)).sort().map(x => [x, fs.statSync(path.join(root, x)).mtimeMs]) : [])
+  const files = root => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).filter(x => !/\.wav$|^(edit|words|project|mix)\.json$|^sound\.py$|^sound\/|^review\/|__pycache__/.test(x)).sort().map(x => [x, fs.statSync(path.join(root, x)).mtimeMs]) : [])
   const engine = ['lib/page.js', 'lib/kit.js', 'lib/runtime.js', 'lib/actors.js', 'lib/paper.js', 'lib/timeline.js', 'page/render.html'].map(x => fs.readFileSync(path.join(ENGINE, x), 'utf8')).join()
   // the motion blur is how it is rendered, not what: the chunks' keys add it
   return hash(engine + JSON.stringify([{ ...job, blur: null }, ...['source', 'actors', 'assets'].map(x => files(path.join(dir, x)))]))
@@ -636,6 +657,7 @@ function init(slug) {
   for (const s of sources) if (!/^https?:\/\//.test(s) && !fs.existsSync(rushOf(s).src)) die(`source not found: ${rushOf(s).src}`)
 
   for (const d of ['assets/images', 'assets/logos', 'assets/review', 'files/reviews', 'output', 'source', 'stills']) fs.mkdirSync(path.join(dir, d), { recursive: true })
+  if (!fs.existsSync(path.join(HOME, '.gitignore'))) fs.writeFileSync(path.join(HOME, '.gitignore'), GITIGNORE)
   let source = null
   if (sources.length) {
     const file = path.join(dir, 'assets/source.mp4')
@@ -766,26 +788,114 @@ async function voices(search) {
   console.log(j.voices.length ? (j.has_more ? 'more voices: narrow with voices <search>' : '') : 'no voice found')
 }
 
-// music "<prompt>" --length <s> | sfx "<prompt>" [--length <s>]: an instrumental track or a sound effect made by
-// ElevenLabs, into assets/sound/<name>.mp3 for sound.py's load(). An existing file is made again only with --force:
-// each one costs credits
-async function generate(kind, prompt) {
-  const dir = projectDir(), name = opt.name ?? kind, rel = `assets/sound/${name}.mp3`, file = path.join(dir, rel), length = +opt.length
-  const [min, max] = kind === 'music' ? [3, 600] : [0.5, 30]
-  if (!prompt?.trim() || !/^[\w-]+$/.test(name) || ((kind === 'music' || opt.length !== undefined) && !(length >= min && length <= max)))
-    die(`usage: ${kind} "<prompt>" ${kind === 'music' ? '--length' : '[--length'} <${min} to ${max} s>${kind === 'music' ? '' : ']'} [--name <name>] [--force] -p <slug>`)
-  chosen(dir, kind)
+// music "<prompt>" --length <s>: an instrumental track made by ElevenLabs, into assets/sound/music.mp3 (or --name)
+// for sound.py's load(). An existing file is made again only with --force: each one costs credits
+async function music(prompt) {
+  const dir = projectDir(), name = opt.name ?? 'music', rel = `assets/sound/${name}.mp3`, file = path.join(dir, rel), length = +opt.length
+  if (!prompt?.trim() || !/^[\w-]+$/.test(name) || !(length >= 3 && length <= 600)) die('usage: music "<prompt>" --length <3 to 600 s> [--name <name>] [--force] -p <slug>')
+  chosen(dir, 'music')
   if (fs.existsSync(file) && !opt.force) die(`${rel} exists: --force makes it again (it costs credits), --name makes another`)
-  const s = step(dir, kind === 'music' ? 'Composing the music (ElevenLabs)' : `Sound effect "${name}" (ElevenLabs)`)
-  const [route, body] = kind === 'music' ? ['/v1/music', { prompt, music_length_ms: Math.round(length * 1000), force_instrumental: true, model_id: 'music_v2_5' }]
-    : ['/v1/sound-generation', { text: prompt, ...(opt.length !== undefined && { duration_seconds: length }) }]
-  const audio = await eleven(route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  const s = step(dir, 'Composing the music (ElevenLabs)')
+  const audio = await eleven('/v1/music', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt, music_length_ms: Math.round(length * 1000), force_instrumental: true, model_id: 'music_v2_5' }) })
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, audio)
   s.end()
-  const secs = +out('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file])
-  console.log(`${kind}: ${rel} (${ms(secs)} s). In sound.py: load('${rel}')`)
+  console.log(`music: ${rel} (${ms(+out('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]))} s). In sound.py: load('${rel}')`)
 }
+
+// the files of a sound in folder d, its takes in order (whoosh, whoosh-2…), as audio.py's takes() finds them
+const takesIn = (d, name) => (fs.existsSync(d) ? fs.readdirSync(d) : []).filter(x => x.startsWith(name) && new RegExp(`^${name}(-\\d+)?\\.(wav|mp3|m4a|flac|ogg|aiff?)$`, 'i').test(x))
+  .sort((a, b) => +(a.match(/-(\d+)\.\w+$/)?.[1] ?? 1) - +(b.match(/-(\d+)\.\w+$/)?.[1] ?? 1))
+// where play() finds the sound of a cue kind, as audio.py does: the video's assets/sound/, then the library, each by
+// the kind's own name, then by the catalog's kind it is an alias of. [label, takes], or null
+function effectSource(dir, kind) {
+  for (const [d, label] of [[path.join(dir, 'assets/sound'), 'assets/sound'], [LIBRARY, '.sound']])
+    for (const n of new Set([kind, KIND[kind] ?? kind])) {
+      const t = takesIn(d, n)
+      if (t.length) return [`${label}/${t[0]}${t.length > 1 ? ` (${t.length} takes)` : ''}`, t]
+    }
+  return null
+}
+
+// the sounds a library folder has: their names, the takes of each counted once (whoosh, whoosh-2… is whoosh)
+const soundsIn = d => [...new Set((fs.existsSync(d) ? fs.readdirSync(d) : []).map(x => x.match(/^(.+?)(-\d+)?\.(wav|mp3|m4a|flac|ogg|aiff?)$/i)?.[1]).filter(Boolean))]
+
+// sfx <name>… --local | sfx <name> ["<prompt>"] [--length <s>]: sounds into the projects folder's library (.sound/),
+// which every video of the folder plays; --here into this video's assets/sound/, which overrides it. A kind of the
+// catalog (sfx.json) or a sound of the project's own, any name, as many as the videos need. --local synthesizes them
+// (sfx.py: the folder's own designs in its sfx.py, else the kit's; three takes each, no credit); ElevenLabs makes one
+// from the catalog's prompt, or the one given (a sound of the project's own needs it), at the catalog's length (1 s
+// for the others). A sound already there is made again only with --force
+async function sfx(...items) {
+  const usage = 'usage: sfx <name>… --local [--here] [--force] [-p <slug>] | sfx <name> ["<prompt>"] [--length <0.5 to 30 s>] [--here] [--force] -p <slug>'
+  const dir = opt.local && !opt.here ? projectDir(false) : projectDir(), target = opt.here ? path.join(dir, 'assets/sound') : LIBRARY
+  const kinds = (opt.local ? items : items.slice(0, 1)).map(k => KIND[k] ?? (/^[a-z][\w-]*$/i.test(k) && !/-\d+$/.test(k) ? k : die(`sfx: ${k}: a name of letters, digits, _ and - (not ending in -<number>, the takes' mark)`)))
+  if (!kinds.length) die(usage)
+  if (!opt.local) chosen(dir, 'sfx')
+  const rel = d => path.relative(HOME, d)
+  for (const k of kinds) {
+    const there = takesIn(target, k)
+    if (there.length && !opt.force) die(`${rel(target)}/${there[0]} exists: --force makes ${k} again${opt.local ? '' : ' (it costs credits)'}${opt.here ? '' : ', --here makes one for this video only'}`)
+  }
+  const clear = k => takesIn(target, k).forEach(x => fs.rmSync(path.join(target, x)))
+  fs.mkdirSync(target, { recursive: true })
+  if (opt.local) {
+    const s = dir && step(dir, `Sound effects ${kinds.join(', ')} (kit)`)
+    kinds.forEach(clear)
+    run('uv', ['run', '--quiet', path.join(ENGINE, 'sfx.py'), ...kinds, '--out', target])
+    s?.end()
+    return console.log(`sfx: ${kinds.map(k => `${rel(target)}/${takesIn(target, k).join(', ')}`).join(' · ')}${opt.here ? ', for this video only' : ', for every video of the folder'}`)
+  }
+  const [k] = kinds, prompt = items[1] ?? CATALOG[k]?.prompt, length = +(opt.length ?? CATALOG[k]?.dur ?? 1)
+  if (!prompt?.trim()) die(`sfx: ${k} is a sound of the project's own: describe it, sfx ${k} "<the sound, not the picture>" [--length <s>] -p ${path.basename(dir)}`)
+  if (!(length >= 0.5 && length <= 30)) die(usage)
+  const s = step(dir, `Sound effect "${k}" (ElevenLabs)`)
+  const audio = await eleven('/v1/sound-generation', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: prompt, duration_seconds: length }) })
+  clear(k)
+  const file = path.join(target, `${k}.mp3`)
+  fs.writeFileSync(file, audio)
+  s.end()
+  console.log(`sfx: ${rel(file)} (${ms(+out('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]))} s)${opt.here ? ', for this video only' : ', for every video of the folder'}`)
+}
+
+// sounds [-p <slug>]: the catalog and the project's own sounds, what the library has; on a video, the kinds its cues
+// use (stills saves them), each with where its sound comes from, and how to make the missing ones
+function sounds() {
+  const dir = projectDir(!!opt.project)
+  if (!dir) {
+    for (const [k, e] of Object.entries(CATALOG)) {
+      const t = takesIn(LIBRARY, k)
+      console.log(`${k}: ${e.about} (${e.dur} s${e.stretch ? ', fits its dur' : ''}). ${t.length ? `.sound/${t.join(', ')}` : 'not in the library'}. Also: ${e.aliases.join(', ')}`)
+    }
+    const own = soundsIn(LIBRARY).filter(k => !CATALOG[k])
+    return console.log(`${own.length ? `the project's own sounds: ${own.join(', ')}\n` : ''}library: ${LIBRARY}`)
+  }
+  const file = path.join(dir, '.cache/cues.json'), code = fs.existsSync(path.join(dir, 'source/sound.py')) ? fs.readFileSync(path.join(dir, 'source/sound.py'), 'utf8') : ''
+  if (!fs.existsSync(file)) die('run stills first: they save the cues of the scene')
+  const uses = {}, missing = [], own = []
+  for (const c of readJson(file)) {
+    const k = KIND[c.kind] ?? c.kind
+    uses[k] ??= {}
+    uses[k][c.kind] = (uses[k][c.kind] ?? 0) + 1
+  }
+  for (const [k, names] of Object.entries(uses)) {
+    const count = Object.values(names).reduce((a, b) => a + b), also = Object.entries(names).filter(([n]) => n !== k).map(([n, c]) => `${n} ×${c}`).join(', ')
+    const from = [...new Set(Object.keys(names).map(n => effectSource(dir, n)?.[0] ?? (named(code, n) ? 'placed by sound.py' : 'missing')))]
+    if (from.includes('missing')) (CATALOG[k] ? missing : own).push(k)
+    console.log(`${k} ×${count}${also ? ` (${also})` : ''}${CATALOG[k] ? '' : ' (its own)'}: ${from.join(' · ')}`)
+  }
+  if (!missing.length && !own.length) return console.log('every cue has its sound')
+  const slug = path.basename(dir)
+  if (missing.length) console.log(`missing: ${missing.join(', ')}. ${elevenOf(dir)?.sfx
+    ? `ElevenLabs (credits sfx=${missing.map(k => CATALOG[k].dur).join(',')}): ${missing.map(k => `video.mjs sfx ${k} -p ${slug}`).join(' ; ')}`
+    : `The kit: video.mjs sfx ${missing.join(' ')} --local`}`)
+  if (own.length) console.log(`to make, sounds of its own: ${own.join(', ')}. Design each in sound.py, or as \`def <name>(rng)\` in .sound/sfx.py then video.mjs sfx <name> --local (every video of the folder can play it)${elevenOf(dir)?.sfx ? `, or ElevenLabs: video.mjs sfx <name> "<the sound>" -p ${slug}` : ''}`)
+}
+
+// whether sound.py names a kind of cue in a string: it places that kind itself
+const named = (code, k) => new RegExp(`['"]${k.replace(/\W/g, '\\$&')}['"]`).test(code)
 
 // elevenlabs [set <key>=<value>…]: what ElevenLabs makes for this video (source/elevenlabs.json): transcript (Scribe
 // v2), voice (the voice-over's voice id, or false), music, sfx. A key left out keeps its value, false at first
@@ -1013,10 +1123,11 @@ async function render() {
 
 // assets/mix.wav: the edited voice, the music of edit.json, the scene's cues (.cache/cues.json, from render) and the
 // sound of its media clips (.cache/clips.json), mixed by audio.py (uv runs it with numpy). Rebuilt when one of its
-// inputs changed; null when there is nothing to hear.
+// inputs changed, the effects of the library included; null when there is nothing to hear.
 function mix(dir, force) {
   const f = rel => path.resolve(dir, rel), file = f('assets/mix.wav')
-  const inputs = ['source/sound.py', 'source/edit.json', 'source/style.json', 'assets/timeline.json', 'assets/source.wav', '.cache/cues.json', '.cache/clips.json', path.join(ENGINE, 'audio.py')]
+  const inputs = ['source/sound.py', 'source/edit.json', 'source/style.json', 'assets/timeline.json', 'assets/source.wav', '.cache/cues.json', '.cache/clips.json', path.join(ENGINE, 'audio.py'), path.join(ENGINE, 'sfx.json'),
+    ...[f('assets/sound'), LIBRARY].flatMap(d => (fs.existsSync(d) ? fs.readdirSync(d).map(x => path.join(d, x)) : []))]
   if (!force && fs.existsSync(file) && fs.existsSync(f('assets/mix.json')) && fs.statSync(file).mtimeMs >= Math.max(...inputs.map(x => fs.statSync(f(x), { throwIfNoEntry: false })?.mtimeMs ?? 0))) return file
   const plan = audioPlan(dir)
   if (!plan.voice && !plan.sound && !plan.clips.length) return fs.rmSync(file, { force: true }), null
@@ -1026,7 +1137,8 @@ function mix(dir, force) {
 }
 
 // what audio.py mixes, every time in video seconds: the voice, source/sound.py (written for the video), the scene's
-// cues and the spoken words for it to follow, and the pieces of media the scene plays with their volume (edit.json)
+// cues and the spoken words for it to follow, the pieces of media the scene plays with their volume (edit.json), and
+// the library play() takes the effects from
 function audioPlan(dir) {
   const f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), j = job(dir, p.formats[0], ''), tl = makeTimeline(j.timeline), s = j.style.sound, segs = j.timeline?.segments
   const words = j.words.filter(w => !w.screen && (!segs || segs.some(([a, b]) => w.t1 > a && w.t0 < b))).map(w => ({ w: w.w, v0: ms(tl.toVideo(w.t0)), v1: ms(tl.toVideo(w.t1)) }))
@@ -1038,7 +1150,7 @@ function audioPlan(dir) {
     duration: j.duration, voice: p.source?.audio ? buildVoice(dir, tl) : null,
     sound: fs.existsSync(f('source/sound.py')) ? f('source/sound.py') : null, variant: 0,
     cues: fs.existsSync(f('.cache/cues.json')) ? readJson(f('.cache/cues.json')) : [], words, clips,
-    levels: { music: s.music, sfx: s.sfx, duck: s.duck }, out: f('assets/mix.wav'),
+    levels: { music: s.music, sfx: s.sfx, duck: s.duck }, library: LIBRARY, out: f('assets/mix.wav'),
   }
 }
 
@@ -1735,6 +1847,11 @@ function doctor() {
   if (process.arch !== 'arm64') console.log('note: transcription (mlx-whisper) needs Apple Silicon; use Scribe v2 (ElevenLabs) or a pack with "transcribe": false here')
   console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Scribe v2 transcript, voice-over, music, sound effects)' : 'elevenlabs: no key (Whisper transcript, no voice-over, the kit makes the sound); the plugin\'s secret: /plugin configure skill-video@pabrisson')
   console.log(`projects: ${HOME}`)
+  // in a git repository: nothing of what makes the videos ignored
+  const ignored = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', ...KEPT], { encoding: 'utf8' })
+  if (ignored.status === 0) console.log(`warning: git ignores ${ignored.stdout.trim().split('\n').join(', ')} here: the rushes, music and effects must stay versioned, fix ${path.join(HOME, '.gitignore')}`)
+  const own = soundsIn(LIBRARY).filter(k => !CATALOG[k]).length
+  console.log(`sound library: ${Object.keys(CATALOG).filter(k => takesIn(LIBRARY, k).length).length} of the catalog's ${Object.keys(CATALOG).length} effects${own ? ` and ${own} of its own` : ''} in ${LIBRARY} (video.mjs sounds)`)
   console.log(fs.existsSync(path.join(HOME, '.style/style.json')) ? `style: ${path.join(HOME, '.style/STYLE.md')}` : 'style: none yet, run the setup interview')
   if (checks.some(c => !c[1])) process.exit(1)
 }
@@ -1795,6 +1912,12 @@ async function check() {
     await openPage(pages[i], `${base}render?format=${encodeURIComponent(fmt)}&type=`, job(dir, fmt, ''))
     return checkLayout(await pages[i].evaluate(step => window.sampleLayout(step), 0.25), 0.25, fmt)
   })))).flat())
+  // every cue is heard: its sound in the library (or the video's) when sound.py plays it, or a kind sound.py names
+  const code = fs.existsSync(f('source/sound.py')) ? fs.readFileSync(f('source/sound.py'), 'utf8') : null
+  if (code && fs.existsSync(f('.cache/cues.json'))) {
+    const silent = [...new Set(readJson(f('.cache/cues.json')).map(c => c.kind))].filter(k => !named(code, k) && !(/\bplay\(/.test(code) && effectSource(dir, k)))
+    found.push([!silent.length, silent.length ? `no sound for the cues ${silent.join(', ')}: video.mjs sounds -p ${p.slug} says how to make them` : 'every cue has its sound'])
+  }
   for (const [ok, msg] of found) console.log(`${ok ? '✓' : '✗'} ${msg}`)
   const failed = found.filter(([ok]) => !ok).length, active = readJson(f('source/rules.json')).active
   console.log(found.length ? `${failed ? `${failed} to fix` : 'nothing to fix'} (rules: ${active.join(', ') || 'none'}). The stills show the rest` : 'nothing to measure for this pack: the stills show the rest')
@@ -1806,7 +1929,7 @@ const commands = {
   style: () => style(...args), serve, rules: () => rules(...args), check, sync: () => syncMedia(args[0]), beats: () => beatGrid(args[0]), thumbnail,
   fix: () => fixWord(args[0], args[1]), status: () => status(...args), voice: voiceOver, voices: () => voices(args[0]),
   elevenlabs: () => elevenlabs(...args), credits: () => credits(...args),
-  music: () => generate('music', args[0]), sfx: () => generate('sfx', args[0]),
+  music: () => music(args[0]), sfx: () => sfx(...args), sounds,
 }
 if (!commands[cmd]) die(`usage: video.mjs <${Object.keys(commands).join(' | ')}> [--project <slug>]`)
 await commands[cmd]()

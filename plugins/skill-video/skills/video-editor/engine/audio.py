@@ -5,8 +5,9 @@
 """The video's sound. Claude writes the music and the sound design of each video in the project's source/sound.py
 (references/sound-format.md); this file runs it and mixes it with the edited voice: the music ducks under the
 voice, the mix goes to -14 LUFS with its true peak under -1.5 dBTP. It is also the kit sound.py imports
-(`from audio import *`): placement, filters, noise, oscillators, envelopes, reverb, tape stop. numpy only, no audio
-file.
+(`from audio import *`): placement, filters, noise, oscillators, envelopes, reverb, tape stop, and play(), which places
+the effect of a cue from the sound library (the video's assets/sound/, then the projects folder's .sound/). numpy
+only.
 
   uv run audio.py <plan.json> [--variant n] [--at <s> --len 8] [--out x.wav]
   uv run audio.py --sync <reference> <other>     where the other recording sits in the reference (JSON)
@@ -17,9 +18,9 @@ The plan, written by video.mjs audio (every time in VIDEO seconds):
   {"duration": 43.2, "voice": "…/assets/voice.wav" | null, "sound": "…/source/sound.py" | null, "variant": 0,
    "cues": [{"kind": "hit", "t": 1.2}], "words": [{"w": "Bonjour", "v0": 0.4, "v1": 0.8}],
    "clips": [{"id": "arc", "wav": "…/.cache/media/arc/audio.wav", "t": 3.2, "from": 0, "dur": 4, "gain": 1}],
-   "levels": {"music": -21, "sfx": -28.5, "duck": 0.5}, "out": "…/assets/mix.wav"}
+   "levels": {"music": -21, "sfx": -28.5, "duck": 0.5}, "library": "…/.sound", "out": "…/assets/mix.wav"}
 """
-import argparse, importlib.util, json, os, subprocess, sys, tempfile, time, wave
+import argparse, importlib.util, json, os, re, subprocess, sys, tempfile, time, wave
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,13 +28,18 @@ import numpy as np
 
 # no __pycache__ next to the project's sound.py
 sys.dont_write_bytecode = True
+# sound.py's `from audio import *` gets this very module when it runs as a script: one LIBRARY for compose() and play()
+sys.modules.setdefault('audio', sys.modules[__name__])
 
-__all__ = ['SR', 'np', 'secs', 'hz', 'bus', 'place', 'filt', 'band_noise', 'sweep', 'osc', 'adsr', 'reverb', 'tape_stop', 'load']
+__all__ = ['SR', 'np', 'secs', 'hz', 'bus', 'place', 'filt', 'band_noise', 'sweep', 'osc', 'adsr', 'reverb', 'tape_stop', 'load', 'play', 'lufs', 'norm']
 
 SR = 48000
 # loudness of the mix, its true peak ceiling (dBTP: 0.5 dB under the -1 of the delivery, AAC overshoots); under a
 # voice: the music bed and the effects (LUFS), the music's gain while someone speaks (1 - duck)
 LEVELS = {'lufs': -14, 'peak': -1.5, 'music': -21, 'sfx': -28.5, 'duck': 0.5}
+# the effects' catalog (sfx.json): each kind with its length, gain and the old names it stands for
+CATALOG = json.loads((Path(__file__).parent / 'sfx.json').read_text())
+KIND = {a: k for k, e in CATALOG.items() for a in (k, *e['aliases'])}
 
 
 # ── kit ─────────────────────────────────────────────────────────────────────
@@ -120,6 +126,57 @@ def tape_stop(x, t, back, d=.6):
     x[:, i + k:j] = 0
     f = min(480, x.shape[1] - j)
     x[:, j:j + f] *= np.linspace(0, 1, f)
+
+
+# the library, where play() looks for a cue's sound, in order (compose() sets it for the video), what it loaded,
+# the occurrences per kind (their takes alternate) and the kinds it found no file for
+LIBRARY = {'dirs': ['assets/sound'], 'loaded': {}, 'count': {}, 'missing': set()}
+AUDIO = r'\.(wav|mp3|m4a|flac|ogg|aiff?)'
+
+
+def takes(d, name):
+    """The files of a sound in folder d, its takes in order: whoosh, whoosh-2, whoosh-3…"""
+    found = [p for p in Path(d).glob(f'{name}*') if re.fullmatch(rf'{re.escape(name)}(-\d+)?{AUDIO}', p.name, re.I)]
+    return sorted(found, key=lambda p: int(m[1]) if (m := re.search(r'-(\d+)\.\w+$', p.name)) else 1)
+
+
+def take(path):
+    """A take, stereo, high-passed at 25 Hz, its loudest 10 ms brought to the same level, and where that instant is
+    (samples)."""
+    if path not in LIBRARY['loaded']:
+        x = filt(load(path), 25)  # no offset nor infrasound weighing on the level
+        env = np.sqrt(np.convolve((x ** 2).mean(0), np.ones(480) / 480, 'same'))
+        LIBRARY['loaded'][path] = (x * .25 / max(env.max(), 1e-9), int(env.argmax()))
+    return LIBRARY['loaded'][path]
+
+
+def play(bus, c, gain=1.0):
+    """Places the sound of cue c from the library: the file named after its kind (or the catalog's kind it is an alias
+    of), its takes in turn. Its loudest instant lands on c['t'] (a riser's climax), panned on c['x'], fitted to c['dur']
+    when the kind stretches, raised c['pitch'] semitones (a count's i of n climbs an octave), each occurrence a little
+    different in pitch and level. n with step (s) or dur: a series of n, step apart or spread over dur (typed text, a
+    counter that rolls). A kind without a file is skipped and reported."""
+    if 'i' not in c and c.get('n', 0) > 1 and (c.get('step') or c.get('dur')):
+        step, one = c.get('step') or c['dur'] / c['n'], {k: v for k, v in c.items() if k not in ('n', 'step', 'dur')}
+        for j in range(int(c['n'])): play(bus, {**one, 't': c['t'] + j * step}, gain)
+        return
+    kind = c['kind']
+    e = CATALOG.get(KIND.get(kind), {})
+    files = next((f for d in LIBRARY['dirs'] for name in dict.fromkeys((kind, KIND.get(kind, kind))) if (f := takes(d, name))), [])
+    if not files:
+        if e: LIBRARY['missing'].add(kind)
+        return
+    k = LIBRARY['count'][KIND.get(kind, kind)] = LIBRARY['count'].get(KIND.get(kind, kind), -1) + 1
+    x, peak = take(files[k % len(files)])
+    rng = np.random.default_rng([int(round(c['t'] * 1000)), k])
+    rate = 2 ** ((c.get('pitch', 0) + (12 * c['i'] / max(1, c['n']) if 'i' in c and 'n' in c else 0)) / 12) * (1 + .04 * (rng.random() - .5))
+    if e.get('stretch') and c.get('dur'): rate *= np.clip(x.shape[1] / SR / c['dur'], .67, 1.5)
+    if abs(rate - 1) > 1e-3:
+        i = np.arange(0, x.shape[1] - 1, rate)
+        x, peak = np.stack([np.interp(i, np.arange(x.shape[1]), ch) for ch in x]), int(peak / rate)
+    a = (np.clip(c.get('x', 0), -1, 1) + 1) * np.pi / 4
+    g = gain * e.get('gain', 1) * c.get('gain', 1) * 10 ** ((rng.random() - .5) * 2 / 20)
+    place(bus, c['t'] - peak / SR, x * np.array([[np.cos(a)], [np.sin(a)]]) * np.sqrt(2), g)
 
 
 def decode(path, channels=2, rate=SR):
@@ -243,10 +300,12 @@ def compose(plan, n, speech):
     spec.loader.exec_module(mod)
     v = SimpleNamespace(duration=plan['duration'], n=n, cues=plan.get('cues') or [], words=plan.get('words') or [],
                         variant=plan.get('variant') or 0, speech=speech)
-    here = os.getcwd()
-    os.chdir(Path(plan['sound']).resolve().parent.parent)  # the video's folder: load('assets/…') works
+    here, video = os.getcwd(), Path(plan['sound']).resolve().parent.parent
+    LIBRARY.update(dirs=[video / 'assets/sound', *([Path(plan['library'])] if plan.get('library') else [])], count={}, missing=set())
+    os.chdir(video)  # the video's folder: load('assets/…') works
     try: out = mod.sound(v)
     finally: os.chdir(here)
+    if LIBRARY['missing']: print(f"warning: no sound in the library for {', '.join(sorted(LIBRARY['missing']))}: video.mjs sounds lists what to make", file=sys.stderr)
     music, fx = (out, None) if isinstance(out, np.ndarray) else out
     fit = lambda x: None if x is None else np.pad(np.atleast_2d(x)[[0, -1]], ((0, 0), (0, max(0, n - x.shape[-1]))))[:, :n]
     return fit(music), fit(fx)
@@ -420,6 +479,28 @@ def selftest():
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(44100)
             w.writeframes((8000 * np.sin(2 * np.pi * 440 * np.arange(44100) / 44100)).astype('<i2').tobytes())
         assert abs(load(f'{tmp}/44k.wav').shape[1] - SR) < 10, 'load at 44.1 kHz'
+        # play(): the library's sound of each cue, the video's file before the project's, the takes in turn, an alias
+        # for its kind; the loudest instant on the cue, a riser's climax; a series; a kind without a file reported
+        lib, video = Path(tmp, 'lib'), Path(tmp, 'v')
+        (video / 'assets/sound').mkdir(parents=True)
+        (video / 'source').mkdir()
+        ping = lambda f: np.stack([np.r_[np.zeros(2400), np.sin(2 * np.pi * f * secs(.1)) * np.exp(-secs(.1) * 40)]] * 2)
+        lib.mkdir()
+        for name, f in (('pop', 500), ('pop-2', 1000), ('tick', 2000)): write(lib / f'{name}.wav', .5 * ping(f))
+        write(video / 'assets/sound/tick.wav', .5 * ping(3000))
+        write(lib / 'riser.wav', .5 * np.stack([np.r_[filt(np.random.default_rng(5).standard_normal(SR), 500) * np.linspace(0, 1, SR), np.zeros(SR // 2)]] * 2))
+        (video / 'source/sound.py').write_text('from audio import *\n\ndef sound(v):\n    fx = bus(v.n)\n    for c in v.cues: play(fx, c)\n    return bus(v.n), fx\n')
+        cues = [{'kind': 'pop', 't': 1}, {'kind': 'bubble', 't': 2, 'x': 1}, {'kind': 'tick', 't': 3}, {'kind': 'riser', 't': 5},
+                {'kind': 'pop', 't': 7, 'n': 3, 'step': .25}, {'kind': 'type', 't': 9}, {'kind': 'tapestop', 't': 10}]
+        fx = mix({'duration': 11, 'voice': None, 'sound': str(video / 'source/sound.py'), 'library': str(lib), 'cues': cues})[1]['fx']
+        env = np.sqrt(np.convolve((fx ** 2).mean(0), np.ones(480) / 480, 'same'))
+        tone = lambda t: np.fft.rfftfreq(4800, 1 / SR)[np.abs(np.fft.rfft(fx[0, int(t * SR):int(t * SR) + 4800] + fx[1, int(t * SR):int(t * SR) + 4800])).argmax()]
+        for t in (1, 2, 3, 7, 7.25, 7.5):
+            assert abs(env[int(t * SR) - 4800:int(t * SR) + 4800].argmax() - 4800) < 96, f'effect at {t} s: its loudest instant is off the cue'
+        assert [round(tone(t), -2) for t in (1, 2, 3)] == [500, 1000, 3000], 'takes in turn, the alias, the video before the project'
+        assert np.abs(fx[0, 2 * SR:int(2.2 * SR)]).max() < 1e-3 < np.abs(fx[1, 2 * SR:int(2.2 * SR)]).max(), 'panned on x'
+        assert env[int(4.5 * SR):5 * SR].max() > 5 * env[int(5.02 * SR):int(5.5 * SR)].max(), "the riser's climax on its cue"
+        assert env[int(8.8 * SR):].max() < 1e-6 and LIBRARY['missing'] == {'type'}, 'a kind without a file: nothing placed, reported'
     # sync: the same bursts recorded twice, one starting earlier, the other later, each with its own noise
     rng, rate = np.random.default_rng(3), 8000
     ref = rng.standard_normal(60 * rate) * np.repeat(rng.random(600) > .6, rate // 10)
@@ -440,7 +521,7 @@ def selftest():
     on = [b for b in times if b < truth[-1] + .1]  # the grid goes on to the end of the track
     assert max(np.min(np.abs(truth - b)) for b in on) < .015 and len(on) == len(truth), 'beats off the clicks'
     assert abs(((times[down] - t0) / (240 / bpm) + .5) % 1 - .5) < .02, f'downbeat at {times[down]} s'
-    print(f'selftest ok in {time.time() - started:.1f} s: exact length, no clipping, -14 LUFS with and without a voice, music down under it, effects on their cues, track levels, variants, clip sound in place, deterministic, any file loaded, sync, beats')
+    print(f'selftest ok in {time.time() - started:.1f} s: exact length, no clipping, -14 LUFS with and without a voice, music down under it, effects on their cues, track levels, variants, clip sound in place, deterministic, any file loaded, library effects on their cues, sync, beats')
 
 
 if __name__ == '__main__':

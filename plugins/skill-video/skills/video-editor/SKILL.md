@@ -18,7 +18,8 @@ engine renders it. The user reviews it in a local studio, and their feedback com
 Everything lives in the project Claude Code runs in, the projects folder (`$VIDEO_EDITOR_DIR` overrides it):
 - one folder per video (`<slug>/`);
 - `.style/`, the style of this project;
-- `.rules/`, its own rule packs.
+- `.rules/`, its own rule packs;
+- `.sound/`, its sound effects, which all its videos play.
 
 Run the commands from that folder and pass `-p <slug>` to every project command.
 
@@ -151,14 +152,16 @@ each ElevenLabs option gives its estimated credits in its description.
   Other takes another name or a voice id. A voice becomes `voice=<voice_id>`. When `voices` is refused (a key
   without the Voices read permission), say so and offer « Sans voix off », Other taking a voice id.
 - **Musique** (header `Musique`): « Synthétisée (local) », then « ElevenLabs ». It becomes `music=true`.
-- **Effets** (header `Effets`): « Synthétisés (local) », then « ElevenLabs ». It becomes `sfx=true`.
+- **Effets** (header `Effets`): « Synthétisés (local) », then « ElevenLabs ». It becomes `sfx=true`: ElevenLabs makes
+  the effects the projects folder's library does not have yet (the `sound library` line of `doctor`).
 
 Skip Musique or Effets only when the video will have none (the request or the pack says so). The estimates come from
 `video.mjs credits transcript=<s> voice=<characters> music=<s> sfx=<s>,<s>,…`, at ElevenLabs' rates:
 - the transcript, on the length of the source (its range);
 - the voice-over, at about 15 characters per second of video;
 - the music, on the length of the video;
-- the effects, one of about 1 s per kind of cue you expect (about five for a short).
+- the effects: only the kinds of the catalog you expect that the library lacks (`video.mjs sounds` shows what it
+  has), at their catalog length (0.5 s for most, 1 s for a whoosh or a chime, 1.5 s for a riser or an impact).
 
 Once the user has answered, tell them the estimated total of what they chose and what the account has left (the last
 line of `credits`, when the key may read it) before going on.
@@ -322,7 +325,9 @@ frames at once leads to small, safe layouts.
   the `on_beat` param.
 - Show the source with `camera()` and play the clips with `clip(id, start)`: each one brings its sound, at its
   `volume` in `edit.json`.
-- Put a `cue(kind, t, data)` on every event that should be heard, with what the sound needs (`dur`, `x`…).
+- Put a `cue(kind, t, data)` on every event that should be heard, at the instant it peaks: a kind of the sound
+  catalog for a common event, a kind of your own for the others (sound-format.md), and what the sound needs (`x`,
+  `dur`, `n` and `step`…).
 - Declare what the picture is made of with `part(kind, t0, t1, data)`: a `part('sequence', …, { name, field })`
   per sequence (`field`: the palette color it sits on), and one per key element (`title`, `counter`, `logo`,
   `transition`…). The studio's Clip tab shows them, and the user's feedback points at them by kind and name.
@@ -339,15 +344,20 @@ The sound comes before the review, so that every pass reviews it with the pictur
 asks for music or sound, write `source/sound.py`. A video without speech always gets sound. Read
 `references/sound-format.md` first.
 - Compose the score on the Direction's tempo and beats.
-- Design one sound for each kind of cue.
+- Place the common effects with `play()`: they come from the projects folder's library. Run
+  `video.mjs stills -p <slug>` (it saves the cues), then `video.mjs sounds -p <slug>`, and make only the kinds of the
+  catalog it says are missing: with ElevenLabs when `source/elevenlabs.json` turns `sfx` on, else with the kit
+  (`sfx <kind>… --local`).
+- Design the sounds of your own, as many as the video needs (sound-format.md, « Sounds of your own »): the library is a
+  base, not a limit.
 - What `source/elevenlabs.json` turns on (`music`, `sfx`), ElevenLabs makes, and `sound.py` places it
   (sound-format.md, « With ElevenLabs »). The rest, and what the key may not make, the kit makes as before.
 - The clips play their own sound by themselves: set each one's `volume` in `edit.json`.
 
 The voice needs nothing: the engine levels the rushes, cuts the rumble, denoises lightly and compresses it.
 
-Run `video.mjs stills -p <slug>` (they save the scene's cues), then `video.mjs audio -p <slug>`, and measure: the
-balance of the bands, effects starting on their cues, a quiet break, and the clips' level against the voice.
+Then run `video.mjs audio -p <slug>`, and measure: the balance of the bands, effects starting on their cues, a quiet
+break, and the clips' level against the voice.
 
 ### 9. Review until nothing is left to fix
 
@@ -427,6 +437,9 @@ its change, then `resolved` and `reply` in the feedback file.
 Before a change that goes through ElevenLabs (the voice-over's text, the music or an effect made again, a transcript
 again with Scribe v2), give the user its estimated credits and what the account has left with `video.mjs credits`, then go on.
 
+An effect of the library is every video's: made again (`sfx <kind> --force`), it changes all the videos of the folder
+at their next mix. When the comment is about this video only, make it with `--here`.
+
 When a comment changes what the voice-over says (not how a word is spelled, which `fix` corrects), edit
 `source/voice.txt`, run `voice` then `prepare` again, and move the scene's `at()` and `edit.json`'s cuts onto the new
 times of `files/words.md`.
@@ -478,5 +491,8 @@ gives its current lines.
   footage anywhere. The only exception is ElevenLabs, for what the user turned on in `source/elevenlabs.json`:
   Scribe v2 gets the source's sound, the voice-over the text of `source/voice.txt`, the music and the effects their
   prompts.
+- **Git.** `init` writes the projects folder's `.gitignore` when it has none: git keeps the rushes, the clips, the
+  music and the effects (`.sound/`, `assets/`), and leaves out only what the engine makes again (`.cache/`, `output/`,
+  `stills/`). `doctor` warns when a `.gitignore` would leave out one of them.
 - **One studio per projects folder.** `studio` reuses this folder's server, or starts one on the first free port from
   41187: other folders' studios keep running side by side. Give the user the URL it prints.

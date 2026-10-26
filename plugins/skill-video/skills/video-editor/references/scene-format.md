@@ -38,7 +38,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
   // bigger than the frame: the word crosses it
   tl.fromTo(seq.firstChild, { x: W }, { x: -seq.firstChild.offsetWidth, duration: 2.4, ease: 'power2.inOut' }, at(0.4))
   tl.from(chars, { yPercent: 110, duration: 0.6, ease: 'expo.out', stagger: 0.025 }, at(0.4))
-  cue('whoosh', at(0.4), { dur: 2.4 })
+  cue('whoosh', at(0.4) + 1.2, { dur: 2.4 })     // loudest in the middle of the move
 }
 ```
 
@@ -92,7 +92,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 | `clip(id, start)` | A clip of `edit.json`'s `media` as a box playing from video time `start`, its sound with it. A synced media (`video.mjs sync <id>`) shows instead the frame of the source's instant, like `camera()`, without its sound |
 | `captions(opts)` | Word-by-word sticker captions of the speech (below) |
 | `paper()` | `Promise<string>`: a paper texture as a CSS background, only when the style asks for a paper look |
-| `cue(kind, t, data)` | A named sound moment at video time `t`, for sound.py: any kind and data (`{ dur, x, … }`) |
+| `cue(kind, t, data)` | A sound at video time `t`, where it peaks (a move's middle, a landing, a riser's climax): a kind of the sound catalog or one of your own (sound-format.md) and its data (`{ dur, x, n, step, pitch }`) |
 | `part(kind, t0, t1, data)` | A part of the picture from `t0` to `t1` (video seconds), for the studio's Clip tab: `'sequence'` with `{ name, field }` (`field`: the palette color it sits on), or a key element of any kind (`'title'`, `'counter'`…) with `{ name }` |
 | `say(text, from, to)` | What the viewer reads from `from` to `to` (video seconds): one line of the transcript (below) |
 | `tick(fn)` | `fn(t)` runs at every frame (and sub-frame), after the timeline |
@@ -184,8 +184,8 @@ measures skip it too.
 
 ## Sound
 
-The music and the sound design are written for each video in `source/sound.py`: see `sound-format.md`. The scene's
-`cue()` calls are its timeline of events (exported by `render` and `stills` into `.cache/cues.json`), and where its
+The music is written for each video in `source/sound.py`, and its effects come from the projects folder's sound
+library: see `sound-format.md`. The scene's `cue()` calls are its timeline of events (exported by `render` and `stills` into `.cache/cues.json`), and where its
 clips play goes next to them (`.cache/clips.json`) for their own sound.
 
 ## Parts

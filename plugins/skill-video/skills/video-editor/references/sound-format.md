@@ -1,8 +1,9 @@
 # The sound: `source/sound.py`
 
-There are no presets. You compose the music and design the sounds of each video, in code, the way the scene is
-written: `source/sound.py` is a Python module (numpy and the standard library only) whose `sound(v)` returns the
-video's music and effects. The engine (`engine/audio.py`) runs it, then does the mixing:
+You compose the music of each video in code, the way the scene is written, and you give it its effects: the
+projects folder's library has the common ones ready, and you design the others, as many as the video needs.
+`source/sound.py` is a Python module (numpy and the standard library only) whose
+`sound(v)` returns the video's music and effects. The engine (`engine/audio.py`) runs it, then does the mixing:
 - with a voice, it edits the voice (each rush brought to the same level, no rumble under 80 Hz, a light denoise, a
   gentle compression), ducks the music under it, and sets the music and the effects to the style's levels;
 - without a voice, it keeps your balance between music and effects;
@@ -12,8 +13,8 @@ video's music and effects. The engine (`engine/audio.py`) runs it, then does the
   which overshoots by up to about 1 dB, mostly stays under -1 dBTP. When it does not, `final` lowers that encoded
   track by 0.5 dB steps until the delivered file is under -1 dBTP.
 
-`video.mjs audio` builds `assets/mix.wav` and prints its loudness. `final` rebuilds it whenever `sound.py`, the cues
-or the timeline changed.
+`video.mjs audio` builds `assets/mix.wav` and prints its loudness. `final` rebuilds it whenever `sound.py`, the cues,
+the timeline or a sound of the library changed.
 
 ```python
 from audio import *          # the kit below, numpy as np, SR = 48000
@@ -51,6 +52,91 @@ never use the clock.
 | `reverb(x, d=2, wet=.3, seed=0)` | `x` plus a `d`-second tail; mono comes back stereo |
 | `tape_stop(x, t, back, d=.6)` | Slows `x` down to a stop at `t`, silent until `back` (in place) |
 | `load(path)` | A sound file (WAV, MP3, M4A, FLAC…) as a stereo array at 48 kHz, path relative to the video's folder: a track the user gives (`return load('assets/track.mp3')`), a recorded sound to place |
+| `play(bus, c, gain=1)` | Places the effect of cue `c` from the library (below): `for c in v.cues: play(fx, c)` |
+| `lufs(x)`, `norm(x, target)` | The loudness of a stereo array, and the array brought to `target` LUFS: to set the balance of music and effects without a voice (`return norm(music, -16), norm(fx, -20)`) |
+
+## The effects: the library
+
+The effects are the projects folder's, not each video's: every video of the folder plays the same `whoosh`, so its
+videos sound like one brand. A kind of sound exists once, in `.sound/` (next to `.style/` and `.rules/`), as one file
+or several takes that play in turn (`whoosh.wav`, `whoosh-2.wav`…). A video's `assets/sound/<kind>.*` overrides it for
+that video only. The library is not frozen like the style: a sound made again changes it for every video at its next
+`audio`.
+
+**The catalog** (`engine/sfx.json`): the library's ready-made kinds, for the common events. It is a base, not a
+limit: when the video needs a sound of its own, invent its kind (« Sounds of your own », below). `check` flags only a
+cue that no sound plays. The old names in the catalog's aliases still play their kind (`swoosh` is a `whoosh`).
+
+| Kind | For | Also |
+|---|---|---|
+| `whoosh` | a move across the frame, a transition | swoosh, slide, sweep, wipe, zoom, morph… |
+| `swish` | a quick small move: a line drawn, a bar that fills, a card that swaps | draw, fill, bar, slash, swap… |
+| `riser` | a build-up whose climax lands on the cue | rise, grow, swell, suck |
+| `drop` | something that falls or goes down | dive, fall |
+| `impact` | the big hit of a reveal or a turn | slam, reveal, crack, strike, sting… |
+| `hit` | a small dry hit: a cut, a snap, a word that lands | snap, slap, clap, cut |
+| `thud` | something set down, docked, stacked or closed | layer, stack, dock, close… |
+| `stamp` | a stamp, a seal, a validation pressed on | seal |
+| `pop` | an element that appears: a bubble, a tag, a chip | bubble, chip, tag, cascade… |
+| `click` | an interface click: a button, a key, a switch, a selection | key, press, select, tab, switch… |
+| `type` | one keystroke of typed text | letters, typing |
+| `tick` | a counter, a clock, rolling digits | count, counter, countup, clock, roll… |
+| `blip` | a short electronic beep: a signal, a pulse, a sonar | pulse, sonar, ripple |
+| `chime` | a success, a notification, a bright resolve | ding, bell, ok, done, check… |
+| `error` | a failure, a loss, an alarm | alarm, loss, fail |
+| `shimmer` | a shine, a sparkle, a scan of light | shine, sparkle, scan |
+| `glitch` | a digital glitch: scrambled text, a rewind, a scratch | scramble, rewind, scratch |
+| `paper` | paper: a flap, a tear, a page flipped, a print | flap, tear, flip, print |
+
+`video.mjs sounds` prints the catalog with every alias and what the library has.
+
+**What a cue's data does** with `play()`:
+- `x`: where it sits on screen, -1 to 1: the sound is panned there;
+- `dur`: the move's length: `whoosh`, `swish`, `riser` and `drop` fit it (within 0.67× to 1.5×);
+- `pitch`: semitones up (or down); `i` of `n` climbs an octave over a count (the steps of a counter);
+- `n` with `step` (s) or `dur`: a series of `n` sounds, `step` apart or spread over `dur` (typed text, rolling digits);
+- `gain`: louder or softer than the kind's level.
+
+The loudest instant of the sound lands on `t` (a whoosh's middle, a riser's climax). Each occurrence differs a
+little in pitch and level, and the takes alternate, so 30 pops never sound like one sample.
+
+**Only what the video needs.** Once the scene is written and its stills rendered, `video.mjs sounds -p <slug>` lists
+the kinds its cues use and where each sound comes from (the video, the library, `sound.py`, or missing), then how to
+make the missing ones. For a kind of the catalog:
+- with the kit (no credit): `video.mjs sfx <kind>… --local` synthesizes three takes of each into `.sound/`;
+- with ElevenLabs, when `source/elevenlabs.json` turns `sfx` on: `video.mjs sfx <kind> -p <slug>`, one kind per call, from
+  the catalog's prompt at the catalog's length (give your own prompt as a second argument when the brand calls for
+  it: describe the sound, not the picture).
+
+`--here` makes the sound for this video only (`assets/sound/`), when it must differ from the project's. A sound that is
+there is made again only with `--force`: an ElevenLabs one costs credits again, so make again only the one a comment
+is about.
+
+**Sounds of your own.** The library takes care of the common events; what makes this video's sound is yours to
+design: its signature, a sound that plays in the key of the music, one that follows the data (a counter that climbs, a
+chart that fills), a moment no kind of the catalog says. Make as many as the video needs, under any name, three ways:
+- **In `sound.py`**, for this video only: designed in code like the music, in layers (a transient, a body, a tail),
+  tuned to the score and the scene, placed with `place()` on its cue.
+- **In the library**, for every video of the folder: `def <name>(rng)` in `.sound/sfx.py`, returning a mono or
+  stereo array (`from audio import *`; `import sfx` gives the kit's designs, `sfx.whoosh`…), then
+  `video.mjs sfx <name> --local`. The cues of that name then play it. A `def` named after a kind of the catalog
+  replaces the kit's design of it for the project.
+- **With ElevenLabs**, when `sfx` is on: `video.mjs sfx <name> "<the sound>" [--length <s>] -p <slug>` (1 s unless
+  said).
+
+A sound baked into the library goes through the finish: the kind's band, its stereo width and a short tail for a kind
+of the catalog, the design's own band and length for a sound of your own, and its peak at -1 dBFS.
+
+**What makes an effect sound recorded rather than synthesized** (measured on ElevenLabs' effects against the kit's
+first designs; the kit's designs follow it, follow it in yours):
+- **Width.** Moves, hits and sparkles are wide (decorrelated left and right); pops, keys and thuds stay mono.
+- **Short, dry tails.** 30 to 400 ms from the peak down to -40 dB. No reverb on the effects: the music carries the
+  space.
+- **Shape.** A fast rise and a slower fall: a whoosh peaks a fifth of the way in, and its pitch falls as it passes.
+- **Each kind in its own band.** A whoosh in the mids (250 Hz to 4 kHz, not hiss), a thud at 80 to 250 Hz (not a
+  sub), a key with a body around 400 Hz, a tick at 2.8 kHz, a blip at 900 Hz gliding down, a chime and a shimmer
+  above 6 kHz.
+- **Grain.** Micro-transients and a level that is never smooth; a sharp peak (crest 15 to 28 dB).
 
 ## With ElevenLabs
 
@@ -63,14 +149,14 @@ commands refuse what the file leaves off.
   builds from 4 s, a break at 9.5 s, full on the reveal at 10 s, resolves on a final chord at 15 s »). Never name an
   artist. Make it the video's length, then `video.mjs beats assets/sound/music.mp3 -p <slug>` measures its grid for
   the scene's cuts. When the video's length changes, make it again rather than cutting it off.
-- **The effects**: one per kind of cue, `video.mjs sfx "<prompt>" --length <s> --name <kind> -p <slug>` writes
-  `assets/sound/<kind>.mp3` (0.5 to 30 s; without `--length`, ElevenLabs picks). Describe the sound, not the
-  picture (« short airy whoosh, soft tail »), and give it the cue's `dur`. Find where it peaks in the file and place
-  that instant on the cue (a whoosh's loudest point, a riser's end).
+- **The effects**: the ones the library lacks for this video's cues (`video.mjs sounds -p <slug>` lists them),
+  `video.mjs sfx <kind> -p <slug>` each. They go to the library, so the next videos of the folder play them too, and
+  `play()` places them.
 - **Each file is made once.** Making it again takes `--force` and costs credits again: change only the one a comment
   is about.
 - **Refused**: when a command answers that the key may not (a missing permission, the plan, the credits), the kit
-  makes that part for the whole video, as without ElevenLabs, with no new attempt. Tell the user in the summary.
+  makes that part, as without ElevenLabs (`sfx <kind> --local` for an effect), with no new attempt. Tell the user in
+  the summary.
 
 ```python
 from audio import *
@@ -79,11 +165,7 @@ def sound(v):
     music, fx = bus(v.n), bus(v.n)
     place(music, 0, load('assets/sound/music.mp3'))
     music[:, -SR // 2:] *= np.linspace(1, 0, SR // 2)        # no click if it runs past the end
-    whoosh = load('assets/sound/whoosh.mp3').mean(0)          # mono: place() pans it on the cue's x
-    peak = np.abs(whoosh).argmax() / SR
-    for c in v.cues:
-        if c['kind'] == 'whoosh':
-            place(fx, c['t'] - peak, whoosh, .8, c.get('x', 0))
+    for c in v.cues: play(fx, c)
     return music, fx
 ```
 
@@ -109,18 +191,14 @@ def sound(v):
   - hats: high-passed noise of 50 ms.
 
   Pump the pads under the kick (sidechain) for drive.
-- **Design one sound per kind of event.** The cues carry the scene's events, and each kind gets its own sound:
-  - a `band_noise` whoosh shaped like the move;
-  - an impact for a reveal: a low sweep, a noise burst and reverb;
-  - ticks that follow a counter;
-  - clicks for typed text;
-  - a riser that ends on the hit;
-  - a glassy bell for a pop of interface.
-
-  Build each from layers: a transient, a body, a tail. Pan it where the thing is on screen (pass `x` in the cue's
-  data). Put a whoosh's loudest point on the cue, and end a riser on it.
+- **A sound per event.** The cues carry the scene's events: give a common one the catalog's kind it is (a reveal is
+  an `impact`, typed text a series of `type`, a counter a series of `tick`), with what the sound needs (`x`, `dur`,
+  `n` and `step`, `pitch`), and `play()` places it. Design the others: the moments that make the video, the sounds that
+  belong to the music (a tape stop, a riser in the key, the last chord), whatever the scene needs that the catalog
+  lacks. Build each from layers (a transient, a body, a tail), pan it where the thing is on screen, and put its
+  loudest instant on the cue.
 - **Mix for phones.** Too much below 80 Hz sounds dull on a phone and eats loudness. Leave room around 2 to 5 kHz for
-  the effects, and add a little reverb to give space.
+  the effects, and give the music a little reverb for space (the effects stay dry).
 
 ## Checking (you cannot listen, so measure)
 
@@ -149,11 +227,6 @@ def pad(notes, d):
     t = secs(d + 1)
     return sum(osc(hz(m) * c, t, 3) for m in notes for c in (.997, 1.003)) * adsr(d, .3, .5, .8, 1)
 
-def whoosh(c, rng):
-    d = c.get('dur', .6)
-    s = band_noise(d, lambda p: 600 * 6 ** p, 1.2, rng) * np.sin(np.pi * np.linspace(0, 1, int(d * SR))) ** 2
-    return s, -d / 2          # loudest on the cue
-
 def sound(v):
     rng = np.random.default_rng(7)
     music, fx = bus(v.n), bus(v.n)
@@ -162,9 +235,6 @@ def sound(v):
         place(music, i * bar, pad(CHORDS[i % 4], bar), .08)
         for b in range(4) if i >= 2 else ():             # the drums come in on bar 3
             place(music, i * bar + b * BEAT, kick(rng), .5)
-    for c in v.cues:
-        if c['kind'] == 'whoosh':
-            s, off = whoosh(c, rng)
-            place(fx, c['t'] + off, s, .4, c.get('x', 0))
-    return reverb(music, 2.5, .2), reverb(fx, 1.2, .15)
+    for c in v.cues: play(fx, c)
+    return reverb(music, 2.5, .2), fx
 ```
