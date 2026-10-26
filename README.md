@@ -228,7 +228,7 @@ Graphics: `lead`, the motion design carries the video; `support`, the footage ca
 - **Studio**: local review on `127.0.0.1`, from port 41187, one server per projects folder, open from the start of each video: until the first version it shows what is being done (Claude's steps, the engine's, the renders' progress) and reloads by itself on the video. Feedback goes back to Claude as a prompt to paste.
 - **Folders**: the current folder (or `$VIDEO_EDITOR_DIR`) holds one folder per video (`<slug>/`), the project's style (`.style/`) and its own rule packs (`.rules/`).
 - **Learning**: stated preferences go into the style (`style set`, `style note`) or into the active pack's personal lines (`.rules/<name>.md` with `extends: <name>`).
-- **ElevenLabs** (optional): with `ELEVENLABS_API_KEY` in the environment (e.g. `env` in Claude Code's settings), the starting questions offer Scribe v2 for the transcript, or a voice-over read by a voice of the account for a video without speech (`voice`, `voices`); local Whisper and no voice-over stay the defaults. ElevenLabs also makes the music and the sound effects (`music`, `sfx`), placed by `sound.py`; what the key may not make (permission, plan, credits) is synthesized as before.
+- **ElevenLabs** (optional): with the plugin's secret `ElevenLabs API key` (asked when the plugin is enabled, or `/plugin configure skill-video@pabrisson`, kept in the Keychain; restart the session after setting it) or `ELEVENLABS_API_KEY` in the environment, the starting questions offer Scribe v2 for the transcript, or a voice-over read by a voice of the account for a video without speech (`voice`, `voices`); local Whisper and no voice-over stay the defaults. ElevenLabs also makes the music and the sound effects (`music`, `sfx`), placed by `sound.py`; what the key may not make (permission, plan, credits) is synthesized as before.
 - **First runs**: the first transcription downloads the Whisper model (~1.5 GB), the first render installs `playwright-core`.
 
 Everything stays on the machine, except what goes to ElevenLabs: the source's sound for Scribe v2 and the narration's text for a voice-over when chosen, the prompts of the music and the effects.
@@ -286,7 +286,7 @@ For a future theme, output style, monitor or executable: `theme-*` (`themes/*.js
 
 **Marketplace entry**: `{"name": "<plugin>", "source": "./plugins/<plugin>", "description": "…"}` in `.claude-plugin/marketplace.json`.
 
-**Settings**: `userConfig` in `plugin.json` declares the settings asked at install time and editable in `/config`. A `"sensitive": true` setting goes to the Keychain. They are read through `${user_config.<key>}`.
+**Settings**: `userConfig` in `plugin.json` declares the settings asked at install time and editable in `/config`. A `"sensitive": true` setting goes to the Keychain. They are read through `${user_config.<key>}`. The commands a skill runs don't see them: a `SessionStart` hook gets each one as `$CLAUDE_PLUGIN_OPTION_<KEY>` and writes it to `$CLAUDE_ENV_FILE`, which every later Bash command of the session loads (`skill-video`'s ElevenLabs key).
 
 **Paths**: `${CLAUDE_PLUGIN_ROOT}` is the plugin's folder (replaced on every update), `$CLAUDE_PLUGIN_DATA` its data folder (kept), `${CLAUDE_SKILL_DIR}` a skill's folder.
 

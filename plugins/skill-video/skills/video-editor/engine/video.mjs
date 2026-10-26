@@ -269,12 +269,12 @@ function sourceWav(dir) {
   return wav
 }
 
-// ElevenLabs' API, with the key of $ELEVENLABS_API_KEY: the transcript by Scribe v2 and the voice-over on the user's
+// ElevenLabs' API, with the key of $ELEVENLABS_API_KEY (the plugin's secret, exported by its SessionStart hook): the transcript by Scribe v2 and the voice-over on the user's
 // choice at the start of a video (they send the source's sound, or the narration's text); the music and the sound
 // effects whenever the key may make them. JSON, or the audio it made
 async function eleven(route, init = {}) {
   const key = process.env.ELEVENLABS_API_KEY
-  if (!key) die('ELEVENLABS_API_KEY is not set: the transcript stays with Whisper, no voice-over, and the kit makes the sound')
+  if (!key) die('no ElevenLabs key (the plugin\'s secret, /plugin configure skill-video@pabrisson, or ELEVENLABS_API_KEY): the transcript stays with Whisper, no voice-over, and the kit makes the sound')
   const r = await fetch(`https://api.elevenlabs.io${route}`, { ...init, headers: { 'xi-api-key': key, ...init.headers } })
   if (!r.ok) die(`ElevenLabs ${route.split('?')[0]}: ${r.status} ${await r.text()}`)
   return /json/.test(r.headers.get('content-type') ?? '') ? r.json() : Buffer.from(await r.arrayBuffer())
@@ -1648,7 +1648,7 @@ function doctor() {
   ]
   for (const [name, ok, fix] of checks) console.log(`${ok ? 'ok     ' : 'MISSING'} ${name}${ok ? '' : `: ${fix}`}`)
   if (process.arch !== 'arm64') console.log('note: transcription (mlx-whisper) needs Apple Silicon; use Scribe v2 (ElevenLabs) or a pack with "transcribe": false here')
-  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Scribe v2 transcript, voice-over, music, sound effects)' : 'elevenlabs: no ELEVENLABS_API_KEY (Whisper transcript, no voice-over, the kit makes the sound)')
+  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Scribe v2 transcript, voice-over, music, sound effects)' : 'elevenlabs: no key (Whisper transcript, no voice-over, the kit makes the sound); the plugin\'s secret: /plugin configure skill-video@pabrisson')
   console.log(`projects: ${HOME}`)
   console.log(fs.existsSync(path.join(HOME, '.style/style.json')) ? `style: ${path.join(HOME, '.style/STYLE.md')}` : 'style: none yet, run the setup interview')
   if (checks.some(c => !c[1])) process.exit(1)

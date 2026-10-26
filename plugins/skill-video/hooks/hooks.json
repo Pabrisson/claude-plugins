@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "k=\"$CLAUDE_PLUGIN_OPTION_ELEVENLABS_API_KEY\"; case \"$k\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -n \"$CLAUDE_ENV_FILE\" ] && echo \"export ELEVENLABS_API_KEY=$k\" >> \"$CLAUDE_ENV_FILE\" ;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

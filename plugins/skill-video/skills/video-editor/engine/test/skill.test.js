@@ -439,5 +439,5 @@ test('ElevenLabs (faked): a voice-over becomes the source, timed by the voice an
   assert.throws(() => eleven('sfx', 'Soft whoosh', '--length', '0.8', '--name', 'whoosh', '-p', 'vo'), /401 .*missing the permission sound_generation/)
   assert.ok(!fs.existsSync(path.join(home, 'vo/assets/sound/whoosh.mp3')))
   // without a key, the engine says so instead of calling
-  assert.throws(() => execFileSync(process.execPath, [engine, 'voices'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, stdio: 'pipe' }), /ELEVENLABS_API_KEY is not set/)
+  assert.throws(() => execFileSync(process.execPath, [engine, 'voices'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, stdio: 'pipe' }), /no ElevenLabs key/)
 })
