@@ -1180,6 +1180,12 @@ async function handle(req, res, write = false) {
   const url = new URL(req.url, `http://${host}`), post = req.method === 'POST'
   if (url.pathname === '/__video-editor') return reply(res, 200, { engine: ENGINE, home: HOME, mtime: LOADED })
   if (url.pathname === '/__video-editor/quit' && post) { res.on('finish', () => process.exit(0)); return reply(res, 200, {}) }
+  if (url.pathname === '/__video-editor/owner' && post) {
+    const pid = +url.searchParams.get('pid')
+    if (!Number.isInteger(pid) || pid < 2) return reply(res, 400, { error: 'expects ?pid=<process id>' })
+    watchOwner(pid)
+    return reply(res, 200, {})
+  }
   if (url.pathname === '/__blank/') { res.writeHead(200, { 'Content-Type': MIME['.html'] }); return res.end('<!doctype html><title>blank</title>') }
 
   // the root opens the first video of the folder
@@ -1264,9 +1270,40 @@ function serve() {
     .listen(PORT, '127.0.0.1', () => console.log(`studio server on http://127.0.0.1:${PORT}/ for ${HOME}`))
 }
 
+// the Claude processes the server works for (each `studio` or `preview` adds its own): it quits once they have all
+// quit. A server nobody registered with (started by hand, the tests) runs until stopped
+const owners = new Set()
+function watchOwner(pid) {
+  if (!owners.size) setInterval(() => {
+    for (const o of owners) try { process.kill(o, 0) } catch (e) { if (e.code === 'ESRCH') owners.delete(o) }
+    if (!owners.size) { console.log('every Claude this studio server worked for has quit: stopping'); process.exit(0) }
+  }, 2000)
+  owners.add(pid)
+}
+
+// the Claude Code (or Claude app) this command runs under: the nearest ancestor named claude, null outside one
+function claudePid() {
+  try {
+    const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' }).trim().split('\n').map(l => {
+      const [, pid, ppid, comm] = l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
+      return [+pid, { ppid: +ppid, comm }]
+    }))
+    for (let pid = process.ppid; pid > 1 && procs.has(pid); pid = procs.get(pid).ppid)
+      if (/^claude$/i.test(path.basename(procs.get(pid).comm))) return pid
+  } catch {}
+  return null
+}
+
+// the studio server, which stops once the Claude that asked for it has quit
+async function ensureServer() {
+  const url = await findServer(), owner = claudePid()
+  if (owner) await fetch(url + `__video-editor/owner?pid=${owner}`, { method: 'POST' }).catch(() => {})
+  return url
+}
+
 // the studio server in the background: reused when it runs this very engine (same file, same version) for this projects folder
 // one server per projects folder, side by side from PORT up: another folder's server keeps its port
-async function ensureServer() {
+async function findServer() {
   const sleep = t => new Promise(ok => setTimeout(ok, t)), base = port => `http://127.0.0.1:${port}/`
   const ping = port => fetch(base(port) + '__video-editor').then(r => r.json()).catch(() => null)
   const ports = Array.from({ length: 20 }, (_, i) => PORT + i), lives = await Promise.all(ports.map(ping))

@@ -102,6 +102,22 @@ test('one studio server per projects folder, side by side', async () => {
   }
 })
 
+test('the server stops once the Claude it works for has quit', async () => {
+  const p1 = 42500 + Math.floor(Math.random() * 400), at = `http://127.0.0.1:${p1}/__video-editor`
+  const other = spawn(process.execPath, [engine, 'serve'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, VIDEO_EDITOR_PORT: `${p1}` } })
+  const claude = spawn('sleep', ['30']), exited = new Promise(ok => other.on('exit', ok))
+  try {
+    for (let i = 0; i < 50 && !(await fetch(at).then(() => true, () => false)); i++) await new Promise(ok => setTimeout(ok, 100))
+    assert.equal((await fetch(`${at}/owner?pid=x`, { method: 'POST' })).status, 400)
+    assert.equal((await fetch(`${at}/owner?pid=${claude.pid}`, { method: 'POST' })).status, 200)
+    claude.kill()
+    assert.equal(await Promise.race([exited, new Promise(ok => setTimeout(() => ok('still up'), 6000))]), 0)
+  } finally {
+    claude.kill()
+    other.kill()
+  }
+})
+
 test('progress: the log, and the file Claude changed last (not the engine\'s own files)', async () => {
   await up()
   fs.writeFileSync(path.join(dir, 'About.md'), '# demo\n')
