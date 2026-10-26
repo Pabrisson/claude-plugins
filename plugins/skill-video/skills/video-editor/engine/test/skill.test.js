@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -91,6 +91,89 @@ test('one pack per video; rules show gives it with its personal lines, rules set
 
 const ffmpeg = (...argv) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { cwd: home })
 const failing = (...argv) => { try { return cli(...argv) } catch (e) { return e.stdout } }
+// [r, g, b] of one pixel of an image
+const pixel = (rel, x, y) => [...execFileSync('ffmpeg', ['-v', 'error', '-i', path.join(home, rel), '-vf', `format=rgb24,crop=1:1:${x}:${y}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'])]
+
+test('the actors keep their place and size in every resolution (stills draw in 720p)', { timeout: 120000 }, () => {
+  cli('init', 'cast', '--formats', '9:16', '--renders', '720p', '--rules', 'none')
+  fs.writeFileSync(path.join(home, 'cast/source/edit.json'), JSON.stringify({ duration: 2 }))
+  fs.writeFileSync(path.join(home, 'cast/source/scene.js'), 'export default async function scene() {}')
+  // a red card over the bottom right quarter of the frame
+  fs.mkdirSync(path.join(home, 'cast/actors'))
+  fs.writeFileSync(path.join(home, 'cast/actors/card.json'), JSON.stringify({ id: 'c', type: 'card', x: 810, y: 1440, w: 540, h: 960, radius: 0, fill: 'red' }))
+  cli('stills', '1', '-p', 'cast')
+  const [r, g] = pixel('cast/stills/9x16/t01.00.jpg', 700, 1200)
+  assert.ok(r > 150 && g < 110, `${r}, ${g}: the card is not at the bottom right`)
+  assert.ok(pixel('cast/stills/9x16/t01.00.jpg', 300, 600).every(x => x > 200), 'the card is not at the bottom right')
+})
+
+test("check measures the actors' texts too", { timeout: 300000 }, () => {
+  cli('init', 'acted', '--formats', '9:16', '--renders', '720p', '--rules', 'none')
+  fs.writeFileSync(path.join(home, 'acted/source/edit.json'), JSON.stringify({ duration: 3 }))
+  fs.writeFileSync(path.join(home, 'acted/source/scene.js'), 'export default async function scene() {}')
+  fs.mkdirSync(path.join(home, 'acted/actors'))
+  fs.writeFileSync(path.join(home, 'acted/actors/texts.json'), JSON.stringify([{ id: 'low', type: 'text', text: 'Bas de *écran*', y: 1750 }, { id: 'tiny', type: 'chip', text: 'minuscule', size: 14, y: 800 }]))
+  cli('stills', '-p', 'acted')
+  const log = failing('check', '-p', 'acted')
+  assert.match(log, /✗ 9:16: "Bas de écran" in the platforms' interface zones/)
+  assert.match(log, /✗ 9:16: "minuscule" too small to read on a phone/)
+})
+
+test("without speech the transcript is the say() lines, else the texts shown: this format's actors, each text while it shows", { timeout: 120000 }, () => {
+  cli('init', 'shown', '--formats', '1:1,9:16', '--renders', '720p', '--rules', 'none')
+  // a cut: the scene's own time still runs to 6 s
+  fs.writeFileSync(path.join(home, 'shown/source/edit.json'), JSON.stringify({ duration: 6, cut: [[2, 2.5]] }))
+  fs.writeFileSync(path.join(home, 'shown/source/scene.js'), 'export default async function scene() {}')
+  fs.mkdirSync(path.join(home, 'shown/actors'))
+  fs.writeFileSync(path.join(home, 'shown/actors/a.json'), JSON.stringify([{ id: 'k', type: 'text', text: 'Avant', from: 1, to: 5, keys: [[3, { text: 'Après' }]] },
+    { id: 'h', type: 'chip', text: 'Caché', formats: { '1:1': { hidden: true } } }, { id: 'f', type: 'chip', text: 'Fin', from: 5.2 }]))
+  const lines = () => JSON.parse(read('shown/assets/words.json')).map(w => [w.w, w.t0, w.t1])
+  cli('stills', '1', '-p', 'shown')
+  assert.deepEqual(lines(), [['Avant', 1, 3], ['Après', 3, 5], ['Fin', 5.2, 6]])
+  fs.writeFileSync(path.join(home, 'shown/source/scene.js'), "export default async function scene({ say }) { say('Ce que dit la scène', 0, 6) }")
+  cli('stills', '1', '-p', 'shown')
+  assert.deepEqual(lines(), [['Ce que dit la scène', 0, 6]])
+})
+
+test('the page warns of a tween placed before 0', { timeout: 120000 }, () => {
+  cli('init', 'early', '--formats', '16:9', '--renders', '720p', '--rules', 'none')
+  fs.writeFileSync(path.join(home, 'early/source/edit.json'), JSON.stringify({ duration: 2 }))
+  fs.writeFileSync(path.join(home, 'early/source/scene.js'), 'export default async function scene({ stage, tl }) { tl.to(stage, { opacity: 0.5, duration: 1 }, -0.5) }')
+  const r = spawnSync(process.execPath, [engine, 'stills', '1', '-p', 'early'], { env: { ...process.env, VIDEO_EDITOR_DIR: home }, encoding: 'utf8' })
+  assert.match(r.stderr, /page: a tween starts at -0\.5 s/)
+})
+
+test('the scene knows the resolution it draws, by name and in pixels', { timeout: 120000 }, () => {
+  cli('init', 'res', '--formats', '9:16', '--renders', '1080p', '--rules', 'none')
+  fs.writeFileSync(path.join(home, 'res/source/edit.json'), JSON.stringify({ duration: 1 }))
+  fs.writeFileSync(path.join(home, 'res/source/scene.js'), "export default async function scene({ cue, resolution, size }) { cue('res', 0, { resolution, size }) }")
+  cli('stills', '0.5', '-p', 'res')
+  assert.deepEqual(JSON.parse(read('res/.cache/cues.json')), [{ kind: 'res', t: 0, resolution: '', size: [720, 1280] }])
+  cli('render', '-p', 'res')
+  assert.deepEqual(JSON.parse(read('res/.cache/cues.json')), [{ kind: 'res', t: 0, resolution: '1080p', size: [1080, 1920] }])
+})
+
+test('a chunk whose page Chrome loses renders again on a new page', { timeout: 120000 }, async () => {
+  cli('init', 'crash', '--formats', '16:9', '--renders', '720p', '--fps', '30', '--rules', 'none')
+  fs.writeFileSync(path.join(home, 'crash/source/edit.json'), JSON.stringify({ duration: 8 }))
+  // 25 ms a frame: the render lasts long enough to lose its page
+  fs.writeFileSync(path.join(home, 'crash/source/scene.js'), `export default async function scene({ stage, tick }) {
+    stage.innerHTML = '<h1>Hi</h1>'
+    tick(() => { for (const end = performance.now() + 25; performance.now() < end;); })
+  }`)
+  const child = spawn(process.execPath, [engine, 'render', '-p', 'crash', '--workers', '1'], { env: { ...process.env, VIDEO_EDITOR_DIR: home } })
+  let log = ''
+  child.stdout.on('data', d => (log += d))
+  child.stderr.on('data', d => (log += d))
+  const exited = new Promise(ok => child.on('exit', ok)), done = () => { try { return JSON.parse(read('crash/.cache/progress.json')).steps.at(-1).done } catch { return 0 } }
+  while (!(done() >= 1)) await new Promise(ok => setTimeout(ok, 50))
+  // the renderers of that render's Chrome die
+  const below = pid => spawnSync('pgrep', ['-P', `${pid}`], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean).flatMap(x => [x, ...below(x)])
+  for (const pid of below(child.pid)) if (/--type=renderer/.test(spawnSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf8' }).stdout)) process.kill(+pid, 'SIGKILL')
+  assert.equal(await exited, 0, log)
+  assert.match(log, /Chrome lost a page at frame \d+, rendering that chunk again/)
+  assert.match(log, /240 frames, 4\/4 chunks rendered/)
+})
 
 test('check samples the layout of every format: platform zones, tiny text, text cut by the frame', { timeout: 300000 }, () => {
   cli('init', 'lay', '--formats', '9:16,16:9', '--renders', '720p', '--rules', 'none')
@@ -216,14 +299,22 @@ test('a draft is the main format alone, sharp, in 720p; the delivery gets subtit
   assert.match(read('parts/output/parts.srt'), /^1\n00:00:00,\d{3} --> 00:00:0\d,\d{3}\nHey\n/)
   assert.match(read('parts/output/parts.vtt'), /^WEBVTT\n\n00:00:00\.\d{3} --> /)
   assert.equal(read('parts/output/parts-description.txt'), 'Hey, the title\n#demo\n')
+  const final = () => spawnSync(process.execPath, [engine, 'final', '-p', 'parts'], { env: { ...process.env, VIDEO_EDITOR_DIR: home }, encoding: 'utf8' })
+  // the sound alone changed: the renders still show the scene. Bursts of noise, which AAC pushes over the mix's peak
+  fs.writeFileSync(path.join(home, 'parts/source/sound.py'), 'from audio import *\n\ndef sound(v):\n    rng, x = np.random.default_rng(1), bus(v.n)\n' +
+    '    for k in range(int(v.duration * 8)):\n        place(x, k / 8 + .06, rng.standard_normal((2, 4800)) * np.exp(-np.arange(4800) / 400))\n    return x\n')
+  assert.doesNotMatch(final().stderr, /rendered before/)
+  // the delivered file itself stays under -1 dBTP
+  const peak = +spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', path.join(home, 'parts/output/parts-16x9-720p.mp4'), '-af', 'ebur128=peak=true', '-f', 'null', '-'], { encoding: 'utf8' }).stderr.match(/True peak:\s+Peak:\s+(\S+)/)[1]
+  assert.ok(peak <= -1, `${peak} dBTP`)
   const scene = path.join(home, 'parts/source/scene.js')
   fs.writeFileSync(scene, fs.readFileSync(scene, 'utf8').replace('Hey', 'Ho'))
   // the scene changed since the render: final says so
-  const stale = spawnSync(process.execPath, [engine, 'final', '-p', 'parts'], { env: { ...process.env, VIDEO_EDITOR_DIR: home }, encoding: 'utf8' })
+  const stale = final()
   assert.match(stale.stderr, /16:9 720p was rendered before the last change of the scene: run render again/)
   cli('render', '-p', 'parts', '--draft', '--blur', '4')
   const log = cli('final', '-p', 'parts', '--draft')
-  assert.match(log, /final v4 \(draft\)/)
+  assert.match(log, /final v5 \(draft\)/)
   const { versions } = JSON.parse(read('parts/source/project.json'))
   assert.deepEqual([versions.at(-1).draft, versions.at(-1).files], [true, { '16:9': 'parts-16x9-draft.mp4' }])
   assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path.join(home, 'parts/output/parts-16x9-draft.mp4')], { encoding: 'utf8' }), /^1280,720/)

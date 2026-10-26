@@ -95,13 +95,18 @@ function visibleTexts(stage) {
 // What check flags at this instant, as [kind, what]: 'zone', a text in the platforms' interface (9:16: 14 % at the
 // top, 22 % at the bottom, 13 % on the right, 6 % on the left); 'small', a text under ~24 px at 1080 once scaled;
 // 'cut', a text the frame cuts (display type, 130 px and more, may cross it); 'face', a text over a face the camera
-// shows. Only texts a viewer reads count: opacity 0.4 and more, 60 % shown.
-function layoutIssues(stage, faces) {
+// shows. Only texts a viewer reads count: opacity 0.4 and more, 60 % shown. drawn: the actors' texts (a canvas), which
+// only the frame cuts.
+function layoutIssues(stage, faces, drawn) {
   const W = stage.offsetWidth, H = stage.offsetHeight, short = Math.min(W, H), out = []
   const zones = H > 1.6 * W ? [[0, 0, W, 0.14 * H], [0, 0.78 * H, W, H], [0.87 * W, 0, W, H], [0, 0, 0.06 * W, H]] : []
   const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]))
   const area = a => inter(a, a)
-  for (const x of textBoxes(stage)) {
+  const acted = drawn.map(({ text, box, size, o }) => {
+    const framed = [Math.max(box[0], 0), Math.max(box[1], 0), Math.min(box[2], W), Math.min(box[3], H)], shown = area(framed) / (area(box) || 1)
+    return { text, o, size, shown, inFrame: shown, box: framed }
+  })
+  for (const x of [...textBoxes(stage), ...acted]) {
     if (x.o < 0.4) continue
     const what = x.caption ? 'the captions' : `"${x.text.length > 60 ? `${x.text.slice(0, 57)}…` : x.text}"`, display = x.size >= 0.12 * short
     if (!display && x.inFrame > 0.05 && x.inFrame < 0.97) out.push(['cut', what])
@@ -145,13 +150,14 @@ export async function boot(host, query) {
   const noSource = !job.source, sceneAt = v => (noSource ? time.toSource(v) : v), onVideo = t => Math.round((noSource ? time.toVideo(t) : t) * 1000) / 1000
   const kept = t => !noSource || !segs || segs.some(([a, b]) => t >= a && t < b)
 
-  // the optional actors: a full-stage canvas at (0, 0), drawn at the output resolution
+  // the optional actors: a full-stage canvas at (0, 0), drawn at the output resolution. The capture paints a canvas at
+  // its bitmap size whatever its CSS size: it gets its bitmap's size, scaled to the stage by a transform
   let actors = null, actorsEl = null
   if (job.actors) {
     actorsEl = document.createElement('canvas')
     ;[actorsEl.width, actorsEl.height] = job.size
     actorsEl.className = 've-actors'
-    actorsEl.style.cssText = `position:absolute;left:0;top:0;width:${W}px;height:${H}px;pointer-events:none`
+    actorsEl.style.cssText = `position:absolute;left:0;top:0;width:${job.size[0]}px;height:${job.size[1]}px;transform-origin:0 0;transform:scale(${W / job.size[0]});pointer-events:none`
     actors = await createActors(job.actors, job, time, {
       image: src => bitmap(`project/${src}`),
       media: (id, n) => bitmap(`project/.cache/media/${id}/${pad(n)}.jpg`),
@@ -161,6 +167,8 @@ export async function boot(host, query) {
   const api = {
     stage, W, H, gsap, tl, words,
     format: job.format, formats: job.formats, fps: job.fps, duration: noSource ? job.scene.duration : job.duration, style: job.style, variant: +query.variant || 0,
+    // the render's resolution ('1080p'…, 'draft'; '' for stills, check and preview) and its frame in pixels
+    resolution: job.resolution, size: job.size,
     // true when drawing the YouTube thumbnail (video.mjs thumbnail): one composed frame in 16:9
     thumbnail: !!job.thumbnail,
     at: s => (noSource ? s : time.toVideo(s)),
@@ -196,6 +204,8 @@ export async function boot(host, query) {
   for (const c of stage.querySelectorAll('canvas')) {
     if (c.offsetLeft || c.offsetTop) console.warn(`canvas ${c.id || c.className || ''} is placed by layout (${c.offsetLeft}, ${c.offsetTop}): it renders blank. Put it at left:0;top:0 and move it with transforms`)
   }
+  const early = Math.min(0, ...tl.getChildren(false).map(c => c.startTime()))
+  if (early < 0) console.warn(`a tween starts at ${Math.round(early * 1000) / 1000} s, before 0: GSAP shifts the whole timeline ${Math.round(-early * 1000) / 1000} s later, every moment off its sound. Start it at 0 or later`)
 
   async function seek(v) {
     const s = sceneAt(v)
@@ -248,7 +258,7 @@ export async function boot(host, query) {
       }
       const faces = live.filter(c => c.face).map(c => [c, c.face()]).filter(([c, f]) => f && seen(c, (f[0] + f[2]) / 2, (f[1] + f[3]) / 2))
         .map(([, f]) => [f[0] - sr.left, f[1] - sr.top, f[2] - sr.left, f[3] - sr.top].map(x => x / k))
-      return layoutIssues(stage, faces)
+      return layoutIssues(stage, faces, actorsEl?.checkVisibility({ opacityProperty: true, visibilityProperty: true }) ? actors.texts() : [])
     },
     actors: v => actors?.live(v) ?? [],
     // one image per beat: where tweens start, once they have played a little

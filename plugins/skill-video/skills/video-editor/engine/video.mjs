@@ -10,9 +10,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { shownTexts } from './lib/actors.js'
-import { description, speechCues, srt, vtt } from './lib/deliver.js'
+import { description, joinChunks, speechCues, srt, vtt } from './lib/deliver.js'
 import { PARAMS, checkEdit, checkLayout, effective, listPacks, mergeParams, paramErrors } from './lib/rules.js'
-import { FORMATS, STYLE, logical, styleOf } from './lib/runtime.js'
+import { FORMATS, STYLE, logical, resolveActors, styleOf } from './lib/runtime.js'
 import { audible, keepSegments, makeTimeline, rushGains, silences, stillStretches, windowDb } from './lib/timeline.js'
 
 const SELF = fileURLToPath(import.meta.url)
@@ -292,15 +292,16 @@ function wordsMd(words, slug) {
 }
 
 // Without speech the transcript is what the video shows, one line per moment, in SOURCE seconds: the lines the scene
-// declares with say(), else the readable texts sampled 4 times a second, plus the actors' texts. Rewritten by stills
-// and render, so the studio and the Copy prompt follow.
+// declares with say(), else the readable texts sampled 4 times a second plus the actors' texts (their canvas is not
+// sampled) as the main format shows them. Rewritten by stills and render, so the studio and the Copy prompt follow.
 async function screenTranscript(dir, page, base, j) {
   const f = rel => path.join(dir, rel), p = readJson(f('source/project.json')), cur = fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : []
   if (!j.params.transcribe || cur.some(w => !w.screen)) return
   const tl = makeTimeline(j.timeline)
   await openPage(page, `${base}render?format=${encodeURIComponent(j.format)}&type=`, j)
   let lines = (await page.evaluate(() => window.says())).map(x => [x.v0, x.v1, x.w])
-  if (!lines.length) {
+  const said = lines.length > 0
+  if (!said) {
     // each sample's texts, in reading order, are the screen's line; texts coming in one by one, or leaving, keep it
     // one moment
     const step = 0.25, runs = []
@@ -316,10 +317,11 @@ async function screenTranscript(dir, page, base, j) {
     lines = runs.filter(([a, b]) => b - a >= 0.5).map(([a, b, texts]) => [a, b, texts.join(' · ')])
   }
   const fmt = {}, num = (n, d) => (fmt[d] ??= new Intl.NumberFormat(j.style.creator.lang, { minimumFractionDigits: d, maximumFractionDigits: d })).format(n)
-  const end = p.source?.duration ?? j.duration
+  // the actors' times are SOURCE seconds: without a source, the scene's own length (a cut does not shorten it)
+  const end = p.source?.duration ?? j.scene.duration
   // the end of a line just before a cut is the cut's start, not its end (both are the same video instant)
   const words = lines.map(([a, b, w]) => ({ w, t0: ms(tl.toSource(a)), t1: ms(tl.toSource(Math.min(b, j.duration) - 0.001) + 0.001), screen: true }))
-    .concat((j.actors ?? []).flatMap(a => shownTexts(a, j.style.creator, num).map(w => ({ w, t0: a.from ?? 0, t1: a.to ?? end, screen: true }))))
+    .concat(said ? [] : resolveActors(j.actors ?? [], j.format).flatMap(a => shownTexts(a, j.style.creator, num, end)).map(x => ({ ...x, screen: true })))
     .sort((a, b) => a.t0 - b.t0)
   writeJson(f('assets/words.json'), words)
   fs.writeFileSync(f('files/words.md'), `# Transcript: ${p.slug}\n\nNo speech: what the video shows, moment by moment (SOURCE seconds).\n\n` +
@@ -457,7 +459,7 @@ function buildJob(dir, format, type, thumbnail = false) {
   if (src && !frames) throw new Error('no camera frames: run prepare')
   const css = f('source/scene.css'), mtime = Math.max(...['source/scene.js', 'source/scene.css'].map(x => fs.statSync(f(x), { throwIfNoEntry: false })?.mtimeMs ?? 0))
   return {
-    slug: p.slug, format, formats: p.formats, primary: p.formats[0], logical: [lw, lh], primaryLogical: logical(p.formats[0], src), size, fps: p.fps, duration,
+    slug: p.slug, format, formats: p.formats, primary: p.formats[0], logical: [lw, lh], primaryLogical: logical(p.formats[0], src), resolution: type, size, fps: p.fps, duration,
     timeline, source: src && { width: src.width, height: src.height, fps: src.fps, frames },
     words: params.transcribe && fs.existsSync(f('assets/words.json')) ? readJson(f('assets/words.json')) : [],
     faces: params.face_framing && fs.existsSync(f('assets/frames.json')) ? readJson(f('assets/frames.json')).faces : null,
@@ -470,11 +472,11 @@ function buildJob(dir, format, type, thumbnail = false) {
 }
 
 // What a render depends on. A scene is code, so it covers all it can read: the engine, the job, every file of
-// source/, actors/ and assets/ (names and dates). Not the sound, nor what the scene sees through the job (edit.json,
-// words.json), nor what never reaches the picture (the versions in project.json, the mix's levels, the review's
-// drawings, Python's bytecode of sound.py).
+// source/, actors/ and assets/ (names and dates). Not the sound (sound.py), nor what the scene sees through the job
+// (edit.json, words.json), nor what never reaches the picture (the versions in project.json, the mix's levels, the
+// review's drawings, Python's bytecode of sound.py).
 function sceneKey(dir, job) {
-  const files = root => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).filter(x => !/\.wav$|^(edit|words|project|mix)\.json$|^review\/|__pycache__/.test(x)).sort().map(x => [x, fs.statSync(path.join(root, x)).mtimeMs]) : [])
+  const files = root => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).filter(x => !/\.wav$|^(edit|words|project|mix)\.json$|^sound\.py$|^review\/|__pycache__/.test(x)).sort().map(x => [x, fs.statSync(path.join(root, x)).mtimeMs]) : [])
   const engine = ['lib/page.js', 'lib/kit.js', 'lib/runtime.js', 'lib/actors.js', 'lib/paper.js', 'lib/timeline.js', 'page/render.html'].map(x => fs.readFileSync(path.join(ENGINE, x), 'utf8')).join()
   // the motion blur is how it is rendered, not what: the chunks' keys add it
   return hash(engine + JSON.stringify([{ ...job, blur: null }, ...['source', 'actors', 'assets'].map(x => files(path.join(dir, x)))]))
@@ -502,6 +504,12 @@ async function playwright() {
 // Headless system Chrome (it has the H.264 encoder Chromium lacks) with the HTML-in-canvas API, no frame rate cap;
 // one context per worker, pages served by a private server that also takes their output.
 const needChrome = () => process.platform === 'darwin' && !fs.existsSync('/Applications/Google Chrome.app') && die('Google Chrome is needed in /Applications: https://www.google.com/chrome/')
+// a page's errors and warnings go to the terminal
+const watch = page => {
+  page.on('pageerror', e => console.error(`page: ${e.message}`))
+  page.on('console', m => ['warning', 'error'].includes(m.type()) && !/Failed to load resource/.test(m.text()) && console.warn(`page: ${m.text()}`))
+  return page
+}
 
 async function withChrome(slug, n, fn) {
   needChrome()
@@ -514,12 +522,7 @@ async function withChrome(slug, n, fn) {
       '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'],
   })
   try {
-    const pages = await Promise.all(Array.from({ length: n }, async () => {
-      const page = await (await browser.newContext()).newPage()
-      page.on('pageerror', e => console.error(`page: ${e.message}`))
-      page.on('console', m => ['warning', 'error'].includes(m.type()) && !/Failed to load resource/.test(m.text()) && console.warn(`page: ${m.text()}`))
-      return page
-    }))
+    const pages = await Promise.all(Array.from({ length: n }, async () => watch(await (await browser.newContext()).newPage())))
     return await fn(pages, `http://127.0.0.1:${server.address().port}/${slug ?? '__blank'}/`)
   } finally {
     await browser.close()
@@ -796,10 +799,20 @@ async function render() {
       const url = `${base}render?format=${encodeURIComponent(fmt)}&type=${type}`, s = step(dir, `Rendering ${fmt} ${type}`)
       let rendered = 0
       s.tick(0, count)
-      await Promise.all(pages.slice(0, Math.min(n, todo.length)).map(async page => {
+      await Promise.all(pages.slice(0, Math.min(n, todo.length)).map(async (page, i) => {
         await openPage(page, url, j)
         for (let x; (x = todo.shift());) {
-          hw.add(await page.evaluate(([a, b, file]) => window.renderChunk(a, b, file), [x.a, x.b, name(x)]))
+          try {
+            hw.add(await page.evaluate(([a, b, file]) => window.renderChunk(a, b, file), [x.a, x.b, name(x)]))
+          } catch (e) {
+            // under load Chrome may lose a page: its chunk goes back to the list, for a new page (twice at most)
+            if (!/Target crashed/.test(e.message) || (x.crashes = (x.crashes ?? 0) + 1) > 2) throw e
+            console.warn(`${fmt} ${type}: Chrome lost a page at frame ${x.a}, rendering that chunk again`)
+            todo.push(x)
+            pages[i] = page = watch(await page.context().newPage())
+            await openPage(page, url, j)
+            continue
+          }
           s.tick(++rendered, count)
         }
       }))
@@ -811,9 +824,8 @@ async function render() {
       // chunks of older edits go; the others join into one stream, then one MP4
       const keep = new Set(plan.map(x => path.basename(name(x))))
       for (const x of fs.readdirSync(f('.cache/render'))) if (x.startsWith(prefix) && !keep.has(x)) fs.rmSync(f(`.cache/render/${x}`))
-      const stream = f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.${c.ext}`), parts = plan.map(x => fs.readFileSync(f(name(x))))
+      const stream = f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.${c.ext}`), head = Buffer.alloc(c.ext === 'ivf' ? 32 : 0)
       if (c.ext === 'ivf') {
-        const head = Buffer.alloc(32)
         head.write('DKIF', 0)
         head.writeUInt16LE(32, 6)
         head.write(j.encoder.family === 'av1' ? 'AV01' : 'VP90', 8)
@@ -822,9 +834,8 @@ async function render() {
         head.writeUInt32LE(Math.round(j.fps * 1000), 16)
         head.writeUInt32LE(1000, 20)
         head.writeUInt32LE(plan.at(-1).b, 24)
-        parts.unshift(head)
       }
-      fs.writeFileSync(stream, Buffer.concat(parts))
+      joinChunks(stream, plan.map(x => f(name(x))), head)
       // a raw stream has no timestamps: -r on the input sets them (Chrome's own stream timing is not usable)
       run('ffmpeg', ['-y', '-v', 'error', ...(c.input ? [...c.input, '-r', `${j.fps}`] : []), '-i', stream, '-c', 'copy', ...(c.tag ?? []), '-movflags', '+faststart', f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.mp4`)])
       // the scene it shows, so final knows a render older than the scene
@@ -888,6 +899,19 @@ function audio() {
   console.log(`${n} sound variants (8 s from ${at} s) in ${secs(started)} s: ${path.join(dir, 'stills/sound')}`)
 }
 
+// The mix as AAC. The encoder can push the true peak up to about 1 dB over the mix's: the gain goes down 0.5 dB at a
+// time until the file itself is under -1 dBTP (ebur128's meter), 3 dB at most
+function encodeAudio(wav, aac, kbps, file) {
+  for (let gain = 0; ; gain -= 0.5) {
+    run('ffmpeg', ['-y', '-v', 'error', '-i', wav, ...(gain ? ['-af', `volume=${gain}dB`] : []), '-c:a', aac, '-b:a', `${kbps}k`, '-ar', '48000', '-ac', '2', file])
+    const peak = +ffmpegLog(['-i', file, '-af', 'ebur128=peak=true', '-f', 'null', '-']).match(/True peak:\s+Peak:\s+(\S+)/)?.[1]
+    if (!(peak > -1) || gain <= -3) {
+      if (gain) console.log(`audio ${kbps} kbps: ${-gain} dB down, true peak ${peak} dBTP (AAC overshoots the mix's peak)`)
+      return file
+    }
+  }
+}
+
 // each render with its sound (mix.wav, rebuilt when stale), then a new version. The delivery (all the renders) also
 // gets the posters, the subtitles and the description; a draft (--draft) is the main format alone, to review
 function final() {
@@ -898,7 +922,7 @@ function final() {
   const audio = mix(dir)
   // AAC once per bitrate (Apple's encoder when ffmpeg has it: ten times faster), then every file is a copy
   const aac = out('ffmpeg', ['-hide_banner', '-encoders']).includes(' aac_at ') ? 'aac_at' : 'aac', tracks = {}
-  const track = kbps => (tracks[kbps] ??= (run('ffmpeg', ['-y', '-v', 'error', '-i', audio, '-c:a', aac, '-b:a', `${kbps}k`, '-ar', '48000', '-ac', '2', f(`.cache/audio-${kbps}.m4a`)]), f(`.cache/audio-${kbps}.m4a`)))
+  const track = kbps => (tracks[kbps] ??= encodeAudio(audio, aac, kbps, f(`.cache/audio-${kbps}.m4a`)))
   const files = {}, made = []
   for (const fmt of formats) for (const type of types) {
     const video = f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.mp4`), key = f(`.cache/render/${p.slug}-${ratio(fmt)}-${type}.key`), again = `render${draft ? ' --draft' : ''}`

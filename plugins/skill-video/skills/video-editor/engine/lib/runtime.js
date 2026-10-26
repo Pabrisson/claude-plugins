@@ -73,8 +73,9 @@ export async function createActors(list, job, tl, load) {
   const imgs = new Map(await Promise.all([...srcs].map(async s => [s, await load.image(s).catch(e => (console.warn(`asset ${s}: ${e.message}`), null))])))
 
   const actors = all.filter(a => DRAW[a.type] || console.warn(`unknown actor type ${a.type} (${a.id})`)).map(a0 => {
-    const native = a0.fit === false, [cw, ch] = native ? [lw, lh] : [pw, ph]
-    const a = { x: cw / 2, y: ch / 2, s: 1, r: a0.type === 'stamp' ? -8 : 0, o: 1, ...a0 }
+    // an actor sits at the canvas's center, an arrow at its origin: its a and b are points of the canvas
+    const native = a0.fit === false, [cw, ch] = native ? [lw, lh] : [pw, ph], arrow = a0.type === 'arrow'
+    const a = { x: arrow ? 0 : cw / 2, y: arrow ? 0 : ch / 2, s: 1, r: a0.type === 'stamp' ? -8 : 0, o: 1, ...a0 }
     return {
       a, native, v0: toV(a.from ?? 0), v1: a.to === undefined ? Infinity : toV(a.to),
       pre: a.pre ?? 0.45, post: a.post ?? 0.3, enter: a.enter ?? ENTER[a.type] ?? 'fade',
@@ -84,6 +85,13 @@ export async function createActors(list, job, tl, load) {
   const live = (x, v) => v >= x.v0 && v <= x.v1 + x.post
   const mediaN = (x, v) => clamp(Math.floor((v - x.v0 + (x.a.offset ?? 0)) * job.media[x.a.media].fps), 0, job.media[x.a.media].count - 1) + 1
   const frames = new Map()
+  // the texts of the last frame drawn: { text, box (stage px), size as seen (stage px), o }, for check
+  let seen = []
+  const read = ctx => (text, [l, t, r, b], size) => {
+    const m = ctx.getTransform(), p = [[l, t], [r, t], [l, b], [r, b]].map(([x, y]) => m.transformPoint({ x, y }))
+    const box = [Math.min(...p.map(q => q.x)), Math.min(...p.map(q => q.y)), Math.max(...p.map(q => q.x)), Math.max(...p.map(q => q.y))]
+    if (text) seen.push({ text, box: box.map(z => z / k), size: (size * Math.hypot(m.a, m.b)) / k, o: ctx.globalAlpha })
+  }
 
   function draw(ctx, x, v) {
     const age = v - x.v0, st = keyed(x.a, x.keys, v, x.v0)
@@ -98,7 +106,7 @@ export async function createActors(list, job, tl, load) {
     ctx.globalAlpha = clamp((st.o ?? 1) * (en.o ?? 1) * (ex.o ?? 1))
     DRAW[st.type]({
       ctx, k: sc, age, color, num, font: style.look.font, depth: style.look.paper.depth, creator: style.creator,
-      img: s => imgs.get(s), mediaInfo: id => job.media?.[id], media: (id, n) => frames.get(`${id}/${n}`),
+      img: s => imgs.get(s), mediaInfo: id => job.media?.[id], media: (id, n) => frames.get(`${id}/${n}`), read: read(ctx),
     }, st)
     ctx.restore()
   }
@@ -114,8 +122,10 @@ export async function createActors(list, job, tl, load) {
       }))
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+      seen = []
       for (const x of actors) if (live(x, v)) draw(ctx, x, v)
     },
     live: v => actors.filter(x => live(x, v)).map(x => x.a),
+    texts: () => seen,
   }
 }

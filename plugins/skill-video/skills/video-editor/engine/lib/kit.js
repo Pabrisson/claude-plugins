@@ -94,7 +94,7 @@ export function clip(job, id, start = 0, tl) {
 }
 
 // Sticker captions of the speech: groups of a few words ending on punctuation or a pause; each word pops in as it
-// is said. Style it with CSS on .ve-captions (and .ve-captions b for the word being said).
+// is said. Style it with CSS on .ve-captions (and .ve-captions span for a word).
 export function captions(job, words, { words: per = 3, size = job.style.look.captions.size } = {}) {
   const el = document.createElement('div')
   el.className = 've-captions'
@@ -109,7 +109,9 @@ export function captions(job, words, { words: per = 3, size = job.style.look.cap
   const ends = groups.map((g, i) => Math.min(g.at(-1).v1 + 0.3, groups[i + 1]?.[0].v0 ?? Infinity))
   let shown = null
   el.update = v => {
-    const i = groups.findIndex((g, j) => v >= g[0].v0 && v < ends[j]), g = groups[i]
+    // the line and its words are the frame's: the sub-frames of a motion blur show one line, never two
+    const f = Math.round(v * job.fps) / job.fps
+    const i = groups.findIndex((g, j) => f >= g[0].v0 && f < ends[j]), g = groups[i]
     if (g !== shown) {
       shown = g
       el.replaceChildren(...(g ?? []).map(w => {
@@ -120,10 +122,12 @@ export function captions(job, words, { words: per = 3, size = job.style.look.cap
       }))
       el.style.transform = g ? `rotate(${((i % 3) - 1) * 1.4}deg)` : ''
     }
-    ;(g ?? []).forEach((w, j) => {
-      const s = el.children[j], on = w.v0 <= v + 0.02
-      s.style.visibility = on ? 'visible' : 'hidden'
-      s.style.transform = `scale(${1 + 0.18 * (1 - clamp((v - w.v0) / 0.12))})`
+    // the word being said pops (×1.18 down to ×1 in 0.12 s): the other words of its line move aside by what it grows
+    const spans = [...el.children], on = (g ?? []).map(w => w.v0 <= f + 0.02), grow = (g ?? []).map((w, j) => (on[j] ? 0.18 * (1 - clamp((v - w.v0) / 0.12)) : 0))
+    spans.forEach((s, j) => {
+      const dx = spans.reduce((a, o, k) => a + (o.offsetTop === s.offsetTop ? Math.sign(j - k) * grow[k] * o.offsetWidth / 2 : 0), 0)
+      s.style.visibility = on[j] ? 'visible' : 'hidden'
+      s.style.transform = `translateX(${dx}px) scale(${1 + grow[j]})`
     })
   }
   return el

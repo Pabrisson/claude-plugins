@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
-import { description, speechCues, srt, vtt } from '../lib/deliver.js'
+import { description, joinChunks, speechCues, srt, vtt } from '../lib/deliver.js'
+
+test('a stream past 2 GiB (a long 4K render) joins its chunks', { timeout: 60000 }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'video-join-')), chunk = path.join(dir, 'chunk'), dest = path.join(dir, 'stream')
+  try {
+    // a 64 MiB chunk (sparse) 33 times
+    fs.writeFileSync(chunk, '')
+    fs.truncateSync(chunk, 2 ** 26)
+    joinChunks(dest, Array(33).fill(chunk), Buffer.from('DKIF'))
+    assert.equal(fs.statSync(dest).size, 4 + 33 * 2 ** 26)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 test('subtitles: lines of 42 characters at most, a new one after a sentence or a pause, up 0.8 s at least', () => {
   const words = 'Bonjour à tous. Aujourd’hui on parle du rendu local des vidéos et de sa vitesse réelle'.split(' ')

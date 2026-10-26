@@ -5,7 +5,8 @@ for the parts of a video that do not need a hand-built scene. They exist only wh
 folder**: every `actors/*.json` there (an array of actors, or one) is drawn on a full-stage canvas over the scene,
 or where the scene puts `actors()`. Without the folder, the scene does everything.
 
-The scene stays the creative center (see scene-format.md); actors share its clock and its style.
+The scene stays the creative center (see scene-format.md); actors share its clock and its style. `check` measures
+their texts like the scene's (platform zones, size, frame, faces).
 
 - Times are **source seconds** (like `at()` in the scene). Positions are in the **primary format's** canvas; in
   another format an actor is scaled and centered like the primary composition, unless its `formats` entry gives
@@ -32,7 +33,7 @@ The examples are written short, as JavaScript objects; in the `.json` files, quo
 | `id` | required | Unique; the studio and the formats overrides use it |
 | `type` | required | One of the types below |
 | `from`, `to` | 0, end | Source seconds on screen (the exit plays after `to`) |
-| `x`, `y` | canvas center | Center, logical px |
+| `x`, `y` | canvas center (an arrow: 0, 0) | Center, logical px |
 | `s`, `r`, `o` | 1, 0, 1 | Scale, rotation (degrees), opacity |
 | `pre`, `post` | 0.45, 0.3 | Entrance and exit lengths (video seconds) |
 | `enter` | per type | `pop`, `rise`, `fade`, `slam`, `left`, `right`, `none` |
@@ -80,7 +81,8 @@ A clip from `edit.json`'s `media`, playing at its own pace from the actor's entr
 at the media's `volume` (scene-format.md, `edit.json`).
 
 ## arrow
-Drawn on during `draw` seconds (0.6). `a` and `b` are relative to the actor's `x, y` (0, 0 by default, so absolute).
+Drawn on during `draw` seconds (0.6). `a` and `b` are relative to the actor's `x, y`, which are 0, 0 by default: they
+are points of the canvas.
 ```js
 { id: 'a', type: 'arrow', from: 5, to: 8, a: [420, 360], b: [660, 360], bend: -0.3, color: 'accent', width: 10 }
 ```
@@ -95,6 +97,7 @@ Fills from `value[0]` to `value[1]` (0 to 1) over `dur` seconds, with a label an
 ```js
 { id: 'b', type: 'bar', from: 9, to: 13, label: 'CPU', value: [0, 0.92], w: 820, color: 'red' }
 ```
+Also: `labelColor` (`ink`; the percentage takes `color`), `labelSize` (34), `h` (34), `dur`, `percent: false`.
 
 ## stamp
 ```js

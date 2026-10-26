@@ -8,7 +8,9 @@ video's music and effects. The engine (`engine/audio.py`) runs it, then does the
 - without a voice, it keeps your balance between music and effects;
 - it adds the media clips' own sound where the scene plays them, at the music bed's loudness times their `volume`
   (`edit.json`), ducked under the voice: you do not place them in `sound.py`;
-- in every case, the whole mix goes to -14 LUFS with peaks under -1 dBFS.
+- in every case, the whole mix goes to -14 LUFS with its true peak (4× oversampled) under -1.5 dBTP, so that AAC,
+  which overshoots by up to about 1 dB, mostly stays under -1 dBTP. When it does not, `final` lowers that encoded
+  track by 0.5 dB steps until the delivered file is under -1 dBTP.
 
 `video.mjs audio` builds `assets/mix.wav` and prints its loudness. `final` rebuilds it whenever `sound.py`, the cues
 or the timeline changed.
@@ -87,7 +89,7 @@ never use the clock.
 
 ## Checking (you cannot listen, so measure)
 
-- `video.mjs audio -p <slug>` prints the length, loudness and peak.
+- `video.mjs audio -p <slug>` prints the length, loudness and true peak.
 - Read `assets/mix.wav` with `wave` and numpy, then check:
   - the energy per band (sub < 80 Hz, low, mid, high) of each section, against what you intended;
   - that the effects start on their cues (the envelope rises within a few milliseconds of `t`);

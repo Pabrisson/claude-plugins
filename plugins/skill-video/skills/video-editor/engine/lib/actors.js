@@ -1,6 +1,7 @@
 // Actor drawers. Each one draws in its own space, centered on (0, 0), in logical pixels; the runtime has already
 // applied the position, scale, rotation and opacity. g carries the context: ctx, k (device px per logical px),
-// colors, fonts, images and the actor's age (video seconds since it entered).
+// colors, fonts, images, the actor's age (video seconds since it entered) and read(text, box, size), told of every
+// text drawn (for check).
 
 export const clamp = (x, a = 0, b = 1) => Math.min(Math.max(x, a), b)
 export const easeOut = p => 1 - (1 - p) ** 3
@@ -73,7 +74,9 @@ export function text(g, str, { size = 64, weight = 800, color = 'ink', accent = 
     }
   })
   ctx.letterSpacing = '0px'
-  return { width: Math.max(0, ...lines.map(l => l.width)), height: lines.length * lh }
+  const width = Math.max(0, ...lines.map(l => l.width)), left = x + (align === 'center' ? -width / 2 : align === 'right' ? -width : 0)
+  g.read?.(String(str ?? '').replace(/\*/g, '').replace(/\s+/g, ' ').trim(), [left, top - size / 2, left + width, top + (lines.length - 1) * lh + size / 2], size)
+  return { width, height: lines.length * lh }
 }
 
 export function measure(g, str, { size = 64, weight = 800, maxW = 1e9, line = 1.14 } = {}) {
@@ -266,7 +269,7 @@ export const DRAW = {
       ctx.restore()
     }
     const ls = a.labelSize ?? 34
-    if (a.label) text(g, a.label, { size: ls, weight: 700, align: 'left', x: -w / 2, y: -h / 2 - ls * 0.9 })
+    if (a.label) text(g, a.label, { size: ls, weight: 700, color: a.labelColor ?? 'ink', align: 'left', x: -w / 2, y: -h / 2 - ls * 0.9 })
     if (a.percent !== false) text(g, `${g.num(v * 100, 0)} %`, { size: ls, weight: 800, color: a.color ?? 'accent', align: 'right', x: w / 2, y: -h / 2 - ls * 0.9 })
   },
 
@@ -316,12 +319,25 @@ export const DRAW = {
   },
 }
 
-// texts an actor shows, for the transcript of a video without speech
-export function shownTexts(a, creator, num) {
+// texts an actor shows, for the transcript of a video without speech: [{ w, t0, t1 }] in source seconds, each text
+// from the key that sets it to the key that changes it (end: the video's, for an actor without `to`)
+export function shownTexts(a, creator, num, end) {
   const strip = s => String(s).replace(/\*/g, '').replace(/\s+/g, ' ').trim()
-  const own = [a.text, a.title, a.body, a.label]
-  if (a.type === 'counter') own.push(`${a.prefix ?? ''}${count(a, { num }, Array.isArray(a.value) ? a.value[1] : a.value ?? 0)}${a.suffix ?? ''}`)
-  if (a.type === 'cta') own.push(a.name ?? creator.name, a.button ?? creator.cta.button)
-  for (const [, v] of a.keys ?? []) if (v && typeof v === 'object') own.push(v.text, v.label, v.title)
-  return [...new Set(own.filter(s => s != null && s !== '').map(strip))]
+  const t0 = a.from ?? 0, t1 = a.to ?? end, out = []
+  const add = (s, from, to) => {
+    const w = s == null ? '' : strip(s)
+    if (w && to > from && !out.some(x => x.w === w && x.t0 === from && x.t1 === to)) out.push({ w, t0: from, t1: to })
+  }
+  for (const k of ['text', 'title', 'body', 'label']) {
+    let cur = a[k], at = t0
+    for (const [t, v] of a.keys ?? []) {
+      if (v?.[k] === undefined || t >= t1) continue
+      if (t > at) add(cur, at, t), (at = t)
+      cur = v[k]
+    }
+    add(cur, at, t1)
+  }
+  if (a.type === 'counter') add(`${a.prefix ?? ''}${count(a, { num }, Array.isArray(a.value) ? a.value[1] : a.value ?? 0)}${a.suffix ?? ''}`, t0, t1)
+  if (a.type === 'cta') add(a.name ?? creator.name, t0, t1), add(a.button ?? creator.cta.button, t0, t1)
+  return out
 }

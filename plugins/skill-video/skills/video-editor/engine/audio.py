@@ -4,8 +4,9 @@
 # ///
 """The video's sound. Claude writes the music and the sound design of each video in the project's source/sound.py
 (references/sound-format.md); this file runs it and mixes it with the edited voice: the music ducks under the
-voice, the mix goes to -14 LUFS with peaks under -1 dBFS. It is also the kit sound.py imports (`from audio import *`):
-placement, filters, noise, oscillators, envelopes, reverb, tape stop. numpy only, no audio file.
+voice, the mix goes to -14 LUFS with its true peak under -1.5 dBTP. It is also the kit sound.py imports
+(`from audio import *`): placement, filters, noise, oscillators, envelopes, reverb, tape stop. numpy only, no audio
+file.
 
   uv run audio.py <plan.json> [--variant n] [--at <s> --len 8] [--out x.wav]
   uv run audio.py --sync <reference> <other>     where the other recording sits in the reference (JSON)
@@ -30,9 +31,9 @@ sys.dont_write_bytecode = True
 __all__ = ['SR', 'np', 'secs', 'hz', 'bus', 'place', 'filt', 'band_noise', 'sweep', 'osc', 'adsr', 'reverb', 'tape_stop', 'load']
 
 SR = 48000
-# loudness of the mix, its peak ceiling (dBFS); under a voice: the music bed and the effects (LUFS), the music's
-# gain while someone speaks (1 - duck)
-LEVELS = {'lufs': -14, 'peak': -1, 'music': -21, 'sfx': -28.5, 'duck': 0.5}
+# loudness of the mix, its true peak ceiling (dBTP: 0.5 dB under the -1 of the delivery, AAC overshoots); under a
+# voice: the music bed and the effects (LUFS), the music's gain while someone speaks (1 - duck)
+LEVELS = {'lufs': -14, 'peak': -1.5, 'music': -21, 'sfx': -28.5, 'duck': 0.5}
 
 
 # ── kit ─────────────────────────────────────────────────────────────────────
@@ -166,11 +167,24 @@ def norm(x, target):
     return x * 10 ** ((target - l) / 20) if l > -70 else x
 
 
+# 4× oversampling: the 3 points between two samples, each by a windowed sinc of 32 taps
+_OVER = [np.sinc(np.arange(-15, 17) - p / 4) * np.kaiser(32, 8) for p in (1, 2, 3)]
+
+
+def true_peak(x):
+    """The true peak (BS.1770) of a (2, n) signal at each sample: the largest absolute value at it and at the 3 points
+    after it once 4× oversampled, in either channel. A sample peak misses the crests between samples (up to 3 dB)."""
+    a = np.abs(x).max(0)
+    for h in _OVER:
+        for c in x: a = np.maximum(a, np.abs(np.convolve(c, h[::-1])[16:16 + len(c)]))
+    return a
+
+
 def limit(x, ceiling):
-    """Look-ahead peak limiter on 5 ms blocks: the gain is down before a peak, then recovers over about 80 ms."""
+    """Look-ahead true peak limiter on 5 ms blocks: the gain is down before a peak, then recovers over about 80 ms."""
     b = 240
     m = -(-x.shape[1] // b)
-    peak = np.pad(np.abs(x).max(0), (0, m * b - x.shape[1])).reshape(m, b).max(1)
+    peak = np.pad(true_peak(x), (0, m * b - x.shape[1])).reshape(m, b).max(1)
     need = np.pad(np.minimum(1, ceiling / np.maximum(peak, 1e-9)), 1, constant_values=1)
     need = np.minimum(np.minimum(need[:-2], need[1:-1]), need[2:])
     g, e = np.empty(m), 1.0
@@ -292,10 +306,12 @@ def sync(a, b, rate=8000):
     seconds, r: how well the envelopes match there, 0 to 1: two mics of one room match, two moments do not)."""
     ea, eb = envelope(a, rate), envelope(b, rate)
     c, lags = xcorr(ea, eb)
-    # the correlation per lag over its overlap, which must be 5 s or half the shorter one: a few seconds match anything
-    over = np.minimum(len(ea), len(eb) - lags) - np.maximum(0, -lags)
-    r = np.where(over >= min(500, min(len(ea), len(eb)) // 2), c / np.maximum(over, 1), -1)
-    i = int(np.argmax(r))
+    # the correlation per lag over its overlap, which must be 5 s or half the shorter one: a few seconds match anything.
+    # The lag is the one with the most evidence, r times the square root of the overlap: 65 s at r 0.96 beat 7 s at
+    # r 0.98 on a lookalike at an edge
+    over = np.maximum(np.minimum(len(ea), len(eb) - lags) - np.maximum(0, -lags), 1)
+    r = c / over
+    i = int(np.argmax(np.where(over >= min(500, min(len(ea), len(eb)) // 2), c / np.sqrt(over), -np.inf)))
     coarse = int(lags[i]) * (rate // 100)
     # 20 s of the overlap, from its middle, against b with 50 ms either side
     lo, hi = max(0, -coarse), min(len(a), len(b) - coarse)
@@ -372,9 +388,9 @@ def selftest():
         for voice in (f'{tmp}/voice.wav', None):
             plan = {'duration': d, 'voice': voice, 'sound': f'{tmp}/sound.py', 'cues': cues}
             out, info = mix(plan)
-            peak = np.abs(out).max()
+            peak = true_peak(out).max()
             assert out.shape == (2, n), f'{out.shape[1]} samples instead of {n}'
-            assert peak <= 10 ** (-1 / 20) + 1e-4, f'peak {20 * np.log10(peak):.2f} dBFS'
+            assert peak <= 10 ** (LEVELS['peak'] / 20) + 1e-4, f'true peak {20 * np.log10(peak):.2f} dBTP'
             assert abs(lufs(out) + 14) < 1, f'{lufs(out):.1f} LUFS ({"with" if voice else "without"} a voice)'
         plan['voice'] = f'{tmp}/voice.wav'
         out, info = mix(plan)
@@ -459,5 +475,5 @@ if __name__ == '__main__':
     # the whole mix: the studio's sound panel reads its tracks (mix.json next to mix.wav)
     if a.at is None: Path(dest).with_suffix('.json').write_text(json.dumps(tracks(info['parts'])))
     parts = [x for x, on in (('voice', plan.get('voice')), ('sound.py', plan.get('sound')), ('clips', plan.get('clips'))) if on]
-    print(f"{dest}: {out.shape[1] / SR:.2f} s, {lufs(out):.1f} LUFS, peak {20 * np.log10(np.abs(out).max() + 1e-9):.1f} dBFS"
+    print(f"{dest}: {out.shape[1] / SR:.2f} s, {lufs(out):.1f} LUFS, true peak {20 * np.log10(true_peak(out).max() + 1e-9):.1f} dBTP"
           f" ({', '.join(parts) or 'silence'}{f', variant {plan.get('variant')}' if plan.get('variant') else ''}) in {time.time() - started:.1f} s")

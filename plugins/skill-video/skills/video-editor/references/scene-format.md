@@ -46,7 +46,9 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 
 - **Time**: the timeline runs in **video seconds**. Anchor every moment on the transcript with `at(source seconds)`
   (`files/words.md` gives source times): cuts and speed-ups then never break the sync. Without a source video,
-  `at(t) === t`.
+  `at(t) === t`. Never place a tween before 0 (`at(t) - 0.5` near the start): GSAP then shifts the whole timeline
+  later by that much, and every moment drifts off its cue and its sound (the page warns). Start it at
+  `Math.max(0, …)`.
 - **Only the timeline moves things.** Put every tween on `tl` (or on timelines added to it). GSAP's own clock is
   stopped, so `gsap.to()` outside `tl` never plays. For values computed per frame (counters, canvas drawings),
   use `tick(t => …)`. No `Date`, `performance.now()`, `Math.random()` (use `rng(seed)`), no CSS transitions, no
@@ -56,7 +58,9 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
   with time (a counter, typed text) smears across them: compute it from `frame(t)`, the time of the frame, so it
   stays sharp. Tweens of position, scale and opacity blur as they should.
 - **Canvases**: put a `<canvas>` at `left:0; top:0` (full stage is the easy way) and move it with transforms only:
-  a canvas placed by layout renders blank (Chrome's DOM capture limit; the page warns). Images, SVG (text included),
+  a canvas placed by layout renders blank (Chrome's DOM capture limit; the page warns). The capture also paints a
+  canvas at its bitmap size (`width`, `height`), whatever its CSS size: keep the two equal and scale it with a
+  `transform`. Images, SVG (text included),
   CSS backgrounds, masks, clip-paths, filters, blend modes and shadows all capture normally.
 - **Formats are recomposed, not shrunk.** The same scene builds every format; read `W`, `H`, `format` or use
   `pick(landscape, portrait, tall)` (portrait = 4:5 and up, tall = 9:16), and CSS on
@@ -77,6 +81,7 @@ export default async function scene({ stage, tl, at, W, H, pick, cue }) {
 |---|---|
 | `stage` | The root element, `W × H` CSS pixels (short side 1080), `overflow: hidden` |
 | `W`, `H`, `format`, `formats`, `fps`, `duration` | This render's canvas, all the project's formats, frame rate, video length |
+| `resolution`, `size` | The resolution being drawn (`'1080p'`, `'2160p'`…, `'draft'`; `''` for stills, check and preview, drawn in 720p) and its frame in pixels (`[3840, 2160]`). The stage stays `W × H` whatever the resolution |
 | `tl`, `gsap` | The paused master timeline, and GSAP (plugins are globals: `SplitText`, `DrawSVGPlugin`…) |
 | `at(s)`, `source(v)` | Source seconds → video seconds, and back |
 | `frame(t)` | `t` rounded to its frame: for texts that change with time under motion blur |
@@ -164,12 +169,14 @@ say("Vous êtes e-commerçant, une marketplace, logisticien, transporteur ou exp
 say("Des relances clients dans toutes les langues : « Où est mon colis ? », « Where is my parcel? »…", at(19.25), at(21.25))
 ```
 
-With one `say()` or more, the transcript is exactly these lines. Without any, the engine samples the readable texts
-4 times a second, and that guess has limits:
+With one `say()` or more, the transcript is exactly these lines (the actors' texts included: say them too). Without
+any, the engine samples the readable texts 4 times a second, and that guess has limits:
 - it reads a block's own text, in reading order;
 - it skips text clipped by a mask or a window, faint text (opacity under 0.4) and small text (under about 24 px
   at 1080);
-- it groups each moment's texts on one line.
+- it groups each moment's texts on one line;
+- it adds the actors' texts as the main format shows them (not the ones it hides), each while it is up: a text that
+  `keys` change, from its key to the next.
 
 Rolling words, split letters and mock interfaces still come out rough. Correct a group with `data-say="…"` (its
 text replaces what is inside), and leave decoration out with `data-say=""`: it is not read, so `check`'s layout

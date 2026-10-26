@@ -428,7 +428,7 @@ gives its current lines.
 - **Render speed.** A 75 s video renders in about 10 s, about 40 s with `--blur 4`. Unchanged chunks are cached,
   and changing only the sound never re-renders the picture.
 - **When a command fails, read its message.** A scene error comes back with its stack, and the page warns about a
-  `<canvas>` placed by layout.
+  `<canvas>` placed by layout or a tween placed before 0.
 - **Everything stays on the machine.** The studio server listens on 127.0.0.1 only. Do not upload the user's
   footage anywhere.
 - **One studio per projects folder.** `studio` reuses this folder's server, or starts one on the first free port from
