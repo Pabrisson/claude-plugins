@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import { fromInput, fromStreamEstate, merge, normUrl } from '../lib/listings.js'
+import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from '../lib/listings.js'
 import { badge, daysOnline, dropped, matches, negotiation } from '../lib/market.js'
 
 // a property built from the OpenAPI examples, placed rue Paul Bert (to replace by a recorded one with the key)
@@ -67,4 +67,12 @@ test('criteria, market badge and negotiation margin', () => {
   assert.equal(n.high, 0.15)
   assert.deepEqual(n.reasons.map(r => r[0]), ['above_market', 'days_online', 'urgent', 'already_dropped'])
   assert.equal(negotiation({ ...se, status: 'UNDER_OFFER' }, 4000), null)
+})
+
+test("the address the enrichment geocodes: with the listing's postcode and town when it has none", () => {
+  const loc = { postcode: '78430', city: 'Louveciennes' }
+  // alone, the address base finds « 11 Rue de l'Etang » in Versailles
+  assert.equal(addressQuery("11 Rue de l'Etang", loc), "11 Rue de l'Etang 78430 Louveciennes")
+  assert.equal(addressQuery("11 Rue de l'Etang", { postcode: null, city: 'Louveciennes' }), "11 Rue de l'Etang Louveciennes")
+  assert.equal(addressQuery('Rue Paul Bert, 69003 Lyon', { postcode: '69003', city: 'Lyon' }), 'Rue Paul Bert, 69003 Lyon')
 })

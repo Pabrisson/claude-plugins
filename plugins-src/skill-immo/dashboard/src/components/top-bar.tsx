@@ -1,6 +1,6 @@
 import { WEIGHTS } from "@engine/decide.js"
 import { matches } from "@engine/market.js"
-import { ClipboardCopyIcon, DownloadIcon, HomeIcon, MinusIcon, MoonIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { ClipboardCopyIcon, DownloadIcon, HomeIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Criteria, type Profile, type PropertyType, type ScoreKey } from "@/lib/api"
-import { criteriaLabels, eur, SCORE_LABEL } from "@/lib/format"
+import { criteriaLabels, eur, SCORE_LABEL, TYPE_PLURAL } from "@/lib/format"
 import { useSearch, type Feedback } from "@/lib/store"
 
 
@@ -72,16 +72,26 @@ export function TopBar() {
   )
 }
 
+// The criteria, the types and the source of the search: what changed goes into the prompt as [affiner], in the engine's
+// form (an emptied criterion is `k=`, which drops it) then in words. Claude runs the search with it: the dashboard
+// starts nothing itself.
 function CriteriaPopover({ chips }: { chips: string[] }) {
-  const { slug, data, state } = useSearch()
-  const run = useRun()
-  const [c, setC] = useState(data.search.criteria), [mode, setMode] = useState(data.search.mode), [types, setTypes] = useState<PropertyType[]>(data.search.types ?? ["flat"])
-  async function apply() {
-    const cleared = Object.fromEntries(Object.keys(data.search.criteria).filter(k => !(k in c) || c[k as keyof Criteria] == null).map(k => [k, undefined]))
-    await run({ cmd: "search", slug, args: { criteria: criteriaArg({ ...cleared, ...c }), mode, types: types.join(",") }, label: "Critères enregistrés" })
+  const { data, state, addFeedback } = useSearch()
+  const s = data.search, was = s.types ?? ["flat"]
+  const [open, setOpen] = useState(false)
+  const [c, setC] = useState(s.criteria), [mode, setMode] = useState(s.mode), [types, setTypes] = useState<PropertyType[]>(was)
+  const before = s.criteria as Record<string, unknown>, now = c as Record<string, unknown>
+  const diff = Object.fromEntries([...new Set([...Object.keys(before), ...Object.keys(now)])].filter(k => (now[k] ?? null) !== (before[k] ?? null)).map(k => [k, now[k] ?? undefined])) as Criteria
+  const typesChanged = types.join(",") !== was.join(",")
+  const engine = [criteriaArg(diff), typesChanged && `types=${types.join(",")}`, mode !== s.mode && `mode=${mode}`].filter(Boolean).join(" ")
+  function add() {
+    const words = [criteriaLabels(c).join(", ") || "aucun critère", types.map(t => TYPE_PLURAL[t].toLowerCase()).join(", "), mode === "classic" ? "OpenData" : "API payante"].join(" · ")
+    addFeedback({ kind: "affiner", text: `${engine} — ${words}` })
+    toast.success("Ajouté au prompt : Claude enregistrera ces critères")
+    setOpen(false)
   }
   return (
-    <Popover onOpenChange={o => o && (setC(data.search.criteria), setMode(data.search.mode), setTypes(data.search.types ?? ["flat"]))}>
+    <Popover open={open} onOpenChange={o => { setOpen(o); if (o) { setC(s.criteria); setMode(s.mode); setTypes(was) } }}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="max-w-full">
           <SlidersHorizontalIcon data-icon="inline-start" />
@@ -89,8 +99,8 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
           <span className="truncate">{chips.length ? chips.join(" · ") : "Critères"}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="max-h-[80dvh] w-[min(30rem,calc(100vw-2rem))] overflow-y-auto" align="start">
-        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>La liste se filtre sur ces critères ; l'API payante les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
+      <PopoverContent className="max-h-[80dvh] w-[min(30rem,calc(100vw-2rem))] overflow-y-auto" align="center">
+        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>Le prompt copié, Claude enregistre ces critères : la liste se filtre dessus, et l'API payante les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
         <div className="mt-3 flex flex-col gap-3">
           <TypesField value={types} onChange={setTypes} />
           <CriteriaFields value={c} onChange={setC} types={types} />
@@ -98,7 +108,7 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
             <ToggleGroupItem value="stream-estate" disabled={!state.stream_estate}>API payante</ToggleGroupItem>
             <ToggleGroupItem value="classic">OpenData</ToggleGroupItem>
           </ToggleGroup>
-          <Button onClick={apply}>Enregistrer</Button>
+          <Button onClick={add} disabled={!engine}><MessageSquarePlusIcon data-icon="inline-start" />{engine ? "Ajouter au prompt" : "Rien n'a changé"}</Button>
         </div>
       </PopoverContent>
     </Popover>

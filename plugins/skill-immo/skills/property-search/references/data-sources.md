@@ -11,6 +11,7 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 | Real sales | geo-DVF `https://files.data.gouv.fr/geo-dvf/latest/csv/<year>/communes/<dep>/<insee>.csv` | 30 d (recent years), 180 d (older) |
 | DPE of an address | ADEME data-fair `https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines` | 30 d |
 | DPE classes of a zone | The same dataset, `values_agg?field=type_batiment;etiquette_dpe` with `geo_distance` or `code_insee_ban_eq` | 30 d |
+| Recent DPE of a zone | The same dataset, `lines?bbox=<w,s,e,n>&date_etablissement_dpe_gte=<12 months ago>&sort=-date_etablissement_dpe` | 7 d |
 | Property tax rates | DGFiP « fiscalité locale des particuliers », `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/fiscalite-locale-des-particuliers/records` | 90 d |
 | Homes authorised | Sitadel (SDES), DiDo `https://data.statistiques.developpement-durable.gouv.fr/dido/api/v1/datafiles/<rid>/json` | 30 d |
 | Risks | Géorisques `https://georisques.gouv.fr/api/v1/resultats_rapport_risque?latlon=<lon>,<lat>` | 90 d |
@@ -99,6 +100,11 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
   building), and `methode_application_dpe_neq=dpe appartement généré à partir des données DPE immeuble` the flats' DPE
   generated from them (22 % of Lyon 3e's): one DPE per home. A home diagnosed again (`numero_dpe_remplace`, about 10 %)
   may still count twice. 300 m around rue Paul Bert: 2,132 flats, 47 % C, 6 % F and G.
+- **Recent DPE of a zone** (ADEME `lines`, checked on 2026-10-27): the zone's box (`bbox`, then the engine keeps what is
+  inside the zone) and the same two filters, one DPE per home. `_geopoint` is `lat,lon`. A page holds 10,000 rows at most
+  (`size + skip` cannot be more): the engine follows `next` once. Over 12 months: 178 in Louveciennes, 1,704 in the box
+  around rue Paul Bert, 4,884 in Lyon 3e, 11,400 in Paris 15e. No field says whether a DPE was made to sell or to let;
+  a G can no longer be let since 2025.
 - **Property tax rates** (data.economie.gouv.fr, 50,000 calls a day): one row per commune and year, 2021 to 2025.
   `e12vote` is the commune's rate, `e32vote` the intercommunality's, `taux_global_tfb` their total with the syndicates,
   TSE and GEMAPI, `taux_plein_teom` the waste tax. Paris, Lyon and Marseille vote one rate: the engine asks for 75056,

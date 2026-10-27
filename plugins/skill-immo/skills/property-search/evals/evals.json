@@ -187,6 +187,22 @@
         "Gives the text, never sends it, and asks in one AskUserQuestion whether to add it to the conversation",
         "On a yes, `immo.mjs message … --kind reply --amount <€> --file <file>`"
       ]
+    },
+    {
+      "id": 13,
+      "prompt": "/skill-immo:property-search apply this feedback (recherche louveciennes)\n1. [chercher] l'annonce du DPE 2678E2076323U : maison 52 m², DPE G du 4 août 2026, 13 Rue de Montbuisson 78430 Louveciennes",
+      "expected_output": "A recent DPE without a listing: Claude looks for its listing the assisted way, adds it if found, or says it is not online.",
+      "files": [],
+      "env": {
+        "STREAM_ESTATE_API_KEY": ""
+      },
+      "expectations": [
+        "Runs WebSearch on the street and town with the type and surface (maison 52 m², rue de Montbuisson, Louveciennes)",
+        "WebFetches listing pages one at a time, 5 at most, never a portal's results page",
+        "Found: runs `immo.mjs add -p louveciennes --file <file>` with only what the page states",
+        "Not found: says so in one line (not online yet, sold off the portals, or let), without inventing a listing",
+        "Ends with one line for the item"
+      ]
     }
   ]
 }

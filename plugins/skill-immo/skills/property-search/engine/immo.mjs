@@ -15,10 +15,11 @@ import { parseArgs } from 'node:util'
 import { PROFILE, budget, rentOf, rentVsBuy } from './lib/budget.js'
 import { estimate, gate, table, usage } from './lib/costs.js'
 import { review, score, WEIGHTS } from './lib/decide.js'
+import { recentDpe } from './lib/dpe.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, bbox, center, circle, corridor, distance, inGeometry, inZone } from './lib/geo.js'
-import { fromInput, fromStreamEstate, merge, normUrl } from './lib/listings.js'
-import { badge, daysOnline, dropped, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
+import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from './lib/listings.js'
+import { badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { openData } from './lib/opendata.js'
 import { NoCredits, se } from './lib/stream.js'
 
@@ -300,10 +301,18 @@ async function makeZone(s) {
 }
 
 const ARRONDISSEMENT = /^(751\d\d|6938\d|132\d\d)$/
+// the recent DPE of a search for Claude: how many, how many no listing matches (homes about to go on sale, or to let),
+// how many of those are new since the area.json before (`before`: the numbers it held)
+function dpeLine(rows, listings, before) {
+  if (!Array.isArray(rows)) return rows?.error ? `recent DPE: failed (${rows.error})` : null
+  const open = recentDpe(rows, listings).flatMap(a => a.items).filter(d => !d.listing), fresh = before && open.filter(d => !before.has(d.number)).length
+  return `recent DPE (12 months): ${rows.length}, ${open.length} without a listing${before ? `, ${fresh} new since the last refresh` : ''}`
+}
+const dpeNumbers = dir => { const r = readJson(path.join(dir, 'area.json'), {}).dpe_recent; return Array.isArray(r) ? new Set(r.map(d => d.number)) : null }
 const pool = async (items, n, fn) => { const out = [], it = items.entries(); await Promise.all(Array.from({ length: n }, async () => { for (const [i, x] of it) out[i] = await fn(x) })); return out }
 
 // the free market and neighborhood data of a search: DVF sales, shops and services, travel times to the user's
-// places, crime, income and risks at its center
+// places, crime, income and risks at its center, the DPE of the last 12 months in the zone (for a search of homes)
 async function freeData(dir, s) {
   const zoneOf = p => inZone(p, s.zone)
   const since = new Date(Date.now() - 2 * 365 * 86400000).toISOString().slice(0, 10)
@@ -319,6 +328,7 @@ async function freeData(dir, s) {
     settle(od.irisAt(c)),
     settle(pool(places.flatMap(pl => [['pedestrian', 15], ['pedestrian', 30], ['car', 20]].map(([pr, m]) => ({ pl, pr, m }))), 3,
       async ({ pl, pr, m }) => ({ place: pl.label, profile: pr, minutes: m, geometry: await od.isochrone(pl.point, pr, m) }))),
+    typesOf(s).some(isHome) ? settle(od.recentDpe(bbox(s.zone)).then(rows => rows.filter(d => zoneOf(d.point)))) : [],
   ])
   const d = await dvf
   const byType = Object.fromEntries(typesOf(s).map(t => [t, summary(d.sales.filter(x => x.type === t), { inZone: zoneOf, code_voie: s.street?.code_voie, since, center: c })]))
@@ -328,8 +338,8 @@ async function freeData(dir, s) {
     context: { dpe: dpe.error ? dpe : { scope: dpeAt.insee ? 'commune' : 'zone', ...dpe }, tax, housing },
   }
   writeJson(path.join(dir, 'market.json'), market)
-  const [pois, risks, crime, local, department, france, iris, isochrones] = await areaParts
-  const area = { updated: now(), center: c, pois, risks, crime, income: { local, department, france }, iris: iris && !iris.error ? { code: iris.code, name: iris.name } : null, isochrones, places }
+  const [pois, risks, crime, local, department, france, iris, isochrones, dpe_recent] = await areaParts
+  const area = { updated: now(), center: c, pois, risks, crime, income: { local, department, france }, iris: iris && !iris.error ? { code: iris.code, name: iris.name } : null, isochrones, places, dpe_recent }
   writeJson(path.join(dir, 'area.json'), area)
   return { market, area }
 }
@@ -374,6 +384,8 @@ async function search(query) {
   if (tax && !tax.error) console.log(`property tax ${tax.year}: ${tax.total} % in ${tax.city} (France ${tax.france} %)${housing?.years?.length ? `; homes authorised ${housing.years.at(-1).year}: ${housing.years.at(-1).authorised}` : ''}`)
   const failed = Object.entries({ shops: area.pois, risks: area.risks, crime: area.crime, ...market.context }).filter(([, v]) => v?.error).map(([k, v]) => `${k} (${v.error})`)
   console.log(`neighborhood: ${Array.isArray(area.pois) ? area.pois.length : 0} places nearby, ${(area.isochrones?.length ?? 0)} travel areas${failed.length ? `; failed: ${failed.join(', ')}` : ''}`)
+  const dl = dpeLine(area.dpe_recent, listingsOf(dir))
+  if (dl) console.log(dl)
   if (streamOn(s)) {
     const total = await withCredits(() => seCount(s.slug, seCriteria(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) })))
     s.stream = { total, counted_at: now() }
@@ -406,7 +418,7 @@ async function enrichOne(l, s, sales) {
     if (a?.longitude != null && conf !== 'NONE') { point = [a.longitude, a.latitude]; label = a.label }
   }
   if (!point) return l
-  const [f] = label ? await od.geocode(label, { type: 'housenumber', limit: 1 }) : []
+  const [f] = label ? await od.geocode(addressQuery(label, l.location), { type: 'housenumber', limit: 1 }) : []
   const ban = f?.properties.score > 0.7 ? f.properties.id : null
   const precisePoint = !!ban || precise
   const [dpe, risks, copro] = await Promise.all([
@@ -535,12 +547,13 @@ async function enrich() {
 
 // refresh -p <slug> [--spend n]: what changed since the last refresh — new listings, price drops, offers, expiries
 async function refresh() {
-  const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
-  await freeData(dir, s)
+  const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), before = dpeNumbers(dir)
+  const { area } = await freeData(dir, s)
+  const dpe = () => { const l = dpeLine(area.dpe_recent, listingsOf(dir), before); if (l) console.log(l) }
   const assistedCount = listingsOf(dir).filter(l => l.source !== 'stream-estate' && l.status !== 'EXPIRED').length
   if (!streamOn(s) || !s.last_refresh) {
     console.log(`free data refreshed. ${streamOn(s) ? `No Stream Estate fetch yet: fetch -p ${s.slug}` : s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}${assistedCount ? `; ${assistedCount} assisted listings: check each with WebFetch (one page), then add --file to update price or status` : ''}`)
-    return
+    return dpe()
   }
   const criteria = seCriteria(s, { since: s.last_refresh }), total = await withCredits(() => seCount(s.slug, criteria)), n = Math.min(total, +(opt.max ?? s.max))
   if (n) approve('POST /properties', n, `refresh ${n} changed listings`)
@@ -551,6 +564,7 @@ async function refresh() {
   await autoEnrich(dir, s, changes)
   console.log(`refresh: ${raw.length} changed since the last one: ${describe(changes)}`)
   for (const c of changes.filter(c => c.kind !== 'new')) console.log(`  ${c.id} ${c.kind}: ${c.from} → ${c.to}`)
+  dpe()
 }
 
 // alert forecast | create [--webhook <https url>] [--drop 3] | list | events | on | off | delete, -p <slug>

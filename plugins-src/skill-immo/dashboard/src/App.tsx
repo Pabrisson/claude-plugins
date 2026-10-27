@@ -101,9 +101,10 @@ function Workspace() {
                 {showMap === "map" ? <MapView className="relative mt-3 min-h-0 flex-1 mb-16" /> : <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-20"><ListingList /></div>}
               </div>
             ) : (
-              <div className="grid h-full md:grid-cols-[1fr_minmax(380px,440px)]">
-                <MapView className="relative" />
-                <div className="overflow-y-auto border-l p-3"><ListingList /></div>
+              // the map under both columns, a bit see-through: the layers on its left, the listings on its right (darker)
+              <div className="relative h-full">
+                <MapView className="absolute inset-0" right={440} />
+                <div className="absolute inset-y-0 right-0 z-10 w-[440px] overflow-y-auto border-l bg-background/60 p-3 backdrop-blur-md"><ListingList /></div>
               </div>
             )}
           </TabsContent>

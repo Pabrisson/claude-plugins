@@ -14,6 +14,10 @@ const seType = t => Object.keys(TYPES).find(k => TYPES[k].includes(t)) ?? 'flat'
 // a land area in m² (Stream Estate gives large ones in hectares)
 const landM2 = x => (x?.value > 0 ? Math.round(x.value * (x.unit === 'HECTARE' ? 10000 : 1)) : null)
 
+// what the address base is asked for a listing's address: with its postcode and town when it has no postcode (alone,
+// « 11 Rue de l'Etang » of Louveciennes is found in Versailles)
+export const addressQuery = (address, loc) => (/\b\d{5}\b/.test(address) ? address : [address, loc.postcode, loc.city].filter(Boolean).join(' '))
+
 // the same listing whatever the tracking parameters, the fragment or a trailing slash
 export function normUrl(u) {
   try {

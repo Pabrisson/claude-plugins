@@ -176,6 +176,11 @@ last refresh (the credits rule; it pays only for what changed).
 Report the new listings, the price drops (old → new), the offers and the expiries. For assisted listings, offer to
 recheck the ones the user follows, one WebFetch each.
 
+Its last line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
+refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or
+a lease, so a recent one without a listing may be a home about to go on sale (ADEME does not say which). Say the new ones
+in one line; the dashboard's map rings them (layer « DPE récents »).
+
 ## alert
 
 1. Run `immo.mjs alert forecast -p <slug>`. It is free and gives the expected notifications per day.
@@ -263,18 +268,21 @@ The dashboard's « Copier le prompt » gives:
 
 ```
 apply this feedback (recherche <slug>)
-1. [affiner] rooms_min=3 dpe_max=D — <the user's words>
+1. [affiner] rooms_min=3 dpe_max=D elevator= types=flat,house mode=classic — <the same in words>
 2. [élargir] zone : tout le quartier (IRIS Moncey)
 3. [analyser] <id> — <a short description>
 4. [comparer] <id>, <id>
 5. [message] offre pour <id> — <a short description> : rédige une offre d'achat (…)
 6. [ajouter] <url or text>
-7. [question] <free text>
+7. [chercher] l'annonce du DPE <number> : maison 204 m², DPE D du 19 oct. 2026, <address>
+8. [question] <free text>
 ```
 
 Do every item in order:
-- `[affiner]`: `search -p <slug> --criteria "…"`, then, in Stream Estate mode, the credits rule for a new fetch. The criteria
-  filter the dashboard's list and the next fetches; they delete nothing. In `show`, a listing outside them has
+- `[affiner]`: what the user changed in the dashboard's « Critères » (only that): `search -p <slug> --criteria "…"` with
+  the criteria (`k=` drops one), `--types` with `types=` and `--mode` with `mode=` when present. Then, in Stream Estate
+  mode, the credits rule for a new fetch. The criteria filter the dashboard's list and the next fetches; they delete
+  nothing. In `show`, a listing outside them has
   `matches: false`, and one whose value is unknown (a missing DPE) still matches.
 - `[élargir]`: widen the search as it says, free: `search -p <slug>` with `--zone iris|commune`, `--zone radius --radius
   <m>`, `--criteria "budget_max=…"` (an empty value drops a criterion: `elevator=`) or `--types flat,house,parking`. A
@@ -288,6 +296,10 @@ Do every item in order:
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings.
 - `[message]`: the messages section above.
 - `[ajouter]`: the add mode.
+- `[chercher]`: a recent DPE of the map that no listing matches. Look for its listing the assisted way: WebSearch its
+  street and town with the type and surface (`maison 204 m² "rue de l'Etang" Louveciennes à vendre`), then one listing
+  page at a time, 5 at most. Found: `add --file` (or `add --url` through the credits rule in Stream Estate mode); its DPE
+  then matches it on the map. Not found: say so in one line (not online yet, sold off the portals, or let).
 - `[question]`: answer it.
 
 Then say in one line per item what you did. The open dashboard sees the change within seconds and shows « Recharger »:

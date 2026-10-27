@@ -183,3 +183,12 @@
 .dark .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
 .dark .maplibregl-ctrl-attrib { background: rgb(0 0 0 / 0.5); color: var(--muted-foreground); }
 .dark .maplibregl-ctrl-attrib a { color: var(--muted-foreground); }
+/* the map runs under the listings' column: its controls stay clear of it, its tooltips over both columns */
+.immo-map .maplibregl-ctrl-top-right, .immo-map .maplibregl-ctrl-bottom-right { right: var(--map-right, 0px); }
+.immo-popup { z-index: 20; }
+.immo-popup .maplibregl-popup-content:has(.maplibregl-popup-close-button) { padding-right: 24px; }
+.immo-popup .dpe-row { margin-top: 6px; }
+.immo-popup .dpe-chip { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: 6px; border-radius: 3px; font-size: 10px; }
+.immo-popup button { display: block; margin-top: 3px; padding: 1px 8px; border: 1px solid var(--border); border-radius: calc(var(--radius) * 0.6); font-size: 11px; cursor: pointer; }
+.immo-popup button:hover { background: var(--accent); }
+.immo-popup button:disabled { opacity: 0.5; cursor: default; }

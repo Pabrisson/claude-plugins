@@ -54,6 +54,18 @@ test('refresh: what changed since the last one, a price drop logged', async () =
   assert.deepEqual(read(dir, 'listings.json')[0].price_history.map(h => h.price), [280000, 265000])
 })
 
+test('the recent DPE of the zone: kept in area.json, those without a listing, the new ones at the next refresh', async () => {
+  const { home, dir } = searchesFolder('classic')
+  let r = await run(home, ['search', '-p', 'paul-bert'], { key: null })
+  assert.equal(r.status, 0, r.err)
+  assert.match(r.out, /recent DPE \(12 months\): 2, 2 without a listing\n/)
+  assert.deepEqual(read(dir, 'area.json').dpe_recent.map(d => d.number), ['2669E0000001A', '2669E0000002B'])
+  const file = fs.readdirSync(path.join(home, '.cache/ademe')).find(f => f.startsWith('recent-')), rows = read(home, `.cache/ademe/${file}`)
+  fs.writeFileSync(path.join(home, '.cache/ademe', file), JSON.stringify([{ ...rows[0], number: '2669E0000004D' }, ...rows]))
+  r = await run(home, ['refresh', '-p', 'paul-bert'], { key: null })
+  assert.match(r.out, /recent DPE \(12 months\): 3, 3 without a listing, 1 new since the last refresh/)
+})
+
 test('the monthly cap stops a call, --force passes it', async () => {
   const { home } = searchesFolder()
   fs.writeFileSync(path.join(home, '.profile.json'), JSON.stringify({ monthly_credit_cap: 0 }))

@@ -99,6 +99,8 @@ export type Market = {
   }
 }
 export type Poi = { cat: string; kind: string; name: string | null; point: Point }
+// a DPE of the last 12 months in the zone (ADEME)
+export type DpeRow = { number: string; date: string; energy: string; type: "flat" | "house"; area: number | null; address: string | null; ban: string | null; point: Point }
 export type Area = {
   center?: Point
   pois?: Poi[] | { error: string }
@@ -108,6 +110,7 @@ export type Area = {
   iris?: { code: string; name: string } | null
   isochrones?: { place: string; profile: "pedestrian" | "car"; minutes: number; geometry: Geometry | null }[]
   places?: { label: string; address: string; point: Point }[]
+  dpe_recent?: DpeRow[] | { error: string }
 }
 export type Search = {
   slug: string

@@ -35,6 +35,13 @@ export function searchesFolder(mode = 'stream-estate') {
   cache('ademe/classes-4.8455,45.7560-500.json', { flat: { A: 12, B: 160, C: 2480, D: 1400, E: 650, F: 190, G: 80 }, house: { C: 6, D: 3 } })
   cache('tax/69123.json', { year: 2025, city: 'LYON', commune: 31.89, epci: 0.55, epci_name: 'Métropole de Lyon', total: 32.82, waste: 5.19, france: 43.13 })
   cache('sitadel/69383.json', { release: '2026-09', years: [{ year: 2023, authorised: 75, started: 12 }, { year: 2024, authorised: 81, started: 61 }, { year: 2025, authorised: 174, started: null }] })
+  // the recent DPE of the zone's box: two in the zone, one in its corner, outside the 500 m
+  const ago = d => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10)
+  cache(`ademe/recent-${bbox(zone).map(x => x.toFixed(4)).join(',')}.json`, [
+    { number: '2669E0000001A', date: ago(10), energy: 'E', type: 'flat', area: 40, address: '10 Rue Paul Bert 69003 Lyon', ban: '69383_5245_00010', point: [4.846, 45.7565] },
+    { number: '2669E0000002B', date: ago(40), energy: 'G', type: 'house', area: 120, address: null, ban: null, point: [4.844, 45.7555] },
+    { number: '2669E0000003C', date: ago(5), energy: 'C', type: 'flat', area: 70, address: null, ban: null, point: [4.8392, 45.7516] },
+  ])
   return { home, dir }
 }
 

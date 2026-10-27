@@ -1,5 +1,6 @@
+import { recentDpe } from "@engine/dpe.js"
 import { around } from "@engine/geo.js"
-import { matches, typeOf, unitPrice } from "@engine/market.js"
+import { isHome, matches, typeOf, unitPrice } from "@engine/market.js"
 import type { Feature, FeatureCollection, Geometry, Point as GeoPoint, Position } from "geojson"
 import { LngLatBounds, Map as MapLibre, NavigationControl, Popup, setWorkerUrl, type GeoJSONSource, type MapLayerMouseEvent, type StyleSpecification } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
@@ -7,14 +8,16 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url"
 import { useTheme } from "next-themes"
 import { ChevronDownIcon, CrossIcon, LayersIcon, SchoolIcon, ShoppingBasketIcon, TrainFrontIcon, TreesIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 
+import { DPE_HEX, dpeInk } from "@/components/dpe"
 import { levelOf } from "@/components/ruler"
 import { TypeIcon } from "@/components/type-icon"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import type { Poi, PropertyType } from "@/lib/api"
-import { eur, keur, LEVEL_LABEL, month, num, pct, perUnit, POI_LABEL, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
+import type { DpeRow, Listing, Poi, Point, PropertyType } from "@/lib/api"
+import { date, eur, keur, LEVEL_LABEL, month, num, pct, perUnit, POI_LABEL, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -79,6 +82,24 @@ function gapTip(ppm2: number | null, ref: number | null | undefined) {
 const CATS = { transport: TrainFrontIcon, shops: ShoppingBasketIcon, schools: SchoolIcon, parks: TreesIcon, health: CrossIcon } as const
 const POI_COLOR: Record<string, string> = { transport: "--poi-transport", shops: "--poi-shops", schools: "--poi-schools" }
 const PLACE_COLORS = ["--chart-2", "--chart-3", "--chart-4"]
+// The recent DPE of an address (lib/dpe.js), each with the listing it belongs to: by its number or address, or probably
+// (a listing placed roughly). Their tooltip lists them; clicked, the ones without a listing get « Chercher l'annonce ».
+type DpeGroup = { key: string; point: Point; address: string | null; items: (DpeRow & { listing: { id: string; how: "number" | "address" | "near" } | null })[] }
+const esc = (x: string) => x.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!)
+function dpeTip(g: DpeGroup, listings: Listing[], buttons = false) {
+  const rows = g.items.slice(0, 8).map(d => {
+    const l = d.listing && listings.find(x => x.id === d.listing!.id)
+    const found = l ? `${d.listing!.how === "near" ? "Annonce probable" : "Annonce"} ${keur(l.price)}` : "Aucune annonce trouvée"
+    return `<div class="dpe-row"><b class="dpe-chip" style="background:${DPE_HEX[d.energy]};color:${dpeInk(d.energy)}">${esc(d.energy)}</b>${TYPE_LABEL[d.type]}${d.area ? ` · ${num(d.area)} m²` : ""} · ${date(d.date)}<br><span>${found}</span>${buttons && !d.listing ? `<button type="button" data-n="${esc(d.number)}">Chercher l'annonce</button>` : ""}</div>`
+  })
+  const more = g.items.length > 8 ? `<span>+ ${g.items.length - 8} autres</span>` : ""
+  // a G can no longer be let (since 2025): without a listing, more likely a sale
+  const g7 = g.items.some(d => !d.listing && d.energy === "G") ? `<div class="dpe-row"><span>G : location interdite depuis 2025, plutôt une vente</span></div>` : ""
+  return `<b>${esc(g.address ?? "Adresse inconnue")}</b>${rows.join("")}${more}${g7}`
+}
+// what the prompt asks Claude to look for
+const dpeAsk = (d: DpeRow) => `l'annonce du DPE ${d.number} : ${TYPE_LABEL[d.type].toLowerCase()}${d.area ? ` ${num(d.area)} m²` : ""}, DPE ${d.energy} du ${date(d.date)}, ${d.address ?? `près de ${d.point[1].toFixed(5)}, ${d.point[0].toFixed(5)}`}`
+
 // the world with the zone cut out: the veil that darkens everything outside it
 const WORLD: Position[] = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]
 function outside(g: Geometry): Geometry {
@@ -86,17 +107,39 @@ function outside(g: Geometry): Geometry {
   return { type: "Polygon", coordinates: [WORLD, ...rings] }
 }
 
-export function MapView({ className }: { className?: string }) {
-  const { data, types, marketOf, selected, select } = useSearch()
+// the layers' column, docked on the left of a computer's map
+const PANEL = 320
+// the map's layers the panel's switches show or hide: at the map's making (its theme) and at each switch
+const SWITCHED = { sales: ["sales"], veil: ["veil"], dpe: ["dpe-ring", "dpe", "dpe-count"] }
+function showLayers(m: MapLibre, layers: string[]) {
+  for (const [k, ids] of Object.entries(SWITCHED)) for (const id of ids) m.setLayoutProperty(id, "visibility", layers.includes(k) ? "visible" : "none")
+}
+
+// `right`: the width of what covers the map on its right (the listings' column), which its camera and controls keep clear of
+export function MapView({ className, right = 0 }: { className?: string; right?: number }) {
+  const { data, types, marketOf, selected, select, addFeedback } = useSearch()
   const { resolvedTheme } = useTheme()
   const mobile = useIsMobile()
   const box = useRef<HTMLDivElement>(null), map = useRef<MapLibre | null>(null)
   const [cats, setCats] = useState<string[]>(["transport"])
-  const [layers, setLayers] = useState<string[]>(["sales", "veil"])
+  const [layers, setLayers] = useState<string[]>(["sales", "veil", "dpe-open"])
+  // a computer's map keeps the layers' column clear (a phone's floats, folded)
+  const left = mobile ? 0 : PANEL
   const [scope, setScope] = useState("all"), [shownTypes, setShownTypes] = useState<string[]>(types)
+  const [dpeDays, setDpeDays] = useState("180"), [dpeScope, setDpeScope] = useState("all")
+  // the DPE groups and listings the click on a DPE reads (the map's handlers are made once)
+  const dpeRef = useRef<{ groups: Map<string, DpeGroup>; listings: Listing[] }>({ groups: new Map(), listings: [] })
   const pois = useMemo(() => (Array.isArray(data.area.pois) ? data.area.pois : []), [data.area.pois])
   const places = useMemo(() => [...new Set((data.area.isochrones ?? []).map(i => i.place))], [data.area.isochrones])
   const on = (t: string) => types.length < 2 || shownTypes.includes(t)
+  // the recent DPE of the period (in the search's criteria when asked), then only those without a listing when asked
+  const dpe = useMemo(() => {
+    const rows = Array.isArray(data.area.dpe_recent) ? data.area.dpe_recent : []
+    const all = recentDpe(rows, data.listings, { days: +dpeDays, ...(dpeScope === "criteria" ? { criteria: data.search.criteria, types } : {}) }) as DpeGroup[]
+    const flag = layers.includes("dpe-open"), only = flag && layers.includes("dpe-only")
+    const groups = only ? all.map(g => ({ ...g, items: g.items.filter(d => !d.listing) })).filter(g => g.items.length) : all
+    return { groups, flag, count: all.reduce((a, g) => a + g.items.length, 0), open: all.reduce((a, g) => a + g.items.filter(d => !d.listing).length, 0) }
+  }, [data.area.dpe_recent, data.listings, data.search.criteria, types, dpeDays, dpeScope, layers])
 
   const sources = useMemo(() => {
     const zone = data.search.zone.geometry as Geometry
@@ -115,10 +158,12 @@ export function MapView({ className }: { className?: string }) {
         }
       })),
       pois: fc(pois.filter(p => cats.includes(p.cat)).map((p: Poi) => ({ type: "Feature", geometry: { type: "Point", coordinates: p.point }, properties: { cat: p.cat, tip: `${p.name ?? p.kind}<br><span>${POI_LABEL[p.cat] ?? p.cat}</span>` } }))),
+      // a dot per address in the class of its newest DPE, ringed when one has no listing (the switch on)
+      dpe: fc(dpe.groups.map(g => ({ type: "Feature", geometry: { type: "Point", coordinates: g.point }, properties: { key: g.key, energy: g.items[0].energy, count: g.items.length, open: dpe.flag && g.items.some(d => !d.listing), tip: dpeTip(g, data.listings) } }))),
       isochrones: fc((data.area.isochrones ?? []).filter(i => i.geometry && layers.includes(`place:${i.place}`) && i.profile === "pedestrian").map(i => ({ type: "Feature", geometry: i.geometry as Geometry, properties: { place: places.indexOf(i.place), minutes: i.minutes } }))),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes])
+  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, dpe])
 
   // the map, made again when the theme changes (its style is not the same)
   useEffect(() => {
@@ -129,6 +174,7 @@ export function MapView({ className }: { className?: string }) {
       const z = data.search.zone, center = z.center ?? data.search.point
       const m = new MapLibre({ container: box.current, style, center, zoom: 15, attributionControl: { compact: true }, locale: LOCALE })
       map.current = m
+      m.setPadding({ top: 0, bottom: 0, left, right })
       m.addControl(new NavigationControl({ showCompass: false }), "top-right")
       m.on("load", () => {
         const [below, at, above, ink, card] = ["--below", "--at", "--above", "--foreground", "--card"].map(cssColor)
@@ -141,11 +187,15 @@ export function MapView({ className }: { className?: string }) {
         m.addLayer({ id: "zone-halo", type: "line", source: "zone", paint: { "line-color": ink, "line-width": 6, "line-opacity": 0.12 } })
         m.addLayer({ id: "zone", type: "line", source: "zone", paint: { "line-color": ink, "line-width": 2 } })
         m.addLayer({ id: "isochrones", type: "fill", source: "isochrones", paint: { "fill-color": ["match", ["get", "place"], 0, cssColor(PLACE_COLORS[0]), 1, cssColor(PLACE_COLORS[1]), cssColor(PLACE_COLORS[2])], "fill-opacity": ["case", ["<=", ["get", "minutes"], 15], 0.18, 0.08] } })
+        m.addLayer({ id: "dpe-ring", type: "circle", source: "dpe", filter: ["get", "open"], paint: { "circle-radius": ["case", [">", ["get", "count"], 1], 13, 10], "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": ink, "circle-stroke-width": 2.5 } })
+        m.addLayer({ id: "dpe", type: "circle", source: "dpe", paint: { "circle-radius": ["case", [">", ["get", "count"], 1], 9, 6], "circle-color": ["match", ["get", "energy"], ...Object.entries(DPE_HEX).flat(), "#888"] as never, "circle-stroke-color": card, "circle-stroke-width": 1.5 } })
+        m.addLayer({ id: "dpe-count", type: "symbol", source: "dpe", filter: [">", ["get", "count"], 1], layout: { "text-field": ["to-string", ["get", "count"]], "text-font": ["Source Sans Pro Bold"], "text-size": 11, "text-allow-overlap": true }, paint: { "text-color": ["match", ["get", "energy"], ["A", "G"], "#fff", "#000"] } })
         m.addLayer({ id: "pois", type: "circle", source: "pois", paint: { "circle-radius": 4, "circle-color": ["match", ["get", "cat"], "transport", poiColor.transport, "shops", poiColor.shops, "schools", poiColor.schools, poiColor.parks], "circle-stroke-color": card, "circle-stroke-width": 1 } })
         // the sales as rings, the listings as dots: both in the color of their gap to the market
         m.addLayer({ id: "sales", type: "circle", source: "sales", paint: { "circle-radius": 4, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": ["match", ["get", "level"], "below", below, "above", above, at], "circle-stroke-width": 1.5, "circle-stroke-opacity": 0.85 } })
         m.addLayer({ id: "listings", type: "circle", source: "listings", paint: { "circle-radius": ["case", ["==", ["get", "id"], ""], 12, 8], "circle-color": ["match", ["get", "level"], "below", below, "above", above, at], "circle-stroke-color": ["match", ["get", "status"], "to_visit", status.to_visit, "visited", status.visited, "offer", status.offer, "dropped", status.dropped, card], "circle-stroke-width": ["case", ["==", ["get", "status"], ""], 2.5, 3.5] } })
         m.addLayer({ id: "labels", type: "symbol", source: "listings", layout: { "text-field": ["get", "label"], "text-font": ["Source Sans Pro Bold"], "text-size": 12, "text-offset": [0, -1.5], "text-allow-overlap": false }, paint: { "text-color": ink, "text-halo-color": card, "text-halo-width": 2 } })
+        showLayers(m, layers)
         const all = [...sources.listings.features, ...sources.sales.features]
         if (all.length) {
           const b = new LngLatBounds()
@@ -158,11 +208,26 @@ export function MapView({ className }: { className?: string }) {
           m.fitBounds(b, { padding: 40, maxZoom: 16, duration: 0 })
         }
         const popup = new Popup({ closeButton: false, closeOnClick: false, className: "immo-popup" })
-        for (const id of ["listings", "sales", "pois"]) {
+        for (const id of ["listings", "sales", "pois", "dpe"]) {
           m.on("mouseenter", id, (e: MapLayerMouseEvent) => { m.getCanvas().style.cursor = "pointer"; const f = e.features?.[0]; if (f) popup.setLngLat((f.geometry as GeoPoint).coordinates as [number, number]).setHTML(f.properties.tip).addTo(m) })
           m.on("mouseleave", id, () => { m.getCanvas().style.cursor = ""; popup.remove() })
         }
         m.on("click", "listings", (e: MapLayerMouseEvent) => select(e.features?.[0]?.properties.id ?? null))
+        // a DPE clicked: its card stays, each DPE without a listing with « Chercher l'annonce » (a prompt item for Claude)
+        const pinned = new Popup({ className: "immo-popup", maxWidth: "300px" })
+        m.on("click", "dpe", (e: MapLayerMouseEvent) => {
+          const g = dpeRef.current.groups.get(e.features?.[0]?.properties.key)
+          if (!g) return
+          const el = document.createElement("div")
+          el.innerHTML = dpeTip(g, dpeRef.current.listings, true)
+          for (const b of el.querySelectorAll<HTMLButtonElement>("button[data-n]")) b.onclick = () => {
+            addFeedback({ kind: "chercher", text: dpeAsk(g.items.find(d => d.number === b.dataset.n)!) })
+            toast.success("Ajouté au prompt : Claude cherchera l'annonce")
+            b.disabled = true
+          }
+          popup.remove()
+          pinned.setLngLat(g.point).setDOMContent(el).addTo(m)
+        })
       })
     })
     return () => { gone = true; map.current?.remove(); map.current = null }
@@ -172,22 +237,23 @@ export function MapView({ className }: { className?: string }) {
 
   // new data, filters, selection: the sources and the selected dot change in place
   useEffect(() => {
+    dpeRef.current = { groups: new Map(dpe.groups.map(g => [g.key, g])), listings: data.listings }
     const m = map.current
     if (!m?.isStyleLoaded()) return
     for (const [id, s] of Object.entries(sources)) (m.getSource(id) as GeoJSONSource | undefined)?.setData(s)
     if (m.getLayer("listings")) m.setPaintProperty("listings", "circle-radius", ["case", ["==", ["get", "id"], selected ?? ""], 12, 8])
-    m.setLayoutProperty("sales", "visibility", layers.includes("sales") ? "visible" : "none")
-    m.setLayoutProperty("veil", "visibility", layers.includes("veil") ? "visible" : "none")
+    showLayers(m, layers)
     const l = data.listings.find(x => x.id === selected)
     if (l?.location.point) m.easeTo({ center: l.location.point, duration: 400 })
-  }, [sources, selected, layers, data.listings])
+  }, [sources, selected, layers, data.listings, dpe.groups])
 
   const sales = types.filter(on).reduce((a, t) => a + (data.market.dvf?.[t]?.points.length ?? 0), 0)
   return (
-    <div className={className}>
+    <div className={cn("immo-map", className)} style={{ "--map-right": `${right}px` } as React.CSSProperties}>
       {/* maplibre-gl.css, outside the layers, makes it position: relative: it takes the whole box by its size */}
       <div ref={box} className="h-full w-full" />
-      <LayersPanel key={mobile ? "m" : "d"} startOpen={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, pois, places, sales }} />
+      <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, pois, places, sales }}
+        dpe={{ days: dpeDays, setDays: setDpeDays, scope: dpeScope, setScope: setDpeScope, count: dpe.count, open: dpe.open }} />
     </div>
   )
 }
@@ -200,22 +266,30 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 }
 
 // The panel of the map's layers: the listings shown, the zone (darkened outside or not: it changes through Claude), the sales,
-// the walking areas to the user's places and the places of the neighborhood, each with its color and its count
-function LayersPanel({ startOpen, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, pois, places, sales }: {
-  startOpen: boolean; cats: string[]; setCats: (v: string[]) => void; layers: string[]; setLayers: (v: string[]) => void; scope: string; setScope: (v: string) => void
+// the recent DPE, the walking areas to the user's places and the places of the neighborhood, each with its color and its count.
+// On a computer a column docked on the left, its whole height, always open (the listings' column on the right); on a
+// phone it floats, folded until tapped.
+function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, pois, places, sales, dpe }: {
+  docked: boolean; cats: string[]; setCats: (v: string[]) => void; layers: string[]; setLayers: (v: string[]) => void; scope: string; setScope: (v: string) => void
   shownTypes: string[]; setShownTypes: (v: string[]) => void; pois: Poi[]; places: string[]; sales: number
+  dpe: { days: string; setDays: (v: string) => void; scope: string; setScope: (v: string) => void; count: number; open: number }
 }) {
-  const { types } = useSearch()
-  const [open, setOpen] = useState(startOpen)
+  const { types, data } = useSearch()
+  const [unfolded, setUnfolded] = useState(false), open = docked || unfolded
   const toggle = (k: string, v: boolean) => setLayers(v ? [...layers, k] : layers.filter(x => x !== k))
   const count = (c: string) => pois.filter(p => p.cat === c).length
   return (
-    <div className="absolute bottom-3 left-3 z-10 w-80 max-w-[calc(100%-1.5rem)] rounded-lg border bg-card/95 text-xs shadow-sm backdrop-blur">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-        <LayersIcon className="size-4" />Calques<ChevronDownIcon className={cn("ml-auto size-4 transition-transform", !open && "-rotate-90")} />
-      </button>
+    <div className={cn("absolute z-10 bg-card/70 text-xs backdrop-blur-md",
+      docked ? "inset-y-0 left-0 flex w-80 flex-col border-r" : "bottom-3 left-3 w-80 max-w-[calc(100%-1.5rem)] rounded-lg border shadow-sm")}>
+      {docked ? (
+        <h2 className="flex items-center gap-2 px-3 py-2 text-sm font-medium"><LayersIcon className="size-4" />Calques</h2>
+      ) : (
+        <button type="button" onClick={() => setUnfolded(!unfolded)} aria-expanded={unfolded} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+          <LayersIcon className="size-4" />Calques<ChevronDownIcon className={cn("ml-auto size-4 transition-transform", !unfolded && "-rotate-90")} />
+        </button>
+      )}
       {open && (
-        <div className="flex max-h-[55vh] flex-col gap-3.5 overflow-y-auto border-t p-3">
+        <div className={cn("flex flex-col gap-3.5 overflow-y-auto border-t p-3", docked ? "min-h-0 flex-1" : "max-h-[55vh]")}>
           <Group title="Annonces">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
               <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-below" />Sous le marché</span>
@@ -245,6 +319,51 @@ function LayersPanel({ startOpen, cats, setCats, layers, setLayers, scope, setSc
               <Label htmlFor="sales" className="text-xs">Ventes DVF des 2 dernières années <span className="text-muted-foreground">({num(sales)})</span></Label>
             </div>
           </Group>
+          {types.some(isHome) && (
+            <Group title="DPE récents">
+              {Array.isArray(data.area.dpe_recent) ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Switch id="dpe" checked={layers.includes("dpe")} onCheckedChange={v => toggle("dpe", v)} />
+                    <Label htmlFor="dpe" className="text-xs">Diagnostics récents de la zone <span className="text-muted-foreground">({num(dpe.count)})</span></Label>
+                  </div>
+                  {layers.includes("dpe") && (
+                    <>
+                      <ToggleGroup type="single" size="sm" variant="outline" value={dpe.days} onValueChange={v => v && dpe.setDays(v)} className="justify-start" aria-label="Période des DPE">
+                        {[["90", "3 mois"], ["180", "6 mois"], ["365", "12 mois"]].map(([v, l]) => <ToggleGroupItem className={CHIP} key={v} value={v}>{l}</ToggleGroupItem>)}
+                      </ToggleGroup>
+                      <ToggleGroup type="single" size="sm" variant="outline" value={dpe.scope} onValueChange={v => v && dpe.setScope(v)} className="justify-start" aria-label="DPE affichés">
+                        <ToggleGroupItem className={CHIP} value="all">Tous</ToggleGroupItem>
+                        <ToggleGroupItem className={CHIP} value="criteria">Dans mes critères</ToggleGroupItem>
+                      </ToggleGroup>
+                      <div className="flex flex-wrap items-center gap-1 text-muted-foreground">
+                        {Object.entries(DPE_HEX).map(([k, c]) => <i key={k} className="grid size-4 place-items-center rounded-sm text-[10px] font-bold not-italic" style={{ background: c, color: dpeInk(k) }}>{k}</i>)}
+                        <span className="ml-1">la classe du dernier DPE, le nombre à l'adresse</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch id="dpe-open" checked={layers.includes("dpe-open")} onCheckedChange={v => toggle("dpe-open", v)} />
+                        <Label htmlFor="dpe-open" className="text-xs"><i className="size-3 rounded-full border-2 border-foreground" />Signaler les DPE sans annonce <span className="text-muted-foreground">({num(dpe.open)})</span></Label>
+                      </div>
+                      {layers.includes("dpe-open") && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Switch id="dpe-only" checked={layers.includes("dpe-only")} onCheckedChange={v => toggle("dpe-only", v)} />
+                            <Label htmlFor="dpe-only" className="text-xs">Seulement ceux-là</Label>
+                          </div>
+                          <p className="text-muted-foreground">
+                            Un DPE précède une vente ou une location : sans annonce, le bien est peut-être bientôt en vente.
+                            {data.search.mode === "classic" && " En OpenData, c'est sans annonce dans cette recherche."}
+                          </p>
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              ) : (
+                <p className="text-muted-foreground">{data.area.dpe_recent ? "Données de l'ADEME indisponibles : elles reviendront au prochain rafraîchissement." : "Pas encore chargés : demandez à Claude de rafraîchir la recherche."}</p>
+              )}
+            </Group>
+          )}
           {places.length > 0 && (
             <Group title="À pied">
               {places.map((p, i) => (

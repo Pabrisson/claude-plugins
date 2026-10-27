@@ -11,7 +11,7 @@ const ROUTES = [
   [/geocodage\/search/, 'geocode-20-rue-paul-bert.json'], [/georisques/, 'georisques-20-rue-paul-bert.json'], [/overpass/, 'overpass-paul-bert.json'],
   [/navigation\/isochrone/, 'isochrone-pedestrian-15.json'], [/wfs/, 'iris-moncey.json'],
   [/data\.gouv\.fr\/api\/1\/datasets\/\?q=Carte/, 'rent-datasets.json'], [/tabular-api.*INSEE_C__exact=69383/, 'rent-69383.json'],
-  [/dpe03existant\/values_agg/, 'dpe-classes-paul-bert.json'], [/fiscalite-locale.*insee_com/, 'tax-69123.json'], [/fiscalite-locale.*mpoid/, 'tax-france.json'],
+  [/dpe03existant\/values_agg/, 'dpe-classes-paul-bert.json'], [/dpe03existant\/lines.*bbox/, 'dpe-recent-paul-bert.json'], [/fiscalite-locale.*insee_com/, 'tax-69123.json'], [/fiscalite-locale.*mpoid/, 'tax-france.json'],
   [/dido\/api\/v1\/datasets\//, 'sitadel-dataset.json'], [/dido\/api\/v1\/datafiles\/.*COMM=eq%3A69383/, 'sitadel-69383.json'],
 ]
 const asked = []
@@ -68,6 +68,15 @@ test('the DPE of the zone, one per home: flats and houses apart, building DPE le
   assert.deepEqual(d, { flat: { A: 5, B: 60, C: 1026, D: 621, E: 306, F: 84, G: 30 }, house: { C: 3, D: 1 } })
   const q = new URL(asked.findLast(a => a.url.includes('values_agg')).url).searchParams
   assert.deepEqual([q.get('geo_distance'), q.get('methode_application_dpe_neq')], ['4.856,45.756,300', 'dpe appartement généré à partir des données DPE immeuble'])
+})
+
+test('the recent DPE of a box: the last 12 months, newest first, one per home, each with its point', async () => {
+  const rows = await od.recentDpe([4.8391, 45.7515, 4.8519, 45.7605])
+  assert.equal(rows.length, 12)
+  assert.deepEqual(rows[0], { number: '2669E2663903R', date: '2026-10-19', energy: 'E', type: 'flat', area: 26.5, address: '13bis Rue Chalopin 69007 Lyon', ban: '69387_1380_00013_bis', point: [4.844620040377923, 45.75168297914536] })
+  const q = new URL(asked.findLast(a => a.url.includes('dpe03existant/lines')).url).searchParams
+  assert.deepEqual([q.get('bbox'), q.get('type_batiment_in'), q.get('sort'), q.get('methode_application_dpe_neq')], ['4.8391,45.7515,4.8519,45.7605', 'appartement,maison', '-date_etablissement_dpe', 'dpe appartement généré à partir des données DPE immeuble'])
+  assert.equal(q.get('date_etablissement_dpe_gte'), new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10))
 })
 
 test("the property tax: Lyon's rate for an arrondissement, and France's average", async () => {

@@ -140,5 +140,11 @@ history stay.
 - `area.json`:
   - `center`, `pois[] { cat, kind, name, point }`, `risks`;
   - `crime { commune, department }`, `income { local, department, france }`, `iris`;
-  - `isochrones[] { place, profile, minutes, geometry }`, `places`.
+  - `isochrones[] { place, profile, minutes, geometry }`, `places`;
+  - `dpe_recent[] { number, date, energy, type: flat|house, area, address, ban, point }`: the ADEME DPE of the last 12
+    months in the zone, newest first, one per home (`{ error }` when ADEME failed; empty for a search with no home
+    type). `lib/dpe.js` gives each listing one of them at most: its own by number (`building.dpe_match`,
+    `building.address.certificate`, `dpe.reference`; a listing whose number is known takes no other), else the one of
+    its `building.ban` with the closest surface (within 8 %), else the nearest of the same type and surface within
+    300 m, with its class and DPE date when the listing gives them. A DPE taken goes to no other listing.
 - `alert-events.json`: the alert's events, written by `alert events`.

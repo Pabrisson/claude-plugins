@@ -134,6 +134,28 @@ export function openData(cacheDir) {
       return { flat: of('appartement'), house: of('maison') }
     }),
 
+    // ADEME's DPE of existing homes made in the last 12 months in a box [w, s, e, n], newest first, one per home as
+    // above, each with its BAN address and point. Kept a week: they are the zone's news.
+    // ponytail: two pages of 10,000 at most (Paris 15e makes 11,400 a year), the newest kept; more pages if one zone needs them
+    recentDpe: bb => cached(`ademe/recent-${bb.map(x => x.toFixed(4)).join(',')}.json`, 7, async () => {
+      const q = new URLSearchParams({
+        select: 'numero_dpe,date_etablissement_dpe,etiquette_dpe,type_batiment,surface_habitable_logement,adresse_ban,identifiant_ban,_geopoint',
+        size: 10000, sort: '-date_etablissement_dpe', bbox: bb.join(','), date_etablissement_dpe_gte: new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10),
+        type_batiment_in: 'appartement,maison', methode_application_dpe_neq: 'dpe appartement généré à partir des données DPE immeuble',
+      })
+      const rows = []
+      for (let url = `https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines?${q}`, i = 0; url && i < 2; i++) {
+        const d = await get(url)
+        rows.push(...(d?.results ?? []))
+        url = d?.next
+      }
+      // _geopoint is "lat,lon"
+      return rows.filter(r => r._geopoint).map(r => ({
+        number: r.numero_dpe, date: r.date_etablissement_dpe, energy: r.etiquette_dpe, type: r.type_batiment === 'maison' ? 'house' : 'flat',
+        area: r.surface_habitable_logement ?? null, address: r.adresse_ban ?? null, ban: r.identifiant_ban ?? null, point: r._geopoint.split(',').map(Number).reverse(),
+      }))
+    }),
+
     // The property tax rates (taxe foncière sur le bâti, %) of the latest year: the commune's, its intercommunality's,
     // their total with the small extras (syndicates, GEMAPI…), the waste tax apart, and France's total weighted by
     // population for comparison
