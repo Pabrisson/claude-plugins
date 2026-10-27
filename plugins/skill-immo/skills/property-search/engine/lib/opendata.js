@@ -22,6 +22,12 @@ const POI = {
 }
 // Carte des loyers (DHUP): one dataset a year, found by its title; the 2025 resources if the search fails
 const RENT = { q: "Carte des loyers indicateurs de loyers d'annonce par commune", fallback: { year: 2025, flat: '55b34088-0964-415f-9df7-d87dd98a09be', flat_small: '14a1fe11-b2d1-49b3-9f6b-83d12df9482c', flat_large: '5e3b28a4-cf56-43a3-ae79-43cceeb27f8c', house: '129f764d-b613-44e4-952c-5ff50a8c9b73' } }
+// the property tax of each commune (DGFiP's "fiscalité locale des particuliers"); Paris, Lyon and Marseille vote one
+// rate for all their arrondissements
+const TAX = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/fiscalite-locale-des-particuliers/records'
+const cityOf = insee => (/^751\d\d$/.test(insee) ? '75056' : /^6938\d$/.test(insee) ? '69123' : /^132\d\d$/.test(insee) ? '13055' : insee)
+// Sitadel (SDES, DiDo): the homes authorised and started per commune and year
+const SITADEL = { api: 'https://data.statistiques.developpement-durable.gouv.fr/dido/api/v1', dataset: '6513ee3a3b05e5cd969c270f', rid: '9c90a880-4ba0-49b4-b99d-d7dd6c810dd0' }
 const sleep = t => new Promise(ok => setTimeout(ok, t))
 
 export function openData(cacheDir) {
@@ -114,6 +120,38 @@ export function openData(cacheDir) {
       const select = 'numero_dpe,date_etablissement_dpe,etiquette_dpe,etiquette_ges,annee_construction,surface_habitable_logement,conso_5_usages_par_m2_ep,cout_total_5_usages,type_energie_principale_chauffage,complement_adresse_logement,numero_etage_appartement,numero_immatriculation_copropriete,adresse_ban,identifiant_ban,nombre_appartement,nombre_niveau_immeuble'
       const q = new URLSearchParams({ select, size: 100, sort: '-date_etablissement_dpe', ...(ban ? { qs: `identifiant_ban:"${ban}"` } : { geo_distance: `${point[0]},${point[1]},${radius}` }) })
       return (await get(`https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines?${q}`))?.results ?? []
+    }),
+
+    // ADEME's DPE of existing homes, counted per class, flats and houses apart: within `radius` m of a point, or in a
+    // commune. One per home: the building DPE and the flats' DPE generated from them are left out.
+    dpeClasses: ({ insee, point, radius }) => cached(`ademe/classes-${insee ?? `${point.map(x => x.toFixed(4)).join(',')}-${radius}`}.json`, 30, async () => {
+      const q = new URLSearchParams({
+        field: 'type_batiment;etiquette_dpe', agg_size: 10, type_batiment_in: 'appartement,maison', methode_application_dpe_neq: 'dpe appartement généré à partir des données DPE immeuble',
+        ...(insee ? { code_insee_ban_eq: insee } : { geo_distance: `${point[0]},${point[1]},${radius}` }),
+      })
+      const d = await get(`https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/values_agg?${q}`)
+      const of = t => Object.fromEntries((d?.aggs?.find(a => a.value === t)?.aggs ?? []).map(a => [a.value, a.total]).sort())
+      return { flat: of('appartement'), house: of('maison') }
+    }),
+
+    // The property tax rates (taxe foncière sur le bâti, %) of the latest year: the commune's, its intercommunality's,
+    // their total with the small extras (syndicates, GEMAPI…), the waste tax apart, and France's total weighted by
+    // population for comparison
+    tax: insee => cached(`tax/${cityOf(insee)}.json`, 90, async () => {
+      const r = (await get(`${TAX}?${new URLSearchParams({ where: `insee_com='${cityOf(insee)}'`, select: 'exercice,libcom,q03,e12vote,e32vote,taux_global_tfb,taux_plein_teom', order_by: 'exercice desc', limit: 1 })}`))?.results?.[0]
+      if (!r) return null
+      const f = (await get(`${TAX}?${new URLSearchParams({ where: `exercice='${r.exercice}'`, select: 'sum(taux_global_tfb*mpoid)/sum(mpoid) as france', limit: 1 })}`))?.results?.[0]?.france
+      return { year: +r.exercice, city: r.libcom, commune: r.e12vote, epci: r.e32vote, epci_name: r.q03, total: r.taux_global_tfb, waste: r.taux_plein_teom, france: f ? Math.round(f * 100) / 100 : null }
+    }),
+
+    // The homes authorised and started each year in a commune (or an arrondissement), from 2013, in the newest release
+    // already out: DiDo lists a release before it opens it, and refuses it until then
+    housing: insee => cached(`sitadel/${insee}.json`, 30, async () => {
+      const files = (await get(`${SITADEL.api}/datasets/${SITADEL.dataset}`))?.datafiles ?? []
+      const release = files.find(f => f.rid === SITADEL.rid)?.millesimes?.filter(m => new Date(m.date_diffusion) <= new Date()).sort((a, b) => b.millesime.localeCompare(a.millesime))[0]?.millesime
+      const q = new URLSearchParams({ ...(release ? { millesime: release } : {}), COMM: `eq:${insee}`, TYPE_LGT: 'eq:Tous Logements', columns: 'ANNEE,LOG_AUT,LOG_COM' })
+      const rows = await get(`${SITADEL.api}/datafiles/${SITADEL.rid}/json?${q}`)
+      return { release: release ?? null, years: (rows ?? []).map(r => ({ year: +r.ANNEE, authorised: r.LOG_AUT, started: r.LOG_COM })).sort((a, b) => a.year - b.year) }
     }),
 
     // Géorisques: the natural and technological risks reported at a point

@@ -1,4 +1,4 @@
-import { MapPinIcon, SearchIcon } from "lucide-react"
+import { ClipboardCopyIcon, MapPinIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
@@ -9,12 +9,11 @@ import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet, FieldLegend 
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TypeIcon } from "@/components/type-icon"
 import { api, type Criteria, type PropertyType } from "@/lib/api"
-import { TYPE_LABEL } from "@/lib/format"
+import { criteriaLabels, TYPE_LABEL, TYPE_PLURAL } from "@/lib/format"
 
 // "budget_max=450000 rooms_min=3": the criteria as the engine takes them, an empty value clearing one
 export const criteriaArg = (c: Criteria) => Object.entries(c).map(([k, v]) => `${k}=${v ?? ""}`).join(" ")
@@ -64,8 +63,16 @@ export function CriteriaFields({ value, onChange, types = ["flat"] }: { value: C
   )
 }
 
-// A new search: the place (Géoplateforme's autocomplete, free), the zone, the mode and the criteria. The engine
-// creates it from the free data; listings come after, from Claude or from Stream Estate.
+// A new search: the place (Géoplateforme's autocomplete, free), the zone, the mode, the types and the criteria, as
+// a prompt to copy: Claude creates the search (the dashboard starts nothing by itself).
+export const newSearchPrompt = (o: { place: string; street: boolean; zone: string; radius: number; mode: string; types: PropertyType[]; criteria: Criteria }) => [
+  `/skill-immo:property-search nouvelle recherche : ${o.place}`,
+  `- zone : ${o.zone === "radius" ? (o.street ? `le long de la rue, ${o.radius} m de part et d'autre` : `${o.radius} m autour du lieu`) : o.zone === "iris" ? "le quartier (IRIS)" : "la commune"}`,
+  `- types : ${o.types.map(t => TYPE_PLURAL[t].toLowerCase()).join(", ")}`,
+  `- annonces : ${o.mode === "stream-estate" ? "API payante (avec mon accord avant chaque dépense)" : "classique (gratuit)"}`,
+  `- critères : ${Object.keys(o.criteria).length ? `${criteriaLabels(o.criteria).join(", ")} (${criteriaArg(o.criteria)})` : "aucun"}`,
+].join("\n")
+
 export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; trigger: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState(""), [place, setPlace] = useState<string | null>(null), [street, setStreet] = useState(false)
@@ -73,7 +80,6 @@ export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; tr
   const [zone, setZone] = useState("radius"), [radius, setRadius] = useState(500)
   const [mode, setMode] = useState(streamEstate ? "stream-estate" : "classic")
   const [criteria, setCriteria] = useState<Criteria>({}), [types, setTypes] = useState<PropertyType[]>(["flat"])
-  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (q.length < 3 || q === place) return
@@ -81,13 +87,10 @@ export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; tr
     return () => clearTimeout(t)
   }, [q, place])
 
-  async function create() {
-    setBusy(true)
-    const r = await api.run({ cmd: "search", args: { query: place ?? q, zone, ...(zone === "radius" ? { radius } : {}), mode, types: types.join(","), ...(Object.keys(criteria).length ? { criteria: criteriaArg(criteria) } : {}) } })
-    setBusy(false)
-    const slug = r.out.match(/^search ([a-z0-9-]+) /m)?.[1]
-    if (r.code !== 0 || !slug) return toast.error("La recherche n'a pas pu être créée", { description: /no place found/.test(r.err) ? "Lieu introuvable : précisez l'adresse, la rue ou la commune." : `Détail technique : ${r.err.replace(/^error: /, "")}` })
-    location.href = `/${slug}/`
+  async function copy() {
+    await navigator.clipboard.writeText(newSearchPrompt({ place: place ?? q, street, zone, radius, mode, types, criteria }))
+    toast.success("Prompt copié : collez-le dans Claude Code", { description: "Claude crée la recherche ; elle apparaîtra ici." })
+    setOpen(false)
   }
 
   return (
@@ -96,7 +99,7 @@ export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; tr
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Nouvelle recherche</DialogTitle>
-          <DialogDescription>Une adresse, une rue ou un quartier. Les ventes réelles, le quartier et les risques sont gratuits.</DialogDescription>
+          <DialogDescription>Une adresse, une rue ou un quartier. Le prompt copié, Claude crée la recherche : les ventes réelles, le quartier et les risques sont gratuits.</DialogDescription>
         </DialogHeader>
         <FieldGroup>
           <Command shouldFilter={false} className="rounded-lg border">
@@ -127,16 +130,16 @@ export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; tr
           <FieldSet>
             <FieldLegend variant="label">Source des annonces</FieldLegend>
             <ToggleGroup type="single" variant="outline" value={mode} onValueChange={v => v && setMode(v)}>
-              <ToggleGroupItem value="stream-estate" disabled={!streamEstate}>Stream Estate</ToggleGroupItem>
+              <ToggleGroupItem value="stream-estate" disabled={!streamEstate}>API payante</ToggleGroupItem>
               <ToggleGroupItem value="classic">Classique</ToggleGroupItem>
             </ToggleGroup>
-            <FieldDescription>{streamEstate ? "Stream Estate : les annonces de tous les portails, payantes (votre accord est demandé avant chaque dépense). Classique : open data et annonces trouvées par Claude, gratuit." : "Sans clé Stream Estate : open data et annonces trouvées par Claude, gratuit."}</FieldDescription>
+            <FieldDescription>{streamEstate ? "API payante : les annonces de tous les portails, payantes (votre accord est demandé avant chaque dépense). Classique : open data et annonces trouvées par Claude, gratuit." : "Sans clé de l'API payante : open data et annonces trouvées par Claude, gratuit."}</FieldDescription>
           </FieldSet>
           <TypesField value={types} onChange={setTypes} />
           <CriteriaFields value={criteria} onChange={setCriteria} types={types} />
         </FieldGroup>
         <DialogFooter>
-          <Button onClick={create} disabled={busy || q.length < 3}>{busy ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}{busy ? "Analyse de la zone…" : "Créer la recherche"}</Button>
+          <Button onClick={copy} disabled={q.length < 3}><ClipboardCopyIcon data-icon="inline-start" />Copier le prompt pour Claude</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

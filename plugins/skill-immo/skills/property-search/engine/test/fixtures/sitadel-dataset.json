@@ -1,0 +1,20 @@
+{
+ "id": "6513ee3a3b05e5cd969c270f",
+ "title": "Logements autorisés et commencés, nombre et surfaces, séries annuelles (données non estimées)",
+ "datafiles": [
+  {
+   "rid": "9c90a880-4ba0-49b4-b99d-d7dd6c810dd0",
+   "title": "Données annuelles communales - Logements",
+   "millesimes": [
+    {
+     "millesime": "2099-01",
+     "date_diffusion": "2099-01-01T07:45:00.000Z"
+    },
+    {
+     "millesime": "2026-09",
+     "date_diffusion": "2026-09-29T06:45:00.000Z"
+    }
+   ]
+  }
+ ]
+}

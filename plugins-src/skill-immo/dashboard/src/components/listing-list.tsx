@@ -4,7 +4,7 @@ import { useState } from "react"
 
 import { Dpe } from "@/components/dpe"
 import { Gap, Ruler } from "@/components/ruler"
-import { StatusBadge, statusBand } from "@/components/status"
+import { StatusBadge, statusTint, tint } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,7 +17,7 @@ import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 const FILTERS = { online: "En ligne", new: "Nouvelles", followed: "Suivies", dropped: "Écartées", all: "Toutes" } as const
-const SCOPE: Record<string, string> = { recent: "zone, 2 ans", zone: "zone, 5 ans", commune: "commune, 5 ans", transactions: "ventes Stream Estate" }
+const SCOPE: Record<string, string> = { recent: "zone, 2 ans", zone: "zone, 5 ans", commune: "commune, 5 ans", transactions: "ventes de l'API payante" }
 
 // the sold market of one type: its median unit price, its quartiles and the listings on its ruler
 function MarketCard({ type, listings }: { type: PropertyType; listings: Listing[] }) {
@@ -110,7 +110,7 @@ function ListingCard({ l, score, active, fresh, onOpen }: { l: Listing; score: n
   const seen = (l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, from: c.from as number, to: c.to as number }))
   const days = daysOnline(l), drop = [...l.price_changes, ...seen].toSorted((a, b) => a.date.localeCompare(b.date)).at(-1), messages = l.messages?.length ?? 0
   return (
-    <button type="button" onClick={onOpen} style={statusBand(l.my_status)} className={cn("grid grid-cols-[88px_1fr] gap-3 rounded-xl border bg-card p-2.5 text-left transition-colors hover:bg-accent/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", active && "border-ring ring-1 ring-ring")}>
+    <button type="button" onClick={onOpen} style={statusTint(l.my_status)} className={cn("grid grid-cols-[88px_1fr] gap-3 rounded-xl border p-2.5 text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", tint(l.my_status), active && "border-ring ring-1 ring-ring")}>
       <div className="grid h-20 place-items-center overflow-hidden rounded-lg bg-muted">
         {l.pictures[0] ? <img src={l.pictures[0]} alt="" loading="lazy" className="size-full object-cover" onError={e => e.currentTarget.remove()} /> : <TypeIcon type={t} className="size-6 text-muted-foreground" />}
       </div>

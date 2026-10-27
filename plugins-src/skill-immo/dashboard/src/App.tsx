@@ -1,6 +1,7 @@
-import { BarChart3Icon, EllipsisIcon, ListIcon, MapIcon, PlusIcon, ReceiptEuroIcon, RouteIcon, ScaleIcon, SquareKanbanIcon } from "lucide-react"
+import { BarChart3Icon, EllipsisIcon, ListIcon, MapIcon, PlusIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
 import { ThemeProvider } from "next-themes"
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
 
 import { CompareTab } from "@/components/compare-tab"
 import { CostsTab } from "@/components/costs-tab"
@@ -13,6 +14,9 @@ import { MapView } from "@/components/map-view"
 import { MarketTab } from "@/components/market-tab"
 import { RunProvider } from "@/components/run-dialog"
 import { NewSearch, ThemeButton, TopBar } from "@/components/top-bar"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,9 +48,9 @@ export default function App() {
 function SearchPage({ slug }: { slug: string }) {
   const [boot, setBoot] = useState<{ data: SearchData; state: State; profile: Profile; lastVisit: string | null } | { error: string } | null>(null)
   useEffect(() => {
-    // the visit is recorded once the page has what changed since the previous one
-    Promise.all([api.search(slug), api.state(), api.profile(), api.visit(slug)])
-      .then(([data, state, profile, v]) => setBoot({ data, state, profile, lastVisit: v.last_visit }), e => setBoot({ error: e.message }))
+    // the visit first (it writes search.json): the data read after it carries the version the page starts from
+    api.visit(slug).then(v => Promise.all([api.search(slug), api.state(), api.profile()]).then(([data, state, profile]) => ({ data, state, profile, lastVisit: v.last_visit })))
+      .then(setBoot, e => setBoot({ error: e.message }))
   }, [slug])
   if (!boot) return <div className="grid h-dvh grid-rows-[auto_1fr] gap-2 p-3"><Skeleton className="h-12" /><Skeleton /></div>
   if ("error" in boot) return <Home error={`Recherche « ${slug} » introuvable (${boot.error}).`} />
@@ -59,18 +63,30 @@ function SearchPage({ slug }: { slug: string }) {
 
 const VIEWS = [
   { id: "listings", label: "Cartes", icon: MapIcon },
-  { id: "kanban", label: "Kanban", icon: SquareKanbanIcon },
   { id: "list", label: "Liste", icon: ListIcon },
+  { id: "kanban", label: "Kanban", icon: SquareKanbanIcon },
   { id: "market", label: "Marché", icon: BarChart3Icon },
   { id: "compare", label: "Comparer", icon: ScaleIcon },
   { id: "follow", label: "Suivi", icon: RouteIcon },
   { id: "costs", label: "Coûts API", icon: ReceiptEuroIcon },
 ] as const
 // a phone's bar holds five: the rest goes under "Plus"
-const BAR = ["listings", "kanban", "list", "follow"]
+const BAR = ["listings", "list", "kanban", "follow"]
 
 // The map and the listings' cards side by side (one or the other on a phone), the kanban and the list of every
 // listing, each listing's dossier on top; market, comparison, follow-up as tabs, the API costs apart on the right
+// what Claude changed while the page was open: a bar to take it in, without losing the tab or the dossier
+function StaleBar() {
+  const { stale, reload } = useSearch()
+  if (!stale) return null
+  return (
+    <div role="status" className="flex items-center justify-center gap-3 border-b bg-primary px-3 py-1.5 text-sm text-primary-foreground">
+      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (Claude a mis la recherche à jour).
+      <Button size="xs" variant="secondary" onClick={() => reload()}>Recharger</Button>
+    </div>
+  )
+}
+
 function Workspace() {
   const { reload, compare } = useSearch()
   const mobile = useIsMobile()
@@ -80,6 +96,7 @@ function Workspace() {
     <RunProvider onDone={reload}>
       <div className="flex h-dvh flex-col">
         <TopBar />
+        <StaleBar />
         <Tabs value={view} onValueChange={setView} className="min-h-0 flex-1 gap-0">
           <TabsList variant="line" className="hidden w-full justify-start rounded-none border-b bg-card px-3 md:flex">
             {VIEWS.map(v => (
@@ -137,42 +154,87 @@ function Workspace() {
 }
 
 function Home({ error }: { error?: string }) {
-  const [list, setList] = useState<SearchSummary[] | null>(null), [stream, setStream] = useState(false)
+  const [list, setList] = useState<SearchSummary[] | null>(null), [stream, setStream] = useState(false), [fresh, setFresh] = useState(false)
+  const load = () => api.searches().then(l => { setList(l); setFresh(false) }, () => setList([]))
   useEffect(() => {
-    api.searches().then(setList, () => setList([]))
+    load()
     api.state().then(s => setStream(s.stream_estate), () => {})
   }, [])
+  // a search Claude created or changed since: the same bar as in a search
+  useEffect(() => {
+    if (!list) return
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") api.searches().then(l => JSON.stringify(l) !== JSON.stringify(list) && setFresh(true), () => {})
+    }, 4000)
+    return () => clearInterval(t)
+  }, [list])
   const trigger = <Button><PlusIcon data-icon="inline-start" />Nouvelle recherche</Button>
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-4 py-8">
+      {fresh && (
+        <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
+          <span className="flex items-center gap-2"><RefreshCwIcon className="size-4" />Claude a créé ou mis à jour une recherche.</span>
+          <Button size="xs" variant="secondary" onClick={load}>Recharger</Button>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Recherche immobilière</h1>
-          <p className="text-sm text-muted-foreground">{stream ? "Stream Estate activé" : "Mode classique : open data et annonces trouvées par Claude"}</p>
+          <p className="text-sm text-muted-foreground">{stream ? "API payante activée" : "Mode classique : open data et annonces trouvées par Claude"}</p>
         </div>
         <span className="flex gap-1.5"><NewSearch streamEstate={stream} trigger={trigger} /><ThemeButton /></span>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {list === null ? <Skeleton className="h-24" /> : list.length ? (
         <div className="grid gap-3 sm:grid-cols-2">
-          {list.map(s => (
-            <a key={s.slug} href={`/${s.slug}/`} className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-              <Card className="h-full transition-colors hover:bg-accent/50">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">{s.label}<span className="flex gap-1 text-muted-foreground">{(s.types ?? ["flat"]).map(t => <TypeIcon key={t} type={t} className="size-4" />)}</span></CardTitle>
-                  <CardDescription>{(s.types ?? ["flat"]).map(t => TYPE_PLURAL[t]).join(", ")} · {s.zone} · {s.online} annonce{s.online > 1 ? "s" : ""} en ligne · créée le {date(s.created)}</CardDescription>
-                  <Badge variant={s.mode === "stream-estate" ? "default" : "secondary"} className="w-fit">{s.mode === "stream-estate" ? "Stream Estate" : "Classique"}</Badge>
-                </CardHeader>
-              </Card>
-            </a>
-          ))}
+          {list.map(s => <SearchCard key={s.slug} s={s} onDeleted={load} />)}
         </div>
       ) : (
         <Empty className="border">
-          <EmptyHeader><EmptyTitle>Aucune recherche</EmptyTitle><EmptyDescription>Commencez par une adresse, une rue ou un quartier, ici ou en demandant à Claude.</EmptyDescription></EmptyHeader>
+          <EmptyHeader><EmptyTitle>Aucune recherche</EmptyTitle><EmptyDescription>Commencez par une adresse, une rue ou un quartier : copiez le prompt pour Claude, ou demandez-lui directement.</EmptyDescription></EmptyHeader>
           <EmptyContent><NewSearch streamEstate={stream} trigger={trigger} /></EmptyContent>
         </Empty>
       )}
     </main>
+  )
+}
+
+// a search on the home page: the whole card opens it, its bin deletes it once confirmed
+function SearchCard({ s, onDeleted }: { s: SearchSummary; onDeleted: () => void }) {
+  async function remove() {
+    try {
+      await api.deleteSearch(s.slug)
+      toast.success(`Recherche « ${s.label} » supprimée`)
+      onDeleted()
+    } catch (e) {
+      toast.error("La recherche n'a pas été supprimée", { description: (e as Error).message === "alert" ? "Elle a une alerte de l'API payante : supprimez d'abord l'alerte, dans son onglet Suivi." : `Détail technique : ${(e as Error).message}` })
+    }
+  }
+  return (
+    <Card className="relative h-full transition-colors has-[a:hover]:bg-accent/50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 pr-8">
+          <a href={`/${s.slug}/`} className="after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-3 focus-visible:after:ring-ring/50">{s.label}</a>
+          <span className="flex gap-1 text-muted-foreground">{(s.types ?? ["flat"]).map(t => <TypeIcon key={t} type={t} className="size-4" />)}</span>
+        </CardTitle>
+        <CardDescription>{(s.types ?? ["flat"]).map(t => TYPE_PLURAL[t]).join(", ")} · {s.zone} · {s.online} annonce{s.online > 1 ? "s" : ""} en ligne · créée le {date(s.created)}</CardDescription>
+        <Badge variant={s.mode === "stream-estate" ? "default" : "secondary"} className="w-fit">{s.mode === "stream-estate" ? "API payante" : "Classique"}</Badge>
+      </CardHeader>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="ghost" size="icon-sm" className="absolute top-3 right-3 z-10" aria-label={`Supprimer la recherche ${s.label}`}><Trash2Icon /></Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer la recherche « {s.label} » ?</AlertDialogTitle>
+            <AlertDialogDescription>{s.listings ? `Ses ${s.listings} annonce${s.listings > 1 ? "s" : ""}, vos statuts, vos notes et les messages préparés` : "Sa zone et son marché"} seront effacés de cette machine. C'est définitif.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={remove}>Supprimer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
   )
 }

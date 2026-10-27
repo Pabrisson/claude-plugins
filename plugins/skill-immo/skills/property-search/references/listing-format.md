@@ -96,7 +96,7 @@ snake_case.
 | `first_seen`, `price_history[]` | When this search first saw it, each price it saw `{ date, price }` |
 | `changes[]` | `{ date, kind: new\|price_drop\|price_rise\|status\|expired, from, to }`, for the "new since your last visit" view |
 | `my_status`, `notes` | The user's: `to_visit`, `visited`, `offer`, `dropped` or null, and free notes |
-| `messages[]` | What Claude wrote for it (`message`): `{ id, date, kind: offer\|question\|visit\|other, amount, to, text, sent_at }`; the user marks it sent in the dashboard |
+| `messages[]` | Its conversation with the agent or the seller (`message`, the dossier's « Ajouter »): `{ id, date, from: me\|them, kind: offer\|question\|visit\|reply\|follow_up\|documents\|other, channel: email\|sms\|phone\|visit\|null, amount, to, text, sent_at }`. `from: me` is a draft until `sent_at` (the user marks it sent); `from: them` is received; `to` is the one on the other side. An old message without `from` is the user's |
 | `building` | Added by the enrichment: `{ address, ban, dpe[], dpe_match, dpe_cost_yearly, construction_year, copro, risks, sales[] }` |
 
 The listings are deduplicated by id, else by URL (host and path, without the query or a trailing slash). When Stream
@@ -118,9 +118,21 @@ history stay.
   - `max`, `stream { total, counted_at }`, `last_fetch`, `last_refresh`, `last_visit`, and
     `alert { id, topic, drop }`.
 - `market.json`:
-  - `dvf.<type>` for each type of the search: `{ commune, zone, street, recent, years, points[] }`. Each of the four
-    first is a stats object: `count`, `median_ppm2` (the unit price: € per m², of land for a plot, € a lot for a
-    parking), `q1`, `q3`, `median_price`, `median_area` and `by_quarter[]`;
+  - `dvf.<type>` for each type of the search: `{ commune, zone, street, recent, years, trend, by_rooms, streets,
+    points[] }`. Each of the four first is a stats object: `count`, `median_ppm2` (the unit price: € per m², of land
+    for a plot, € a lot for a parking), `q1`, `q3`, `median_price`, `median_area` and `by_quarter[]`;
+    - `trend { zone, commune }`: each `{ to, median_ppm2, y1, y3 }`, the median of the last 12 months (to the newest
+      sale) and its move against the 12 months one and three years before (0.05 = +5 %), null under 10 sales a side;
+    - `by_rooms { scope: recent|zone, rows[] { rooms, count, median_price, median_area, median_ppm2 } }`: 5 stands for
+      5 and more, 3 sales at least a row; the zone's last two years, or its five when they hold under 30 sales;
+    - `streets[] { code_voie, name, count, median_ppm2, point, change, distance }`: the commune's streets with 5 sales
+      or more, the 40 nearest to the zone's center; `change` is the last two years against the years before;
+  - `context { dpe, tax, housing }`, each `{ error }` when its source failed:
+    - `dpe { scope: zone|commune, flat, house }`: the count of ADEME DPE per class, one per home, within the zone's
+      radius of its center (a circle or a street), else in the commune;
+    - `tax { year, city, commune, epci, epci_name, total, waste, france }`: the property tax rates in %, `total` with
+      the syndicates and GEMAPI, `waste` the household waste tax apart, `france` the average weighted by population;
+    - `housing { release, years[] { year, authorised, started } }`: the homes authorised and started (Sitadel);
   - `rent { year, flat, flat_small, flat_large, house }`: the carte des loyers of the commune, each `{ per_m2, low,
     high, scope, observations }` (€ per m² a month, charges included);
   - `alsace_moselle`;

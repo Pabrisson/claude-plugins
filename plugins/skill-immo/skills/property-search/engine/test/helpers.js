@@ -31,6 +31,10 @@ export function searchesFolder(mode = 'stream-estate') {
   cache('polygon/iris-4.84550,45.75600.json', { code: '693830201', name: 'Moncey', geometry: null })
   // the carte des loyers 2025 of Lyon 3e, as the tabular API answered on 2026-10-27
   cache('rent/69383.json', { year: 2025, flat: { per_m2: 16.4, low: 12.82, high: 20.98, scope: 'commune', observations: 30256 }, flat_small: { per_m2: 18.87, low: 14.58, high: 24.43, scope: 'commune', observations: 19582 }, flat_large: { per_m2: 15.22, low: 11.75, high: 19.71, scope: 'commune', observations: 10876 }, house: { per_m2: 17.89, low: 12.4, high: 25.8, scope: 'commune', observations: 252 } })
+  // the commune's context, as ADEME, the DGFiP and the SDES answered on 2026-10-27
+  cache('ademe/classes-4.8455,45.7560-500.json', { flat: { A: 12, B: 160, C: 2480, D: 1400, E: 650, F: 190, G: 80 }, house: { C: 6, D: 3 } })
+  cache('tax/69123.json', { year: 2025, city: 'LYON', commune: 31.89, epci: 0.55, epci_name: 'Métropole de Lyon', total: 32.82, waste: 5.19, france: 43.13 })
+  cache('sitadel/69383.json', { release: '2026-09', years: [{ year: 2023, authorised: 75, started: 12 }, { year: 2024, authorised: 81, started: 61 }, { year: 2025, authorised: 174, started: null }] })
   return { home, dir }
 }
 

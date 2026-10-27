@@ -17,7 +17,8 @@ these types. You find what is for sale there, and the local engine weighs each l
 - against the rent of the same home (carte des loyers) and the user's budget.
 
 It gives each listing a review (strong points, points to watch, questions to ask, each with its source) and a score out
-of 100 weighted by the user's priorities. You write the messages the user sends: an offer, questions, a visit request.
+of 100 weighted by the user's priorities. You write the messages the user sends (an offer, questions, a visit request, a
+reply, a reminder, a request for documents), from each listing's conversation with the agent or the seller.
 The user then works in a local dashboard, and its feedback comes back to you as a pasted prompt.
 
 `immo.mjs` below means `node ${CLAUDE_SKILL_DIR}/engine/immo.mjs`. References are in `${CLAUDE_SKILL_DIR}/references/`;
@@ -121,6 +122,10 @@ The profile also holds `notary_old` (0.075), `notary_new` (0.025), `insurance_ra
 
 ## A new search
 
+The dashboard's « Nouvelle recherche » starts nothing itself: it copies a prompt `nouvelle recherche : <place>` with
+the lines `- zone`, `- types`, `- annonces` (the mode) and `- critères` (their engine form in parentheses). It answers
+steps 1 to 3 (the place comes from the address autocomplete): run `search` with them and ask nothing it gives.
+
 1. **Place**: if the place is ambiguous (a street name in several towns, "Croix-Rousse"), run `immo.mjs geocode "<q>"`
    and ask which one.
 2. **Zone and mode**: ask in one AskUserQuestion call what the request leaves open.
@@ -143,7 +148,8 @@ The profile also holds `notary_old` (0.075), `notary_new` (0.025), `insurance_ra
    criteria the user did not mention.
 4. **Search**: `immo.mjs search "<q>" --mode … --types … [--zone …] [--radius …] [--criteria …]`. This is free. It
    prints, per type, the sold unit price of the zone, the street and the commune (€/m², €/m² of land for a plot, € a
-   lot for a parking), the rent, the neighborhood, and in Stream Estate mode the count and the estimate.
+   lot for a parking), the rent, the property tax rate, the homes authorised, the neighborhood, and in Stream Estate
+   mode the count and the estimate.
 5. **Listings**:
    - Stream Estate mode: the credits rule above, then `immo.mjs fetch -p <slug> --spend N [--max N]`. Then offer
      `immo.mjs market -p <slug>` (asking prices and reconciled sales, unknown cost until measured).
@@ -186,14 +192,19 @@ recheck the ones the user follows, one WebFetch each.
   zone or commune);
 - `review`: the strong points and the points to watch (each with its source) and the questions to ask;
 - `score`: out of 100, each part (price, budget, energy, transport, travel, outdoor) and its weight;
-- `rent`: the rent of the same home, the owner's monthly cost, and the years before buying beats renting (null: renting
-  stays cheaper over the loan); `budget.works`, the work a DPE E, F or G calls for;
-- `messages`: those you wrote for it, and whether the user sent them;
+- `rent`: the rent of the same home, the owner's monthly cost, the gross yield, and the years before buying beats
+  renting (null: renting stays cheaper over the loan); `budget.works`, the work a DPE E, F or G calls for;
+- `messages`: its conversation with the agent or the seller, in order: `from: me` (yours and the user's, a draft until
+  `sent_at`) or `from: them` (received: a reply the user pasted, a call summed up), with `channel` and `amount`;
 - the negotiation range and its reasons;
 - the days online, the drops already made;
 - the budget against the profile (total, loan, monthly payment, debt ratio, HCSF 35 %, down payment needed);
 - the building: the registry DPE, the condominium, the risks, the sales in the same building;
 - what is within 500 m, and the travel times.
+
+For a question on the market itself, read the search's `market.json` (`references/listing-format.md`): per type the
+price trend over 1 and 3 years, the prices by number of rooms, the streets around with their median and its move, and
+`context` (the DPE classes of the zone, the property tax rate against France's, the homes authorised each year).
 
 `immo.mjs enrich -p <slug> --id <id>` fetches the building data again. In Stream Estate mode, `--resolve` first asks
 for the exact address (beta, unknown cost: ask). Show a resolved address only when its `shown` is `address`; say
@@ -203,28 +214,47 @@ Answer with the numbers, then a plain verdict. Below, at or above the market of 
 visit: start from `review` (its points to watch and questions), the DPE against the registry, the condominium, a G or F
 (it can no longer be let from 2025 or 2028), the risks. The negotiation margin, as a range.
 
-## Messages: an offer, questions, a visit request
+## Messages and the conversation
 
-When the user asks for one (« rédige une offre », « prépare les questions pour l'agent », « demande une visite »), or a
-`[message]` item of the dashboard:
+Each listing keeps its conversation with the agent or the seller. The user adds what they receive in the dossier
+(« Ajouter »: a reply pasted, a call summed up), or pastes it to you.
 
-1. `immo.mjs show -p <slug> --id <id>`: the negotiation range, the review, the sales of the street, the notes.
-2. Write it in French, short and polite, from those facts only. An offer:
-   - its amount inside the negotiation range unless the user gave one; ask in one AskUserQuestion when neither is
-     clear (the range's low end first);
-   - two or three arguments the data backs (time online, drops, DPE and works, sales of the street);
-   - the financing in one line, and how long the offer is valid (10 days by default).
-   Questions: those of `review.questions`, the ones that still matter. Never sign with a name the user did not give.
-3. Save it with the listing: write it to a file in the scratchpad, then
-   `immo.mjs message -p <slug> --id <id> --kind offer|question|visit|other [--amount <€>] [--to "<who>"] --file <file>`.
-4. Show it to the user and say it is in the listing's dossier (« Offres et messages »), with « Copier ». You never send
-   it, and only the user marks it sent: an offer marked sent moves the listing to « Offre faite ».
+**A message the user received** (« l'agent m'a répondu… », a call): add it to the conversation as they give it,
+`immo.mjs message -p <slug> --id <id> --from them [--channel email|sms|phone|visit] [--amount <€ proposed>] [--date
+<iso>] --file <file>`, and say so in one line.
+
+**A message to write**, when the user asks for one or a `[message]` item of the dashboard does:
+- `offer`: an offer;
+- `question`: the questions for the agent;
+- `visit`: a visit request;
+- `reply`: an answer to the last message received;
+- `follow_up`: a reminder of the last message sent that got no answer;
+- `documents`: a request for the documents (full diagnostics, the minutes of the last 3 general meetings, the
+  statement of charges, the property tax notice, the pre-sale statement).
+
+1. `immo.mjs show -p <slug> --id <id>`: the whole conversation first (what was offered, answered, promised), then the
+   negotiation range, the review, the sales of the street, the notes.
+2. Write it in French, short and polite, from those facts only, following on from the conversation:
+   - an offer: its amount inside the negotiation range unless the user gave one; ask in one AskUserQuestion when neither
+     is clear (the range's low end first). Two or three arguments the data backs (time online, drops, DPE and works,
+     sales of the street), the financing in one line, how long it stays valid (10 days by default);
+   - a reply to a counter-offer: where it stands against the range and what the seller said;
+   - questions or documents: those of `review.questions` that still matter, minus what the conversation already
+     answered.
+
+   Never sign with a name the user did not give.
+3. Give the text in your answer, ready to copy. You never send anything: the user does.
+4. Always ask, in one AskUserQuestion, whether to add it to the listing's conversation: « Oui, en brouillon » first,
+   then « Oui, je l'ai déjà envoyé » and « Non ». On a yes, write it to a file in the scratchpad and run
+   `immo.mjs message -p <slug> --id <id> --kind <kind> [--amount <€>] [--to "<who>"] [--sent] --file <file>` (`--sent`
+   for « déjà envoyé »). The dossier shows it in « Conversation », with « Copier » and « Marquer envoyé »; an offer
+   marked sent moves the listing to « Offre faite ».
 
 ## Other public data: the data.gouv.fr MCP
 
 The engine covers the open data it needs. When a data.gouv.fr MCP server is connected (its tools search the datasets
 and query their tables), use it for a question the engine does not answer: a local dataset, a newer edition, the
-building permits of a commune, the sales of plots in the next town. Name the dataset and its date in your answer. The
+noise maps, the sales of plots in the next town. Name the dataset and its date in your answer. The
 engine stays the source for what it computes: never replace its numbers with yours.
 
 ## apply this feedback
@@ -247,16 +277,21 @@ Do every item in order:
   filter the dashboard's list and the next fetches; they delete nothing. In `show`, a listing outside them has
   `matches: false`, and one whose value is unknown (a missing DPE) still matches.
 - `[élargir]`: widen the search as it says, free: `search -p <slug>` with `--zone iris|commune`, `--zone radius --radius
-  <m>`, `--criteria "budget_max=…"` (an empty value drops a criterion: `elevator=`) or `--types flat,house`. Several
-  `[élargir]` items make one `search` call. Then look for the new listings: in Stream Estate mode the count is free and
-  a fetch goes through the credits rule; in classic mode, the assisted mode. Say what the wider search brings.
+  <m>`, `--criteria "budget_max=…"` (an empty value drops a criterion: `elevator=`) or `--types flat,house,parking`. A
+  prompt holds one zone at most. Several `[élargir]` items make one `search` call. Two need no engine change:
+  - « inclure le neuf »: look for new-build programmes and off-plan sales (VEFA) of the zone too, the assisted way;
+  - « chercher aussi chez les notaires et les agences du quartier »: WebSearch the notaries' listings
+    (immobilier.notaires.fr) and the local agencies' sites, then one listing page at a time, as in the assisted mode.
+  Then look for the new listings: in Stream Estate mode the count is free and a fetch goes through the credits rule; in
+  classic mode, the assisted mode. Say what the wider search brings.
 - `[analyser]`: `show --id`, and `enrich --id` if it has no building data.
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings.
 - `[message]`: the messages section above.
 - `[ajouter]`: the add mode.
 - `[question]`: answer it.
 
-Then say in one line per item what you did, and tell the user to reload the dashboard.
+Then say in one line per item what you did. The open dashboard sees the change within seconds and shows « Recharger »:
+no need to tell the user to reload it.
 
 ## Common mistakes
 

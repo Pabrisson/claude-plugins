@@ -8,16 +8,13 @@ import { useTheme } from "next-themes"
 import { ChevronDownIcon, CrossIcon, LayersIcon, SchoolIcon, ShoppingBasketIcon, TrainFrontIcon, TreesIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
-import { useRun } from "@/components/run-dialog"
 import { levelOf } from "@/components/ruler"
 import { TypeIcon } from "@/components/type-icon"
-import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { Poi, PropertyType } from "@/lib/api"
-import { eur, keur, num, perUnit, POI_LABEL, STATUS_LABEL, TYPE_LABEL } from "@/lib/format"
+import { eur, keur, LEVEL_LABEL, month, num, pct, perUnit, POI_LABEL, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -73,6 +70,12 @@ function cssColor(name: string) {
 }
 
 const fc = (features: Feature[]): FeatureCollection => ({ type: "FeatureCollection", features })
+// a sale's or a listing's gap to the sold market of its type, in its level's color: "−12 % sous le marché"
+function gapTip(ppm2: number | null, ref: number | null | undefined) {
+  const level = levelOf(ppm2, ref)
+  if (!level || !ref || !ppm2) return ""
+  return `<br><b style="color:var(--${level})">${pct(ppm2 / ref - 1)} ${LEVEL_LABEL[level]}</b>`
+}
 const CATS = { transport: TrainFrontIcon, shops: ShoppingBasketIcon, schools: SchoolIcon, parks: TreesIcon, health: CrossIcon } as const
 const POI_COLOR: Record<string, string> = { transport: "--poi-transport", shops: "--poi-shops", schools: "--poi-schools" }
 const PLACE_COLORS = ["--chart-2", "--chart-3", "--chart-4"]
@@ -102,13 +105,13 @@ export function MapView({ className }: { className?: string }) {
       zone: fc([{ type: "Feature", geometry: zone, properties: {} }]),
       sales: fc(types.filter(on).flatMap(t => (data.market.dvf?.[t]?.points ?? []).map(p => ({
         type: "Feature" as const, geometry: { type: "Point" as const, coordinates: p.point },
-        properties: { level: levelOf(p.ppm2, marketOf(t).ref?.ppm2) ?? "at", tip: `<b>Vendu ${eur(p.price)}</b><br>${TYPE_LABEL[t]}${p.area ? ` · ${p.area} m²` : ""} · ${perUnit(p.ppm2, t)}<br>${p.address} · ${p.date.slice(0, 7)}` },
+        properties: { level: levelOf(p.ppm2, marketOf(t).ref?.ppm2) ?? "at", tip: `<b>Vendu ${eur(p.price)}</b><br>${TYPE_LABEL[t]}${p.area ? ` · ${p.area} m²` : ""} · ${perUnit(p.ppm2, t)}${gapTip(p.ppm2, marketOf(t).ref?.ppm2)}<br>${titleCase(p.address)} · ${month(p.date)}` },
       })))),
       listings: fc(data.listings.filter(l => l.location.point && l.status !== "EXPIRED" && on(typeOf(l)) && (scope === "all" || matches(l, data.search.criteria, types))).map(l => {
         const t = typeOf(l) as PropertyType
         return {
           type: "Feature", geometry: { type: "Point", coordinates: l.location.point! },
-          properties: { id: l.id, level: levelOf(unitPrice(l), marketOf(t).ref?.ppm2) ?? "at", status: l.my_status ?? "", label: keur(l.price), tip: `<b>${eur(l.price)}</b><br>${TYPE_LABEL[t]}${l.area ? ` · ${l.area} m²` : ""}${l.rooms ? ` · ${l.rooms} p.` : ""} · ${perUnit(unitPrice(l), t)}${l.my_status ? `<br><span>${STATUS_LABEL[l.my_status]}</span>` : ""}` },
+          properties: { id: l.id, level: levelOf(unitPrice(l), marketOf(t).ref?.ppm2) ?? "at", status: l.my_status ?? "", label: keur(l.price), tip: `<b>${eur(l.price)}</b><br>${TYPE_LABEL[t]}${l.area ? ` · ${l.area} m²` : ""}${l.rooms ? ` · ${l.rooms} p.` : ""} · ${perUnit(unitPrice(l), t)}${gapTip(unitPrice(l), marketOf(t).ref?.ppm2)}${l.my_status ? `<br><span>${STATUS_LABEL[l.my_status]}</span>` : ""}` },
         }
       })),
       pois: fc(pois.filter(p => cats.includes(p.cat)).map((p: Poi) => ({ type: "Feature", geometry: { type: "Point", coordinates: p.point }, properties: { cat: p.cat, tip: `${p.name ?? p.kind}<br><span>${POI_LABEL[p.cat] ?? p.cat}</span>` } }))),
@@ -196,18 +199,14 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   return <section className="flex flex-col gap-2"><h3 className="text-xs font-semibold text-foreground">{title}</h3>{children}</section>
 }
 
-// The panel of the map's layers: the listings shown, the zone (darkened outside, changed here for free), the sales,
+// The panel of the map's layers: the listings shown, the zone (darkened outside or not: it changes through Claude), the sales,
 // the walking areas to the user's places and the places of the neighborhood, each with its color and its count
 function LayersPanel({ startOpen, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, pois, places, sales }: {
   startOpen: boolean; cats: string[]; setCats: (v: string[]) => void; layers: string[]; setLayers: (v: string[]) => void; scope: string; setScope: (v: string) => void
   shownTypes: string[]; setShownTypes: (v: string[]) => void; pois: Poi[]; places: string[]; sales: number
 }) {
-  const { slug, data, types } = useSearch()
-  const run = useRun()
+  const { types } = useSearch()
   const [open, setOpen] = useState(startOpen)
-  const z = data.search.zone, street = data.search.type === "street" && !!data.search.street
-  const [how, setHow] = useState(z.how === "division" ? "radius" : z.how), [radius, setRadius] = useState(z.radius_m ?? (street ? 300 : 500))
-  const changed = how !== z.how || (how === "radius" && radius !== z.radius_m)
   const toggle = (k: string, v: boolean) => setLayers(v ? [...layers, k] : layers.filter(x => x !== k))
   const count = (c: string) => pois.filter(p => p.cat === c).length
   return (
@@ -239,18 +238,6 @@ function LayersPanel({ startOpen, cats, setCats, layers, setLayers, scope, setSc
           </Group>
           <Group title="Zone">
             <div className="flex items-center gap-2"><Switch id="veil" checked={layers.includes("veil")} onCheckedChange={v => toggle("veil", v)} /><Label htmlFor="veil" className="text-xs">Assombrir l'extérieur de la zone</Label></div>
-            <ToggleGroup type="single" size="sm" variant="outline" value={how} onValueChange={v => v && setHow(v)} className="flex-wrap justify-start">
-              <ToggleGroupItem className={CHIP} value="radius">{street ? "Le long de la rue" : "Autour du lieu"}</ToggleGroupItem>
-              <ToggleGroupItem className={CHIP} value="iris">Quartier</ToggleGroupItem>
-              <ToggleGroupItem className={CHIP} value="commune">Commune</ToggleGroupItem>
-            </ToggleGroup>
-            {how === "radius" && (
-              <div className="flex flex-col gap-2">
-                <span className="text-muted-foreground">{street ? `${radius} m de part et d'autre de la rue` : `${radius} m autour du lieu`}</span>
-                <Slider min={100} max={1500} step={50} value={[radius]} onValueChange={([v]) => setRadius(v)} aria-label={street ? "Largeur de la zone" : "Rayon de la zone"} />
-              </div>
-            )}
-            {changed && <Button size="xs" className="self-start" onClick={() => run({ cmd: "search", slug, args: { zone: how, ...(how === "radius" ? { radius } : {}) }, label: "Nouvelle zone (gratuit)" })}>Appliquer la nouvelle zone</Button>}
           </Group>
           <Group title="Marché">
             <div className="flex items-center gap-2">

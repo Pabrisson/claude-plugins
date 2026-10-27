@@ -97,5 +97,7 @@ export function rentVsBuy(l, rent, profile = {}) {
     owning: Math.round(b.monthly + ((b.owning.property_tax ?? 0) + (b.owning.condo ?? 0)) / 12),
     capital: Math.round(b.payment - (b.loan * p.rate) / 100 / 12),
     break_even_years: years != null && years <= p.years ? years : null,
+    // the gross rental yield: a year of rent over the asking price
+    gross_yield: Math.round((monthly * 12 * 1000) / b.price) / 1000,
   }
 }

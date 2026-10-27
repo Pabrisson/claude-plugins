@@ -43,7 +43,7 @@ test('renting the same flat, and the work of a DPE F', () => {
   assert.equal(rentOf(l, rent).per_m2, 15.22)
   assert.equal(rentOf({ property_type: 'house' }, rent).per_m2, 17.89)
   const r = rentVsBuy(l, rentOf(l, rent), ctx.profile)
-  assert.deepEqual([r.rent, r.low, r.high], [974, 752, 1261])
+  assert.deepEqual([r.rent, r.low, r.high, r.gross_yield], [974, 752, 1261, 0.049])
   // at 3.4 %, renting stays cheaper than owning: no break-even
   assert.equal(r.break_even_years, null)
   assert.ok(rentVsBuy(l, rentOf(l, rent), { ...ctx.profile, rate: 1, down_payment: 200000 }).break_even_years > 0)

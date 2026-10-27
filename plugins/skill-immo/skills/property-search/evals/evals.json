@@ -129,7 +129,7 @@
     {
       "id": 9,
       "prompt": "Rédige une offre pour le T3 avec cave, proche métro de ma recherche rue-paul-bert-69003-lyon.",
-      "expected_output": "show for the listing, an offer letter in French inside the negotiation range with arguments the data backs, saved with message --kind offer, shown to the user, never sent.",
+      "expected_output": "show for the listing, an offer letter in French inside the negotiation range with arguments the data backs, shown to the user, added to the conversation only once they say so, never sent.",
       "files": [],
       "env": {
         "STREAM_ESTATE_API_KEY": ""
@@ -138,7 +138,7 @@
         "Runs `immo.mjs show -p rue-paul-bert-69003-lyon --id <id>` before writing",
         "Proposes an amount inside the listing's negotiation range, or asks the user which amount",
         "Uses only arguments the data holds (days online, drops, DPE, the street's sales), invents no visit date or fact",
-        "Saves it with `immo.mjs message -p rue-paul-bert-69003-lyon --id <id> --kind offer --amount <€> --file <file>`",
+        "Gives the letter in its answer, then asks in one AskUserQuestion whether to add it to the conversation (« Oui, en brouillon » first); on a yes, `immo.mjs message -p rue-paul-bert-69003-lyon --id <id> --kind offer --amount <€> --file <file>`",
         "Shows the letter and says it is in the dossier, with Copy; never says it was sent and does not mark it sent",
         "Does not sign with a name the user did not give"
       ]
@@ -146,7 +146,7 @@
     {
       "id": 10,
       "prompt": "/skill-immo:property-search apply this feedback (recherche rue-paul-bert-69003-lyon)\n1. [élargir] zone : tout le quartier (IRIS Villette-Paul Bert)\n2. [élargir] budget max 355 000 € (au lieu de 340 000 €)\n3. [message] visite pour w-40529984562e — T3 lumineux avec balcon, 289 000 € : rédige une demande de visite",
-      "expected_output": "One search call widening the zone to the IRIS and the budget (free), then the assisted search for new listings in classic mode, then a visit request saved with message --kind visit.",
+      "expected_output": "One search call widening the zone to the IRIS and the budget (free), then the assisted search for new listings in classic mode, then a visit request, added to the conversation once the user says so.",
       "files": [],
       "env": {
         "STREAM_ESTATE_API_KEY": ""
@@ -154,8 +154,38 @@
       "expectations": [
         "Runs one `immo.mjs search -p rue-paul-bert-69003-lyon` with `--zone iris` and `--criteria \"budget_max=355000\"`",
         "Then looks for new listings in the assisted mode (WebSearch, one listing page at a time), never a portal's results page",
-        "Writes a short visit request in French and saves it with `immo.mjs message … --kind visit`",
-        "Reports in one line per item what it did and tells the user to reload the dashboard"
+        "Writes a short visit request in French, gives it, and asks whether to add it to the conversation before any `immo.mjs message … --kind visit`",
+        "Reports in one line per item what it did, without asking the user to reload the dashboard (it offers « Recharger » itself)"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "/skill-immo:property-search nouvelle recherche : Rue de Montchat 69003 Lyon\n- zone : le long de la rue, 300 m de part et d'autre\n- types : appartements, maisons\n- annonces : classique (gratuit)\n- critères : ≤ 400 000 €, 3+ pièces (budget_max=400000 rooms_min=3)",
+      "expected_output": "The prompt the dashboard copies for a new search: one search with its zone, types, mode and criteria, no question it already answers, then the assisted search and the dashboard.",
+      "files": [],
+      "env": {
+        "STREAM_ESTATE_API_KEY": ""
+      },
+      "expectations": [
+        "Asks no AskUserQuestion about the place, the zone, the types or the mode",
+        "Runs `immo.mjs search \"Rue de Montchat 69003 Lyon\"` with `--zone radius --radius 300`, `--types flat,house`, `--mode classic` and `--criteria \"budget_max=400000 rooms_min=3\"`",
+        "Then looks for listings in the assisted mode (WebSearch, one listing page at a time), never a portal's results page",
+        "Gives the dashboard URL and a short summary with the zone's sold €/m²"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "/skill-immo:property-search apply this feedback (recherche rue-paul-bert-69003-lyon)\n1. [message] réponse pour <id of « T3 avec cave, proche métro »> — T3 avec cave, proche métro, 262 000 € : rédige une réponse au dernier message reçu, d'après toute la conversation",
+      "expected_output": "Reads the listing's conversation (the offer sent at 250 000 €, the seller's counter-offer at 256 000 € received), answers it inside the negotiation range, gives the text and asks before adding it.",
+      "files": [],
+      "env": {
+        "STREAM_ESTATE_API_KEY": ""
+      },
+      "expectations": [
+        "Runs `immo.mjs show -p rue-paul-bert-69003-lyon --id <id>` and reads the conversation before writing",
+        "The reply answers the 256 000 € counter-offer with an amount inside the negotiation range, and no argument the data does not back",
+        "Gives the text, never sends it, and asks in one AskUserQuestion whether to add it to the conversation",
+        "On a yes, `immo.mjs message … --kind reply --amount <€> --file <file>`"
       ]
     }
   ]

@@ -11,6 +11,8 @@ const ROUTES = [
   [/geocodage\/search/, 'geocode-20-rue-paul-bert.json'], [/georisques/, 'georisques-20-rue-paul-bert.json'], [/overpass/, 'overpass-paul-bert.json'],
   [/navigation\/isochrone/, 'isochrone-pedestrian-15.json'], [/wfs/, 'iris-moncey.json'],
   [/data\.gouv\.fr\/api\/1\/datasets\/\?q=Carte/, 'rent-datasets.json'], [/tabular-api.*INSEE_C__exact=69383/, 'rent-69383.json'],
+  [/dpe03existant\/values_agg/, 'dpe-classes-paul-bert.json'], [/fiscalite-locale.*insee_com/, 'tax-69123.json'], [/fiscalite-locale.*mpoid/, 'tax-france.json'],
+  [/dido\/api\/v1\/datasets\//, 'sitadel-dataset.json'], [/dido\/api\/v1\/datafiles\/.*COMM=eq%3A69383/, 'sitadel-69383.json'],
 ]
 const asked = []
 mock.method(globalThis, 'fetch', async (url, init) => {
@@ -59,4 +61,24 @@ test('no DVF in Alsace-Moselle, without a single request', async () => {
   const before = asked.length
   assert.deepEqual(await od.dvf('67482'), { sales: [], years: [], alsace_moselle: true })
   assert.equal(asked.length, before)
+})
+
+test('the DPE of the zone, one per home: flats and houses apart, building DPE left out', async () => {
+  const d = await od.dpeClasses({ point: [4.856, 45.756], radius: 300 })
+  assert.deepEqual(d, { flat: { A: 5, B: 60, C: 1026, D: 621, E: 306, F: 84, G: 30 }, house: { C: 3, D: 1 } })
+  const q = new URL(asked.findLast(a => a.url.includes('values_agg')).url).searchParams
+  assert.deepEqual([q.get('geo_distance'), q.get('methode_application_dpe_neq')], ['4.856,45.756,300', 'dpe appartement généré à partir des données DPE immeuble'])
+})
+
+test("the property tax: Lyon's rate for an arrondissement, and France's average", async () => {
+  assert.deepEqual(await od.tax('69383'), { year: 2025, city: 'LYON', commune: 31.89, epci: 0.55, epci_name: 'Métropole de Lyon', total: 32.82, waste: 5.19, france: 43.13 })
+  assert.ok(asked.some(a => new URL(a.url).searchParams.get('where') === "insee_com='69123'"))
+})
+
+test('the homes authorised: the newest release already out, never one announced for later', async () => {
+  const h = await od.housing('69383')
+  assert.equal(h.release, '2026-09')
+  assert.deepEqual(h.years.at(-1), { year: 2025, authorised: 174, started: null })
+  assert.equal(h.years[0].year, 2013)
+  assert.ok(asked.some(a => a.url.includes('millesime=2026-09')) && !asked.some(a => a.url.includes('millesime=2099')))
 })

@@ -72,12 +72,12 @@ export function FollowTab() {
       </div>
       <Card className="h-fit">
         <CardHeader>
-          <CardTitle>Alerte Stream Estate</CardTitle>
+          <CardTitle>Alerte de l'API payante</CardTitle>
           <CardDescription>Nouveaux biens et baisses de prix, poussés sur votre téléphone par ntfy</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           {!streamOn ? (
-            <Alert><AlertTitle>Indisponible</AlertTitle><AlertDescription>{state.stream_estate ? "Cette recherche est en mode Classique." : "Les alertes nécessitent une clé Stream Estate."}</AlertDescription></Alert>
+            <Alert><AlertTitle>Indisponible</AlertTitle><AlertDescription>{state.stream_estate ? "Cette recherche est en mode Classique." : "Les alertes nécessitent une clé de l'API payante."}</AlertDescription></Alert>
           ) : alert ? (
             <>
               <p>Alerte active{alert.drop ? `, baisses de ${alert.drop} % ou plus` : ""}.</p>

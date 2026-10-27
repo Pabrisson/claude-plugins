@@ -10,6 +10,9 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 | Autocomplete | `https://data.geopf.fr/geocodage/completion?text=&type=StreetAddress,PositionOfInterest` | none |
 | Real sales | geo-DVF `https://files.data.gouv.fr/geo-dvf/latest/csv/<year>/communes/<dep>/<insee>.csv` | 30 d (recent years), 180 d (older) |
 | DPE of an address | ADEME data-fair `https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines` | 30 d |
+| DPE classes of a zone | The same dataset, `values_agg?field=type_batiment;etiquette_dpe` with `geo_distance` or `code_insee_ban_eq` | 30 d |
+| Property tax rates | DGFiP « fiscalité locale des particuliers », `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/fiscalite-locale-des-particuliers/records` | 90 d |
+| Homes authorised | Sitadel (SDES), DiDo `https://data.statistiques.developpement-durable.gouv.fr/dido/api/v1/datafiles/<rid>/json` | 30 d |
 | Risks | Géorisques `https://georisques.gouv.fr/api/v1/resultats_rapport_risque?latlon=<lon>,<lat>` | 90 d |
 | Rents | Carte des loyers (DHUP), through the tabular API: the latest year's dataset, found by its title | 30 d |
 | Condominiums | Registre national d'immatriculation des copropriétés, through data.gouv's tabular API | 30 d |
@@ -92,7 +95,22 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 - **IGN styles**: `standard`, `gris` and `attenue` exist. There is no dark one, so the dashboard darkens `gris`
   itself.
 
+- **DPE classes of a zone** (ADEME `values_agg`): `type_batiment_in=appartement,maison` drops the building DPE (one per
+  building), and `methode_application_dpe_neq=dpe appartement généré à partir des données DPE immeuble` the flats' DPE
+  generated from them (22 % of Lyon 3e's): one DPE per home. A home diagnosed again (`numero_dpe_remplace`, about 10 %)
+  may still count twice. 300 m around rue Paul Bert: 2,132 flats, 47 % C, 6 % F and G.
+- **Property tax rates** (data.economie.gouv.fr, 50,000 calls a day): one row per commune and year, 2021 to 2025.
+  `e12vote` is the commune's rate, `e32vote` the intercommunality's, `taux_global_tfb` their total with the syndicates,
+  TSE and GEMAPI, `taux_plein_teom` the waste tax. Paris, Lyon and Marseille vote one rate: the engine asks for 75056,
+  69123 or 13055 for an arrondissement. France's average comes from one more call,
+  `select=sum(taux_global_tfb*mpoid)/sum(mpoid)` (weighted by population: 43.13 % in 2025). Lyon 2025: 32.82 %.
+- **Homes authorised** (Sitadel on DiDo, dataset `6513ee3a3b05e5cd969c270f`, file `9c90a880-…`): one row per commune
+  (or arrondissement), year and type of home, 2013 onwards; the engine keeps « Tous Logements ». DiDo lists a release
+  (`millesime`) days before it opens it and answers 400 until then: the engine reads the dataset's releases and takes
+  the newest whose `date_diffusion` has passed. The last year's homes started are not out yet. Lyon 3e: 174 authorised
+  in 2025, 472 in 2022.
+
 ## The data.gouv.fr MCP
 
 When a data.gouv.fr MCP server is connected, Claude may use it to find and query a dataset the engine does not cover
-(the building permits of a commune, a local dataset, a newer edition of one above). The engine does not depend on it.
+(the noise maps, a local dataset, a newer edition of one above). The engine does not depend on it.

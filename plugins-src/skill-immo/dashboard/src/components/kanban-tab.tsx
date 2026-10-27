@@ -4,7 +4,7 @@ import { useState } from "react"
 
 import { Dpe } from "@/components/dpe"
 import { Gap } from "@/components/ruler"
-import { StatusDot, statusBand } from "@/components/status"
+import { StatusDot, statusTint, tint } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -97,8 +97,8 @@ function KanbanCard({ l, score, fresh, onOpen, onMove }: { l: Listing; score: nu
   const { marketFor } = useSearch()
   const days = daysOnline(l), messages = l.messages?.length ?? 0, offer = l.messages?.findLast(m => m.kind === "offer" && m.amount)
   return (
-    <div draggable style={statusBand(l.my_status)} onDragStart={e => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move" }}
-      className="group relative flex cursor-grab flex-col gap-1.5 rounded-lg border bg-card p-2.5 text-sm shadow-xs active:cursor-grabbing">
+    <div draggable style={statusTint(l.my_status)} onDragStart={e => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move" }}
+      className={cn("group relative flex cursor-grab flex-col gap-1.5 rounded-lg border p-2.5 text-sm shadow-xs hover:border-ring hover:shadow-md active:cursor-grabbing", tint(l.my_status))}>
       <button type="button" onClick={onOpen} className="flex flex-col gap-1 text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-3 focus-visible:after:ring-ring/50">
         <span className="flex items-center gap-1.5 pr-7">
           <TypeIcon type={l.property_type} className="size-4 shrink-0 text-muted-foreground" />

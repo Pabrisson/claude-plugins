@@ -1,7 +1,7 @@
 import { budget } from "@engine/budget.js"
 import { score } from "@engine/decide.js"
 import { daysOnline, negotiation, typeOf, unitPrice } from "@engine/market.js"
-import { MessageSquarePlusIcon, XIcon } from "lucide-react"
+import { BrushCleaningIcon, MessageSquarePlusIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Dpe } from "@/components/dpe"
@@ -10,7 +10,7 @@ import { Gap } from "@/components/ruler"
 import { StatusBadge } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Listing, PropertyType } from "@/lib/api"
 import { eur, num, perUnit, share, titleOf, TYPE_LABEL } from "@/lib/format"
@@ -18,16 +18,19 @@ import { useSearch } from "@/lib/store"
 
 // 2 to 4 listings side by side, on what decides between them
 export function CompareTab() {
-  const { data, compare, toggleCompare, marketFor, aidsFor, profile, select, addFeedback } = useSearch()
+  const { data, compare, toggleCompare, clearCompare, marketFor, aidsFor, profile, select, addFeedback } = useSearch()
   const ls = compare.map(id => data.listings.find(l => l.id === id)).filter(Boolean) as Listing[]
   if (ls.length < 2)
     return (
-      <Empty className="m-4 border">
-        <EmptyHeader>
-          <EmptyTitle>Choisissez 2 à 4 biens</EmptyTitle>
-          <EmptyDescription>Dans le dossier d'un bien, « Comparer » l'ajoute ici. {ls.length === 1 ? "Un bien est déjà choisi." : ""}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <div className="p-4">
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyTitle>Choisissez 2 à 4 biens</EmptyTitle>
+            <EmptyDescription>Dans le dossier d'un bien, « Comparer » l'ajoute ici. {ls.length === 1 ? "Un bien est déjà choisi." : ""}</EmptyDescription>
+          </EmptyHeader>
+          {compare.length > 0 && <EmptyContent><Button variant="outline" size="sm" onClick={clearCompare}><BrushCleaningIcon data-icon="inline-start" />Vider le comparateur</Button></EmptyContent>}
+        </Empty>
+      </div>
     )
   const pois = Array.isArray(data.area.pois) ? data.area.pois : []
   const rows: [string, (l: Listing) => React.ReactNode][] = [
@@ -52,11 +55,14 @@ export function CompareTab() {
   ]
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold">Comparer {ls.length} biens</h2>
-        <Button variant="outline" size="sm" onClick={() => { addFeedback({ kind: "comparer", text: ls.map(l => l.id).join(", ") }); toast.success("Ajouté au prompt pour Claude") }}>
-          <MessageSquarePlusIcon data-icon="inline-start" />Comparer avec Claude
-        </Button>
+        <span className="flex flex-wrap gap-2">
+          <Button variant="ghost" size="sm" onClick={clearCompare}><BrushCleaningIcon data-icon="inline-start" />Vider le comparateur</Button>
+          <Button variant="outline" size="sm" onClick={() => { addFeedback({ kind: "comparer", text: ls.map(l => l.id).join(", ") }); toast.success("Ajouté au prompt pour Claude") }}>
+            <MessageSquarePlusIcon data-icon="inline-start" />Comparer avec Claude
+          </Button>
+        </span>
       </div>
       <div className="overflow-x-auto rounded-xl border">
         <Table>

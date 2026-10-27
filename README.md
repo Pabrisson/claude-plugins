@@ -258,8 +258,10 @@ Claude helps buy property in France: a flat, a house, a plot, a parking or a box
 - each search has a mode, **Stream Estate** (listings from every portal, paid) or **Classique** (open data and listings Claude finds, free);
 - the engine weighs every listing against the real sales of its type (DVF: a house against houses, a parking on its price), its building, its neighborhood, the rent of the same home (carte des loyers) and the buyer's budget;
 - each listing gets a review (strong points, points to watch, questions to ask, each with its source) and a score out of 100 weighted by the buyer's priorities;
-- Claude writes the offers, the questions to the agent and the visit requests, kept with the listing;
-- a local dashboard (`http://127.0.0.1:41287/<search>/`, dark by default) shows it all: the map and the cards (the zone stands out, a panel of layers), a kanban by status (« Écarté » folded), a list to filter and sort, a dossier per listing, market, comparison, follow-up and API costs. Each status has a discreet color, the same in every tab.
+- each listing keeps its conversation with the agent or the seller (replies pasted in the dossier, calls summed up): Claude reads it, then writes the offers, the replies, the reminders, the questions, the requests for documents and the visit requests. It gives the text and never sends anything;
+- a local dashboard (`http://127.0.0.1:41287/<search>/`, dark by default) shows it all: the map and the cards (the zone stands out, a panel of layers), a kanban by status (« Écarté » folded), a list to filter and sort, a dossier per listing, market, comparison, follow-up and API costs. Each status tints its cards, the same in every tab;
+- the market tab follows the price trend and the number of sales, what the budget buys (prices by rooms, the spread of the sold prices), the listings' follow-up week by week, the prices street by street, and the commune's context (DPE classes of the zone, property tax rate, homes authorised);
+- the dashboard starts nothing paid or new by itself: a new search, a wider zone or a message go through the prompt it copies for Claude, and a bar offers « Recharger » once Claude has changed the search.
 
 | Arguments | Mode |
 |---|---|
@@ -271,7 +273,7 @@ Claude helps buy property in France: a flat, a house, a plot, a parking or a box
 | `dashboard [<slug>]` | Reopens the dashboard |
 | `apply this feedback …` | Applies the prompt copied from the dashboard: refine, widen (zone, criteria, types), analyse, compare, write a message, add, question |
 
-**Open data** (free, no key): Géoplateforme geocoding and isochrones, geo-DVF sales of every type (5 years; none in Moselle, Bas-Rhin, Haut-Rhin), the carte des loyers, ADEME DPE, Géorisques, the national condominium register, OSM Overpass, SSMSI crime, INSEE Filosofi income, IGN vector tiles. When a data.gouv.fr MCP server is connected, Claude may use it for a dataset the engine does not cover. The answers are cached in the searches folder's `.cache/`. See `skills/property-search/references/data-sources.md`.
+**Open data** (free, no key): Géoplateforme geocoding and isochrones, geo-DVF sales of every type (5 years; none in Moselle, Bas-Rhin, Haut-Rhin), the carte des loyers, ADEME DPE (of an address and of a zone), the DGFiP's property tax rates, Sitadel's homes authorised, Géorisques, the national condominium register, OSM Overpass, SSMSI crime, INSEE Filosofi income, IGN vector tiles. When a data.gouv.fr MCP server is connected, Claude may use it for a dataset the engine does not cover. The answers are cached in the searches folder's `.cache/`. See `skills/property-search/references/data-sources.md`.
 
 **Listings**:
 - **With Stream Estate** (`stream_estate_api_key`, the plugin's secret, asked when the plugin is enabled or with `/plugin configure skill-immo@pabrisson`, kept in the Keychain): listings of every portal, with their price history, fees, publisher and time online. Also asking-price analytics, sales reconciled across DVF and the notaries, the exact address (beta) and alerts.

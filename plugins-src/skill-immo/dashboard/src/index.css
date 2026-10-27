@@ -129,9 +129,10 @@
     --at: oklch(0.56 0.012 286);
     --above: oklch(0.67 0.16 50);
     --chart-1: oklch(0.92 0.004 286.32);
-    --chart-2: oklch(0.72 0.15 300);
-    --chart-3: oklch(0.72 0.11 185);
-    --chart-4: oklch(0.8 0.14 80);
+    /* chart-2 to 4 checked with dataviz's validator against the card (#18181b), every pair */
+    --chart-2: oklch(0.64 0.16 300);
+    --chart-3: oklch(0.66 0.11 185);
+    --chart-4: oklch(0.665 0.14 75);
     --chart-5: oklch(0.6 0.02 286);
     --poi-transport: #9085e9;
     --poi-schools: #199e70;

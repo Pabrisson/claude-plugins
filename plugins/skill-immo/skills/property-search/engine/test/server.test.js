@@ -60,6 +60,32 @@ test('a message marked sent: an offer puts the listing in "Offre faite"', async 
   assert.ok(l.messages[0].sent_at)
   assert.equal(l.my_status, 'offer')
   assert.equal((await post(`/api/s/paul-bert/listings/${property.id}`, { message: { id: 'nope', sent: true } })).status, 404)
+  // the user adds the agent's reply, then deletes it; a bad one is refused
+  const msg = (body) => post(`/api/s/paul-bert/listings/${property.id}`, { message: body })
+  let c = await (await msg({ add: { from: 'them', channel: 'email', text: 'Le vendeur accepte 255 000 €.' } })).json()
+  const got = c.messages.at(-1)
+  assert.deepEqual([got.from, got.channel, got.sent_at, got.text], ['them', 'email', null, 'Le vendeur accepte 255 000 €.'])
+  assert.equal((await msg({ add: { from: 'nobody', text: 'x' } })).status, 400)
+  assert.equal((await msg({ add: { from: 'them', text: '  ' } })).status, 400)
+  c = await (await msg({ id: got.id, delete: true })).json()
+  assert.ok(!c.messages.some(x => x.id === got.id))
+})
+
+test('the version follows the files; a search is deleted, not one with an alert', async () => {
+  const v = (await (await fetch(base + '/api/s/paul-bert/version')).json()).version
+  assert.equal((await (await fetch(base + '/api/s/paul-bert')).json()).version, v)
+  fs.utimesSync(path.join(dir, 'listings.json'), new Date(), new Date(Date.now() + 5000))
+  assert.ok((await (await fetch(base + '/api/s/paul-bert/version')).json()).version > v)
+  const gone = path.join(home, 'to-delete'), del = slug => fetch(`${base}/api/s/${slug}`, { method: 'DELETE' })
+  fs.cpSync(dir, gone, { recursive: true })
+  const f = path.join(gone, 'search.json'), s = JSON.parse(fs.readFileSync(f, 'utf8'))
+  fs.writeFileSync(f, JSON.stringify({ ...s, alert: { id: 'a-1' } }))
+  assert.equal((await del('to-delete')).status, 409)
+  fs.writeFileSync(f, JSON.stringify({ ...s, alert: null }))
+  assert.equal((await del('to-delete')).status, 200)
+  assert.ok(!fs.existsSync(gone))
+  assert.equal((await del('to-delete')).status, 404)
+  assert.equal((await fetch(`${base}/api/s/paul-bert`, { method: 'DELETE', headers: { Origin: 'https://evil.example' } })).status, 403)
 })
 
 test('nothing from a foreign site', async () => {

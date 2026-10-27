@@ -4,7 +4,11 @@ export type Point = [number, number]
 export type Geometry = { type: "Polygon" | "MultiPolygon"; coordinates: unknown }
 export type Status = "to_visit" | "visited" | "offer" | "dropped" | null
 export type PropertyType = "flat" | "house" | "land" | "parking" | "premises"
-export type Message = { id: string; date: string; kind: "offer" | "question" | "visit" | "other"; amount: number | null; to: string | null; text: string; sent_at: string | null }
+// a message of a listing's conversation: the user's (from: me, a draft until sent_at) or the agent's or seller's
+// (from: them, received); `to` is the one on the other side
+export type Channel = "email" | "sms" | "phone" | "visit"
+export type Message = { id: string; date: string; from?: "me" | "them"; kind: "offer" | "question" | "visit" | "reply" | "follow_up" | "documents" | "other"; channel?: Channel | null; amount: number | null; to: string | null; text: string; sent_at: string | null }
+export type NewMessage = { from: "me" | "them"; channel: Channel; date: string; text: string; amount?: number; sent?: boolean }
 
 export type Listing = {
   id: string
@@ -62,7 +66,20 @@ export type Listing = {
 
 export type Stats = { count: number; median_ppm2: number | null; q1: number | null; q3: number | null; median_price: number | null; by_quarter: { quarter: string; count: number; median_ppm2: number }[] }
 export type Sale = { id: string; type?: PropertyType; date: string; price: number; area: number | null; rooms: number | null; ppm2: number; point: Point; address: string }
-export type Dvf = { commune: Stats; zone: Stats; street: Stats | null; recent: Stats; years: string[]; points: Sale[] }
+// how the median moved: its last 12 months against the 12 months one and three years before
+export type Trend = { to: string; median_ppm2: number | null; y1: number | null; y3: number | null }
+export type Street = { code_voie: string; name: string; count: number; median_ppm2: number; point: Point; change: number | null; distance: number | null }
+export type Dvf = {
+  commune: Stats; zone: Stats; street: Stats | null; recent: Stats; years: string[]; points: Sale[]
+  trend?: { zone: Trend | null; commune: Trend | null }
+  by_rooms?: { scope: "recent" | "zone"; rows: { rooms: number; count: number; median_price: number; median_area: number; median_ppm2: number }[] }
+  streets?: Street[]
+}
+// the commune's context: the DPE of the zone per class, the property tax rates (%), the homes authorised each year
+export type DpeClasses = { scope: "zone" | "commune"; flat: Record<string, number>; house: Record<string, number> }
+export type Tax = { year: number; city: string; commune: number; epci: number; epci_name: string; total: number; waste: number; france: number | null }
+export type Housing = { release: string | null; years: { year: number; authorised: number | null; started: number | null }[] }
+type Failed = { error: string }
 // the carte des loyers of the commune: € per m² a month, charges included
 export type Rent = { per_m2: number; low: number; high: number; scope: string; observations: number } | null
 export type Market = {
@@ -70,6 +87,7 @@ export type Market = {
   alsace_moselle?: boolean
   dvf?: Partial<Record<PropertyType, Dvf>> | null
   rent?: { year: number; flat: Rent; flat_small: Rent; flat_large: Rent; house: Rent } | { error: string }
+  context?: { dpe: DpeClasses | Failed; tax: Tax | Failed | null; housing: Housing | Failed }
   stream?: {
     updated: string
     type?: PropertyType
@@ -113,7 +131,7 @@ export type Search = {
   alert: { id: string; topic: string | null; drop: number; enabled?: boolean } | null
 }
 export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" | "area_max" | "rooms_min" | "rooms_max" | "floor_min" | "land_min", number>> & { dpe_max?: string; elevator?: boolean; outdoor?: boolean }
-export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; events: { id: string; type: string; property: string; at: string }[] }
+export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; events: { id: string; type: string; property: string; at: string }[]; version: number }
 export type Profile = { down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
 export type ScoreKey = "price" | "budget" | "energy" | "transport" | "travel" | "outdoor"
 export type UsageEntry = { date: string; route: string; credits: number | null; results: number; search: string | null }
@@ -139,8 +157,10 @@ export const api = {
   state: () => json<State>("/api/state"),
   searches: () => json<SearchSummary[]>("/api/searches"),
   search: (slug: string) => json<SearchData>(`/api/s/${slug}`),
+  version: (slug: string) => json<{ version: number }>(`/api/s/${slug}/version`),
+  deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; notes?: string; message?: { id: string; sent: boolean } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   saveProfile: (p: Partial<Profile>) => post<Profile>("/api/profile", p),
   autocomplete: (q: string) => json<{ fulltext: string; kind: string; city: string; zipcode: string }[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),

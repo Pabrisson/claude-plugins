@@ -1,6 +1,6 @@
 import { WEIGHTS } from "@engine/decide.js"
 import { matches } from "@engine/market.js"
-import { ClipboardCopyIcon, DownloadIcon, HomeIcon, MoonIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { ClipboardCopyIcon, DownloadIcon, HomeIcon, MinusIcon, MoonIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -12,8 +12,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
 import { Slider } from "@/components/ui/slider"
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
@@ -21,13 +22,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Criteria, type Profile, type PropertyType, type ScoreKey } from "@/lib/api"
-import { eur, SCORE_LABEL } from "@/lib/format"
+import { criteriaLabels, eur, SCORE_LABEL } from "@/lib/format"
 import { useSearch, type Feedback } from "@/lib/store"
 
-const CRIT_LABEL = (c: Criteria) => [
-  c.budget_max && `≤ ${eur(c.budget_max)}`, c.budget_min && `≥ ${eur(c.budget_min)}`, c.rooms_min && `${c.rooms_min}+ pièces`, c.rooms_max && `≤ ${c.rooms_max} pièces`,
-  c.area_min && `≥ ${c.area_min} m²`, c.land_min && `terrain ≥ ${c.land_min} m²`, c.floor_min != null && `étage ≥ ${c.floor_min}`, c.dpe_max && `DPE ≤ ${c.dpe_max}`, c.elevator && "ascenseur", c.outdoor && "extérieur",
-].filter(Boolean) as string[]
 
 // the Copy prompt, as the skill's "apply this feedback" mode reads it
 export const promptText = (slug: string, items: Feedback[]) =>
@@ -37,7 +34,7 @@ export function TopBar() {
   const { slug, data, state } = useSearch()
   const run = useRun()
   const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate"
-  const chips = CRIT_LABEL(s.criteria)
+  const chips = criteriaLabels(s.criteria)
   return (
     <header className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2 md:flex-nowrap md:px-4">
       <Button variant="ghost" size="icon-sm" asChild aria-label="Toutes les recherches"><a href="/"><HomeIcon /></a></Button>
@@ -46,8 +43,8 @@ export function TopBar() {
         <span className="truncate text-xs text-muted-foreground">{s.zone.label}</span>
       </div>
       <Tooltip>
-        <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"}>{s.mode === "stream-estate" ? "Stream Estate" : "Classique"}</Badge></TooltipTrigger>
-        <TooltipContent>{s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via Stream Estate (payant, avec votre accord)" : "Mode Stream Estate, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
+        <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"}>{s.mode === "stream-estate" ? "API payante" : "Classique"}</Badge></TooltipTrigger>
+        <TooltipContent>{s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API payante (payant, avec votre accord)" : "Mode API payante, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
       </Tooltip>
       <CriteriaPopover chips={chips} />
       <span className="flex-1" />
@@ -55,12 +52,12 @@ export function TopBar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <span>
-              <Button size="sm" disabled={!streamOn} onClick={() => run({ cmd: "fetch", slug, label: "Annonces Stream Estate" })}>
+              <Button size="sm" disabled={!streamOn} onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API payante" })}>
                 <DownloadIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span>{s.stream?.total ? ` (${s.stream.total})` : ""}
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>{streamOn ? "Récupérer les annonces de la zone : le coût est annoncé avant" : state.stream_estate ? "Recherche en mode Classique : demandez à Claude de chercher des annonces" : "Nécessite une clé Stream Estate. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
+          <TooltipContent>{streamOn ? "Récupérer les annonces de la zone : le coût est annoncé avant" : state.stream_estate ? "Recherche en mode Classique : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API payante. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
         </Tooltip>
         <AddListing />
         <PromptButton />
@@ -89,12 +86,12 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-h-[80dvh] w-[min(30rem,calc(100vw-2rem))] overflow-y-auto" align="start">
-        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>La liste se filtre sur ces critères ; Stream Estate les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
+        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>La liste se filtre sur ces critères ; l'API payante les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
         <div className="mt-3 flex flex-col gap-3">
           <TypesField value={types} onChange={setTypes} />
           <CriteriaFields value={c} onChange={setC} types={types} />
           <ToggleGroup type="single" variant="outline" size="sm" value={mode} onValueChange={v => v && setMode(v as typeof mode)}>
-            <ToggleGroupItem value="stream-estate" disabled={!state.stream_estate}>Stream Estate</ToggleGroupItem>
+            <ToggleGroupItem value="stream-estate" disabled={!state.stream_estate}>API payante</ToggleGroupItem>
             <ToggleGroupItem value="classic">Classique</ToggleGroupItem>
           </ToggleGroup>
           <Button onClick={apply}>Enregistrer</Button>
@@ -124,47 +121,118 @@ function AddListing() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Ajouter une annonce</DialogTitle>
-          <DialogDescription>{streamOn ? "Un lien : Stream Estate la retrouve (2 crédits, après votre accord). Sinon, ou pour un texte, Claude la lit." : "Collez son lien ou son texte : Claude la lira et l'ajoutera."}</DialogDescription>
+          <DialogDescription>{streamOn ? "Un lien : l'API payante la retrouve (2 crédits, après votre accord). Sinon, ou pour un texte, Claude la lit." : "Collez son lien ou son texte : Claude la lira et l'ajoutera."}</DialogDescription>
         </DialogHeader>
         <Field>
           <FieldLabel htmlFor="listing">Lien ou texte de l'annonce</FieldLabel>
           <Textarea id="listing" value={value} onChange={e => setValue(e.target.value)} placeholder="https://www.seloger.com/annonces/…" rows={4} />
         </Field>
-        <DialogFooter><Button onClick={submit} disabled={!value.trim()}>{streamOn && isUrl ? "Chercher dans Stream Estate" : "Ajouter au prompt"}</Button></DialogFooter>
+        <DialogFooter><Button onClick={submit} disabled={!value.trim()}>{streamOn && isUrl ? "Chercher avec l'API payante" : "Ajouter au prompt"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
 
-// Ways to widen the search, from what it holds: a wider zone, looser criteria, another type, each with the listings
-// already known that would come back into the criteria
+// Ways to widen the search, from what it holds: one wider zone, one higher budget, looser criteria and other types,
+// each criterion with the listings already known that would come back into the criteria
+type Way = { text: string; gain?: number }
 function useWiden() {
   const { data, types } = useSearch()
   const s = data.search, c = s.criteria, z = s.zone, street = s.type === "street" && !!s.street
   const live = data.listings.filter(l => l.status !== "EXPIRED")
   const gain = (c2: Criteria, t2: PropertyType[] = types) => live.filter(l => !matches(l, c, types) && matches(l, c2, t2)).length
-  const round = (x: number) => Math.round(x / 5000) * 5000
+  const round = (x: number) => Math.round(x / 1000) * 1000
   const next = (d: string) => "ABCDEFG"["ABCDEFG".indexOf(d) + 1]
-  return [
-    z.how === "radius" && z.radius_m && { text: street ? `zone : ${z.radius_m + 200} m de part et d'autre de la rue (au lieu de ${z.radius_m} m)` : `zone : ${z.radius_m + 200} m autour du lieu (au lieu de ${z.radius_m} m)` },
-    z.how !== "iris" && data.area.iris && { text: `zone : tout le quartier (IRIS ${data.area.iris.name})` },
-    z.how !== "commune" && { text: `zone : toute la commune (${s.district ?? s.city})` },
-    c.budget_max && { text: `budget max ${eur(round(c.budget_max * 1.05))} (au lieu de ${eur(c.budget_max)})`, gain: gain({ ...c, budget_max: round(c.budget_max * 1.05) }) },
-    c.rooms_min && c.rooms_min > 1 && { text: `${c.rooms_min - 1} pièces et plus (au lieu de ${c.rooms_min})`, gain: gain({ ...c, rooms_min: c.rooms_min - 1 }) },
-    c.area_min && { text: `surface de ${Math.round(c.area_min * 0.9)} m² et plus (au lieu de ${c.area_min})`, gain: gain({ ...c, area_min: Math.round(c.area_min * 0.9) }) },
-    c.dpe_max && next(c.dpe_max) && { text: `DPE jusqu'à ${next(c.dpe_max)} (au lieu de ${c.dpe_max})`, gain: gain({ ...c, dpe_max: next(c.dpe_max) }) },
-    c.elevator && { text: "sans exiger d'ascenseur", gain: gain({ ...c, elevator: undefined }) },
-    c.outdoor && { text: "sans exiger d'extérieur", gain: gain({ ...c, outdoor: undefined }) },
-    types.includes("flat") && !types.includes("house") && { text: "inclure les maisons", gain: gain(c, [...types, "house"]) },
-    types.includes("house") && !types.includes("flat") && { text: "inclure les appartements", gain: gain(c, [...types, "flat"]) },
-  ].filter(Boolean) as { text: string; gain?: number }[]
+  const along = (m: number) => (street ? `${m} m de part et d'autre de la rue` : `${m} m autour du lieu`)
+  const keep = (x: unknown[]) => x.filter(Boolean) as Way[]
+  return {
+    // the zone chosen with the three buttons, as the prompt's line ("" when it stays the same)
+    zone: (how: string, radius: number): Way | null =>
+      how === "radius" ? (z.how === "radius" && radius === z.radius_m ? null : { text: `zone : ${along(radius)} (au lieu de ${z.how === "radius" && z.radius_m ? `${z.radius_m} m` : z.label})` })
+        : how === "iris" ? (z.how === "iris" ? null : { text: `zone : tout le quartier${data.area.iris ? ` (IRIS ${data.area.iris.name})` : ""}` })
+          : how === "commune" ? (z.how === "commune" ? null : { text: `zone : toute la commune (${s.district ?? s.city})` }) : null,
+    budget: (k: number): Way | null => (c.budget_max && k > 1 ? { text: `budget max ${eur(round(c.budget_max * k))} (au lieu de ${eur(c.budget_max)})`, gain: gain({ ...c, budget_max: round(c.budget_max * k) }) } : null),
+    criteria: keep([
+      c.rooms_min && c.rooms_min > 1 && { text: `${c.rooms_min - 1} pièces et plus (au lieu de ${c.rooms_min})`, gain: gain({ ...c, rooms_min: c.rooms_min - 1 }) },
+      c.rooms_max && { text: `sans maximum de pièces (au lieu de ${c.rooms_max})`, gain: gain({ ...c, rooms_max: undefined }) },
+      c.area_min && { text: `surface de ${Math.round(c.area_min * 0.9)} m² et plus (au lieu de ${c.area_min})`, gain: gain({ ...c, area_min: Math.round(c.area_min * 0.9) }) },
+      c.area_max && { text: `sans surface maximum (au lieu de ${c.area_max} m²)`, gain: gain({ ...c, area_max: undefined }) },
+      c.land_min && { text: `terrain de ${Math.round(c.land_min * 0.8)} m² et plus (au lieu de ${c.land_min})`, gain: gain({ ...c, land_min: Math.round(c.land_min * 0.8) }) },
+      c.budget_min && { text: `sans budget minimum (au lieu de ${eur(c.budget_min)})`, gain: gain({ ...c, budget_min: undefined }) },
+      c.dpe_max && next(c.dpe_max) && { text: `DPE jusqu'à ${next(c.dpe_max)} (au lieu de ${c.dpe_max})`, gain: gain({ ...c, dpe_max: next(c.dpe_max) }) },
+      c.floor_min != null && c.floor_min > 0 && { text: `dès le rez-de-chaussée (au lieu du ${c.floor_min}ᵉ étage)`, gain: gain({ ...c, floor_min: undefined }) },
+      c.elevator && { text: "sans exiger d'ascenseur", gain: gain({ ...c, elevator: undefined }) },
+      c.outdoor && { text: "sans exiger d'extérieur", gain: gain({ ...c, outdoor: undefined }) },
+      types.includes("flat") && !types.includes("house") && { text: "inclure les maisons", gain: gain(c, [...types, "house"]) },
+      types.includes("house") && !types.includes("flat") && { text: "inclure les appartements", gain: gain(c, [...types, "flat"]) },
+      (types.includes("flat") || types.includes("house")) && !types.includes("parking") && { text: "chercher aussi une place de parking ou un box dans la zone" },
+      (types.includes("flat") || types.includes("house")) && { text: "inclure le neuf (programmes et ventes sur plan)" },
+      s.mode === "classic" && { text: "chercher aussi chez les notaires et les agences du quartier" },
+    ]),
+  }
 }
 
+const cap = (t: string) => t[0].toUpperCase() + t.slice(1)
+// "Budget max 355 000 € (au lieu de 340 000 €) · 2 biens déjà connus y entrent"
+function WayLabel({ w, htmlFor }: { w: Way; htmlFor: string }) {
+  return (
+    <FieldLabel htmlFor={htmlFor} className="font-normal">
+      {cap(w.text)}{w.gain ? <span className="text-muted-foreground"> · {w.gain} bien{w.gain > 1 ? "s" : ""} déjà connu{w.gain > 1 ? "s" : ""} y entre{w.gain > 1 ? "nt" : ""}</span> : null}
+    </FieldLabel>
+  )
+}
+// The zone in three buttons, as the map's layers had them: along the street (or around the place) with its width, the
+// IRIS, the commune. None pressed: the zone stays.
+function ZonePicker({ how, setHow, radius, setRadius, way }: { how: string; setHow: (v: string) => void; radius: number; setRadius: (v: number) => void; way: Way | null }) {
+  const { data } = useSearch()
+  const s = data.search, street = s.type === "street" && !!s.street
+  return (
+    <FieldSet className="gap-2">
+      <FieldLegend variant="label" className="text-muted-foreground">Zone</FieldLegend>
+      <ToggleGroup type="single" variant="outline" size="sm" value={how} onValueChange={setHow} className="flex-wrap justify-start" aria-label="Zone">
+        <ToggleGroupItem value="radius">{street ? "Le long de la rue" : "Autour du lieu"}</ToggleGroupItem>
+        <ToggleGroupItem value="iris">Quartier</ToggleGroupItem>
+        <ToggleGroupItem value="commune">Commune</ToggleGroupItem>
+      </ToggleGroup>
+      {how === "radius" && <Slider className="my-3" min={100} max={1500} step={50} value={[radius]} onValueChange={([v]) => setRadius(v)} aria-label={street ? "Largeur de la zone" : "Rayon de la zone"} />}
+      <span className="text-sm text-muted-foreground">{way ? cap(way.text.replace(/^zone : /, "")) : `Zone actuelle : ${s.zone.label}`}</span>
+    </FieldSet>
+  )
+}
+
+// the budget raised by a share of it: a preset, or any percentage typed or stepped with − and +
+const PRESETS = { 0: "Garder", 5: "+5 %", 10: "+10 %" } as const
+function BudgetPicker({ pct, setPct, way }: { pct: number; setPct: (v: number) => void; way: Way | null }) {
+  const { data } = useSearch()
+  const set = (v: number) => setPct(Math.max(0, Math.min(50, Math.round(v) || 0)))
+  return (
+    <FieldSet className="gap-2">
+      <FieldLegend variant="label" className="text-muted-foreground">Budget</FieldLegend>
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup type="single" variant="outline" size="sm" value={pct in PRESETS ? String(pct) : ""} onValueChange={v => set(Number(v))} className="justify-start" aria-label="Budget">
+          {Object.entries(PRESETS).map(([k, v]) => <ToggleGroupItem key={k} value={k}>{v}</ToggleGroupItem>)}
+        </ToggleGroup>
+        <InputGroup className="h-8 w-32">
+          <InputGroupAddon><InputGroupButton size="icon-xs" aria-label="Baisser de 1 %" disabled={pct <= 0} onClick={() => set(pct - 1)}><MinusIcon /></InputGroupButton></InputGroupAddon>
+          <InputGroupInput type="number" inputMode="numeric" min={0} max={50} value={pct} onChange={e => set(Number(e.target.value))} className="text-center" aria-label="Hausse du budget, en %" />
+          <InputGroupAddon align="inline-end">%<InputGroupButton size="icon-xs" aria-label="Monter de 1 %" disabled={pct >= 50} onClick={() => set(pct + 1)}><PlusIcon /></InputGroupButton></InputGroupAddon>
+        </InputGroup>
+      </div>
+      <span className="text-sm text-muted-foreground">
+        {way ? <>{cap(way.text)}{way.gain ? ` · ${way.gain} bien${way.gain > 1 ? "s" : ""} déjà connu${way.gain > 1 ? "s" : ""} y entre${way.gain > 1 ? "nt" : ""}` : ""}</> : `Budget actuel : ${eur(data.search.criteria.budget_max)}`}
+      </span>
+    </FieldSet>
+  )
+}
 function PromptButton() {
-  const { slug, feedback, removeFeedback, clearFeedback } = useSearch()
+  const { slug, data, feedback, removeFeedback, clearFeedback } = useSearch()
   const widen = useWiden()
   const [question, setQuestion] = useState(""), [picked, setPicked] = useState<string[]>([]), [other, setOther] = useState("")
-  const items = [...feedback, ...picked.map(text => ({ kind: "élargir" as const, text })), ...(other.trim() ? [{ kind: "élargir" as const, text: other.trim() }] : []), ...(question.trim() ? [{ kind: "question" as const, text: question.trim() }] : [])]
+  const z = data.search.zone, start = z.radius_m ? z.radius_m + 200 : data.search.type === "street" ? 300 : 500
+  const [how, setHow] = useState(""), [radius, setRadius] = useState(start), [pct, setPct] = useState(0)
+  const zoneWay = widen.zone(how, radius), budgetWay = widen.budget(1 + pct / 100)
+  const ways = [zoneWay?.text, budgetWay?.text, ...picked, other.trim()].filter(Boolean) as string[]
+  const items = [...feedback, ...ways.map(text => ({ kind: "élargir" as const, text })), ...(question.trim() ? [{ kind: "question" as const, text: question.trim() }] : [])]
   async function copy() {
     await navigator.clipboard.writeText(promptText(slug, items))
     toast.success("Prompt copié : collez-le dans Claude Code")
@@ -172,6 +240,9 @@ function PromptButton() {
     setQuestion("")
     setPicked([])
     setOther("")
+    setHow("")
+    setRadius(start)
+    setPct(0)
   }
   return (
     <Popover>
@@ -185,16 +256,21 @@ function PromptButton() {
               <Button variant="ghost" size="icon-xs" aria-label="Retirer" onClick={() => removeFeedback(i)}><Trash2Icon /></Button>
             </div>
           ))}
-          <FieldGroup className="gap-2">
+          <FieldGroup className="gap-3">
             <FieldLabel>Élargir la recherche</FieldLabel>
-            {widen.map(w => (
-              <Field key={w.text} orientation="horizontal" className="items-start">
-                <Checkbox id={w.text} checked={picked.includes(w.text)} onCheckedChange={v => setPicked(p => (v ? [...p, w.text] : p.filter(x => x !== w.text)))} />
-                <FieldLabel htmlFor={w.text} className="font-normal">{w.text[0].toUpperCase() + w.text.slice(1)}{w.gain ? <span className="text-muted-foreground"> · {w.gain} bien{w.gain > 1 ? "s" : ""} déjà connu{w.gain > 1 ? "s" : ""} y entre{w.gain > 1 ? "nt" : ""}</span> : null}</FieldLabel>
-              </Field>
-            ))}
+            <ZonePicker how={how} setHow={setHow} radius={radius} setRadius={setRadius} way={zoneWay} />
+            {data.search.criteria.budget_max && <BudgetPicker pct={pct} setPct={setPct} way={budgetWay} />}
+            <FieldSet className="gap-2">
+              <FieldLegend variant="label" className="text-muted-foreground">Critères et types</FieldLegend>
+              {widen.criteria.map(w => (
+                <Field key={w.text} orientation="horizontal" className="items-start">
+                  <Checkbox id={w.text} checked={picked.includes(w.text)} onCheckedChange={v => setPicked(p => (v ? [...p, w.text] : p.filter(x => x !== w.text)))} />
+                  <WayLabel w={w} htmlFor={w.text} />
+                </Field>
+              ))}
+            </FieldSet>
             <Input value={other} onChange={e => setOther(e.target.value)} placeholder="Autre : la rue voisine, une autre commune…" aria-label="Autre façon d'élargir" />
-            <FieldDescription>Claude change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode Stream Estate, le coût est annoncé avant.</FieldDescription>
+            <FieldDescription>Claude change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode API payante, le coût est annoncé avant.</FieldDescription>
           </FieldGroup>
           <Separator />
           <Field>
@@ -218,7 +294,7 @@ export function ProfileDialog() {
     ["down_payment", "Apport (€)"], ["net_income_monthly", "Revenus nets du foyer (€/mois)"], ["other_loans_monthly", "Autres crédits (€/mois)"],
     ["rate", "Taux du crédit (%)"], ["years", "Durée (ans)"], ["insurance_rate", "Assurance (% par an)"],
     ["notary_old", "Frais de notaire, ancien", "0,075 = 7,5 %"], ["notary_new", "Frais de notaire, neuf", "0,025 = 2,5 %"],
-    ["monthly_credit_cap", "Plafond de crédits Stream Estate par mois"], ["eur_per_credit", "Prix d'un crédit (€)"],
+    ["monthly_credit_cap", "Plafond de crédits de l'API payante par mois"], ["eur_per_credit", "Prix d'un crédit (€)"],
   ]
   return (
     <Dialog onOpenChange={o => o && setP(profile)}>

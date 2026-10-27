@@ -24,10 +24,13 @@ type Ctx = {
   // what the decision aids of a listing read (lib/decide.js)
   aidsFor: (l: Listing) => { ref: Ref | null; pois: Poi[]; isochrones: NonNullable<SearchData["area"]["isochrones"]>; profile: Profile; criteria: SearchData["search"]["criteria"] }
   lastVisit: string | null
+  // the search changed on disk since the page loaded it (Claude at work): reload() takes the change
+  stale: boolean
   selected: string | null
   select: (id: string | null) => void
   compare: string[]
   toggleCompare: (id: string) => void
+  clearCompare: () => void
   feedback: Feedback[]
   addFeedback: (f: Feedback) => void
   removeFeedback: (i: number) => void
@@ -51,11 +54,22 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
   useEffect(() => save(`immo:${slug}:compare`, compare), [slug, compare])
   useEffect(() => save(`immo:${slug}:feedback`, feedback), [slug, feedback])
 
+  const [stale, setStale] = useState(false)
+
   const reload = useCallback(async () => {
     const [d, s] = await Promise.all([api.search(slug), api.state()])
     setData(d)
     setState(s)
+    setStale(false)
   }, [slug])
+  // every few seconds, while the page is shown: a newer version than the data's is a change made elsewhere. The
+  // page's own changes reload the data, which moves its version along.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") api.version(slug).then(v => v.version > data.version && setStale(true), () => {})
+    }, 4000)
+    return () => clearInterval(t)
+  }, [slug, data.version])
   const types = useMemo<PropertyType[]>(() => data.search.types ?? ["flat"], [data.search.types])
   const markets = useMemo(() => {
     const out: Partial<Record<PropertyType, Market>> = {}
@@ -72,8 +86,9 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
     marketOf: t => markets[t],
     marketFor: l => markets[typeOf(l) as PropertyType],
     aidsFor: l => ({ ref: markets[typeOf(l) as PropertyType].ref, pois, isochrones: data.area.isochrones ?? [], profile, criteria: data.search.criteria }),
-    lastVisit, selected, select, compare,
+    lastVisit, stale, selected, select, compare,
     toggleCompare: id => setCompare(c => (c.includes(id) ? c.filter(x => x !== id) : [...c, id].slice(-4))),
+    clearCompare: () => setCompare([]),
     feedback,
     addFeedback: f => setFeedback(fs => [...fs, f]),
     removeFeedback: i => setFeedback(fs => fs.filter((_, k) => k !== i)),

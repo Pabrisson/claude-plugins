@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import { building, dvfSales, median, parseCsv, quantile, stats, summary } from '../lib/dvf.js'
+import { building, byRooms, dvfSales, median, parseCsv, quantile, stats, streets, summary, trend } from '../lib/dvf.js'
 import { distance, inZone } from '../lib/geo.js'
 
 // 17 real mutations of Lyon 3e in 2024 (geo-DVF): 14 on rue Paul Bert, 2 selling several apartments, a house, a
@@ -47,4 +47,19 @@ test('street, zone, commune and building', () => {
   assert.ok(m.zone.count < m.commune.count)
   assert.ok(m.points.every(p => p.date >= '2024-03-01' && distance(p.point, zone.center) <= 600))
   assert.deepEqual(building(sales, 308, '5245').map(s => s.id), ['2024-826626', '2024-826459', '2024-826289'])
+})
+
+test('the trend, the prices by rooms and the streets around', () => {
+  const sale = (date, ppm2, x = {}) => ({ date, ppm2, price: ppm2 * 50, area: 50, rooms: 2, code_voie: 'A', street: 'RUE A', point: [4.85, 45.75], ...x })
+  const ss = [2021, 2023, 2024].flatMap((y, k) => Array.from({ length: 10 }, (_, i) => sale(`${y}-0${1 + (i % 9)}-15`, [4000, 5000, 5500][k]))).sort((a, b) => a.date.localeCompare(b.date))
+  // the last 12 months to 2024-09-15 against 2023's and 2021's
+  assert.deepEqual(trend(ss), { to: '2024-09-15', median_ppm2: 5500, y1: 0.1, y3: 0.375 })
+  assert.equal(trend(ss.slice(-9)).y1, null)
+  const rooms = byRooms([...ss.slice(0, 3), sale('2024-01-01', 3000, { rooms: 1 }), sale('2024-01-02', 3000, { rooms: 1 }), ...[6, 5, 7].map(r => sale('2024-02-01', 6000, { rooms: r, price: 600000 }))])
+  assert.deepEqual(rooms.map(r => [r.rooms, r.count, r.median_price]), [[2, 3, 200000], [5, 3, 600000]])
+  const far = Array.from({ length: 5 }, (_, i) => sale(`2024-0${i + 1}-01`, 3000, { code_voie: 'B', street: 'RUE B', point: [4.86, 45.75] }))
+  const st = streets([...ss, ...far, ...far.slice(0, 4).map(s => ({ ...s, code_voie: 'C' }))], { center: [4.85, 45.75], since: '2023-01-01' })
+  assert.deepEqual(st.map(s => [s.code_voie, s.count, s.distance]), [['A', 30, 0], ['B', 5, 776]])
+  assert.equal(st[0].change, 0.313)
+  assert.equal(st[1].change, null)
 })

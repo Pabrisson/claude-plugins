@@ -54,7 +54,8 @@ const GITIGNORE = `# skill-immo: what the engine makes again, and the buyer's pr
 // what git must keep, to check against the .gitignore
 const KEPT = ['s/search.json', 's/listings.json', '.costs.json', '.cache/api-usage.json']
 const CRITERIA = ['budget_min', 'budget_max', 'area_min', 'area_max', 'rooms_min', 'rooms_max', 'floor_min', 'land_min', 'dpe_max', 'elevator', 'outdoor']
-const MESSAGE_KINDS = ['offer', 'question', 'visit', 'other']
+const MESSAGE_KINDS = ['offer', 'question', 'visit', 'reply', 'follow_up', 'documents', 'other']
+const CHANNELS = ['email', 'sms', 'phone', 'visit']
 const LETTERS = 'ABCDEFG'
 // the profile's numbers, the only fields the dashboard may write
 const PROFILE_NUMBERS = ['down_payment', 'net_income_monthly', 'other_loans_monthly', 'rate', 'years', 'insurance_rate', 'notary_old', 'notary_new', 'eur_per_credit', 'monthly_credit_cap']
@@ -65,7 +66,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     project: { type: 'string', short: 'p' }, slug: { type: 'string' }, json: { type: 'boolean' },
     estimate: { type: 'boolean' }, spend: { type: 'string' }, force: { type: 'boolean' }, 'accept-unknown': { type: 'boolean' },
     mode: { type: 'string' }, zone: { type: 'string' }, radius: { type: 'string' }, division: { type: 'string' }, type: { type: 'string' }, types: { type: 'string' }, criteria: { type: 'string' }, max: { type: 'string' },
-    kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' },
+    kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' }, from: { type: 'string' }, channel: { type: 'string' }, date: { type: 'string' }, sent: { type: 'boolean' },
     url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' }, resolve: { type: 'boolean' },
     webhook: { type: 'string' }, drop: { type: 'string' }, remote: { type: 'boolean' }, open: { type: 'boolean' },
   },
@@ -96,6 +97,7 @@ function searchDir(required = true) {
   if (!fs.existsSync(path.join(dir, 'search.json'))) die(`no search ${p} in ${HOME}`)
   return dir
 }
+const version = dir => Math.max(...['search.json', 'listings.json', 'market.json', 'area.json', 'alert-events.json'].map(f => fs.statSync(path.join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0))
 const load = dir => ({
   search: readJson(path.join(dir, 'search.json')), listings: readJson(path.join(dir, 'listings.json'), []),
   market: readJson(path.join(dir, 'market.json'), {}), area: readJson(path.join(dir, 'area.json'), {}),
@@ -307,6 +309,10 @@ async function freeData(dir, s) {
   const since = new Date(Date.now() - 2 * 365 * 86400000).toISOString().slice(0, 10)
   const dvf = od.dvf(s.insee), rent = od.rent(s.insee).catch(e => ({ error: e.message })), c = center(s.zone), places = profile().places ?? []
   const settle = p => p.then(v => v, e => ({ error: e.message }))
+  // the commune's context: the DPE of the zone (around its center for a radius or along a street, else the
+  // commune's), the property tax rate, the homes authorised to be built
+  const dpeAt = s.zone.how === 'radius' && s.zone.radius_m ? { point: c, radius: s.zone.radius_m } : { insee: s.insee }
+  const context = Promise.all([settle(od.dpeClasses(dpeAt)), settle(od.tax(s.insee)), settle(od.housing(s.insee))])
   const areaParts = Promise.all([
     settle(od.overpass(bbox(s.zone, 600))), settle(od.georisques(c)), settle(od.crime(s.insee, s.dep)),
     settle(od.income(`${ARRONDISSEMENT.test(s.insee) ? 'ARM' : 'COM'}-${s.insee}`)), settle(od.income(`DEP-${s.dep}`)), settle(od.income('FRANCE-FM')),
@@ -315,8 +321,12 @@ async function freeData(dir, s) {
       async ({ pl, pr, m }) => ({ place: pl.label, profile: pr, minutes: m, geometry: await od.isochrone(pl.point, pr, m) }))),
   ])
   const d = await dvf
-  const byType = Object.fromEntries(typesOf(s).map(t => [t, summary(d.sales.filter(x => x.type === t), { inZone: zoneOf, code_voie: s.street?.code_voie, since })]))
-  const market = { ...readJson(path.join(dir, 'market.json'), {}), updated: now(), alsace_moselle: d.alsace_moselle, dvf: d.sales.length ? byType : null, rent: await rent }
+  const byType = Object.fromEntries(typesOf(s).map(t => [t, summary(d.sales.filter(x => x.type === t), { inZone: zoneOf, code_voie: s.street?.code_voie, since, center: c })]))
+  const [dpe, tax, housing] = await context
+  const market = {
+    ...readJson(path.join(dir, 'market.json'), {}), updated: now(), alsace_moselle: d.alsace_moselle, dvf: d.sales.length ? byType : null, rent: await rent,
+    context: { dpe: dpe.error ? dpe : { scope: dpeAt.insee ? 'commune' : 'zone', ...dpe }, tax, housing },
+  }
   writeJson(path.join(dir, 'market.json'), market)
   const [pois, risks, crime, local, department, france, iris, isochrones] = await areaParts
   const area = { updated: now(), center: c, pois, risks, crime, income: { local, department, france }, iris: iris && !iris.error ? { code: iris.code, name: iris.name } : null, isochrones, places }
@@ -358,7 +368,9 @@ async function search(query) {
   }
   const r = market.rent
   if (r?.flat || r?.house) console.log(`rent (carte des loyers ${r.year}, €/m² a month, charges included): flats ${r.flat?.per_m2 ?? '—'}, houses ${r.house?.per_m2 ?? '—'}`)
-  const failed = Object.entries({ shops: area.pois, risks: area.risks, crime: area.crime }).filter(([, v]) => v?.error).map(([k, v]) => `${k} (${v.error})`)
+  const { tax, housing } = market.context
+  if (tax && !tax.error) console.log(`property tax ${tax.year}: ${tax.total} % in ${tax.city} (France ${tax.france} %)${housing?.years?.length ? `; homes authorised ${housing.years.at(-1).year}: ${housing.years.at(-1).authorised}` : ''}`)
+  const failed = Object.entries({ shops: area.pois, risks: area.risks, crime: area.crime, ...market.context }).filter(([, v]) => v?.error).map(([k, v]) => `${k} (${v.error})`)
   console.log(`neighborhood: ${Array.isArray(area.pois) ? area.pois.length : 0} places nearby, ${(area.isochrones?.length ?? 0)} travel areas${failed.length ? `; failed: ${failed.join(', ')}` : ''}`)
   if (streamOn(s)) {
     const total = await withCredits(() => seCount(s.slug, seCriteria(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) })))
@@ -665,7 +677,7 @@ function show() {
     return {
     id: l.id, source: l.source, type: t, title: l.title, url: l.urls.find(u => u.url)?.url ?? null, portals: l.urls.map(u => u.source),
     price: l.price, area: l.area, land_area: l.land_area ?? null, price_per_m2: l.price_per_m2, rooms: l.rooms, floor: l.floor, dpe: l.dpe?.energy, status: l.status,
-    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, notes: l.notes, messages: l.messages ?? [], address: l.building?.address?.shown ? l.building.address.label : l.location.address,
+    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), address: l.building?.address?.shown ? l.building.address.label : l.location.address,
     market: { reference: ref, badge: badge(unitPrice(l), ref?.ppm2), street_ppm2: m.dvf?.[t]?.street?.median_ppm2 ?? null, asking_ppm2: m.stream?.type === t ? m.stream?.trend?.data?.at(-1)?.metrics?.['median:price_per_sqm'] ?? null : null },
     negotiation: negotiation(l, ref?.ppm2), days_online: daysOnline(l), dropped: Math.round(dropped(l) * 1000) / 1000, urgent: l.urgent, favorites: l.favorites,
     review: review(l, ctx), score: score(l, ctx),
@@ -679,20 +691,37 @@ function show() {
   console.log(JSON.stringify(ids?.length === 1 ? out[0] : out, null, 2))
 }
 
-// message -p <slug> --id <id> --kind offer|question|visit|other [--amount €] [--to <who>] --file <text> | --text "…":
-// a message Claude wrote for a listing (an offer, a question to the agent, a visit request), kept with it and shown
-// in its dossier, ready to copy
+// A message of a listing's conversation with the agent or the seller: one the user sends (from: me, a draft until
+// sent_at; Claude writes them) or one received (from: them: a reply pasted, a call summed up). Its text is kept as given.
+function newMessage(l, { from = 'me', kind = 'other', channel = null, amount = null, to, text, date, sent = false }) {
+  if (!['me', 'them'].includes(from)) throw new Error('from is me or them')
+  if (!MESSAGE_KINDS.includes(kind)) throw new Error(`kind is ${MESSAGE_KINDS.join(', ')}`)
+  if (channel != null && !CHANNELS.includes(channel)) throw new Error(`channel is ${CHANNELS.join(', ')}`)
+  if (amount != null && !(+amount > 0)) throw new Error('amount is a price in €')
+  const body = String(text ?? '').trim().slice(0, 10000), at = date ? new Date(date) : new Date()
+  if (!body) throw new Error('the message is empty')
+  if (Number.isNaN(at.getTime())) throw new Error('date is an ISO date: 2026-10-27 or 2026-10-27T18:30')
+  return {
+    id: `m-${randomBytes(4).toString('hex')}`, date: at.toISOString(), from, kind, channel, amount: amount != null ? +amount : null,
+    to: to ?? l.publishers?.[0]?.name ?? null, text: body, sent_at: from === 'me' && sent ? at.toISOString() : null,
+  }
+}
+// an offer sent puts the listing in "Offre faite"
+const afterSent = (l, m) => { if (m.sent_at && m.kind === 'offer') l.my_status = 'offer' }
+
+// message -p <slug> --id <id> [--from me|them] [--kind …] [--channel …] [--amount €] [--to <who>] [--date <iso>]
+// [--sent] --file <text> | --text "…": a message added to the listing's conversation, shown in its dossier
 function message() {
   const dir = searchDir(), f = path.join(dir, 'listings.json'), ls = listingsOf(dir), l = ls.find(x => x.id === opt.id)
-  if (!l) die(`usage: message -p <slug> --id <listing id> --kind ${MESSAGE_KINDS.join('|')} [--amount €] [--to <who>] --file <text file> | --text "…"`)
-  const kind = opt.kind ?? 'other', text = (opt.file ? fs.readFileSync(opt.file === '-' ? 0 : opt.file, 'utf8') : opt.text ?? '').trim()
-  if (!MESSAGE_KINDS.includes(kind)) die(`--kind is ${MESSAGE_KINDS.join(', ')}`)
-  if (!text) die('the message is empty: --file <text file> or --text "…"')
-  if (opt.amount != null && !(+opt.amount > 0)) die('--amount is a price in €')
-  const m = { id: `m-${randomBytes(4).toString('hex')}`, date: now(), kind, amount: opt.amount ? +opt.amount : null, to: opt.to ?? l.publishers?.[0]?.name ?? null, text, sent_at: null }
+  if (!l) die(`usage: message -p <slug> --id <listing id> [--from me|them] [--kind ${MESSAGE_KINDS.join('|')}] [--channel ${CHANNELS.join('|')}] [--amount €] [--to <who>] [--date <iso>] [--sent] --file <text file> | --text "…"`)
+  const text = opt.file ? fs.readFileSync(opt.file === '-' ? 0 : opt.file, 'utf8') : opt.text
+  let m
+  try { m = newMessage(l, { from: opt.from, kind: opt.kind, channel: opt.channel, amount: opt.amount, to: opt.to, text, date: opt.date, sent: opt.sent }) } catch (e) { die(e.message) }
   l.messages = [...(l.messages ?? []), m]
+  afterSent(l, m)
   writeJson(f, ls)
-  console.log(`message ${m.id} (${kind}${m.amount ? `, ${fmt(m.amount)} €` : ''}) saved on ${l.id}: the dossier shows it, with Copy and Sent`)
+  const state = m.from === 'them' ? 'received' : m.sent_at ? 'sent' : 'draft'
+  console.log(`message ${m.id} (${m.kind}, ${state}${m.amount ? `, ${fmt(m.amount)} €` : ''}) added to the conversation of ${l.id}: the dossier shows it`)
 }
 
 function list() {
@@ -784,7 +813,16 @@ async function handle(req, res) {
   if (m) {
     const dir = path.join(HOME, m[1]), sub = m[2] ?? ''
     if (!fs.existsSync(path.join(dir, 'search.json'))) return reply(res, 404, { error: `no search ${m[1]}` })
-    if (!sub) return reply(res, 200, { ...load(dir), events: readJson(path.join(dir, 'alert-events.json'), []) })
+    // the search's version: its files' latest change, taken before reading them, so that what Claude writes
+    // meanwhile still shows as new to the page (it asks /version every few seconds)
+    if (sub === '/version') return reply(res, 200, { version: version(dir) })
+    if (!sub && req.method === 'DELETE') {
+      // a search with an alert keeps it: Stream Estate would go on notifying, with no search left to show it
+      if (readJson(path.join(dir, 'search.json')).alert?.id) return reply(res, 409, { error: 'alert' })
+      fs.rmSync(dir, { recursive: true, force: true })
+      return reply(res, 200, {})
+    }
+    if (!sub) { const v = version(dir); return reply(res, 200, { ...load(dir), events: readJson(path.join(dir, 'alert-events.json'), []), version: v }) }
     if (sub === '/visit' && post) {
       const f = path.join(dir, 'search.json'), s = readJson(f), before = s.last_visit
       s.last_visit = now()
@@ -797,12 +835,15 @@ async function handle(req, res) {
       if (!l) return reply(res, 404, { error: 'no such listing' })
       if ('my_status' in body) { if (![null, 'to_visit', 'visited', 'offer', 'dropped'].includes(body.my_status)) return reply(res, 400, { error: 'bad status' }); l.my_status = body.my_status }
       if (typeof body.notes === 'string') l.notes = body.notes.slice(0, 5000)
-      // a message marked sent (or not): an offer sent puts the listing in "Offre faite"
-      if (body.message?.id) {
+      // the conversation: a message the user adds (a reply received, a call), one marked sent or not, one deleted
+      if (body.message?.add) {
+        try { l.messages = [...(l.messages ?? []), newMessage(l, body.message.add)] } catch (e) { return reply(res, 400, { error: e.message }) }
+        afterSent(l, l.messages.at(-1))
+      } else if (body.message?.id) {
         const msg = (l.messages ?? []).find(x => x.id === body.message.id)
         if (!msg) return reply(res, 404, { error: 'no such message' })
-        msg.sent_at = body.message.sent ? now() : null
-        if (msg.sent_at && msg.kind === 'offer') l.my_status = 'offer'
+        if (body.message.delete) l.messages = l.messages.filter(x => x !== msg)
+        else if (msg.from !== 'them') { msg.sent_at = body.message.sent ? now() : null; afterSent(l, msg) }
       }
       writeJson(f, ls)
       return reply(res, 200, l)

@@ -13,17 +13,17 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Listing, PropertyType } from "@/lib/api"
-import { eur, num, SALE_STATUS, SOURCE_LABEL, STATUS_LABEL, titleOf, TYPE_PLURAL } from "@/lib/format"
+import { eur, num, pct, SALE_STATUS, SOURCE_LABEL, STATUS_LABEL, titleOf, TYPE_PLURAL } from "@/lib/format"
 import { isNew } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 type Row = { l: Listing; score: number | null; gap: number | null; days: number | null; offer: number | null }
 // each column: its header, what it sorts on, its cell; `wide` ones only show from a tablet up
-const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string | null; cell: (r: Row) => React.ReactNode; right?: boolean; wide?: boolean }[] = [
-  { key: "type", label: "Type", sort: r => typeOf(r.l), cell: r => <TypeIcon type={r.l.property_type} className="size-4 text-muted-foreground" /> },
+const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string | null; cell: (r: Row) => React.ReactNode; right?: boolean; center?: boolean; wide?: boolean }[] = [
+  { key: "type", label: "Type", center: true, sort: r => typeOf(r.l), cell: r => <TypeIcon type={r.l.property_type} className="mx-auto size-4 text-muted-foreground" /> },
   { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="max-w-64 truncate font-medium">{titleOf(r.l)}</span><span className="text-xs text-muted-foreground">{r.l.urls.map(u => u.source).filter(Boolean).join(", ") || SOURCE_LABEL[r.l.source]}</span></span> },
-  { key: "price", label: "Prix", right: true, sort: r => r.l.price, cell: r => <b>{eur(r.l.price)}</b> },
+  { key: "price", label: "Prix", right: true, sort: r => r.l.price, cell: r => <PriceCell l={r.l} /> },
   { key: "area", label: "Surface", right: true, sort: r => r.l.area ?? r.l.land_area ?? null, cell: r => (r.l.area ? `${num(r.l.area)} m²` : r.l.land_area ? `${num(r.l.land_area)} m² de terrain` : "—") },
   { key: "ppm2", label: "Prix unitaire", right: true, wide: true, sort: r => unitPrice(r.l), cell: r => num(unitPrice(r.l)) },
   { key: "gap", label: "Écart", right: true, sort: r => r.gap, cell: r => <GapCell l={r.l} /> },
@@ -35,6 +35,16 @@ const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string |
   { key: "days", label: "En ligne", right: true, wide: true, sort: r => r.days, cell: r => (r.days == null ? "—" : `${r.days} j`) },
   { key: "offer", label: "Offre", right: true, wide: true, sort: r => r.offer, cell: r => eur(r.offer) },
 ]
+// the price first: large, with the first price seen struck through when it has changed since
+function PriceCell({ l }: { l: Listing }) {
+  const first = l.price_history?.[0]?.price, moved = first && l.price && first !== l.price ? (l.price - first) / first : null
+  return (
+    <span className="inline-flex flex-col items-end leading-tight">
+      <span className="text-base font-bold tabular-nums whitespace-nowrap">{eur(l.price)}</span>
+      {moved != null && <span className={cn("text-xs whitespace-nowrap", moved < 0 ? "text-below" : "text-above")}><s className="text-muted-foreground">{eur(first)}</s> {pct(moved)}</span>}
+    </span>
+  )
+}
 function GapCell({ l }: { l: Listing }) {
   const { marketFor } = useSearch()
   return <Gap ppm2={unitPrice(l)} refPpm2={marketFor(l).ref?.ppm2} />
@@ -95,10 +105,12 @@ export function ListTab() {
               {COLUMNS.map(c => {
                 const on = sort.key === c.key, Icon = !on ? ArrowUpDownIcon : sort.dir === 1 ? ArrowUpIcon : ArrowDownIcon
                 return (
-                  <TableHead key={c.key} aria-sort={on ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn(c.right && "text-right", c.wide && "hidden md:table-cell")}>
+                  <TableHead key={c.key} aria-sort={on ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn(c.right && "text-right", c.center && "w-16 text-center", c.wide && "hidden md:table-cell")}>
+                    {/* the arrow of the sorted column only, the others' on hover: it sits on the side away from the
+                        column's alignment, so the labels line up with their values */}
                     <button type="button" onClick={() => setSort(s => ({ key: c.key, dir: s.key === c.key ? (-s.dir as 1 | -1) : c.key === "score" ? -1 : 1 }))}
-                      className={cn("inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", c.right && "flex-row-reverse", on && "text-foreground")}>
-                      {c.label}<Icon className={cn("size-3.5", !on && "opacity-40")} />
+                      className={cn("group/sort relative inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", c.right && "flex-row-reverse", on && "text-foreground")}>
+                      {c.label}<Icon className={cn("size-3.5", c.center && "absolute left-full ml-1", !on && "opacity-0 group-hover/sort:opacity-60 group-focus-visible/sort:opacity-60")} />
                     </button>
                   </TableHead>
                 )
@@ -109,7 +121,7 @@ export function ListTab() {
             {shown.map(r => (
               <TableRow key={r.l.id} onClick={() => select(r.l.id)} style={statusBand(r.l.my_status)} className="cursor-pointer">
                 {COLUMNS.map(c => (
-                  <TableCell key={c.key} className={cn(c.right && "text-right", c.wide && "hidden md:table-cell")}>
+                  <TableCell key={c.key} className={cn(c.right && "text-right", c.center && "text-center", c.wide && "hidden md:table-cell")}>
                     {c.key === "title" ? (
                       <button type="button" onClick={e => { e.stopPropagation(); select(r.l.id) }} className="text-left focus-visible:underline focus-visible:outline-none">{c.cell(r)}</button>
                     ) : c.cell(r)}

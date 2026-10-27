@@ -2,7 +2,7 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { daysOnline, dropped, isHome, negotiation, typeOf, unitPrice } from "@engine/market.js"
-import { CheckIcon, CircleQuestionMarkIcon, CopyIcon, ExternalLinkIcon, MailIcon, MessageSquarePlusIcon, PenLineIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, CircleQuestionMarkIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
@@ -12,10 +12,14 @@ import { Gap, Ruler } from "@/components/ruler"
 import { useRun } from "@/components/run-dialog"
 import { StatusDot } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -23,8 +27,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
-import { ACCURACY_LABEL, date, eur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, SOURCE_LABEL, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
+import { api, type Channel, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
+import { ACCURACY_LABEL, CHANNEL_LABEL, date, dateTime, eur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, SOURCE_LABEL, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -83,7 +87,12 @@ export function Dossier() {
 }
 
 // what Claude writes from the dossier's "Rédiger" menu, as a line of the prompt
-const DRAFTS = { offer: "une offre d'achat (montant et arguments à partir de la marge de négociation)", question: "les questions à poser à l'agent ou au vendeur", visit: "une demande de visite" } as const
+// what Claude is asked to write, from the dossier's menu: the prompt says what, Claude reads the conversation first
+const DRAFTS = {
+  offer: "une offre d'achat (montant et arguments à partir de la marge de négociation)", question: "les questions à poser à l'agent ou au vendeur", visit: "une demande de visite",
+  reply: "une réponse au dernier message reçu, d'après toute la conversation", follow_up: "une relance du dernier message resté sans réponse",
+  documents: "une demande des documents (diagnostics complets, PV des 3 dernières AG, relevé de charges, avis de taxe foncière, pré-état daté)",
+} as const
 
 function DossierBody({ l }: { l: Listing }) {
   const { slug, data, state, profile, marketFor, aidsFor, reload, compare, toggleCompare, addFeedback } = useSearch()
@@ -137,7 +146,7 @@ function DossierBody({ l }: { l: Listing }) {
         </ToggleGroup>
         <Button variant={compare.includes(l.id) ? "secondary" : "outline"} size="sm" onClick={() => toggleCompare(l.id)}><ScaleIcon data-icon="inline-start" />{compare.includes(l.id) ? "Dans le comparateur" : "Comparer"}</Button>
         <Button variant="outline" size="sm" onClick={() => { addFeedback({ kind: "analyser", text: `${l.id} — ${short}` }); toast.success("Ajouté au prompt pour Claude") }}><MessageSquarePlusIcon data-icon="inline-start" />Analyser avec Claude</Button>
-        <DraftMenu onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il rédigera le message et l'enregistrera ici") }} />
+        <DraftMenu l={l} onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il rédigera le message et l'enregistrera ici") }} />
       </div>
 
       <Synthesis l={l} aids={aids} />
@@ -162,16 +171,16 @@ function DossierBody({ l }: { l: Listing }) {
         ) : <p className="text-sm text-muted-foreground">Pas de marge : le bien est sous offre, vendu ou retiré.</p>}
       </Section>
 
-      <Messages l={l} onDraft={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt pour Claude") }} />
+      <Conversation l={l} onDraft={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt pour Claude") }} />
 
       <Section title="Bâtiment et risques" action={
         <span className="flex gap-1.5">
           <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span><Button size="xs" variant="outline" disabled={!streamOn || !l.se_id} onClick={() => run({ cmd: "enrich", slug, args: { id: l.id, resolve: true }, label: "Adresse exacte (Stream Estate)" })}>Adresse exacte</Button></span>
+              <span><Button size="xs" variant="outline" disabled={!streamOn || !l.se_id} onClick={() => run({ cmd: "enrich", slug, args: { id: l.id, resolve: true }, label: "Adresse exacte (API payante)" })}>Adresse exacte</Button></span>
             </TooltipTrigger>
-            <TooltipContent>{streamOn && l.se_id ? "Stream Estate retrouve l'adresse exacte (bêta), puis le DPE, la copropriété et les ventes de l'immeuble" : "Nécessite Stream Estate (clé et recherche en mode Stream Estate)"}</TooltipContent>
+            <TooltipContent>{streamOn && l.se_id ? "L'API payante retrouve l'adresse exacte (bêta), puis le DPE, la copropriété et les ventes de l'immeuble" : "Nécessite l'API payante (clé et recherche en mode API payante)"}</TooltipContent>
           </Tooltip>
         </span>
       }>
@@ -224,15 +233,20 @@ function DossierBody({ l }: { l: Listing }) {
   )
 }
 
-// the "Rédiger" menu: a message Claude writes from the prompt (an offer, the questions to ask, a visit request)
-function DraftMenu({ onPick, size = "sm" }: { onPick: (k: keyof typeof DRAFTS) => void; size?: "sm" | "xs" }) {
+// "Rédiger avec Claude": a message Claude writes from the prompt. A reply needs a message received, a reminder one sent.
+function DraftMenu({ l, onPick, size = "sm" }: { l: Listing; onPick: (k: keyof typeof DRAFTS) => void; size?: "sm" | "xs" }) {
+  const ms = l.messages ?? []
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild><Button variant="outline" size={size}><PenLineIcon data-icon="inline-start" />Rédiger un message</Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuTrigger asChild><Button variant="outline" size={size}><PenLineIcon data-icon="inline-start" />Rédiger avec Claude</Button></DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuItem onSelect={() => onPick("offer")}>Une offre d'achat</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onPick("question")}>Les questions à l'agent</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onPick("visit")}>Une demande de visite</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onPick("documents")}>Une demande de documents</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={!ms.some(m => m.from === "them")} onSelect={() => onPick("reply")}>Répondre au dernier message</DropdownMenuItem>
+        <DropdownMenuItem disabled={!ms.some(m => m.from !== "them" && m.sent_at)} onSelect={() => onPick("follow_up")}>Une relance</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -268,41 +282,113 @@ function Synthesis({ l, aids }: { l: Listing; aids: Parameters<typeof review>[1]
   )
 }
 
-// the messages Claude wrote for this listing: copied in one click, marked sent (an offer sent: "Offre faite")
-function Messages({ l, onDraft }: { l: Listing; onDraft: (k: keyof typeof DRAFTS) => void }) {
+const CHANNEL_ICON = { email: MailIcon, sms: MessageSquareTextIcon, phone: PhoneIcon, visit: HouseIcon } as const
+// The conversation with the agent or the seller, in order: the user's messages on the right (Claude's drafts, those
+// sent), the received ones on the left (pasted, or a call summed up). Claude reads it before writing the next one.
+function Conversation({ l, onDraft }: { l: Listing; onDraft: (k: keyof typeof DRAFTS) => void }) {
   const { slug, reload } = useSearch()
-  const ms = (l.messages ?? []).toReversed()
-  async function sent(m: Message, v: boolean) {
-    await api.listing(slug, l.id, { message: { id: m.id, sent: v } })
+  const ms = (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date))
+  async function change(m: Message, body: { sent?: boolean; delete?: boolean }) {
+    await api.listing(slug, l.id, { message: { id: m.id, ...body } })
     await reload()
-    if (v) toast.success(m.kind === "offer" ? "Offre envoyée : le bien passe dans « Offre faite »" : "Message marqué comme envoyé")
+    if (body.delete) toast.success("Message supprimé de la conversation")
+    else if (body.sent) toast.success(m.kind === "offer" ? "Offre envoyée : le bien passe dans « Offre faite »" : "Message marqué comme envoyé")
   }
   return (
-    <Section title="Offres et messages" action={<DraftMenu size="xs" onPick={onDraft} />}>
-      {!ms.length && <p className="text-sm text-muted-foreground">Aucun message. « Rédiger un message » l'ajoute au prompt : Claude le rédige et l'enregistre ici.</p>}
-      {ms.map(m => <MessageItem key={m.id} m={m} onSent={v => sent(m, v)} />)}
+    <Section title="Conversation" action={<span className="flex flex-wrap justify-end gap-1.5"><AddMessage l={l} /><DraftMenu size="xs" l={l} onPick={onDraft} /></span>}>
+      {!ms.length && <p className="text-sm text-muted-foreground">Aucun message. « Ajouter » garde une réponse de l'agent ou le résumé d'un appel ; « Rédiger avec Claude » met la demande dans le prompt, et Claude lit toute la conversation avant d'écrire.</p>}
+      <ol className="flex flex-col gap-2">{ms.map(m => <Bubble key={m.id} m={m} onChange={b => change(m, b)} />)}</ol>
     </Section>
   )
 }
-function MessageItem({ m, onSent }: { m: Message; onSent: (v: boolean) => void }) {
+
+function Bubble({ m, onChange }: { m: Message; onChange: (b: { sent?: boolean; delete?: boolean }) => void }) {
   const [full, setFull] = useState(false)
+  const mine = m.from !== "them", Icon = m.channel ? CHANNEL_ICON[m.channel] : MailIcon
   return (
-    <article className="flex flex-col gap-2 rounded-lg border p-3">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <MailIcon className="size-4 text-muted-foreground" />
-        <b>{MESSAGE_LABEL[m.kind]}</b>
+    <li className={cn("flex flex-col gap-2 rounded-lg border p-3", mine ? "ml-8 bg-primary/5" : "mr-8 bg-muted/60")}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <Icon className="size-4 text-muted-foreground" aria-label={m.channel ? CHANNEL_LABEL[m.channel] : "Message"} />
+        <b>{mine ? `Moi${m.to ? ` → ${m.to}` : ""}` : m.to ?? "L'agent ou le vendeur"}</b>
+        {m.kind !== "other" && <span className="text-muted-foreground">{MESSAGE_LABEL[m.kind]}</span>}
         {m.amount && <span className="font-semibold">{eur(m.amount)}</span>}
-        {m.to && <span className="text-muted-foreground">à {m.to}</span>}
-        <span className="text-xs text-muted-foreground">{date(m.date)}</span>
-        {m.sent_at && <Badge variant="secondary"><CheckIcon />Envoyé le {date(m.sent_at)}</Badge>}
+        <span className="text-xs text-muted-foreground">{dateTime(m.date)}</span>
+        {mine ? m.sent_at ? <Badge variant="secondary"><CheckIcon />Envoyé le {date(m.sent_at)}</Badge> : <Badge variant="outline">Brouillon</Badge> : <Badge variant="secondary">Reçu</Badge>}
       </div>
       <p className={cn("text-sm whitespace-pre-line", !full && "line-clamp-3")}>{m.text}</p>
       <div className="flex flex-wrap gap-1.5">
         {m.text.split("\n").length > 3 || m.text.length > 240 ? <Button variant="ghost" size="xs" onClick={() => setFull(!full)}>{full ? "Réduire" : "Lire tout"}</Button> : null}
         <Button variant="outline" size="xs" onClick={async () => { await navigator.clipboard.writeText(m.text); toast.success("Message copié") }}><CopyIcon data-icon="inline-start" />Copier</Button>
-        <Button variant={m.sent_at ? "ghost" : "outline"} size="xs" onClick={() => onSent(!m.sent_at)}>{m.sent_at ? "Marquer non envoyé" : "Marquer envoyé"}</Button>
+        {mine && <Button variant={m.sent_at ? "ghost" : "outline"} size="xs" onClick={() => onChange({ sent: !m.sent_at })}>{m.sent_at ? "Marquer non envoyé" : "Marquer envoyé"}</Button>}
+        <AlertDialog>
+          <AlertDialogTrigger asChild><Button variant="ghost" size="icon-xs" className="ml-auto" aria-label="Supprimer le message"><Trash2Icon /></Button></AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Supprimer ce message ?</AlertDialogTitle>
+              <AlertDialogDescription>Il sera retiré de la conversation, et Claude ne le lira plus.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Annuler</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={() => onChange({ delete: true })}>Supprimer</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
-    </article>
+    </li>
+  )
+}
+
+// now as a datetime-local value: "2026-10-27T18:30"
+const localNow = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
+// a message the user adds to the conversation: the agent's reply, a call summed up, or one they sent themselves
+function AddMessage({ l }: { l: Listing }) {
+  const { slug, reload } = useSearch()
+  const [open, setOpen] = useState(false), [from, setFrom] = useState<"them" | "me">("them"), [channel, setChannel] = useState<Channel>("email")
+  const [when, setWhen] = useState(localNow), [text, setText] = useState(""), [amount, setAmount] = useState("")
+  async function save() {
+    try {
+      await api.listing(slug, l.id, { message: { add: { from, channel, date: new Date(when).toISOString(), text, ...(amount ? { amount: Number(amount) } : {}), sent: from === "me" } } })
+    } catch (e) { return toast.error("Le message n'a pas été ajouté", { description: `Détail technique : ${(e as Error).message}` }) }
+    await reload()
+    toast.success("Message ajouté à la conversation")
+    setOpen(false)
+    setText("")
+    setAmount("")
+  }
+  return (
+    <Dialog open={open} onOpenChange={o => { setOpen(o); if (o) setWhen(localNow()) }}>
+      <DialogTrigger asChild><Button variant="outline" size="xs"><PlusIcon data-icon="inline-start" />Ajouter</Button></DialogTrigger>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Ajouter un message</DialogTitle>
+          <DialogDescription>Une réponse de l'agent, le résumé d'un appel ou un message que vous avez envoyé : Claude le lira avant d'écrire le suivant.</DialogDescription>
+        </DialogHeader>
+        <FieldGroup>
+          <Field>
+            <FieldLabel>De</FieldLabel>
+            <ToggleGroup type="single" variant="outline" size="sm" value={from} onValueChange={v => v && setFrom(v as typeof from)} className="justify-start">
+              <ToggleGroupItem value="me"><UserRoundIcon />Moi</ToggleGroupItem>
+              <ToggleGroupItem value="them"><ContactRoundIcon />Propriétaire / Agence</ToggleGroupItem>
+            </ToggleGroup>
+          </Field>
+          <Field>
+            <FieldLabel>Canal</FieldLabel>
+            <ToggleGroup type="single" variant="outline" size="sm" value={channel} onValueChange={v => v && setChannel(v as Channel)} className="flex-wrap justify-start">
+              {(Object.keys(CHANNEL_LABEL) as Channel[]).map(c => { const I = CHANNEL_ICON[c]; return <ToggleGroupItem key={c} value={c}><I />{CHANNEL_LABEL[c]}</ToggleGroupItem> })}
+            </ToggleGroup>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field><FieldLabel htmlFor="m-when">Date</FieldLabel><Input id="m-when" type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} /></Field>
+            <Field><FieldLabel htmlFor="m-amount">Prix proposé (€)</FieldLabel><Input id="m-amount" type="number" inputMode="numeric" step={1000} placeholder="facultatif" value={amount} onChange={e => setAmount(e.target.value)} /></Field>
+          </div>
+          <Field>
+            <FieldLabel htmlFor="m-text">Message</FieldLabel>
+            <Textarea id="m-text" rows={6} value={text} onChange={e => setText(e.target.value)} placeholder={from === "me" ? "Collez le message envoyé…" : channel === "phone" ? "Appel : le vendeur accepte de descendre à 256 000 € si…" : "Collez le message reçu…"} />
+          </Field>
+        </FieldGroup>
+        <DialogFooter><Button onClick={save} disabled={!text.trim() || !when}>Ajouter à la conversation</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -317,6 +403,7 @@ function RentSection({ l }: { l: Listing }) {
         <>
           <Row label="Loyer d'un logement équivalent" hint={`Carte des loyers ${rent!.year}, charges comprises, ${row!.scope === "commune" ? "à la commune" : "à l'échelle de la zone"}`}>{eur(r.rent)}/mois <span className="text-muted-foreground">({eur(r.low)} à {eur(r.high)})</span></Row>
           <Row label="Propriétaire : crédit, taxe et charges">{eur(r.owning)}/mois <span className="text-muted-foreground">dont {eur(r.capital)} de capital remboursé</span></Row>
+          <Row label="Rendement locatif brut" hint="Une année de loyer rapportée au prix affiché">{share(r.gross_yield, 1)}</Row>
           <p className="text-sm">{r.break_even_years ? <>Acheter devient plus avantageux que louer au bout d'environ <b>{r.break_even_years} an{r.break_even_years > 1 ? "s" : ""}</b>.</> : <>À ce taux et à ce prix, <b>louer coûte moins cher</b> chaque année que ce que l'achat fait perdre (intérêts, taxe, charges, entretien).</>}</p>
           <p className="text-xs text-muted-foreground">Ordre de grandeur : intérêts de la première année, 1 % du prix par an d'entretien, sans placement de l'apport. Source : carte des loyers {rent!.year} (ministère du Logement).</p>
         </>

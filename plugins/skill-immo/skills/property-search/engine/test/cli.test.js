@@ -159,12 +159,22 @@ test('a message for a listing: kept with it, shown to Claude', async () => {
   let r = await run(home, ['message', '-p', 'paul-bert', '--id', id, '--kind', 'offer', '--amount', '250000', '--file', path.join(dir, 'offer.txt')], { key: null })
   assert.equal(r.status, 0, r.err)
   const [m] = read(dir, 'listings.json')[0].messages
-  assert.deepEqual([m.kind, m.amount, m.to, m.sent_at, m.text.split('\n')[1]], ['offer', 250000, 'Particulier', null, 'je vous propose 250 000 €.'])
+  assert.deepEqual([m.from, m.kind, m.amount, m.to, m.sent_at, m.text.split('\n')[1]], ['me', 'offer', 250000, 'Particulier', null, 'je vous propose 250 000 €.'])
   assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--kind', 'letter', '--text', 'x'], { key: null })).status, 1)
+  // the seller's answer, pasted, dated the day before: the conversation reads in order
+  r = await run(home, ['message', '-p', 'paul-bert', '--id', id, '--from', 'them', '--channel', 'phone', '--amount', '256000', '--date', '2020-01-01T10:00', '--text', 'Le vendeur descend à 256 000 €.'], { key: null })
+  assert.equal(r.status, 0, r.err)
+  assert.match(r.out, /received/)
+  assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--from', 'agent', '--text', 'x'], { key: null })).status, 1)
+  assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--date', 'hier', '--text', 'x'], { key: null })).status, 1)
+  // an offer already sent: the listing goes to "Offre faite"
+  await run(home, ['message', '-p', 'paul-bert', '--id', id, '--kind', 'offer', '--amount', '253000', '--sent', '--text', 'Je monte à 253 000 €.'], { key: null })
+  assert.equal(read(dir, 'listings.json')[0].my_status, 'offer')
   // a refresh of the listing keeps its messages
   await run(home, ['add', '-p', 'paul-bert', '--file', path.join(dir, 'l.json')], { key: null })
   await run(home, ['search', '-p', 'paul-bert'], { key: null })
   const shown = JSON.parse((await run(home, ['show', '-p', 'paul-bert', '--id', id], { key: null })).out)
-  assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent], ['flat', 1, 883])
+  assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent], ['flat', 3, 883])
+  assert.deepEqual(shown.messages.map(x => [x.from, x.channel, !!x.sent_at]), [['them', 'phone', false], ['me', null, false], ['me', null, true]])
   assert.ok(shown.review.questions.length && shown.score.parts.length === 6)
 })
