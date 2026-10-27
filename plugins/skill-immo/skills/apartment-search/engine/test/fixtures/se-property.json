@@ -1,0 +1,397 @@
+{
+ "id": "019dedb1-fdf4-714c-8392-5b9cfd63cde3",
+ "property": {
+  "createdAt": "2025-01-15T10:30:00+00:00",
+  "updatedAt": "2025-06-15T12:00:00+00:00",
+  "expired": false,
+  "propertyType": "FLAT",
+  "constructionStatus": "OLD",
+  "transaction": {
+   "type": "SELL",
+   "status": "AVAILABLE",
+   "saleType": "STANDARD",
+   "availableAt": "2026-06-01"
+  },
+  "area": {
+   "displayed": 56,
+   "unit": "SQM",
+   "indoor": {
+    "unit": "SQM",
+    "legal": {
+     "value": 35,
+     "law": "CARREZ"
+    },
+    "living": 56,
+    "total": 72
+   },
+   "outdoor": {
+    "unit": "SQM",
+    "terrace": 12,
+    "balcony": 4.5,
+    "garden": 80
+   },
+   "annexes": {
+    "unit": "SQM",
+    "basement": 10,
+    "parking": 12
+   },
+   "land": {
+    "unit": "HECTARE",
+    "value": 320
+   }
+  },
+  "unit": {
+   "rooms": 3,
+   "bedrooms": 2,
+   "bathrooms": 1,
+   "showerRooms": 1,
+   "wc": 1,
+   "livingRooms": 1,
+   "kitchens": 1,
+   "floor": 2,
+   "lastFloor": false,
+   "groundFloor": false,
+   "gardenFloor": false,
+   "orientation": [
+    "SOUTH"
+   ],
+   "condition": "GOOD",
+   "furnished": false,
+   "disabledAccess": false,
+   "equippedKitchen": true,
+   "fireplace": true,
+   "airConditioning": false,
+   "doubleGlazing": true,
+   "parquet": true,
+   "balcony": true,
+   "terrace": false,
+   "garden": false,
+   "dressing": true,
+   "crossing": true,
+   "quiet": true,
+   "cellar": true,
+   "basement": true,
+   "storage": true,
+   "parking": {
+    "total": 2,
+    "spots": [
+     {
+      "type": "GARAGE",
+      "box": false
+     }
+    ]
+   },
+   "diagnostic": {
+    "type": "DPE",
+    "date": "2024-06-15",
+    "standard": "FR_DPE_2021",
+    "methodVersion": "2.4",
+    "reference": "2421E1234567X",
+    "scores": {
+     "ENERGY_CONSUMPTION": {
+      "rating": "D",
+      "value": 245,
+      "unit": "KWH_EP_PER_SQM_YEAR"
+     },
+     "CARBON_EMISSIONS": {
+      "rating": "D",
+      "value": 35,
+      "unit": "KG_CO2E_PER_SQM_YEAR"
+     }
+    }
+   },
+   "energy": {
+    "heating": [
+     {
+      "system": "BOILER",
+      "energyCarrier": "GAS",
+      "collective": true
+     }
+    ]
+   }
+  },
+  "building": {
+   "constructionYear": 1980,
+   "renovationYear": 2020,
+   "constructionType": "HAUSSMANNIAN",
+   "condition": "GOOD",
+   "floors": 6,
+   "numberOfLots": 45,
+   "legalStatus": {
+    "underLegalProceedings": false
+   },
+   "energy": {
+    "heating": [
+     {
+      "system": "BOILER",
+      "energyCarrier": "GAS",
+      "collective": true
+     }
+    ]
+   }
+  },
+  "amenities": {
+   "parking": {
+    "type": "COVERED",
+    "spaces": 25
+   },
+   "elevator": true,
+   "intercom": true,
+   "digicode": true,
+   "caretaker": true,
+   "bikeRoom": true,
+   "disabledAccess": false,
+   "gym": false,
+   "playground": false,
+   "partyHall": false,
+   "sportCourt": false,
+   "adultGameRoom": false,
+   "gatedCommunity": false,
+   "barbecueGrill": false,
+   "swimmingPool": false,
+   "connectivity": [
+    "FIBER"
+   ]
+  },
+  "body": {
+   "title": "Appartement 3 pièces 56 m² Lyon 3e",
+   "description": "Renovated flat on a quiet street, close to transit and shops."
+  },
+  "pricing": {
+   "displayed": 280000,
+   "currency": "EUR",
+   "sale": {
+    "netPrice": 266000,
+    "fees": {
+     "agency": {
+      "amount": 14000,
+      "percentage": 5.26,
+      "currency": "EUR",
+      "paidBy": "SELLER",
+      "includedInPrice": true
+     },
+     "legal": {
+      "type": "NOTARY",
+      "currency": "EUR",
+      "amount": 7500,
+      "percentage": 2.5,
+      "paidBy": "BUYER"
+     },
+     "condominium": {
+      "total": 1800,
+      "currency": "EUR",
+      "frequency": "YEARLY",
+      "breakdown": [
+       {
+        "type": "MAINTENANCE",
+        "amount": 85,
+        "currency": "EUR",
+        "frequency": "MONTHLY"
+       }
+      ]
+     },
+     "taxes": {
+      "propertyTax": {
+       "amount": 1200,
+       "currency": "EUR",
+       "frequency": "YEARLY",
+       "paidBy": "OWNER"
+      }
+     }
+    }
+   },
+   "rental": {
+    "rent": {
+     "amount": 1450,
+     "currency": "EUR",
+     "frequency": "MONTHLY",
+     "includesCharges": true
+    },
+    "fees": {
+     "charges": {
+      "amount": 120,
+      "currency": "EUR",
+      "frequency": "MONTHLY",
+      "details": [
+       {
+        "type": "HEATING",
+        "amount": 35,
+        "currency": "EUR"
+       }
+      ]
+     },
+     "deposit": {
+      "amount": 1450,
+      "currency": "EUR",
+      "months": 1,
+      "paidBy": "TENANT"
+     },
+     "taxes": {
+      "housingTax": {
+       "amount": 800,
+       "currency": "EUR",
+       "frequency": "YEARLY",
+       "paidBy": "TENANT",
+       "includedInCharges": false
+      }
+     },
+     "inventory": {
+      "amount": 150,
+      "percentage": 5,
+      "currency": "EUR",
+      "paidBy": "TENANT"
+     },
+     "agency": {
+      "amount": 150,
+      "percentage": 5,
+      "currency": "EUR",
+      "paidBy": "TENANT"
+     }
+    }
+   }
+  },
+  "location": {
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     4.8455,
+     45.756
+    ]
+   },
+   "accuracy": "STREET",
+   "address": "Rue Paul Bert, 69003 Lyon",
+   "countryCode": "FR",
+   "city": {
+    "iri": "/geo/administrative-divisions/019dedb1-fdf4-714c-8392-5b9cfd63cde3",
+    "id": "019dedb1-fdf4-714c-8392-5b9cfd63cde3",
+    "name": "Lyon 3e Arrondissement",
+    "type": "MUNICIPALITY",
+    "uniqueCode": "69383",
+    "postalCodes": [
+     "69003"
+    ]
+   },
+   "neighborhood": {
+    "iri": "/geo/administrative-divisions/019dedb1-fdf4-714c-8392-5b9cfd63cde3",
+    "id": "019dedb1-fdf4-714c-8392-5b9cfd63cde3",
+    "name": "Paris",
+    "type": "MUNICIPALITY",
+    "uniqueCode": "75056",
+    "postalCodes": [
+     "75018"
+    ]
+   },
+   "subNeighborhood": {
+    "iri": "/geo/administrative-divisions/019dedb1-fdf4-714c-8392-5b9cfd63cde3",
+    "id": "019dedb1-fdf4-714c-8392-5b9cfd63cde3",
+    "name": "Paris",
+    "type": "MUNICIPALITY",
+    "uniqueCode": "75056",
+    "postalCodes": [
+     "75018"
+    ]
+   }
+  },
+  "pictures": [
+   {
+    "url": "https://cdn.stream.estate/storage/properties/2026/10/14/01/0199a4c2-7a2b-7f3c-9d5e-4a0b8f6e3c12.webp"
+   }
+  ],
+  "changes": [
+   {
+    "attribute": "DISPLAYED_PRICE",
+    "occurredAt": "2026-10-01T08:00:00+00:00",
+    "listingId": "l1",
+    "revisionId": "r2",
+    "variationPercent": -3.45,
+    "numericOld": 290000,
+    "numericNew": 280000
+   },
+   {
+    "attribute": "DISPLAYED_PRICE",
+    "occurredAt": "2026-09-01T08:00:00+00:00",
+    "listingId": "l1",
+    "revisionId": "r1",
+    "variationPercent": -3.33,
+    "numericOld": 300000,
+    "numericNew": 290000
+   }
+  ]
+ },
+ "publishers": [
+  {
+   "id": "019d0000-0000-7000-8000-000000000001",
+   "publisherType": "REAL_ESTATE_AGENCY",
+   "agencyName": "Agence Exemple",
+   "professionalCardNumber": "12345",
+   "website": "https://www.foncia-paris18.example.com",
+   "mandate": "EXCLUSIVE",
+   "reference": "REF-AB42",
+   "contact": {
+    "email": "agence@example.com",
+    "phone": "+33 4 00 00 00 00",
+    "profileUrl": null
+   }
+  }
+ ],
+ "listings": [
+  {
+   "id": "019dedb1-ff41-7e5a-bd16-6900cbd8c004",
+   "url": "https://www.seloger.com/annonces/achat/appartement/lyon-3eme-69/123456789.htm?utm_source=x",
+   "source": {
+    "iri": "/sources/s1",
+    "uuid": "s1",
+    "slug": "seloger"
+   },
+   "publishedAt": "2026-06-01T08:00:00+00:00",
+   "expiredAt": "2026-07-15T09:00:00+00:00",
+   "lastSeenAt": "2026-05-12T08:30:00+00:00",
+   "title": "Bright 3-room apartment with balcony",
+   "description": "Renovated flat on a quiet street, close to transit and shops.",
+   "createdAt": "2026-04-15T09:05:00+00:00",
+   "updatedAt": "2026-05-12T08:30:00+00:00",
+   "area": 54,
+   "rooms": 3,
+   "bedrooms": 2,
+   "bathrooms": 1,
+   "showerRooms": 1,
+   "wc": 1,
+   "livingRooms": 1,
+   "kitchens": 1,
+   "floor": 2,
+   "lastFloor": false,
+   "groundFloor": false,
+   "gardenFloor": false,
+   "condition": "TO_RENOVATE",
+   "furnished": false,
+   "disabledAccess": false,
+   "equippedKitchen": true,
+   "fireplace": true,
+   "airConditioning": false,
+   "doubleGlazing": true,
+   "parquet": true,
+   "balcony": true,
+   "terrace": false,
+   "garden": false,
+   "dressing": true,
+   "crossing": true,
+   "quiet": true,
+   "cellar": true,
+   "basement": true,
+   "storage": true,
+   "transactionStatus": "SOLD",
+   "displayedPrice": 420000,
+   "propertyType": "FLAT",
+   "transactionType": "SELL",
+   "marketing": {
+    "favorites": 42,
+    "urgent": true,
+    "boosted": false,
+    "highlighted": false
+   }
+  }
+ ],
+ "mergedFrom": [
+  "019dedb1-fdf4-714c-8392-5b9cfd63cde3"
+ ]
+}

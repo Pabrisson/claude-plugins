@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "k=$(printf %s \"$CLAUDE_PLUGIN_OPTION_STREAM_ESTATE_API_KEY\" | tr -d '[:space:]'); f=\"$CLAUDE_PLUGIN_DATA/stream-estate-key\"; case \"$k\" in ''|*[!A-Za-z0-9_.-]*) rm -f \"$f\" ;; *) mkdir -p \"$CLAUDE_PLUGIN_DATA\" && (umask 077; printf %s \"$k\" > \"$f\") && [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export STREAM_ESTATE_API_KEY=\"$(cat %s)\"\\n' \"'$f'\" >> \"$CLAUDE_ENV_FILE\" ;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

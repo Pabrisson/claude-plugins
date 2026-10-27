@@ -1,0 +1,60 @@
+// A throwaway searches folder with one search rue Paul Bert, its open data cache filled (no network), and a fake
+// Stream Estate that answers from the fixture property and charges what the real one documents.
+import fs from 'node:fs'
+import http from 'node:http'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { bbox } from '../lib/geo.js'
+
+export const ENGINE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'immo.mjs')
+export const property = JSON.parse(fs.readFileSync(new URL('./fixtures/se-property.json', import.meta.url), 'utf8'))
+
+export function searchesFolder(mode = 'stream-estate') {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'immo-')), dir = path.join(home, 'paul-bert')
+  fs.mkdirSync(dir)
+  const point = [4.8455, 45.756]
+  fs.writeFileSync(path.join(dir, 'search.json'), JSON.stringify({
+    slug: 'paul-bert', query: 'rue Paul Bert, Lyon 3e', label: 'Rue Paul Bert 69003 Lyon', created: '2026-10-27T10:00:00.000Z', type: 'street', point,
+    insee: '69383', city: 'Lyon', postcode: '69003', dep: '69', street: { name: 'Rue Paul Bert', code_voie: '5245' }, ban: '69383_5245', mode,
+    zone: { how: 'radius', kind: 'radius', center: point, radius_m: 500, label: '500 m autour de Rue Paul Bert 69003 Lyon' },
+    criteria: { rooms_min: 3 }, max: 100, stream: null, last_fetch: null, last_refresh: null, last_visit: null, alert: null,
+  }))
+  const cache = (rel, v) => { fs.mkdirSync(path.dirname(path.join(home, '.cache', rel)), { recursive: true }); fs.writeFileSync(path.join(home, '.cache', rel), JSON.stringify(v)) }
+  const y = new Date().getFullYear()
+  for (let k = y - 6; k <= y; k++) cache(`dvf/69383-${k}.json`, [])
+  cache('georisques/4.84550,45.75600.json', { natural: [{ key: 'seisme', label: 'Séisme' }], technological: [], url: null })
+  const zone = { kind: 'radius', center: point, radius_m: 500 }
+  cache(`overpass/${bbox(zone, 600).map(x => x.toFixed(4)).join(',')}.json`, [{ cat: 'transport', kind: 'tram_stop', name: 'Guillotière - Gabriel Péri', point: [4.8425387, 45.7549452] }])
+  cache('ssmsi/69383.json', { commune: { year: 2025, rows: [{ indicator: 'Cambriolages de logement', count: 420, rate: 6.73 }] }, department: null })
+  for (const [geo, median] of [['ARM-69383', 30190], ['DEP-69', 27500], ['FRANCE-FM', 25920]]) cache(`filosofi/${geo}.json`, { geo, year: '2023', median, poverty: 16 })
+  cache('polygon/iris-4.84550,45.75600.json', { code: '693830201', name: 'Moncey', geometry: null })
+  return { home, dir }
+}
+
+// the fake API: state.price changes the property's price, state.broke answers 402
+export async function fakeStreamEstate(state = {}) {
+  const seen = []
+  const server = http.createServer((req, res) => {
+    let body = ''
+    req.on('data', c => (body += c))
+    req.on('end', () => {
+      const url = new URL(req.url, 'http://x'), json = body ? JSON.parse(body) : null
+      seen.push({ method: req.method, path: url.pathname, body: json, key: req.headers['x-api-key'], accept: req.headers.accept })
+      const send = (code, data, credits) => { res.writeHead(code, { 'Content-Type': 'application/json', ...(credits != null ? { 'X-Credits-Charged': String(credits) } : {}) }); res.end(data == null ? '' : JSON.stringify(data)) }
+      if (state.broke) return send(402, { title: 'Payment Required' })
+      const p = { ...property, property: { ...property.property, pricing: { ...property.property.pricing, displayed: state.price ?? property.property.pricing.displayed } } }
+      if (req.method === 'POST' && url.pathname === '/properties') {
+        if (json.size === 0) return send(200, { data: [], meta: { totalItems: state.total ?? 1 }, links: {} }, 0)
+        const out = Array.from({ length: Math.min(json.size, state.total ?? 1) }, () => p)
+        return send(200, out, out.length)
+      }
+      if (req.method === 'GET' && url.pathname === `/properties/${property.id}`) return send(200, p, 1)
+      if (req.method === 'POST' && url.pathname === '/properties/lookup-by-url') return json.url.includes('seloger') ? send(200, { id: property.id, property: `/properties/${property.id}` }, 1) : send(404, { title: 'Not found' })
+      if (req.method === 'POST' && url.pathname === '/alerts/forecast') return send(200, { windowDays: 30, total: 12, perDay: { average: 0.4 }, perHour: { average: 0.02 } })
+      send(404, { title: 'Not found' })
+    })
+  })
+  await new Promise(ok => server.listen(0, '127.0.0.1', ok))
+  return { url: `http://127.0.0.1:${server.address().port}`, seen, state, close: () => server.close() }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "skill-immo",
+  "version": "1.0.0",
+  "description": "Skill apartment-search: find flats for sale in France around an address, a street or a neighborhood, enriched with open data (DVF sales, DPE, risks, condominiums, shops, travel times, crime, income) and the Stream Estate API, in a local dashboard with price and negotiation, building, neighborhood, budget and follow-up",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  },
+  "userConfig": {
+    "stream_estate_api_key": {
+      "type": "string",
+      "title": "Stream Estate API key",
+      "description": "Optional: listings from every portal, asking-price analytics, reconciled sales and alerts by Stream Estate (paid per use, 0.01 € a credit). Empty: open data and assisted listings (WebSearch, WebFetch, pasted text)",
+      "sensitive": true
+    }
+  }
+}

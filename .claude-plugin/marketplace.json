@@ -46,6 +46,11 @@
       "description": "Skill video-editor: edit a video of any genre from one or several rushes and B-roll, or create one from scratch in motion design, rendered locally in every format, with captions, synthesized music and sound, a review studio, editing rule packs and a style that learns"
     },
     {
+      "name": "skill-immo",
+      "source": "./plugins/skill-immo",
+      "description": "Skill apartment-search: find flats for sale in France around an address, a street or a neighborhood, weigh each against real sales (DVF), its building, its neighborhood and the buyer's budget, in a local dashboard; listings from the Stream Estate API (paid, with the user's yes on every credit) or found by Claude"
+    },
+    {
       "name": "requesty",
       "source": "./plugins/requesty",
       "description": "MCP server Requesty (router.requesty.ai): Sentry tools through the Requesty router"

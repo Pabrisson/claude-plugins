@@ -5,3 +5,5 @@ node_modules/
 plugins/skill-video/skills/video-editor/engine/test/*.mp4
 plugins/skill-video/skills/video-editor/engine/test/assets/
 plugins/skill-video/skills/video-editor/engine/models/
+.playwright-mcp/
+docs/
