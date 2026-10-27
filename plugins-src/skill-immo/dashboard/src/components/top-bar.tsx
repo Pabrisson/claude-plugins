@@ -1,6 +1,6 @@
 import { WEIGHTS } from "@engine/decide.js"
 import { matches } from "@engine/market.js"
-import { ClipboardCopyIcon, DownloadIcon, HomeIcon, MinusIcon, MoonIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { ClipboardCopyIcon, DownloadIcon, HomeIcon, MinusIcon, MoonIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -39,13 +39,17 @@ export function TopBar() {
     <header className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2 md:flex-nowrap md:px-4">
       <Button variant="ghost" size="icon-sm" asChild aria-label="Toutes les recherches"><a href="/"><HomeIcon /></a></Button>
       <div className="flex min-w-0 flex-col">
-        <h1 className="truncate text-sm font-bold md:text-base">{s.label}</h1>
+        <span className="flex min-w-0 items-center gap-2">
+          <h1 className="truncate text-sm font-bold md:text-base">{s.label}</h1>
+          <Tooltip>
+            <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"} className="shrink-0">{s.mode === "stream-estate" ? "API payante" : "OpenData"}</Badge></TooltipTrigger>
+            <TooltipContent>{s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API payante (payant, avec votre accord)" : "Mode API payante, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
+          </Tooltip>
+        </span>
         <span className="truncate text-xs text-muted-foreground">{s.zone.label}</span>
       </div>
-      <Tooltip>
-        <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"}>{s.mode === "stream-estate" ? "API payante" : "Classique"}</Badge></TooltipTrigger>
-        <TooltipContent>{s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API payante (payant, avec votre accord)" : "Mode API payante, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
-      </Tooltip>
+      {/* the criteria in the middle of the room left between the title and the actions */}
+      <span className="hidden flex-1 md:block" />
       <CriteriaPopover chips={chips} />
       <span className="flex-1" />
       <span className="flex flex-wrap items-center gap-1.5">
@@ -57,7 +61,7 @@ export function TopBar() {
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>{streamOn ? "Récupérer les annonces de la zone : le coût est annoncé avant" : state.stream_estate ? "Recherche en mode Classique : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API payante. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
+          <TooltipContent>{streamOn ? "Récupérer les annonces de la zone : le coût est annoncé avant" : state.stream_estate ? "Recherche en mode OpenData : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API payante. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
         </Tooltip>
         <AddListing />
         <PromptButton />
@@ -92,7 +96,7 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
           <CriteriaFields value={c} onChange={setC} types={types} />
           <ToggleGroup type="single" variant="outline" size="sm" value={mode} onValueChange={v => v && setMode(v as typeof mode)}>
             <ToggleGroupItem value="stream-estate" disabled={!state.stream_estate}>API payante</ToggleGroupItem>
-            <ToggleGroupItem value="classic">Classique</ToggleGroupItem>
+            <ToggleGroupItem value="classic">OpenData</ToggleGroupItem>
           </ToggleGroup>
           <Button onClick={apply}>Enregistrer</Button>
         </div>
@@ -323,6 +327,19 @@ export function ProfileDialog() {
         <DialogFooter><Button onClick={async () => { setProfile(await api.saveProfile(p)); toast.success("Profil enregistré") }}>Enregistrer</Button></DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// what Claude changed while the page was open: a bar to reload the page, which keeps the tab and the dossier open.
+// The dossier shows it too: while open, it keeps the page behind it from being clicked.
+export function StaleBar() {
+  const { stale } = useSearch()
+  if (!stale) return null
+  return (
+    <div role="status" className="flex items-center justify-center gap-3 border-b bg-primary px-3 py-1.5 text-sm text-primary-foreground">
+      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (Claude a mis la recherche à jour).
+      <Button size="xs" variant="secondary" onClick={() => location.reload()}>Recharger</Button>
+    </div>
   )
 }
 

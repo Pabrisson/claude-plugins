@@ -128,7 +128,7 @@ function approve(route, credits, what) {
 const assisted = why => die(`${why}. Assisted mode: find listings with WebSearch, read one page with WebFetch, or take the text the user pastes, then \`immo.mjs add -p <slug> --file listing.json\``, 3)
 // the paid commands of a search: classic searches never call the API
 const requireStream = s => {
-  if (s.mode === 'classic') die(`${s.slug} is a classic search (open data and assisted listings, no credit): switch it with search -p ${s.slug} --mode stream-estate`, 2)
+  if (s.mode === 'classic') die(`${s.slug} is an OpenData search (classic: open data and assisted listings, no credit): switch it with search -p ${s.slug} --mode stream-estate`, 2)
   if (!hasKey()) assisted('Stream Estate is off (no key)')
 }
 const withCredits = async fn => { try { return await fn() } catch (e) { if (e instanceof NoCredits) assisted(e.message); throw e } }
@@ -351,7 +351,9 @@ async function search(query) {
     }
     dir = path.join(HOME, slug)
   }
-  if (opt.mode && !MODES.includes(opt.mode)) die('--mode is stream-estate or classic')
+  // OpenData is the classic mode's name for the user
+  if (opt.mode === 'opendata') opt.mode = 'classic'
+  if (opt.mode && !MODES.includes(opt.mode)) die('--mode is stream-estate or classic (OpenData)')
   s.mode = opt.mode ?? s.mode ?? (hasKey() ? 'stream-estate' : 'classic')
   if (opt.types) s.types = parseTypes(opt.types)
   if (opt.criteria) parseCriteria(opt.criteria, s.criteria)
@@ -378,7 +380,7 @@ async function search(query) {
     writeJson(path.join(dir, 'search.json'), s)
     const n = Math.min(total, s.max), p = profile()
     console.log(`Stream Estate: ${total} new listings match, ${n} would be fetched for ${n} credits (${euros(n, p.eur_per_credit)}); ${Math.max(0, p.monthly_credit_cap - usage(usageLog()).month)} left of the monthly cap. Ask the user, then fetch -p ${s.slug} --spend ${n}`)
-  } else console.log(`${s.mode === 'classic' ? 'classic search' : 'Stream Estate: off (no key)'}: assisted listings (WebSearch, WebFetch, pasted text, then add)`)
+  } else console.log(`${s.mode === 'classic' ? 'OpenData search' : 'Stream Estate: off (no key)'}: assisted listings (WebSearch, WebFetch, pasted text, then add)`)
   console.log(`then: dashboard -p ${s.slug} --open`)
 }
 const listingsOf = dir => readJson(path.join(dir, 'listings.json'), [])
@@ -496,7 +498,7 @@ async function market() {
 async function add() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
   if (opt.url) {
-    if (!streamOn(s)) die(`${s.mode === 'classic' ? 'classic search' : 'Stream Estate is off'}: read ${opt.url} with WebFetch, then add -p ${s.slug} --file listing.json`, 4)
+    if (!streamOn(s)) die(`${s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}: read ${opt.url} with WebFetch, then add -p ${s.slug} --file listing.json`, 4)
     const known = listingsOf(dir).find(l => l.urls.some(u => normUrl(u.url) === normUrl(opt.url)))
     if (known) return console.log(`already in the search: ${known.id}`)
     approve('POST /properties/lookup-by-url + GET /properties/{id}', 2, 'look up the listing')
@@ -537,7 +539,7 @@ async function refresh() {
   await freeData(dir, s)
   const assistedCount = listingsOf(dir).filter(l => l.source !== 'stream-estate' && l.status !== 'EXPIRED').length
   if (!streamOn(s) || !s.last_refresh) {
-    console.log(`free data refreshed. ${streamOn(s) ? `No Stream Estate fetch yet: fetch -p ${s.slug}` : s.mode === 'classic' ? 'Classic search' : 'Stream Estate is off'}${assistedCount ? `; ${assistedCount} assisted listings: check each with WebFetch (one page), then add --file to update price or status` : ''}`)
+    console.log(`free data refreshed. ${streamOn(s) ? `No Stream Estate fetch yet: fetch -p ${s.slug}` : s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}${assistedCount ? `; ${assistedCount} assisted listings: check each with WebFetch (one page), then add --file to update price or status` : ''}`)
     return
   }
   const criteria = seCriteria(s, { since: s.last_refresh }), total = await withCredits(() => seCount(s.slug, criteria)), n = Math.min(total, +(opt.max ?? s.max))

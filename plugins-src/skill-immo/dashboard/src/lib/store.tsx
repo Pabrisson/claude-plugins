@@ -24,7 +24,7 @@ type Ctx = {
   // what the decision aids of a listing read (lib/decide.js)
   aidsFor: (l: Listing) => { ref: Ref | null; pois: Poi[]; isochrones: NonNullable<SearchData["area"]["isochrones"]>; profile: Profile; criteria: SearchData["search"]["criteria"] }
   lastVisit: string | null
-  // the search changed on disk since the page loaded it (Claude at work): reload() takes the change
+  // the search changed on disk since the page loaded it (Claude at work): reloading the page takes the change
   stale: boolean
   selected: string | null
   select: (id: string | null) => void
@@ -43,12 +43,18 @@ export const useSearch = () => useContext(SearchContext)!
 // the prompt's items stay in this browser per search, across reloads
 const load = (key: string) => { try { return JSON.parse(localStorage.getItem(key) ?? "[]") } catch { return [] } }
 const save = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* private window */ } }
+// what this tab shows (its view, the dossier open) survives a reload of the page, in this tab only
+export function useTabState<T>(key: string, initial: T) {
+  const [v, setV] = useState<T>(() => { try { const x = sessionStorage.getItem(key); return x == null ? initial : JSON.parse(x) } catch { return initial } })
+  useEffect(() => { try { sessionStorage.setItem(key, JSON.stringify(v)) } catch { /* private window */ } }, [key, v])
+  return [v, setV] as const
+}
 
 export function SearchProvider({ slug, initial, state: initialState, profile: initialProfile, lastVisit, children }: { slug: string; initial: SearchData; state: State; profile: Profile; lastVisit: string | null; children: ReactNode }) {
   const [data, setData] = useState(initial)
   const [state, setState] = useState(initialState)
   const [profile, setProfile] = useState(initialProfile)
-  const [selected, select] = useState<string | null>(null)
+  const [selected, select] = useTabState<string | null>(`immo:${slug}:selected`, null)
   const [compare, setCompare] = useState<string[]>(() => load(`immo:${slug}:compare`))
   const [feedback, setFeedback] = useState<Feedback[]>(() => load(`immo:${slug}:feedback`))
   useEffect(() => save(`immo:${slug}:compare`, compare), [slug, compare])

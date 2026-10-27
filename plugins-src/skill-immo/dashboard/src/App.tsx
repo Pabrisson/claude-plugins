@@ -13,7 +13,7 @@ import { ListingList } from "@/components/listing-list"
 import { MapView } from "@/components/map-view"
 import { MarketTab } from "@/components/market-tab"
 import { RunProvider } from "@/components/run-dialog"
-import { NewSearch, ThemeButton, TopBar } from "@/components/top-bar"
+import { NewSearch, StaleBar, ThemeButton, TopBar } from "@/components/top-bar"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
@@ -30,7 +30,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { TypeIcon } from "@/components/type-icon"
 import { api, slugOfUrl, type Profile, type SearchData, type SearchSummary, type State } from "@/lib/api"
 import { date, TYPE_PLURAL } from "@/lib/format"
-import { SearchProvider, useSearch } from "@/lib/store"
+import { SearchProvider, useSearch, useTabState } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
 
@@ -75,22 +75,10 @@ const BAR = ["listings", "list", "kanban", "follow"]
 
 // The map and the listings' cards side by side (one or the other on a phone), the kanban and the list of every
 // listing, each listing's dossier on top; market, comparison, follow-up as tabs, the API costs apart on the right
-// what Claude changed while the page was open: a bar to take it in, without losing the tab or the dossier
-function StaleBar() {
-  const { stale, reload } = useSearch()
-  if (!stale) return null
-  return (
-    <div role="status" className="flex items-center justify-center gap-3 border-b bg-primary px-3 py-1.5 text-sm text-primary-foreground">
-      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (Claude a mis la recherche à jour).
-      <Button size="xs" variant="secondary" onClick={() => reload()}>Recharger</Button>
-    </div>
-  )
-}
-
 function Workspace() {
-  const { reload, compare } = useSearch()
+  const { slug, reload, compare } = useSearch()
   const mobile = useIsMobile()
-  const [view, setView] = useState<string>("listings"), [showMap, setShowMap] = useState("list")
+  const [view, setView] = useTabState(`immo:${slug}:view`, "listings"), [showMap, setShowMap] = useState("list")
   const more = VIEWS.filter(v => !BAR.includes(v.id))
   return (
     <RunProvider onDone={reload}>
@@ -174,13 +162,13 @@ function Home({ error }: { error?: string }) {
       {fresh && (
         <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
           <span className="flex items-center gap-2"><RefreshCwIcon className="size-4" />Claude a créé ou mis à jour une recherche.</span>
-          <Button size="xs" variant="secondary" onClick={load}>Recharger</Button>
+          <Button size="xs" variant="secondary" onClick={() => location.reload()}>Recharger</Button>
         </div>
       )}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Recherche immobilière</h1>
-          <p className="text-sm text-muted-foreground">{stream ? "API payante activée" : "Mode classique : open data et annonces trouvées par Claude"}</p>
+          <p className="text-sm text-muted-foreground">{stream ? "API payante activée" : "Mode OpenData : open data et annonces trouvées par Claude"}</p>
         </div>
         <span className="flex gap-1.5"><NewSearch streamEstate={stream} trigger={trigger} /><ThemeButton /></span>
       </div>
@@ -218,7 +206,7 @@ function SearchCard({ s, onDeleted }: { s: SearchSummary; onDeleted: () => void 
           <span className="flex gap-1 text-muted-foreground">{(s.types ?? ["flat"]).map(t => <TypeIcon key={t} type={t} className="size-4" />)}</span>
         </CardTitle>
         <CardDescription>{(s.types ?? ["flat"]).map(t => TYPE_PLURAL[t]).join(", ")} · {s.zone} · {s.online} annonce{s.online > 1 ? "s" : ""} en ligne · créée le {date(s.created)}</CardDescription>
-        <Badge variant={s.mode === "stream-estate" ? "default" : "secondary"} className="w-fit">{s.mode === "stream-estate" ? "API payante" : "Classique"}</Badge>
+        <Badge variant={s.mode === "stream-estate" ? "default" : "secondary"} className="w-fit">{s.mode === "stream-estate" ? "API payante" : "OpenData"}</Badge>
       </CardHeader>
       <AlertDialog>
         <AlertDialogTrigger asChild>

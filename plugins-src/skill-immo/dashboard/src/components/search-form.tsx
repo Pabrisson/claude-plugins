@@ -69,7 +69,7 @@ export const newSearchPrompt = (o: { place: string; street: boolean; zone: strin
   `/skill-immo:property-search nouvelle recherche : ${o.place}`,
   `- zone : ${o.zone === "radius" ? (o.street ? `le long de la rue, ${o.radius} m de part et d'autre` : `${o.radius} m autour du lieu`) : o.zone === "iris" ? "le quartier (IRIS)" : "la commune"}`,
   `- types : ${o.types.map(t => TYPE_PLURAL[t].toLowerCase()).join(", ")}`,
-  `- annonces : ${o.mode === "stream-estate" ? "API payante (avec mon accord avant chaque dépense)" : "classique (gratuit)"}`,
+  `- annonces : ${o.mode === "stream-estate" ? "API payante (avec mon accord avant chaque dépense)" : "OpenData (gratuit)"}`,
   `- critères : ${Object.keys(o.criteria).length ? `${criteriaLabels(o.criteria).join(", ")} (${criteriaArg(o.criteria)})` : "aucun"}`,
 ].join("\n")
 
@@ -131,9 +131,9 @@ export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; tr
             <FieldLegend variant="label">Source des annonces</FieldLegend>
             <ToggleGroup type="single" variant="outline" value={mode} onValueChange={v => v && setMode(v)}>
               <ToggleGroupItem value="stream-estate" disabled={!streamEstate}>API payante</ToggleGroupItem>
-              <ToggleGroupItem value="classic">Classique</ToggleGroupItem>
+              <ToggleGroupItem value="classic">OpenData</ToggleGroupItem>
             </ToggleGroup>
-            <FieldDescription>{streamEstate ? "API payante : les annonces de tous les portails, payantes (votre accord est demandé avant chaque dépense). Classique : open data et annonces trouvées par Claude, gratuit." : "Sans clé de l'API payante : open data et annonces trouvées par Claude, gratuit."}</FieldDescription>
+            <FieldDescription>{streamEstate ? "API payante : les annonces de tous les portails, payantes (votre accord est demandé avant chaque dépense). OpenData : open data et annonces trouvées par Claude, gratuit." : "Sans clé de l'API payante : open data et annonces trouvées par Claude, gratuit."}</FieldDescription>
           </FieldSet>
           <TypesField value={types} onChange={setTypes} />
           <CriteriaFields value={criteria} onChange={setCriteria} types={types} />

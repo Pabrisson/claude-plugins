@@ -45,7 +45,7 @@ Talk to the user in French. Write code and files in English. The dashboard is in
 
 Run `immo.mjs doctor` once per conversation.
 - `MISSING`: show the user the fix it prints, and stop.
-- `stream-estate: on|off`: whether the key is set. Off means every search is classic.
+- `stream-estate: on|off`: whether the key is set. Off means every search is in OpenData mode.
 - `credits: …`: what was spent. Say it when the user is about to spend more.
 - `profile: none yet`: the budget needs `setup`. Offer it, but do not block a search on it.
 
@@ -77,7 +77,7 @@ The other exit codes:
 
 ## Listings without Stream Estate: the assisted mode
 
-In a classic search, or after an exit 3, you find the listings yourself:
+In an OpenData search, or after an exit 3, you find the listings yourself:
 - **WebSearch**: for example `appartement à vendre "rue Paul Bert" Lyon 3e` or `T3 vente Lyon 3e Guillotière`.
 - **WebFetch**: of **one listing page** at a time, the ones the user wants, or the best WebSearch hits (5 to 10 at
   most).
@@ -136,8 +136,8 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
      - the commune or arrondissement (`--zone commune`);
      - the IRIS (`--zone iris`);
      - with the key, a neighborhood of Stream Estate (`--zone division --division <id>`).
-   - The mode, when the key is on: « Stream Estate (annonces de tous les portails, payant) » first, then « Classique
-     (open data et annonces assistées, gratuit) ». It goes in `--mode`.
+   - The mode, when the key is on: « Stream Estate (annonces de tous les portails, payant) » first, then « OpenData
+     (open data et annonces assistées, gratuit) ». It goes in `--mode stream-estate|classic` (`classic` is OpenData).
    - The types, when the request does not say (« un bien », « investir »): a multiple-choice question, « Appartement »
      first. « un T3 », « un appartement » is a flat; « une maison », « un terrain », « un parking » or « un box », « un
      local » or « des bureaux » need no question. They go in `--types flat,house` (flat by default).
@@ -153,7 +153,7 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
 5. **Listings**:
    - Stream Estate mode: the credits rule above, then `immo.mjs fetch -p <slug> --spend N [--max N]`. Then offer
      `immo.mjs market -p <slug>` (asking prices and reconciled sales, unknown cost until measured).
-   - Classic mode: the assisted mode.
+   - OpenData mode: the assisted mode.
 6. **Dashboard**: `immo.mjs dashboard -p <slug> --open`. Give the user its URL.
 7. **Summary**: say in a few lines how many listings there are, the zone's sold €/m², the two or three listings
    that stand out and why (below the market, a recent drop, a long time online), and what is missing (no profile, no
@@ -163,7 +163,7 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
 
 - **A URL, Stream Estate mode**: `immo.mjs add -p <slug> --url <url>` (2 credits, through the credits rule). On exit 4,
   read the page with WebFetch.
-- **A URL, classic mode**: read the page with WebFetch.
+- **A URL, OpenData mode**: read the page with WebFetch.
 - **Text**: the assisted mode, with `--source pasted`.
 
 Without a search, ask which search it goes to, or start one from the listing's address.
@@ -283,7 +283,7 @@ Do every item in order:
   - « chercher aussi chez les notaires et les agences du quartier »: WebSearch the notaries' listings
     (immobilier.notaires.fr) and the local agencies' sites, then one listing page at a time, as in the assisted mode.
   Then look for the new listings: in Stream Estate mode the count is free and a fetch goes through the credits rule; in
-  classic mode, the assisted mode. Say what the wider search brings.
+  OpenData mode, the assisted mode. Say what the wider search brings.
 - `[analyser]`: `show --id`, and `enrich --id` if it has no building data.
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings.
 - `[message]`: the messages section above.

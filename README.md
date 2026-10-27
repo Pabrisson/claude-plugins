@@ -255,7 +255,7 @@ Everything stays on the machine, except what the video's `source/elevenlabs.json
 
 Claude helps buy property in France: a flat, a house, a plot, a parking or a box, a shop or an office. A search starts from an address, a street or a neighborhood, for one or several types:
 - the zone is a polygon: a band along the whole street (300 m on each side by default), a circle around an address, the commune or arrondissement, its IRIS, or a Stream Estate neighborhood;
-- each search has a mode, **Stream Estate** (listings from every portal, paid) or **Classique** (open data and listings Claude finds, free);
+- each search has a mode, **Stream Estate** (listings from every portal, paid) or **OpenData** (open data and listings Claude finds, free);
 - the engine weighs every listing against the real sales of its type (DVF: a house against houses, a parking on its price), its building, its neighborhood, the rent of the same home (carte des loyers) and the buyer's budget;
 - each listing gets a review (strong points, points to watch, questions to ask, each with its source) and a score out of 100 weighted by the buyer's priorities;
 - each listing keeps its conversation with the agent or the seller (replies pasted in the dossier, calls summed up): Claude reads it, then writes the offers, the replies, the reminders, the questions, the requests for documents and the visit requests. It gives the text and never sends anything;

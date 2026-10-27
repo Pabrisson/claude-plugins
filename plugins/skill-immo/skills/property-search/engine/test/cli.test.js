@@ -79,7 +79,7 @@ test('a classic search never calls Stream Estate', async () => {
   const before = api.seen.length
   let r = await run(home, ['fetch', '-p', 'paul-bert', '--spend', '9'])
   assert.equal(r.status, 2)
-  assert.match(r.err, /classic search .*--mode stream-estate/)
+  assert.match(r.err, /OpenData search .*--mode stream-estate/)
   r = await run(home, ['add', '-p', 'paul-bert', '--url', 'https://www.seloger.com/x.htm'])
   assert.equal(r.status, 4)
   assert.equal(api.seen.length, before)

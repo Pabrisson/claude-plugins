@@ -107,7 +107,7 @@ history stay.
 
 - `search.json`:
   - `slug`, `query`, `label`, `type` (housenumber, street, municipality);
-  - `mode` (`stream-estate` or `classic`);
+  - `mode` (`stream-estate`, or `classic` for OpenData);
   - `types` (`["flat"]` when absent);
   - `point`, `insee`, `dep`, `street { name, code_voie }`, `ban`;
   - `zone { how: radius|commune|iris|division, kind: radius|polygon, center, radius_m, geometry, label }`. For a

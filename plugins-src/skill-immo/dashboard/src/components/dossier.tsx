@@ -11,6 +11,7 @@ import { nearby } from "@/components/map-view"
 import { Gap, Ruler } from "@/components/ruler"
 import { useRun } from "@/components/run-dialog"
 import { StatusDot } from "@/components/status"
+import { StaleBar } from "@/components/top-bar"
 import { TypeIcon } from "@/components/type-icon"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -72,6 +73,7 @@ export function Dossier() {
       <Drawer open={!!l} onOpenChange={o => !o && select(null)}>
         <DrawerContent className="max-h-[92vh]">
           <DrawerHeader><DrawerTitle>{title}</DrawerTitle><DrawerDescription>{l && eur(l.price)}</DrawerDescription></DrawerHeader>
+          <StaleBar />
           <div className="overflow-y-auto px-4 pb-6">{body}</div>
         </DrawerContent>
       </Drawer>
@@ -80,13 +82,13 @@ export function Dossier() {
     <Sheet open={!!l} onOpenChange={o => !o && select(null)}>
       <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
         <SheetHeader className="border-b"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)} · ${SOURCE_LABEL[l.source]}`}</SheetDescription></SheetHeader>
+        <StaleBar />
         <div className="p-4">{body}</div>
       </SheetContent>
     </Sheet>
   )
 }
 
-// what Claude writes from the dossier's "Rédiger" menu, as a line of the prompt
 // what Claude is asked to write, from the dossier's menu: the prompt says what, Claude reads the conversation first
 const DRAFTS = {
   offer: "une offre d'achat (montant et arguments à partir de la marge de négociation)", question: "les questions à poser à l'agent ou au vendeur", visit: "une demande de visite",

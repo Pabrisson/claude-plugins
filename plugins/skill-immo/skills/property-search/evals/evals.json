@@ -160,7 +160,7 @@
     },
     {
       "id": 11,
-      "prompt": "/skill-immo:property-search nouvelle recherche : Rue de Montchat 69003 Lyon\n- zone : le long de la rue, 300 m de part et d'autre\n- types : appartements, maisons\n- annonces : classique (gratuit)\n- critères : ≤ 400 000 €, 3+ pièces (budget_max=400000 rooms_min=3)",
+      "prompt": "/skill-immo:property-search nouvelle recherche : Rue de Montchat 69003 Lyon\n- zone : le long de la rue, 300 m de part et d'autre\n- types : appartements, maisons\n- annonces : OpenData (gratuit)\n- critères : ≤ 400 000 €, 3+ pièces (budget_max=400000 rooms_min=3)",
       "expected_output": "The prompt the dashboard copies for a new search: one search with its zone, types, mode and criteria, no question it already answers, then the assisted search and the dashboard.",
       "files": [],
       "env": {

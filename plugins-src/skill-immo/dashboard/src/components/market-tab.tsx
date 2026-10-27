@@ -135,7 +135,7 @@ export function MarketTab() {
       {!streamOn && (
         <Alert>
           <AlertTitle>Prix affichés et durée en ligne de tout le marché : API payante</AlertTitle>
-          <AlertDescription>{state.stream_estate ? "Cette recherche est en mode Classique. Passez-la en mode API payante pour ajouter les prix affichés, la durée en ligne et les ventes des notaires." : "Sans clé d'API payante, le marché repose sur les ventes réelles DVF et l'open data, gratuits. La clé ajoute les prix affichés, la durée en ligne et les ventes des notaires."}</AlertDescription>
+          <AlertDescription>{state.stream_estate ? "Cette recherche est en mode OpenData. Passez-la en mode API payante pour ajouter les prix affichés, la durée en ligne et les ventes des notaires." : "Sans clé d'API payante, le marché repose sur les ventes réelles DVF et l'open data, gratuits. La clé ajoute les prix affichés, la durée en ligne et les ventes des notaires."}</AlertDescription>
         </Alert>
       )}
       {d && <SalesCard d={d} type={type} />}
