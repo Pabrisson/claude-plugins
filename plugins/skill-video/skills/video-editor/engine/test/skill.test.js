@@ -30,7 +30,7 @@ test('init writes a .gitignore that keeps the rushes, the music and the effects,
   execFileSync('git', ['init', '-q', root])
   run('init', 'a', '--formats', '1:1', '--renders', '720p', '--rules', 'none')
   const rules = fs.readFileSync(file, 'utf8').split('\n').filter(l => l && !l.startsWith('#'))
-  assert.deepEqual(rules, ['.cache/', 'output/', 'stills/', '__pycache__/', '.studio.log', '*.log', '.DS_Store'])
+  assert.deepEqual(rules, ['.cache/', 'output/', 'stills/', 'frames/', '**/assets/source.wav', '**/assets/mix.wav', '.backup/', '__pycache__/', '.studio.log', '*.log', '.DS_Store'])
   assert.doesNotMatch(run('doctor'), /warning: git ignores/)
   fs.writeFileSync(file, '*.wav\n')
   run('init', 'b', '--formats', '1:1', '--renders', '720p', '--rules', 'none')

@@ -10,7 +10,7 @@ import { fullscreen, mark, Player, toggle, useVideoTime } from "@/components/pla
 import { SoundTimeline } from "@/components/sound"
 import { VideoTimeline } from "@/components/video"
 import { Transcript, TranscriptDownload } from "@/components/transcript"
-import { busy, Waiting, Working } from "@/components/waiting"
+import { busy, took, Waiting, Working } from "@/components/waiting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -636,6 +636,7 @@ export default function App() {
             <Feedback
               version={ver.v}
               newer={newer}
+              took={newer?.rendered ? took(progress, ver.rendered, newer.rendered) : null}
               working={<Working progress={progress} since={ver.rendered} next={ver.v + 1} />}
               comments={comments}
               focus={focus}

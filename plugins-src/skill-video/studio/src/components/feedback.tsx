@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 
 import { follow, useStoredSize } from "@/components/panel"
+import { span } from "@/components/waiting"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -313,6 +314,7 @@ function Item({
 export function Feedback({
   version,
   newer,
+  took,
   working,
   comments,
   focus,
@@ -337,6 +339,8 @@ export function Feedback({
   version: number
   // this video with a version newer than the one shown, once a render lands
   newer: VideoItem | null
+  // how long the work that made it took (ms), null when no step was logged
+  took: number | null
   // the next version being made, shown until it lands
   working: ReactNode
   comments: Comment[]
@@ -438,7 +442,7 @@ export function Feedback({
             <RefreshCwIcon />
             <AlertTitle>Version v{newer.versions} is ready</AlertTitle>
             <AlertDescription className="text-xs">
-              {newer.rendered && `Rendered ${when(newer.rendered)}. `}Reload to review it: the feedback on v{version} moves under Resolved.
+              {newer.rendered && `Rendered ${when(newer.rendered)}${took === null ? "" : ` · Total ${span(took)}`}. `}Reload to review it: the feedback on v{version} moves under Resolved.
             </AlertDescription>
             <AlertAction>
               <Button size="xs" onClick={() => location.reload()}>

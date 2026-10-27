@@ -6,7 +6,7 @@ import type { Progress, Step } from "@/lib/studio"
 import { cn } from "@/lib/utils"
 
 // how long a step took, or has been running: 8 s, 2 min 05, 1 h 02
-const span = (ms: number) => {
+export const span = (ms: number) => {
   const s = Math.max(0, Math.round(ms / 1000))
   if (s < 60) return `${s} s`
   return s < 3600 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}` : `${Math.floor(s / 3600)} h ${String(Math.floor(s / 60) % 60).padStart(2, "0")}`
@@ -48,6 +48,19 @@ const isLive = (last: number, now: number) => !!last && now - last < 30 * 60_000
 export const busy = (p: Progress | null, from?: string | null, to?: string | null) =>
   isLive(lastNews(p), Date.now()) &&
   !!p?.steps.some((s) => s.state === "running" && (!from || Date.parse(s.t0) > Date.parse(from)) && (!to || Date.parse(s.t0) < Date.parse(to)))
+
+// the change since the version shown: from Claude's first step after it (the `status` that opens it), without the
+// engine's stray ones before it (a still, a check); with no step of Claude's, every step since that version
+const change = (p: Progress | null, since: string) => {
+  const all = p?.steps.filter((s) => Date.parse(s.t0) > Date.parse(since)) ?? []
+  return all.slice(Math.max(0, all.findIndex((s) => s.by === "claude")))
+}
+// how long the change that made the next version took: from its first step to the end of the last one started before
+// that version's render (final, and Claude's step around it); null with no step logged
+export const took = (p: Progress | null, since: string, to: string) => {
+  const steps = change(p, since).filter((s) => Date.parse(s.t0) < Date.parse(to))
+  return steps.length ? Math.max(...steps.map((s) => Date.parse(s.t1 ?? to))) - Date.parse(steps[0].t0) : null
+}
 
 // Nothing to review yet: what is being done on the video, newest last, with the total time. Claude's own steps (the
 // brief, the scene, a review pass…) lead, the engine's (transcription, renders with their progress) fold under them:
@@ -106,10 +119,7 @@ export function Waiting({ progress }: { progress: Progress | null }) {
 // the alert that offers to reload takes over.
 export function Working({ progress, since, next }: { progress: Progress | null; since: string; next: number }) {
   const now = useNow()
-  // the change under way: from Claude's first step since the version shown (the `status` that opens it), without the
-  // engine's stray ones before it (a still, a check); with no step of Claude's, every step since that version
-  const all = progress?.steps.filter((s) => Date.parse(s.t0) > Date.parse(since)) ?? []
-  const steps = all.slice(Math.max(0, all.findIndex((s) => s.by === "claude")))
+  const steps = change(progress, since)
   if (!busy(progress, since)) return null
   // the renders under way: the engine's steps that count their chunks
   const renders = steps.filter((s) => s.by === "engine" && s.state === "running" && !!s.total)

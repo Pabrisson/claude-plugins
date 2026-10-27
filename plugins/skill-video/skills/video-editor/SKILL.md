@@ -511,6 +511,6 @@ gives its current lines.
   prompts.
 - **Git.** `init` writes the projects folder's `.gitignore` when it has none: git keeps the rushes, the clips, the
   music and the effects (`.sound/`, `assets/`), and leaves out only what the engine makes again (`.cache/`, `output/`,
-  `stills/`). `doctor` warns when a `.gitignore` would leave out one of them.
+  `stills/`, `frames/`, `assets/source.wav`, `assets/mix.wav`) and manual backups (`.backup/`). `doctor` warns when a `.gitignore` would leave out one of them.
 - **One studio per projects folder.** `studio` reuses this folder's server, or starts one on the first free port from
   41187: other folders' studios keep running side by side. Give the user the URL it prints.

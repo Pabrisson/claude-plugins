@@ -4,7 +4,8 @@ Before the first version, the studio shows what is being done, from the project'
 engine's steps (with the renders' progress) and Claude's (`video.mjs status`). It reloads by itself when the first
 version lands. While the next version is made (a step started since the version shown still runs), a card above the
 feedback shows the same steps since that version, folded on Claude's. A version that lands is offered (the first one
-reloads the page) once every step of the work that made it is over: `rough` and `final` end Claude's step.
+reloads the page) once every step of the work that made it is over: `rough` and `final` end Claude's step. The
+offer gives the total time that work took.
 
 Every render (`rough`, `final`, `final --draft`) is a version `vN` of the project (`source/project.json` `versions`;
 a draft has `draft: true` and the main format only). Each one also keeps a 720p preview of its main format

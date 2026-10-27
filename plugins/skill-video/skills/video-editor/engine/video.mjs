@@ -39,6 +39,13 @@ const GITIGNORE = `# What the engine makes again. Everything else is kept: the s
 .cache/
 output/
 stills/
+# images caméra extraites de assets/source.mp4 (prepare)
+frames/
+# son de la source (ffmpeg) et mixage (audio), recréés s'ils manquent
+**/assets/source.wav
+**/assets/mix.wav
+# Sauvegardes manuelles (git fait déjà office de sauvegarde)
+.backup/
 __pycache__/
 .studio.log
 *.log
