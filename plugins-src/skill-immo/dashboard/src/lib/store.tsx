@@ -1,11 +1,14 @@
-import { reference } from "@engine/market.js"
+import { reference, typeOf } from "@engine/market.js"
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
-import { api, type Profile, type SearchData, type State, type Stats } from "@/lib/api"
+import { api, type Listing, type Poi, type Profile, type PropertyType, type SearchData, type State, type Stats } from "@/lib/api"
 
 // what the user asks Claude, collected across the dashboard and copied as one prompt
-export type FeedbackKind = "affiner" | "analyser" | "comparer" | "ajouter" | "question"
+export type FeedbackKind = "affiner" | "élargir" | "analyser" | "comparer" | "ajouter" | "message" | "question"
 export type Feedback = { kind: FeedbackKind; text: string }
+// the sold unit price a type is weighed against, and the stats of its scope
+export type Ref = { ppm2: number; scope: string; count: number; type: PropertyType }
+export type Market = { ref: Ref | null; stats: Stats | null }
 
 type Ctx = {
   slug: string
@@ -14,9 +17,12 @@ type Ctx = {
   profile: Profile
   reload: () => Promise<void>
   setProfile: (p: Profile) => void
-  // the sold price per m² every listing is weighed against, and the stats of its scope
-  ref: { ppm2: number; scope: string; count: number } | null
-  refStats: Stats | null
+  types: PropertyType[]
+  // the market of a type, of a listing's type
+  marketOf: (type: PropertyType) => Market
+  marketFor: (l: Listing) => Market
+  // what the decision aids of a listing read (lib/decide.js)
+  aidsFor: (l: Listing) => { ref: Ref | null; pois: Poi[]; isochrones: NonNullable<SearchData["area"]["isochrones"]>; profile: Profile; criteria: SearchData["search"]["criteria"] }
   lastVisit: string | null
   selected: string | null
   select: (id: string | null) => void
@@ -50,11 +56,23 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
     setData(d)
     setState(s)
   }, [slug])
-  const ref = useMemo(() => reference(data.market) as Ctx["ref"], [data.market])
-  const refStats = ref && data.market.dvf ? (data.market.dvf[ref.scope as "recent" | "zone" | "commune"] ?? null) : null
+  const types = useMemo<PropertyType[]>(() => data.search.types ?? ["flat"], [data.search.types])
+  const markets = useMemo(() => {
+    const out: Partial<Record<PropertyType, Market>> = {}
+    for (const t of ["flat", "house", "land", "parking", "premises"] as PropertyType[]) {
+      const ref = reference(data.market, t) as Ref | null, d = data.market.dvf?.[t]
+      out[t] = { ref, stats: ref && d && ref.scope !== "transactions" ? d[ref.scope as "recent" | "zone" | "commune"] : null }
+    }
+    return out as Record<PropertyType, Market>
+  }, [data.market])
+  const pois = useMemo(() => (Array.isArray(data.area.pois) ? data.area.pois : []), [data.area.pois])
 
   const value: Ctx = {
-    slug, data, state, profile, reload, setProfile, ref, refStats, lastVisit, selected, select, compare,
+    slug, data, state, profile, reload, setProfile, types,
+    marketOf: t => markets[t],
+    marketFor: l => markets[typeOf(l) as PropertyType],
+    aidsFor: l => ({ ref: markets[typeOf(l) as PropertyType].ref, pois, isochrones: data.area.isochrones ?? [], profile, criteria: data.search.criteria }),
+    lastVisit, selected, select, compare,
     toggleCompare: id => setCompare(c => (c.includes(id) ? c.filter(x => x !== id) : [...c, id].slice(-4))),
     feedback,
     addFeedback: f => setFeedback(fs => [...fs, f]),

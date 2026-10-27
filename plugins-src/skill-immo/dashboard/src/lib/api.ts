@@ -3,17 +3,21 @@
 export type Point = [number, number]
 export type Geometry = { type: "Polygon" | "MultiPolygon"; coordinates: unknown }
 export type Status = "to_visit" | "visited" | "offer" | "dropped" | null
+export type PropertyType = "flat" | "house" | "land" | "parking" | "premises"
+export type Message = { id: string; date: string; kind: "offer" | "question" | "visit" | "other"; amount: number | null; to: string | null; text: string; sent_at: string | null }
 
 export type Listing = {
   id: string
   se_id: string | null
   source: "stream-estate" | "websearch" | "pasted"
+  property_type?: PropertyType
   urls: { url: string | null; source: string | null; published_at: string | null; favorites: number | null; urgent: boolean }[]
   title: string | null
   description: string | null
   price: number | null
   net_price: number | null
   area: number | null
+  land_area?: number | null
   price_per_m2: number | null
   rooms: number | null
   bedrooms: number | null
@@ -25,6 +29,7 @@ export type Listing = {
   lots: number | null
   condition: string | null
   new_build: boolean | null
+  legal_proceedings?: boolean | null
   features: Record<string, boolean | null | string | string[]>
   outdoor_area: number | null
   location: { point: Point | null; accuracy: string | null; address: string | null; city: string | null; neighborhood: string | null; iris: string | null }
@@ -41,6 +46,7 @@ export type Listing = {
   changes: { date: string; kind: "new" | "price_drop" | "price_rise" | "status" | "expired"; from: number | string | null; to: number | string | null }[]
   my_status: Status
   notes: string
+  messages?: Message[]
   building?: {
     address?: { confidence: string; label: string | null; shown: "address" | "probable" | null }
     ban: string | null
@@ -55,12 +61,18 @@ export type Listing = {
 }
 
 export type Stats = { count: number; median_ppm2: number | null; q1: number | null; q3: number | null; median_price: number | null; by_quarter: { quarter: string; count: number; median_ppm2: number }[] }
+export type Sale = { id: string; type?: PropertyType; date: string; price: number; area: number | null; rooms: number | null; ppm2: number; point: Point; address: string }
+export type Dvf = { commune: Stats; zone: Stats; street: Stats | null; recent: Stats; years: string[]; points: Sale[] }
+// the carte des loyers of the commune: € per m² a month, charges included
+export type Rent = { per_m2: number; low: number; high: number; scope: string; observations: number } | null
 export type Market = {
   updated?: string
   alsace_moselle?: boolean
-  dvf?: { commune: Stats; zone: Stats; street: Stats | null; recent: Stats; years: string[]; points: { id: string; date: string; price: number; area: number; rooms: number | null; ppm2: number; point: Point; address: string }[] } | null
+  dvf?: Partial<Record<PropertyType, Dvf>> | null
+  rent?: { year: number; flat: Rent; flat_small: Rent; flat_large: Rent; house: Rent } | { error: string }
   stream?: {
     updated: string
+    type?: PropertyType
     trend?: { data?: { group: Record<string, string>; metrics: Record<string, number> }[] }
     dpe?: { data?: { group: Record<string, string>; metrics: Record<string, number> }[] }
     publishers?: { data?: { group: Record<string, string>; metrics: Record<string, number> }[] }
@@ -84,6 +96,7 @@ export type Search = {
   query: string
   label: string
   mode: "stream-estate" | "classic"
+  types?: PropertyType[]
   type: string
   point: Point
   insee: string
@@ -99,9 +112,10 @@ export type Search = {
   last_visit: string | null
   alert: { id: string; topic: string | null; drop: number; enabled?: boolean } | null
 }
-export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" | "area_max" | "rooms_min" | "rooms_max" | "floor_min", number>> & { dpe_max?: string; elevator?: boolean; outdoor?: boolean }
+export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" | "area_max" | "rooms_min" | "rooms_max" | "floor_min" | "land_min", number>> & { dpe_max?: string; elevator?: boolean; outdoor?: boolean }
 export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; events: { id: string; type: string; property: string; at: string }[] }
-export type Profile = { down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; places: { label: string; address: string; point: Point }[] }
+export type Profile = { down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
+export type ScoreKey = "price" | "budget" | "energy" | "transport" | "travel" | "outdoor"
 export type UsageEntry = { date: string; route: string; credits: number | null; results: number; search: string | null }
 export type State = {
   home: string
@@ -110,7 +124,7 @@ export type State = {
   usage: { month: number; last30: number; unknown: number; cap: number; eur_per_credit: number; by_search: Record<string, { calls: number; credits: number }>; by_route: Record<string, { calls: number; credits: number }>; by_month: Record<string, number> }
   log: UsageEntry[]
 }
-export type SearchSummary = { slug: string; label: string; mode: "stream-estate" | "classic"; zone: string; created: string; listings: number; online: number }
+export type SearchSummary = { slug: string; label: string; mode: "stream-estate" | "classic"; types?: PropertyType[]; zone: string; created: string; listings: number; online: number }
 export type Estimate = { what: string; route: string; credits: number | null; eur: number | null; unknown: boolean; spent: number; cap: number; remaining: number }
 export type RunResult = { code: number; out: string; err: string; estimate?: Estimate }
 
@@ -126,7 +140,7 @@ export const api = {
   searches: () => json<SearchSummary[]>("/api/searches"),
   search: (slug: string) => json<SearchData>(`/api/s/${slug}`),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; notes?: string }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; notes?: string; message?: { id: string; sent: boolean } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   saveProfile: (p: Partial<Profile>) => post<Profile>("/api/profile", p),
   autocomplete: (q: string) => json<{ fulltext: string; kind: string; city: string; zipcode: string }[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),

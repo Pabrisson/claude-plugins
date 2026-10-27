@@ -48,7 +48,7 @@
     {
       "name": "skill-immo",
       "source": "./plugins/skill-immo",
-      "description": "Skill apartment-search: find flats for sale in France around an address, a street or a neighborhood, weigh each against real sales (DVF), its building, its neighborhood and the buyer's budget, in a local dashboard; listings from the Stream Estate API (paid, with the user's yes on every credit) or found by Claude"
+      "description": "Skill property-search: find property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, weigh each against the real sales of its type, its building, its neighborhood, the rent and the buyer's budget, write offer letters, in a local dashboard; listings from the Stream Estate API (paid, with the user's yes on every credit) or found by Claude"
     },
     {
       "name": "requesty",

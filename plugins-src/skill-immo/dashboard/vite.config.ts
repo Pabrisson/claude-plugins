@@ -6,7 +6,7 @@ import { defineConfig } from "vite"
 // the engine this dashboard ships in: only the build (dist/) goes into the plugin
 const engine = resolve(
   import.meta.dirname,
-  "../../../plugins/skill-immo/skills/apartment-search/engine"
+  "../../../plugins/skill-immo/skills/property-search/engine"
 )
 
 export default defineConfig({

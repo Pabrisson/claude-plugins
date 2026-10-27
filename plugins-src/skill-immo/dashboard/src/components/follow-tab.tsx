@@ -1,7 +1,6 @@
 import { BellPlusIcon, RefreshCwIcon } from "lucide-react"
 import { useState } from "react"
 
-import { isNew } from "@/components/listing-list"
 import { useRun } from "@/components/run-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -9,7 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { api } from "@/lib/api"
 import { date, eur, num, SALE_STATUS, STATUS_LABEL } from "@/lib/format"
+import { isNew } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
+import { StatusDot } from "@/components/status"
+import type { Status } from "@/lib/api"
 
 const KIND = { new: "Nouvelle annonce", price_drop: "Baisse de prix", price_rise: "Hausse de prix", status: "Changement de statut", expired: "Annonce expirée" } as const
 
@@ -55,7 +57,7 @@ export function FollowTab() {
             const ls = data.listings.filter(l => l.my_status === k)
             return (
               <Card key={k} size="sm">
-                <CardHeader><CardTitle>{v}</CardTitle><CardDescription>{ls.length} bien{ls.length > 1 ? "s" : ""}</CardDescription></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><StatusDot status={k as Status} />{v}</CardTitle><CardDescription>{ls.length} bien{ls.length > 1 ? "s" : ""}</CardDescription></CardHeader>
                 <CardContent className="flex flex-col gap-1">
                   {ls.map(l => (
                     <button key={l.id} type="button" onClick={() => select(l.id)} className="flex justify-between gap-2 rounded-md px-1.5 py-1 text-left text-sm hover:bg-accent">

@@ -83,6 +83,18 @@
     --chart-3: oklch(0.6 0.11 185);
     --chart-4: oklch(0.7 0.15 75);
     --chart-5: oklch(0.55 0.02 286);
+    /* the places on the map: three colors, which dataviz's validator passes all-pairs in both modes; parks and health
+       share the neutral grey (more than three colors no longer pass), the panel and the tooltips name them */
+    --poi-transport: #6250d6;
+    --poi-schools: #1baf7a;
+    --poi-shops: #eda100;
+    --poi-other: oklch(0.55 0.02 286);
+    /* the user's status of a listing (the kanban's columns), a thin band wherever it shows: the same three validated
+       colors, "Écarté" in grey, "À trier" without */
+    --status-to_visit: #6250d6;
+    --status-visited: #1baf7a;
+    --status-offer: #eda100;
+    --status-dropped: oklch(0.7 0.01 286);
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.141 0.005 285.823);
     --sidebar-primary: oklch(0.21 0.006 285.885);
@@ -121,6 +133,14 @@
     --chart-3: oklch(0.72 0.11 185);
     --chart-4: oklch(0.8 0.14 80);
     --chart-5: oklch(0.6 0.02 286);
+    --poi-transport: #9085e9;
+    --poi-schools: #199e70;
+    --poi-shops: #c98500;
+    --poi-other: oklch(0.6 0.02 286);
+    --status-to_visit: #9085e9;
+    --status-visited: #199e70;
+    --status-offer: #c98500;
+    --status-dropped: oklch(0.45 0.01 286);
     --sidebar: oklch(0.21 0.006 285.885);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.92 0.004 286.32);

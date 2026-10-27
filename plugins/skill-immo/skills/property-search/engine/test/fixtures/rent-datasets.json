@@ -1,0 +1,10 @@
+{"data": [
+  {"id": "6751be987c09f4be821c6934", "title": "\"Carte des loyers\" - Indicateurs de loyers d'annonce par commune en 2024", "resources": [{"id": "old-flat", "title": "Indicateurs de loyer appartement"}]},
+  {"id": "693aa2feed1bf4da603faa49", "title": "\"Carte des loyers\" - Indicateurs de loyers d'annonce par commune en 2025", "resources": [
+    {"id": "0264d1fe-d5d2-45eb-9cf1-a2b706867441", "title": "Note méthodologique"},
+    {"id": "55b34088-0964-415f-9df7-d87dd98a09be", "title": "Indicateurs de loyer appartement"},
+    {"id": "14a1fe11-b2d1-49b3-9f6b-83d12df9482c", "title": "Indicateur de loyer appartement de 1 ou 2 pièces"},
+    {"id": "5e3b28a4-cf56-43a3-ae79-43cceeb27f8c", "title": "Indicateur de loyer appartement de 3 pièces ou plus"},
+    {"id": "129f764d-b613-44e4-952c-5ff50a8c9b73", "title": "Indicateurs de loyer maison"}
+  ]}
+]}

@@ -25,7 +25,7 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@engine/*": ["../../../plugins/skill-immo/skills/apartment-search/engine/lib/*"]
+      "@engine/*": ["../../../plugins/skill-immo/skills/property-search/engine/lib/*"]
     }
   },
   "include": ["src"]

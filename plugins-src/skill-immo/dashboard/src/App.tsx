@@ -1,4 +1,4 @@
-import { BarChart3Icon, ListIcon, MapIcon, PlusIcon, ReceiptEuroIcon, RouteIcon, ScaleIcon } from "lucide-react"
+import { BarChart3Icon, EllipsisIcon, ListIcon, MapIcon, PlusIcon, ReceiptEuroIcon, RouteIcon, ScaleIcon, SquareKanbanIcon } from "lucide-react"
 import { ThemeProvider } from "next-themes"
 import { useEffect, useState } from "react"
 
@@ -6,6 +6,8 @@ import { CompareTab } from "@/components/compare-tab"
 import { CostsTab } from "@/components/costs-tab"
 import { Dossier } from "@/components/dossier"
 import { FollowTab } from "@/components/follow-tab"
+import { KanbanTab } from "@/components/kanban-tab"
+import { ListTab } from "@/components/list-tab"
 import { ListingList } from "@/components/listing-list"
 import { MapView } from "@/components/map-view"
 import { MarketTab } from "@/components/market-tab"
@@ -14,13 +16,16 @@ import { NewSearch, ThemeButton, TopBar } from "@/components/top-bar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Toaster } from "@/components/ui/sonner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { TypeIcon } from "@/components/type-icon"
 import { api, slugOfUrl, type Profile, type SearchData, type SearchSummary, type State } from "@/lib/api"
-import { date } from "@/lib/format"
+import { date, TYPE_PLURAL } from "@/lib/format"
 import { SearchProvider, useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -53,51 +58,76 @@ function SearchPage({ slug }: { slug: string }) {
 }
 
 const VIEWS = [
-  { id: "listings", label: "Annonces", icon: ListIcon },
-  { id: "map", label: "Carte", icon: MapIcon, mobileOnly: true },
+  { id: "listings", label: "Cartes", icon: MapIcon },
+  { id: "kanban", label: "Kanban", icon: SquareKanbanIcon },
+  { id: "list", label: "Liste", icon: ListIcon },
   { id: "market", label: "Marché", icon: BarChart3Icon },
   { id: "compare", label: "Comparer", icon: ScaleIcon },
   { id: "follow", label: "Suivi", icon: RouteIcon },
   { id: "costs", label: "Coûts API", icon: ReceiptEuroIcon },
 ] as const
+// a phone's bar holds five: the rest goes under "Plus"
+const BAR = ["listings", "kanban", "list", "follow"]
 
-// A + C: the map and the list side by side (tabs on a phone), each listing's dossier on top; market, comparison,
-// follow-up and API costs as tabs
+// The map and the listings' cards side by side (one or the other on a phone), the kanban and the list of every
+// listing, each listing's dossier on top; market, comparison, follow-up as tabs, the API costs apart on the right
 function Workspace() {
   const { reload, compare } = useSearch()
   const mobile = useIsMobile()
-  const [view, setView] = useState<string>("listings")
-  const views = VIEWS.filter(v => mobile || !("mobileOnly" in v)).filter(v => !mobile || v.id !== "costs")
+  const [view, setView] = useState<string>("listings"), [showMap, setShowMap] = useState("list")
+  const more = VIEWS.filter(v => !BAR.includes(v.id))
   return (
     <RunProvider onDone={reload}>
       <div className="flex h-dvh flex-col">
         <TopBar />
         <Tabs value={view} onValueChange={setView} className="min-h-0 flex-1 gap-0">
           <TabsList variant="line" className="hidden w-full justify-start rounded-none border-b bg-card px-3 md:flex">
-            {views.map(v => (
-              <TabsTrigger key={v.id} value={v.id} className="flex-none"><v.icon />{v.label}{v.id === "compare" && compare.length > 0 && <Badge variant="secondary">{compare.length}</Badge>}</TabsTrigger>
+            {VIEWS.map(v => (
+              <TabsTrigger key={v.id} value={v.id} className={cn("flex-none", v.id === "costs" && "ml-auto")}><v.icon />{v.label}{v.id === "compare" && compare.length > 0 && <Badge variant="secondary">{compare.length}</Badge>}</TabsTrigger>
             ))}
           </TabsList>
           <TabsContent value="listings" className="min-h-0">
-            <div className="grid h-full md:grid-cols-[1fr_minmax(380px,440px)]">
-              {!mobile && <MapView className="relative" />}
-              <div className="overflow-y-auto border-l p-3 pb-20 md:pb-3"><ListingList /></div>
-            </div>
+            {mobile ? (
+              <div className="relative flex h-full flex-col">
+                <ToggleGroup type="single" variant="outline" size="sm" value={showMap} onValueChange={v => v && setShowMap(v)} className="m-3 mb-0 self-start" aria-label="Affichage">
+                  <ToggleGroupItem value="list"><ListIcon />Liste</ToggleGroupItem>
+                  <ToggleGroupItem value="map"><MapIcon />Carte</ToggleGroupItem>
+                </ToggleGroup>
+                {showMap === "map" ? <MapView className="relative mt-3 min-h-0 flex-1 mb-16" /> : <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-20"><ListingList /></div>}
+              </div>
+            ) : (
+              <div className="grid h-full md:grid-cols-[1fr_minmax(380px,440px)]">
+                <MapView className="relative" />
+                <div className="overflow-y-auto border-l p-3"><ListingList /></div>
+              </div>
+            )}
           </TabsContent>
-          {mobile && <TabsContent value="map" className="relative min-h-0"><MapView className="absolute inset-0 bottom-16" /></TabsContent>}
+          <TabsContent value="kanban" className="min-h-0 pb-16 md:pb-0"><KanbanTab /></TabsContent>
+          <TabsContent value="list" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><ListTab /></TabsContent>
           <TabsContent value="market" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><MarketTab /></TabsContent>
           <TabsContent value="compare" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><CompareTab /></TabsContent>
           <TabsContent value="follow" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><FollowTab /></TabsContent>
-          <TabsContent value="costs" className="min-h-0 overflow-y-auto"><CostsTab /></TabsContent>
+          <TabsContent value="costs" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><CostsTab /></TabsContent>
         </Tabs>
         {mobile && (
           <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t bg-card pb-[env(safe-area-inset-bottom)]" aria-label="Vues">
-            {views.map(v => (
+            {VIEWS.filter(v => BAR.includes(v.id)).map(v => (
               <button key={v.id} type="button" onClick={() => setView(v.id)} aria-current={view === v.id ? "page" : undefined}
                 className={cn("flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground", view === v.id && "text-foreground")}>
                 <v.icon className="size-5" />{v.label}
               </button>
             ))}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-current={more.some(v => v.id === view) ? "page" : undefined}
+                  className={cn("flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground", more.some(v => v.id === view) && "text-foreground")}>
+                  <EllipsisIcon className="size-5" />Plus
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="top">
+                {more.map(v => <DropdownMenuItem key={v.id} onSelect={() => setView(v.id)}><v.icon />{v.label}</DropdownMenuItem>)}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </nav>
         )}
         <Dossier />
@@ -117,7 +147,7 @@ function Home({ error }: { error?: string }) {
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-4 py-8">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Recherche d'appartement</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Recherche immobilière</h1>
           <p className="text-sm text-muted-foreground">{stream ? "Stream Estate activé" : "Mode classique : open data et annonces trouvées par Claude"}</p>
         </div>
         <span className="flex gap-1.5"><NewSearch streamEstate={stream} trigger={trigger} /><ThemeButton /></span>
@@ -129,8 +159,8 @@ function Home({ error }: { error?: string }) {
             <a key={s.slug} href={`/${s.slug}/`} className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
               <Card className="h-full transition-colors hover:bg-accent/50">
                 <CardHeader>
-                  <CardTitle>{s.label}</CardTitle>
-                  <CardDescription>{s.zone} · {s.online} annonce{s.online > 1 ? "s" : ""} en ligne · créée le {date(s.created)}</CardDescription>
+                  <CardTitle className="flex items-center gap-2">{s.label}<span className="flex gap-1 text-muted-foreground">{(s.types ?? ["flat"]).map(t => <TypeIcon key={t} type={t} className="size-4" />)}</span></CardTitle>
+                  <CardDescription>{(s.types ?? ["flat"]).map(t => TYPE_PLURAL[t]).join(", ")} · {s.zone} · {s.online} annonce{s.online > 1 ? "s" : ""} en ligne · créée le {date(s.created)}</CardDescription>
                   <Badge variant={s.mode === "stream-estate" ? "default" : "secondary"} className="w-fit">{s.mode === "stream-estate" ? "Stream Estate" : "Classique"}</Badge>
                 </CardHeader>
               </Card>

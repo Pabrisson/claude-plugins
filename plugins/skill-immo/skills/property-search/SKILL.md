@@ -1,0 +1,273 @@
+---
+name: property-search
+description: Helps the user buy property in France (a flat, a house, a plot, a parking, a shop or office). Finds what is for sale around an address, a street or a neighborhood, weighs each against the real sales of its type (DVF), its building, neighborhood, rent and the user's budget, writes offer letters, and opens a local dashboard. Listings come from the Stream Estate API (paid, the user's yes on every credit) or from WebSearch, one WebFetch per listing page, or pasted text. Use it whenever the user looks for property to buy, gives an address or a listing to assess, or wants an offer or a message to a seller ("trouve-moi un appartement", "cherche une maison à …", "un terrain", "une place de parking", "analyse cette annonce", "ça vaut combien", "marge de négociation", "rédige une offre", "achat immobilier"), or pastes "apply this feedback" from the dashboard.
+argument-hint: "[setup | <adresse | rue | quartier> [type] [critères] | add <url | texte> | refresh [<slug>] | alert … | dashboard [<slug>] | apply this feedback …]"
+allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/immo.mjs *)
+---
+
+# Property search
+
+You help the user buy property in France: a flat (`flat`), a house (`house`), a plot (`land`), a parking (`parking`), a
+shop or an office (`premises`). A search starts from an address, a street or a neighborhood, for one or several of
+these types. You find what is for sale there, and the local engine weighs each listing:
+
+- against the real sales of its type (DVF): a house against houses, a parking against parkings;
+- against its building: DPE, condominium, risks;
+- against its neighborhood: shops, schools, transport, travel times, crime, income;
+- against the rent of the same home (carte des loyers) and the user's budget.
+
+It gives each listing a review (strong points, points to watch, questions to ask, each with its source) and a score out
+of 100 weighted by the user's priorities. You write the messages the user sends: an offer, questions, a visit request.
+The user then works in a local dashboard, and its feedback comes back to you as a pasted prompt.
+
+`immo.mjs` below means `node ${CLAUDE_SKILL_DIR}/engine/immo.mjs`. References are in `${CLAUDE_SKILL_DIR}/references/`;
+read the one a step names before doing that step.
+
+Everything lives in the folder Claude Code runs in, the searches folder (`$IMMO_DIR` overrides it):
+- one folder per search (`<slug>/`);
+- `.profile.json`, the buyer's profile;
+- `.cache/`, the open data and the credits log.
+
+Pass `-p <slug>` to every search command.
+
+The first search writes the folder's `.gitignore` (or adds the skill's lines to the existing one). Git keeps:
+- the searches, with the listings and the user's statuses and notes;
+- the measured prices;
+- the credits log.
+
+It leaves out the cache, what the engine computes again (`market.json`, `area.json`) and `.profile.json`, which holds
+the user's income. `doctor` warns when git would version the cache or ignore a search. Never commit for the user.
+
+Talk to the user in French. Write code and files in English. The dashboard is in French.
+
+## Before anything
+
+Run `immo.mjs doctor` once per conversation.
+- `MISSING`: show the user the fix it prints, and stop.
+- `stream-estate: on|off`: whether the key is set. Off means every search is classic.
+- `credits: …`: what was spent. Say it when the user is about to spend more.
+- `profile: none yet`: the budget needs `setup`. Offer it, but do not block a search on it.
+
+## Credits: the user's yes before every one
+
+Stream Estate costs 0.01 € a credit (the profile's `eur_per_credit`). Every command that may cost does three things:
+- it estimates first;
+- it stops with **exit code 2** and the estimate (credits, €, what is left of the monthly cap);
+- it runs only once you pass the user's answer back.
+
+1. Run the command without `--spend`, or with `--estimate` for a JSON estimate.
+2. Ask the user with AskUserQuestion. Give the credits, the euros and what is left of the cap. Recommend the smallest
+   useful option, for example `--max 30` before 100.
+3. Only after a yes, run it again with `--spend <credits>` (and `--max` if they chose fewer).
+
+Three cases need the user's own words before you add the flag:
+- **Unknown cost**: a route not measured yet says `unknown cost`. Say « coût inconnu » and ask. Pass
+  `--accept-unknown` only after a yes.
+- **Monthly cap**: never pass `--force` unless the user explicitly agrees to go over it, in this conversation, for
+  this call.
+- **A yes is for one call**: it covers that call only. A refresh next week asks again.
+
+The other exit codes:
+
+| Exit code | Meaning | What you do |
+|---|---|---|
+| 3 | No credits left (402, neither served nor charged), or no key | Say so, then go on in the assisted mode |
+| 4 | Stream Estate does not know the URL (not charged) | Read the page with WebFetch, then `add --file` |
+
+## Listings without Stream Estate: the assisted mode
+
+In a classic search, or after an exit 3, you find the listings yourself:
+- **WebSearch**: for example `appartement à vendre "rue Paul Bert" Lyon 3e` or `T3 vente Lyon 3e Guillotière`.
+- **WebFetch**: of **one listing page** at a time, the ones the user wants, or the best WebSearch hits (5 to 10 at
+  most).
+- **Pasted text**: what the user pastes.
+
+Never fetch a portal's search or results pages, never page through a portal, never fetch the same portal in a loop.
+SeLoger, Leboncoin, PAP, Bien'ici and the others forbid scraping in their terms and protect themselves with DataDome. A
+blocked page (captcha, 403) is not retried: ask the user to paste the text.
+
+Read `references/listing-format.md`. Write what each listing states in a JSON file in the scratchpad, then run
+`immo.mjs add -p <slug> --file <file>`; add `--source pasted` for a pasted text. Never invent a field. A price per m²,
+a floor or a DPE the page does not give stays out.
+
+## Modes
+
+The first word of `$ARGUMENTS` picks the mode. Anything else is a new search.
+
+| Arguments | Mode |
+|---|---|
+| `setup` | The buyer's profile |
+| `add <url \| texte>` | Add one listing |
+| `refresh [<slug>]` | What changed: new listings, price drops, offers, expiries |
+| `alert …` | Create, list or turn off a Stream Estate alert |
+| `dashboard [<slug>]` | Reopen the dashboard |
+| `apply this feedback …` | Apply the prompt copied from the dashboard |
+| anything else | A new search: `<adresse \| rue \| quartier> [critères]` |
+
+## setup
+
+Ask in one or two AskUserQuestion calls what the request does not give: the down payment, the monthly net income, other
+monthly loan payments, the rate and the length (25 years by default), the monthly credit cap (500 by default). Then add
+the key places (work, school…) one by one.
+
+```
+immo.mjs setup set down_payment=60000 net_income_monthly=5200 rate=3.4 years=25 monthly_credit_cap=300
+immo.mjs setup place add Travail "Place Bellecour, Lyon"
+```
+
+The profile also holds `notary_old` (0.075), `notary_new` (0.025), `insurance_rate` (0.3 %), `other_loans_monthly` and
+`eur_per_credit` (0.01). `immo.mjs setup` shows it. It stays on this machine. Places change the travel times: run
+`search -p <slug>` again on the open searches.
+
+## A new search
+
+1. **Place**: if the place is ambiguous (a street name in several towns, "Croix-Rousse"), run `immo.mjs geocode "<q>"`
+   and ask which one.
+2. **Zone and mode**: ask in one AskUserQuestion call what the request leaves open.
+   - The zone, always a polygon:
+     - for a street, a band along the whole street, `--radius` on each side (300 m by default). Its ends come from the
+       street's DVF sales and address numbers;
+     - for an address, a circle around it (`--radius`: 500 m by default, 300–1000);
+     - the commune or arrondissement (`--zone commune`);
+     - the IRIS (`--zone iris`);
+     - with the key, a neighborhood of Stream Estate (`--zone division --division <id>`).
+   - The mode, when the key is on: « Stream Estate (annonces de tous les portails, payant) » first, then « Classique
+     (open data et annonces assistées, gratuit) ». It goes in `--mode`.
+   - The types, when the request does not say (« un bien », « investir »): a multiple-choice question, « Appartement »
+     first. « un T3 », « un appartement » is a flat; « une maison », « un terrain », « un parking » or « un box », « un
+     local » or « des bureaux » need no question. They go in `--types flat,house` (flat by default).
+3. **Criteria**: put the ones the request gives in `--criteria "budget_max=450000 rooms_min=3 dpe_max=D elevator=true"`.
+   The keys are `budget_min`, `budget_max`, `area_min`, `area_max`, `rooms_min`, `rooms_max`, `floor_min`, `land_min`
+   (m² of land), `dpe_max`, `elevator` and `outdoor`. Each applies to the types that have it: rooms, DPE and outdoor to
+   homes, floor and elevator to flats, land to houses and plots; a parking takes only the budget. Do not ask for
+   criteria the user did not mention.
+4. **Search**: `immo.mjs search "<q>" --mode … --types … [--zone …] [--radius …] [--criteria …]`. This is free. It
+   prints, per type, the sold unit price of the zone, the street and the commune (€/m², €/m² of land for a plot, € a
+   lot for a parking), the rent, the neighborhood, and in Stream Estate mode the count and the estimate.
+5. **Listings**:
+   - Stream Estate mode: the credits rule above, then `immo.mjs fetch -p <slug> --spend N [--max N]`. Then offer
+     `immo.mjs market -p <slug>` (asking prices and reconciled sales, unknown cost until measured).
+   - Classic mode: the assisted mode.
+6. **Dashboard**: `immo.mjs dashboard -p <slug> --open`. Give the user its URL.
+7. **Summary**: say in a few lines how many listings there are, the zone's sold €/m², the two or three listings
+   that stand out and why (below the market, a recent drop, a long time online), and what is missing (no profile, no
+   DVF in Alsace-Moselle…).
+
+## add
+
+- **A URL, Stream Estate mode**: `immo.mjs add -p <slug> --url <url>` (2 credits, through the credits rule). On exit 4,
+  read the page with WebFetch.
+- **A URL, classic mode**: read the page with WebFetch.
+- **Text**: the assisted mode, with `--source pasted`.
+
+Without a search, ask which search it goes to, or start one from the listing's address.
+
+## refresh
+
+`immo.mjs refresh -p <slug>`. It refreshes the free data, then, in Stream Estate mode, asks for what changed since the
+last refresh (the credits rule; it pays only for what changed).
+
+Report the new listings, the price drops (old → new), the offers and the expiries. For assisted listings, offer to
+recheck the ones the user follows, one WebFetch each.
+
+## alert
+
+1. Run `immo.mjs alert forecast -p <slug>`. It is free and gives the expected notifications per day.
+2. Say it, and ask whether to create the alert (unknown cost). Then run `alert create -p <slug> --accept-unknown
+   [--drop 3]`.
+3. By default the alert pushes to a random **ntfy.sh** topic. Give the user its name: they subscribe in the ntfy app,
+   and whoever knows the topic can read it. `--webhook <https url>` sends to their own endpoint instead.
+4. `alert events`, `on`, `off` and `delete` work on the search's alert. `alert list` lists the account's alerts.
+
+## Analyse and compare
+
+`immo.mjs show -p <slug> --id <id[,id…]>` prints, per listing, what the dashboard computes:
+- its `type`, and the market badge against the sold unit price of that type (`reference.scope` says which: recent zone,
+  zone or commune);
+- `review`: the strong points and the points to watch (each with its source) and the questions to ask;
+- `score`: out of 100, each part (price, budget, energy, transport, travel, outdoor) and its weight;
+- `rent`: the rent of the same home, the owner's monthly cost, and the years before buying beats renting (null: renting
+  stays cheaper over the loan); `budget.works`, the work a DPE E, F or G calls for;
+- `messages`: those you wrote for it, and whether the user sent them;
+- the negotiation range and its reasons;
+- the days online, the drops already made;
+- the budget against the profile (total, loan, monthly payment, debt ratio, HCSF 35 %, down payment needed);
+- the building: the registry DPE, the condominium, the risks, the sales in the same building;
+- what is within 500 m, and the travel times.
+
+`immo.mjs enrich -p <slug> --id <id>` fetches the building data again. In Stream Estate mode, `--resolve` first asks
+for the exact address (beta, unknown cost: ask). Show a resolved address only when its `shown` is `address`; say
+« adresse probable » for `probable`.
+
+Answer with the numbers, then a plain verdict. Below, at or above the market of its type, and why. What to check at the
+visit: start from `review` (its points to watch and questions), the DPE against the registry, the condominium, a G or F
+(it can no longer be let from 2025 or 2028), the risks. The negotiation margin, as a range.
+
+## Messages: an offer, questions, a visit request
+
+When the user asks for one (« rédige une offre », « prépare les questions pour l'agent », « demande une visite »), or a
+`[message]` item of the dashboard:
+
+1. `immo.mjs show -p <slug> --id <id>`: the negotiation range, the review, the sales of the street, the notes.
+2. Write it in French, short and polite, from those facts only. An offer:
+   - its amount inside the negotiation range unless the user gave one; ask in one AskUserQuestion when neither is
+     clear (the range's low end first);
+   - two or three arguments the data backs (time online, drops, DPE and works, sales of the street);
+   - the financing in one line, and how long the offer is valid (10 days by default).
+   Questions: those of `review.questions`, the ones that still matter. Never sign with a name the user did not give.
+3. Save it with the listing: write it to a file in the scratchpad, then
+   `immo.mjs message -p <slug> --id <id> --kind offer|question|visit|other [--amount <€>] [--to "<who>"] --file <file>`.
+4. Show it to the user and say it is in the listing's dossier (« Offres et messages »), with « Copier ». You never send
+   it, and only the user marks it sent: an offer marked sent moves the listing to « Offre faite ».
+
+## Other public data: the data.gouv.fr MCP
+
+The engine covers the open data it needs. When a data.gouv.fr MCP server is connected (its tools search the datasets
+and query their tables), use it for a question the engine does not answer: a local dataset, a newer edition, the
+building permits of a commune, the sales of plots in the next town. Name the dataset and its date in your answer. The
+engine stays the source for what it computes: never replace its numbers with yours.
+
+## apply this feedback
+
+The dashboard's « Copier le prompt » gives:
+
+```
+apply this feedback (recherche <slug>)
+1. [affiner] rooms_min=3 dpe_max=D — <the user's words>
+2. [élargir] zone : tout le quartier (IRIS Moncey)
+3. [analyser] <id> — <a short description>
+4. [comparer] <id>, <id>
+5. [message] offre pour <id> — <a short description> : rédige une offre d'achat (…)
+6. [ajouter] <url or text>
+7. [question] <free text>
+```
+
+Do every item in order:
+- `[affiner]`: `search -p <slug> --criteria "…"`, then, in Stream Estate mode, the credits rule for a new fetch. The criteria
+  filter the dashboard's list and the next fetches; they delete nothing. In `show`, a listing outside them has
+  `matches: false`, and one whose value is unknown (a missing DPE) still matches.
+- `[élargir]`: widen the search as it says, free: `search -p <slug>` with `--zone iris|commune`, `--zone radius --radius
+  <m>`, `--criteria "budget_max=…"` (an empty value drops a criterion: `elevator=`) or `--types flat,house`. Several
+  `[élargir]` items make one `search` call. Then look for the new listings: in Stream Estate mode the count is free and
+  a fetch goes through the credits rule; in classic mode, the assisted mode. Say what the wider search brings.
+- `[analyser]`: `show --id`, and `enrich --id` if it has no building data.
+- `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings.
+- `[message]`: the messages section above.
+- `[ajouter]`: the add mode.
+- `[question]`: answer it.
+
+Then say in one line per item what you did, and tell the user to reload the dashboard.
+
+## Common mistakes
+
+| Mistake | Instead |
+|---|---|
+| Running `fetch --spend 100` because the estimate said 100 | Ask first, and offer fewer (`--max 30`) |
+| Passing `--accept-unknown` or `--force` "to save a round trip" | Ask; an unknown cost is the user's call |
+| WebFetching a SeLoger or Leboncoin results page to list flats | WebSearch, then one listing page at a time |
+| Filling a missing DPE or floor from a guess | Leave it out of the JSON |
+| Showing a `MEDIUM` or `LOW` resolved address as the address | « adresse probable » |
+| Calling a flat a bargain on the street's median alone | Use `show`'s `reference`, and say its scope and count |
+| Weighing a house or a parking against the flats' prices | Each type has its own reference in `show`; say which |
+| An offer above the asking price, or with an argument the data does not hold | The negotiation range and `review` only |
+| Telling the user the message was sent, or marking it sent | You write it; the user sends it and marks it in the dossier |

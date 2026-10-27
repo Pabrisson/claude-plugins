@@ -1,7 +1,8 @@
-import { budget, RENT_BAN } from "@engine/budget.js"
+import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
+import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
-import { daysOnline, dropped, negotiation } from "@engine/market.js"
-import { ExternalLinkIcon, MessageSquarePlusIcon, ScaleIcon, SearchCheckIcon } from "lucide-react"
+import { daysOnline, dropped, isHome, negotiation, typeOf, unitPrice } from "@engine/market.js"
+import { CheckIcon, CircleQuestionMarkIcon, CopyIcon, ExternalLinkIcon, MailIcon, MessageSquarePlusIcon, PenLineIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, TriangleAlertIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
@@ -9,9 +10,12 @@ import { Dpe } from "@/components/dpe"
 import { nearby } from "@/components/map-view"
 import { Gap, Ruler } from "@/components/ruler"
 import { useRun } from "@/components/run-dialog"
+import { StatusDot } from "@/components/status"
+import { TypeIcon } from "@/components/type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -19,10 +23,11 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, type Listing, type Status } from "@/lib/api"
-import { ACCURACY_LABEL, date, eur, m2, pct, POI_LABEL, SALE_STATUS, share, SOURCE_LABEL, STATUS_LABEL } from "@/lib/format"
+import { api, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
+import { ACCURACY_LABEL, date, eur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, SOURCE_LABEL, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
+import { cn } from "@/lib/utils"
 
 const REASON: Record<string, (v: number | boolean) => string> = {
   above_market: v => `affiché ${pct(v as number)} au-dessus du vendu`,
@@ -56,7 +61,7 @@ export function Dossier() {
   const { data, selected, select } = useSearch()
   const mobile = useIsMobile()
   const l = data.listings.find(x => x.id === selected)
-  const title = l ? l.title ?? `${l.rooms ?? "?"} pièces, ${l.area ?? "?"} m²` : ""
+  const title = l ? <span className="flex items-center gap-2"><TypeIcon type={l.property_type} className="size-4 shrink-0 text-muted-foreground" />{titleOf(l)}</span> : ""
   const body = l && <DossierBody key={l.id} l={l} />
   if (mobile)
     return (
@@ -70,23 +75,27 @@ export function Dossier() {
   return (
     <Sheet open={!!l} onOpenChange={o => !o && select(null)}>
       <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
-        <SheetHeader className="border-b"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${eur(l.price)} · ${SOURCE_LABEL[l.source]}`}</SheetDescription></SheetHeader>
+        <SheetHeader className="border-b"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)} · ${SOURCE_LABEL[l.source]}`}</SheetDescription></SheetHeader>
         <div className="p-4">{body}</div>
       </SheetContent>
     </Sheet>
   )
 }
 
+// what Claude writes from the dossier's "Rédiger" menu, as a line of the prompt
+const DRAFTS = { offer: "une offre d'achat (montant et arguments à partir de la marge de négociation)", question: "les questions à poser à l'agent ou au vendeur", visit: "une demande de visite" } as const
+
 function DossierBody({ l }: { l: Listing }) {
-  const { slug, data, state, profile, ref, refStats, reload, compare, toggleCompare, addFeedback } = useSearch()
+  const { slug, data, state, profile, marketFor, aidsFor, reload, compare, toggleCompare, addFeedback } = useSearch()
   const run = useRun()
   const [notes, setNotes] = useState(l.notes)
+  const t = typeOf(l) as PropertyType, home = isHome(t), { ref, stats: refStats } = marketFor(l), aids = aidsFor(l)
   const nego = negotiation(l, ref?.ppm2), days = daysOnline(l), drop = dropped(l)
   const b = l.building, dpeReg = b?.dpe.find(d => d.number === b.dpe_match)
   const near = nearby(l.location.point, Array.isArray(data.area.pois) ? data.area.pois : [])
   const travel = (data.area.isochrones ?? []).filter(i => i.geometry && l.location.point && inGeometry(l.location.point, i.geometry))
   const streamOn = state.stream_estate && data.search.mode === "stream-estate"
-  const short = `${l.rooms ?? "?"} p., ${l.area ?? "?"} m², ${eur(l.price)}${l.location.address ? `, ${l.location.address}` : ""}`
+  const short = `${titleOf(l)}, ${eur(l.price)}${l.location.address ? `, ${l.location.address}` : ""}`
 
   async function setStatus(s: string) {
     await api.listing(slug, l.id, { my_status: (s || null) as Status })
@@ -109,7 +118,7 @@ function DossierBody({ l }: { l: Listing }) {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-3xl font-bold tracking-tight">{eur(l.price)}</span>
         <span className="text-sm text-muted-foreground">
-          {[l.area && `${l.area} m²`, l.rooms && `${l.rooms} pièces`, l.floor != null && (l.floor === 0 ? "rez-de-chaussée" : `${l.floor}ᵉ étage${l.floors ? ` sur ${l.floors}` : ""}`), m2(l.price_per_m2)].filter(Boolean).join(" · ")}
+          {[l.area && `${l.area} m²`, l.land_area && `terrain de ${l.land_area} m²`, l.rooms && `${l.rooms} pièces`, t === "flat" && l.floor != null && (l.floor === 0 ? "rez-de-chaussée" : `${l.floor}ᵉ étage${l.floors ? ` sur ${l.floors}` : ""}`), perUnit(unitPrice(l), t)].filter(Boolean).join(" · ")}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -124,18 +133,21 @@ function DossierBody({ l }: { l: Listing }) {
       )}
       <div className="flex flex-wrap items-center gap-2">
         <ToggleGroup type="single" variant="outline" size="sm" value={l.my_status ?? ""} onValueChange={setStatus} aria-label="Mon statut">
-          {Object.entries(STATUS_LABEL).map(([k, v]) => <ToggleGroupItem key={k} value={k}>{v}</ToggleGroupItem>)}
+          {Object.entries(STATUS_LABEL).map(([k, v]) => <ToggleGroupItem key={k} value={k}><StatusDot status={k as Status} />{v}</ToggleGroupItem>)}
         </ToggleGroup>
         <Button variant={compare.includes(l.id) ? "secondary" : "outline"} size="sm" onClick={() => toggleCompare(l.id)}><ScaleIcon data-icon="inline-start" />{compare.includes(l.id) ? "Dans le comparateur" : "Comparer"}</Button>
         <Button variant="outline" size="sm" onClick={() => { addFeedback({ kind: "analyser", text: `${l.id} — ${short}` }); toast.success("Ajouté au prompt pour Claude") }}><MessageSquarePlusIcon data-icon="inline-start" />Analyser avec Claude</Button>
+        <DraftMenu onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il rédigera le message et l'enregistrera ici") }} />
       </div>
+
+      <Synthesis l={l} aids={aids} />
 
       <Section title="Prix et négociation">
         {refStats && <Ruler stats={refStats} ticks={[{ id: l.id, ppm2: l.price_per_m2 }]} />}
         <Row label="Écart au prix vendu"><Gap ppm2={l.price_per_m2} refPpm2={ref?.ppm2} long /></Row>
-        <Row label="Vendu, zone" hint={ref ? `${ref.count} ventes` : undefined}>{m2(ref?.ppm2)}</Row>
-        {data.market.dvf?.street && <Row label={`Vendu, ${data.search.street?.name ?? "rue"}`}>{m2(data.market.dvf.street.median_ppm2)}</Row>}
-        {data.market.stream?.trend?.data?.length ? <Row label="Affiché, zone (dernier mois)">{m2(data.market.stream.trend.data.at(-1)?.metrics["median:price_per_sqm"])}</Row> : null}
+        <Row label={`Vendu, ${{ recent: "zone (2 ans)", zone: "zone (5 ans)", commune: "commune", transactions: "zone" }[ref?.scope ?? "recent"]}`} hint={ref ? `${ref.count} ventes` : undefined}>{perUnit(ref?.ppm2, t)}</Row>
+        {data.market.dvf?.[t]?.street?.count ? <Row label={`Vendu, ${data.search.street?.name ?? "rue"}`}>{perUnit(data.market.dvf[t]!.street!.median_ppm2, t)}</Row> : null}
+        {data.market.stream?.type === t && data.market.stream?.trend?.data?.length ? <Row label="Affiché, zone (dernier mois)">{m2(data.market.stream.trend.data.at(-1)?.metrics["median:price_per_sqm"])}</Row> : null}
         <Row label="En ligne depuis">{days != null ? `${days} jours` : "—"}{l.urgent ? " · urgent" : ""}{l.favorites ? ` · ${l.favorites} favoris` : ""}</Row>
         {drop > 0 && <Row label="Baisses déjà faites">{pct(-drop, 1)}</Row>}
         {[...l.price_changes.map(c => ({ date: c.date, text: `${eur(c.from)} → ${eur(c.to)}` })), ...(l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, text: `${eur(c.from as number)} → ${eur(c.to as number)}` }))].map((c, i) => (
@@ -150,6 +162,8 @@ function DossierBody({ l }: { l: Listing }) {
         ) : <p className="text-sm text-muted-foreground">Pas de marge : le bien est sous offre, vendu ou retiré.</p>}
       </Section>
 
+      <Messages l={l} onDraft={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt pour Claude") }} />
+
       <Section title="Bâtiment et risques" action={
         <span className="flex gap-1.5">
           <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
@@ -163,20 +177,21 @@ function DossierBody({ l }: { l: Listing }) {
       }>
         {b?.address?.label && <Row label={b.address.shown === "address" ? "Adresse" : "Adresse probable"}>{b.address.shown ? b.address.label : "non trouvée"}</Row>}
         {!b?.address && <Row label="Localisation">{l.location.address ?? "—"} ({ACCURACY_LABEL[l.location.accuracy ?? "UNKNOWN"] ?? "inconnue"})</Row>}
-        <Row label="DPE de l'annonce"><Dpe value={l.dpe?.energy} />{l.dpe?.energy_value ? <span className="ml-2 text-muted-foreground">{l.dpe.energy_value} kWh/m²/an</span> : null}</Row>
-        <Row label="DPE au registre ADEME">{dpeReg ? <><Dpe value={dpeReg.energy} /><span className="ml-2 text-muted-foreground">{date(dpeReg.date)} · {dpeReg.area} m² · {eur(dpeReg.cost)}/an</span></> : b?.dpe.length ? `${b.dpe.length} DPE à l'adresse, aucun de cette surface` : "—"}</Row>
-        {(RENT_BAN as Record<string, string>)[l.dpe?.energy ?? ""] && <Row label="Location interdite">dès {(RENT_BAN as Record<string, string>)[l.dpe!.energy!].slice(0, 4)} (classe {l.dpe!.energy})</Row>}
-        <Row label="Construction">{b?.construction_year ?? l.construction_year ?? (b?.copro ? RISK_KEYS[b.copro.period] ?? "—" : "—")}</Row>
-        <Row label="Copropriété">{b?.copro ? `${b.copro.lots} lots dont ${b.copro.dwellings} logements · syndic ${b.copro.syndic ?? "inconnu"}` : l.lots ? `${l.lots} lots (annonce)` : "—"}</Row>
+        {home && <Row label="DPE de l'annonce"><Dpe value={l.dpe?.energy} />{l.dpe?.energy_value ? <span className="ml-2 text-muted-foreground">{l.dpe.energy_value} kWh/m²/an</span> : null}</Row>}
+        {home && <Row label="DPE au registre ADEME">{dpeReg ? <><Dpe value={dpeReg.energy} /><span className="ml-2 text-muted-foreground">{date(dpeReg.date)} · {dpeReg.area} m² · {eur(dpeReg.cost)}/an</span></> : b?.dpe.length ? `${b.dpe.length} DPE à l'adresse, aucun de cette surface` : "—"}</Row>}
+        {budget(l, profile).rent_ban && <Row label="Location interdite">dès {budget(l, profile).rent_ban!.slice(0, 4)} (classe {l.dpe!.energy})</Row>}
+        {t !== "land" && <Row label="Construction">{b?.construction_year ?? l.construction_year ?? (b?.copro ? RISK_KEYS[b.copro.period] ?? "—" : "—")}</Row>}
+        {(t === "house" || t === "land") && <Row label="Terrain">{l.land_area ? `${l.land_area} m²` : "—"}</Row>}
+        {t !== "house" && t !== "land" && <Row label="Copropriété">{b?.copro ? `${b.copro.lots} lots dont ${b.copro.dwellings} logements · syndic ${b.copro.syndic ?? "inconnu"}` : l.lots ? `${l.lots} lots (annonce)` : "—"}</Row>}
         {b?.copro && <Row label="Registre">{b.copro.name} · n° {b.copro.number}</Row>}
-        <Row label="Équipements">{[l.features.elevator && "ascenseur", l.features.balcony && "balcon", l.features.terrace && "terrasse", l.features.cellar && "cave", l.features.parking && "parking", l.features.caretaker && "gardien", l.features.fiber && "fibre", l.features.elevator === false && "sans ascenseur"].filter(Boolean).join(", ") || "—"}</Row>
+        {t !== "land" && <Row label="Équipements">{[l.features.elevator && "ascenseur", l.features.balcony && "balcon", l.features.terrace && "terrasse", l.features.garden && "jardin", l.features.cellar && "cave", l.features.parking && "parking", l.features.caretaker && "gardien", l.features.fiber && "fibre", l.features.elevator === false && "sans ascenseur"].filter(Boolean).join(", ") || "—"}</Row>}
         <Row label="Charges, taxe foncière">{l.fees.condo_yearly ? `${eur(Math.round(l.fees.condo_yearly / 12))}/mois` : "—"} · {l.fees.property_tax ? `${eur(l.fees.property_tax)}/an` : "—"}</Row>
         <Row label="Risques">{b?.risks ? [...b.risks.natural, ...b.risks.technological].map(r => r.label).join(", ") || "aucun signalé" : "—"}</Row>
         {b?.sales.length ? (
           <>
             <Separator />
-            <span className="text-xs text-muted-foreground">Ventes dans l'immeuble (DVF)</span>
-            {b.sales.slice(0, 5).map(s => <Row key={s.id} label={date(s.date)}>{eur(s.price)} · {s.area} m² · {m2(s.ppm2)}</Row>)}
+            <span className="text-xs text-muted-foreground">Ventes à cette adresse (DVF)</span>
+            {b.sales.slice(0, 5).map(s => <Row key={s.id} label={date(s.date)}>{eur(s.price)}{s.area ? ` · ${s.area} m²` : ""} · {perUnit(s.ppm2, t)}</Row>)}
           </>
         ) : null}
       </Section>
@@ -194,6 +209,7 @@ function DossierBody({ l }: { l: Listing }) {
       </Section>
 
       <BudgetSection l={l} profileIncome={profile.net_income_monthly} />
+      {home && <RentSection l={l} />}
 
       <Section title="Suivi">
         <Field>
@@ -208,7 +224,108 @@ function DossierBody({ l }: { l: Listing }) {
   )
 }
 
-// the loan of this flat with the profile, its down payment, rate and length changeable here before they are saved
+// the "Rédiger" menu: a message Claude writes from the prompt (an offer, the questions to ask, a visit request)
+function DraftMenu({ onPick, size = "sm" }: { onPick: (k: keyof typeof DRAFTS) => void; size?: "sm" | "xs" }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild><Button variant="outline" size={size}><PenLineIcon data-icon="inline-start" />Rédiger un message</Button></DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => onPick("offer")}>Une offre d'achat</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onPick("question")}>Les questions à l'agent</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onPick("visit")}>Une demande de visite</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+// the strong points, the points to watch and the questions to ask, then the score and what makes it
+function Synthesis({ l, aids }: { l: Listing; aids: Parameters<typeof review>[1] }) {
+  const r = review(l, aids), s = score(l, aids)
+  const Item = ({ icon: Icon, className, text, source }: { icon: typeof ThumbsUpIcon; className: string; text: string; source?: string }) => (
+    <li className="flex items-start gap-2 text-sm"><Icon className={cn("mt-0.5 size-4 shrink-0", className)} /><span>{text}{source && <span className="ml-1.5 text-xs text-muted-foreground">{source}</span>}</span></li>
+  )
+  return (
+    <Section title="Synthèse" action={s.value != null && <span className="text-sm"><b className="text-xl tabular-nums">{s.value}</b><span className="text-muted-foreground"> / 100</span></span>}>
+      {r.pros.length > 0 && <ul className="flex flex-col gap-1.5" aria-label="Points forts">{r.pros.map((x, i) => <Item key={i} icon={ThumbsUpIcon} className="text-below" {...x} />)}</ul>}
+      {r.cons.length > 0 && <ul className="flex flex-col gap-1.5" aria-label="Points de vigilance">{r.cons.map((x, i) => <Item key={i} icon={TriangleAlertIcon} className="text-above" {...x} />)}</ul>}
+      {r.questions.length > 0 && (
+        <>
+          <span className="text-xs font-medium text-muted-foreground">Questions à poser</span>
+          <ul className="flex flex-col gap-1.5">{r.questions.map((q, i) => <Item key={i} icon={CircleQuestionMarkIcon} className="text-muted-foreground" text={q} />)}</ul>
+        </>
+      )}
+      <Separator />
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3" aria-label="Détail du score">
+        {s.parts.map(p => (
+          <div key={p.key} className="flex flex-col gap-1">
+            <span className="flex justify-between text-xs"><span className="text-muted-foreground">{SCORE_LABEL[p.key as ScoreKey]}{p.weight ? ` ×${p.weight}` : ""}</span><span className="font-medium">{p.value == null ? "—" : Math.round(p.value * 100)}</span></span>
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground/70" style={{ width: `${(p.value ?? 0) * 100}%` }} /></div>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">Le score pèse chaque critère selon vos priorités (profil). « — » : donnée inconnue, laissée de côté.</p>
+    </Section>
+  )
+}
+
+// the messages Claude wrote for this listing: copied in one click, marked sent (an offer sent: "Offre faite")
+function Messages({ l, onDraft }: { l: Listing; onDraft: (k: keyof typeof DRAFTS) => void }) {
+  const { slug, reload } = useSearch()
+  const ms = (l.messages ?? []).toReversed()
+  async function sent(m: Message, v: boolean) {
+    await api.listing(slug, l.id, { message: { id: m.id, sent: v } })
+    await reload()
+    if (v) toast.success(m.kind === "offer" ? "Offre envoyée : le bien passe dans « Offre faite »" : "Message marqué comme envoyé")
+  }
+  return (
+    <Section title="Offres et messages" action={<DraftMenu size="xs" onPick={onDraft} />}>
+      {!ms.length && <p className="text-sm text-muted-foreground">Aucun message. « Rédiger un message » l'ajoute au prompt : Claude le rédige et l'enregistre ici.</p>}
+      {ms.map(m => <MessageItem key={m.id} m={m} onSent={v => sent(m, v)} />)}
+    </Section>
+  )
+}
+function MessageItem({ m, onSent }: { m: Message; onSent: (v: boolean) => void }) {
+  const [full, setFull] = useState(false)
+  return (
+    <article className="flex flex-col gap-2 rounded-lg border p-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <MailIcon className="size-4 text-muted-foreground" />
+        <b>{MESSAGE_LABEL[m.kind]}</b>
+        {m.amount && <span className="font-semibold">{eur(m.amount)}</span>}
+        {m.to && <span className="text-muted-foreground">à {m.to}</span>}
+        <span className="text-xs text-muted-foreground">{date(m.date)}</span>
+        {m.sent_at && <Badge variant="secondary"><CheckIcon />Envoyé le {date(m.sent_at)}</Badge>}
+      </div>
+      <p className={cn("text-sm whitespace-pre-line", !full && "line-clamp-3")}>{m.text}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {m.text.split("\n").length > 3 || m.text.length > 240 ? <Button variant="ghost" size="xs" onClick={() => setFull(!full)}>{full ? "Réduire" : "Lire tout"}</Button> : null}
+        <Button variant="outline" size="xs" onClick={async () => { await navigator.clipboard.writeText(m.text); toast.success("Message copié") }}><CopyIcon data-icon="inline-start" />Copier</Button>
+        <Button variant={m.sent_at ? "ghost" : "outline"} size="xs" onClick={() => onSent(!m.sent_at)}>{m.sent_at ? "Marquer non envoyé" : "Marquer envoyé"}</Button>
+      </div>
+    </article>
+  )
+}
+
+// renting the same home (carte des loyers) against owning it, and when buying starts to pay
+function RentSection({ l }: { l: Listing }) {
+  const { data, profile } = useSearch()
+  const rent = data.market.rent && !("error" in data.market.rent) ? data.market.rent : null
+  const row = rentOf(l, rent), r = rentVsBuy(l, row, profile)
+  return (
+    <Section title="Louer ou acheter">
+      {r ? (
+        <>
+          <Row label="Loyer d'un logement équivalent" hint={`Carte des loyers ${rent!.year}, charges comprises, ${row!.scope === "commune" ? "à la commune" : "à l'échelle de la zone"}`}>{eur(r.rent)}/mois <span className="text-muted-foreground">({eur(r.low)} à {eur(r.high)})</span></Row>
+          <Row label="Propriétaire : crédit, taxe et charges">{eur(r.owning)}/mois <span className="text-muted-foreground">dont {eur(r.capital)} de capital remboursé</span></Row>
+          <p className="text-sm">{r.break_even_years ? <>Acheter devient plus avantageux que louer au bout d'environ <b>{r.break_even_years} an{r.break_even_years > 1 ? "s" : ""}</b>.</> : <>À ce taux et à ce prix, <b>louer coûte moins cher</b> chaque année que ce que l'achat fait perdre (intérêts, taxe, charges, entretien).</>}</p>
+          <p className="text-xs text-muted-foreground">Ordre de grandeur : intérêts de la première année, 1 % du prix par an d'entretien, sans placement de l'apport. Source : carte des loyers {rent!.year} (ministère du Logement).</p>
+        </>
+      ) : <p className="text-sm text-muted-foreground">{l.area ? "Pas de loyer de référence pour cette commune." : "La surface manque pour comparer à un loyer."}</p>}
+    </Section>
+  )
+}
+
+// the loan of this property with the profile, its down payment, rate and length changeable here before they are saved
 function BudgetSection({ l, profileIncome }: { l: Listing; profileIncome: number }) {
   const { profile, setProfile } = useSearch()
   // the saved profile wins again once it changes
@@ -226,9 +343,11 @@ function BudgetSection({ l, profileIncome }: { l: Listing; profileIncome: number
         <Field><FieldLabel htmlFor="yrs">Durée (ans)</FieldLabel><Input id="yrs" type="number" value={p.years} onChange={set("years")} /></Field>
       </FieldGroup>
       <Row label="Prix">{eur(r.price)}</Row>
+      {r.works && <Row label="Travaux pour atteindre le DPE D" hint="Ordre de grandeur d'une rénovation complète ; un audit énergétique donne le vrai chiffre">{eur(r.works.low)} à {eur(r.works.high)}</Row>}
       {(r.agency_extra ?? 0) > 0 && <Row label="Frais d'agence en plus">{eur(r.agency_extra)}</Row>}
       <Row label={`Frais de notaire (${l.new_build ? "neuf" : "ancien"})`}>{eur(r.notary)}</Row>
       <Row label="Coût total">{eur(r.total)}</Row>
+      {r.works && <Row label="Coût total avec travaux">{eur(r.total + r.works.low)} à {eur(r.total + r.works.high)}</Row>}
       <Row label="Emprunt">{eur(r.loan)}</Row>
       <Row label={`Mensualité sur ${p.years} ans à ${String(p.rate).replace(".", ",")} %`}>{eur(r.payment)} + {eur(r.insurance)} d'assurance</Row>
       {r.debt_ratio != null ? (

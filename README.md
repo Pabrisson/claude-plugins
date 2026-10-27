@@ -84,7 +84,7 @@ A skill triggers on its own when the request matches its description, or is call
 |---|---|---|---|
 | `/skill-laravel:laravel-upgrade` | [`skill-laravel`](#skill-laravel) | `<target version>` | Upgrades Laravel one major version at a time, with a test pause between each |
 | `/skill-video:video-editor` | [`skill-video`](#skill-video) | `setup \| <videos or URLs> \| apply this feedback … \| variations \| preview \| rules …` | Edits a video of any genre (short, YouTube, interview, tutorial, montage, brand film, motion design), rendered locally with captions, sound and a review studio |
-| `/skill-immo:apartment-search` | [`skill-immo`](#skill-immo) | `setup \| <adresse, rue ou quartier> [critères] \| add <url \| texte> \| refresh \| alert … \| dashboard \| apply this feedback …` | Finds flats for sale in France around an address, a street or a neighborhood, weighs each against real sales, its building, its neighborhood and the buyer's budget, in a local dashboard |
+| `/skill-immo:property-search` | [`skill-immo`](#skill-immo) | `setup \| <adresse, rue ou quartier> [type] [critères] \| add <url \| texte> \| refresh \| alert … \| dashboard \| apply this feedback …` | Finds property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, weighs each against the real sales of its type, its building, its neighborhood, the rent and the buyer's budget, writes offer letters, in a local dashboard |
 
 ### MCP servers
 
@@ -253,23 +253,25 @@ Everything stays on the machine, except what the video's `source/elevenlabs.json
 
 `claude plugin install skill-immo@pabrisson` — requires Node ≥ 22. The skill runs `doctor` once per conversation: Node, the dashboard build, the Stream Estate key (`stream-estate: on/off`) and the credits spent over 30 days.
 
-Claude helps buy a flat in France. A search starts from an address, a street or a neighborhood:
+Claude helps buy property in France: a flat, a house, a plot, a parking or a box, a shop or an office. A search starts from an address, a street or a neighborhood, for one or several types:
 - the zone is a polygon: a band along the whole street (300 m on each side by default), a circle around an address, the commune or arrondissement, its IRIS, or a Stream Estate neighborhood;
 - each search has a mode, **Stream Estate** (listings from every portal, paid) or **Classique** (open data and listings Claude finds, free);
-- the engine weighs every flat against the real sales (DVF), its building, its neighborhood and the buyer's budget;
-- a local dashboard (`http://127.0.0.1:41287/<search>/`, dark by default) shows it all: map, list, a dossier per flat, market, comparison, follow-up and API costs.
+- the engine weighs every listing against the real sales of its type (DVF: a house against houses, a parking on its price), its building, its neighborhood, the rent of the same home (carte des loyers) and the buyer's budget;
+- each listing gets a review (strong points, points to watch, questions to ask, each with its source) and a score out of 100 weighted by the buyer's priorities;
+- Claude writes the offers, the questions to the agent and the visit requests, kept with the listing;
+- a local dashboard (`http://127.0.0.1:41287/<search>/`, dark by default) shows it all: the map and the cards (the zone stands out, a panel of layers), a kanban by status (« Écarté » folded), a list to filter and sort, a dossier per listing, market, comparison, follow-up and API costs. Each status has a discreet color, the same in every tab.
 
 | Arguments | Mode |
 |---|---|
 | `setup` | The buyer's profile, kept on the machine (`.profile.json`): down payment, net income, rate, length, notary fees, key places (work, school…), price of a credit, monthly credit cap |
-| `<adresse \| rue \| quartier> [critères]` | New search: zone, real sales, neighborhood, listings, then the dashboard |
+| `<adresse \| rue \| quartier> [type] [critères]` | New search: types, zone, real sales, rent, neighborhood, listings, then the dashboard |
 | `add <url \| texte>` | Adds a listing: Stream Estate's lookup with the key, else one WebFetch of the page, else the pasted text |
 | `refresh [<slug>]` | What changed: new listings, price drops, offers, expiries (Stream Estate pays only for what changed) |
 | `alert …` | A Stream Estate alert for new listings and price drops, pushed to the phone through a random ntfy.sh topic |
 | `dashboard [<slug>]` | Reopens the dashboard |
-| `apply this feedback …` | Applies the prompt copied from the dashboard: refine, analyse, compare, add, question |
+| `apply this feedback …` | Applies the prompt copied from the dashboard: refine, widen (zone, criteria, types), analyse, compare, write a message, add, question |
 
-**Open data** (free, no key): Géoplateforme geocoding and isochrones, geo-DVF sales (5 years; none in Moselle, Bas-Rhin, Haut-Rhin), ADEME DPE, Géorisques, the national condominium register, OSM Overpass, SSMSI crime, INSEE Filosofi income, IGN vector tiles. The answers are cached in the searches folder's `.cache/`. See `skills/apartment-search/references/data-sources.md`.
+**Open data** (free, no key): Géoplateforme geocoding and isochrones, geo-DVF sales of every type (5 years; none in Moselle, Bas-Rhin, Haut-Rhin), the carte des loyers, ADEME DPE, Géorisques, the national condominium register, OSM Overpass, SSMSI crime, INSEE Filosofi income, IGN vector tiles. When a data.gouv.fr MCP server is connected, Claude may use it for a dataset the engine does not cover. The answers are cached in the searches folder's `.cache/`. See `skills/property-search/references/data-sources.md`.
 
 **Listings**:
 - **With Stream Estate** (`stream_estate_api_key`, the plugin's secret, asked when the plugin is enabled or with `/plugin configure skill-immo@pabrisson`, kept in the Keychain): listings of every portal, with their price history, fees, publisher and time online. Also asking-price analytics, sales reconciled across DVF and the notaries, the exact address (beta) and alerts.
@@ -282,7 +284,7 @@ Claude helps buy a flat in France. A search starts from an address, a street or 
 - A 402 (no credits left) falls back to the assisted mode.
 - Every call is logged with the credits charged (`X-Credits-Charged`) in `.cache/api-usage.json`, and `usage --remote` compares the log with Stream Estate's own count.
 
-**Git**: the first search writes the searches folder's `.gitignore`. Git keeps the searches, the listings with the user's statuses and notes, and the credits log. It leaves out the cache, what the engine computes again, and the profile, which holds the income.
+**Git**: the first search writes the searches folder's `.gitignore`. Git keeps the searches, the listings with the user's statuses, notes and messages, and the credits log. It leaves out the cache, what the engine computes again, and the profile, which holds the income.
 
 ### `requesty`
 
@@ -349,5 +351,5 @@ For a future theme, output style, monitor or executable: `theme-*` (`themes/*.js
 - Test a mod: `claude plugin test plugins/mod-hud`.
 - `skill-video` studio: after changing the studio, run `npm run build` in `plugins-src/skill-video/studio/` before bumping the version (only the build, `engine/studio/dist/`, ships in the plugin).
 - `skill-immo` dashboard: after changing it, run `npm run typecheck && npm run lint && npm run build` in `plugins-src/skill-immo/dashboard/` before bumping the version (only the build, `engine/dashboard/dist/`, ships in the plugin). `npm run dev` proxies `/api/` to a running `immo.mjs dashboard`.
-- `skill-immo` engine: `node --test test/*.test.js` in `plugins/skill-immo/skills/apartment-search/engine/` runs offline, against recorded fixtures and a fake Stream Estate. `IMMO_LIVE=1` adds the network smoke test on rue Paul Bert (Lyon 3e): the open data, and with `STREAM_ESTATE_API_KEY` a free count and one listing (1 credit).
+- `skill-immo` engine: `node --test test/*.test.js` in `plugins/skill-immo/skills/property-search/engine/` runs offline, against recorded fixtures and a fake Stream Estate. `IMMO_LIVE=1` adds the network smoke test on rue Paul Bert (Lyon 3e): the open data, and with `STREAM_ESTATE_API_KEY` a free count and one listing (1 credit).
 - Add a plugin: create `plugins/<type>-<domain>/.claude-plugin/plugin.json`, add its entry to `.claude-plugin/marketplace.json`, then add it to the [Catalog](#catalog) and the [Plugin documentation](#plugin-documentation).
