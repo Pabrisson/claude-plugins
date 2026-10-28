@@ -391,8 +391,8 @@ const hudLines = async (
     return [
       <Text color={C.muted}>{gap(`${name} `)}</Text>,
       ...bar,
-      delta ? <Text color={C.muted} dimColor>{gap(` ${delta}`)}</Text> : null,
       detail ? <Text color={C.muted} dimColor>{gap(` (${detail})`)}</Text> : null,
+      delta ? <Text color={C.muted} dimColor>{gap(` ${delta}`)}</Text> : null,
     ]
   }
   // the delta goes with the reset time on a narrow terminal

@@ -82,8 +82,8 @@ test('terminal: one rule above, the 3 lines with theme colors, 1M tokens, cost, 
     /\.claude/,
     /master/,
     // used minus an even pace: 2h 13m left of 5h is 56% elapsed, 3d 4h left of 7d 55%
-    /5h ━{4}─{6} 42% -14% \(2h 13m\)/,
-    /7d ━{2}─{8} 18% -37% \(3d 4h\)/,
+    /5h ━{4}─{6} 42% \(2h 13m\) -14%/,
+    /7d ━{2}─{8} 18% \(3d 4h\) -37%/,
     /ctx ━{3}─{7} 32% \(323k\/1M\) \| \$1\.23/,
     /2\.1\.294 → 2\.1\.300/,
   ]) {
@@ -133,8 +133,8 @@ test('the pace delta: + above an even pace, ±0% on it, gray like the reset time
   })
   await $.session.start(START)
   const ui = await $.ui.mount(BAND)
-  expect(await ui.find({ text: /5h ━{7}─{3} 70% \+14% \(2h 13m\)/ })).toBeDefined()
-  expect(await ui.find({ text: /7d ━{6}─{4} 55% ±0% \(3d 4h\)/ })).toBeDefined()
+  expect(await ui.find({ text: /5h ━{7}─{3} 70% \(2h 13m\) \+14%/ })).toBeDefined()
+  expect(await ui.find({ text: /7d ━{6}─{4} 55% \(3d 4h\) ±0%/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /^ \+14%$/ }))?.props).toMatchObject({ color: 'inactive', dimColor: true })
   await ui.unmount()
 })
