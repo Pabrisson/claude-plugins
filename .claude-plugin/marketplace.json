@@ -51,6 +51,14 @@
       "description": "Skill property-search: find property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, weigh each against the real sales of its type, its building, its neighborhood, the rent and the buyer's budget, write offer letters, in a local dashboard; listings from the Stream Estate API (paid, with the user's yes on every credit) or found by Claude"
     },
     {
+      "name": "skill-security",
+      "source": {
+        "source": "github",
+        "repo": "cloudflare/security-audit-skill"
+      },
+      "description": "Skill security-audit (Cloudflare, tracks upstream): multi-phase security audits with independently verified, machine-readable findings"
+    },
+    {
       "name": "requesty",
       "source": "./plugins/requesty",
       "description": "MCP server Requesty (router.requesty.ai): Sentry tools through the Requesty router"

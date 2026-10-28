@@ -17,7 +17,7 @@
   - [mod-hud](#mod-hud) · [mod-ports](#mod-ports) · [mod-code-fence](#mod-code-fence)
   - [hook-notify](#hook-notify)
   - [command-docs](#command-docs) · [command-toolbox](#command-toolbox)
-  - [skill-laravel](#skill-laravel) · [skill-video](#skill-video) · [skill-immo](#skill-immo)
+  - [skill-laravel](#skill-laravel) · [skill-video](#skill-video) · [skill-immo](#skill-immo) · [skill-security](#skill-security)
   - [requesty](#requesty) · [dbeaver](#dbeaver)
 - [Plugin anatomy](#plugin-anatomy)
 - [Development](#development)
@@ -85,6 +85,7 @@ A skill triggers on its own when the request matches its description, or is call
 | `/skill-laravel:laravel-upgrade` | [`skill-laravel`](#skill-laravel) | `<target version>` | Upgrades Laravel one major version at a time, with a test pause between each |
 | `/skill-video:video-editor` | [`skill-video`](#skill-video) | `setup \| <videos or URLs> \| apply this feedback … \| variations \| preview \| rules …` | Edits a video of any genre (short, YouTube, interview, tutorial, montage, brand film, motion design), rendered locally with captions, sound and a review studio |
 | `/skill-immo:property-search` | [`skill-immo`](#skill-immo) | `setup \| <adresse, rue ou quartier> [type] [critères] \| add <url \| texte> \| refresh \| alert … \| dashboard \| apply this feedback …` | Finds property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, weighs each against the real sales of its type, its building, its neighborhood, the rent and the buyer's budget, writes offer letters, in a local dashboard |
+| `/skill-security:security-audit` | [`skill-security`](#skill-security) | `<question \| path \| audit request> [output folder]` | Answers security questions and reviews code, or runs a full six-phase audit whose findings are each checked by a separate agent |
 
 ### MCP servers
 
@@ -289,6 +290,23 @@ Claude helps buy property in France: a flat, a house, a plot, a parking or a box
 - The API v1 reports no cost: every call is logged in `.cache/api-usage.json` at its route's price for the items it returned. A price read off Stream Estate's console goes in with `costs set`.
 
 **Git**: the first search writes the searches folder's `.gitignore`. Git keeps the searches, the listings with the user's statuses, notes and messages, and the credits log. It leaves out the cache, what the engine computes again, and the profile, which holds the income.
+
+### `skill-security`
+
+`claude plugin install skill-security@pabrisson` — requires Node (for the skill's validators).
+
+Cloudflare's [`security-audit`](https://github.com/cloudflare/security-audit-skill) skill (MIT), **not copied here**: the entry is a `github` source on their repo, with no `version`, so the installed copy follows their latest commit on `main`. `claude plugin marketplace update pabrisson && claude plugin update skill-security@pabrisson` fetches it, or turn on auto-update for `pabrisson` under **Marketplaces** in `/plugin`. To hold a version, add `"sha": "<commit>"` to the entry's `source`.
+
+**`security-audit`**: a security question or a focused review (`find security vulnerabilities in ./src`) gets an answer in guidance mode. An explicit audit or pen-test request (`security audit this codebase`) runs the full workflow:
+
+1. reconnaissance: architecture, trust boundaries, input surfaces, in `architecture.md` and `coverage-ledger.json`;
+2. hunting by isolated agents, one per ledger unit, with critics looking for coverage gaps;
+3. each candidate handed to a fresh agent that tries to disprove it;
+4. `confirmed`, `needs_validation` and `rejected` records in `findings.json`, checked against `report-schema.json`;
+5. fresh agents check each record's claims against the source;
+6. `REPORT.md`, `FINDINGS-DETAIL.md` and `NEEDS-VALIDATION.md`.
+
+Output goes to `~/security-audit-skill/<repo-name>/run-<N>` unless another folder is given. Later runs build on the previous ledgers and findings. Without an OS sandbox (no network, writes limited to scratch folders), the skill never runs the target's code and keeps those leads as `needs_validation`.
 
 ### `requesty`
 
