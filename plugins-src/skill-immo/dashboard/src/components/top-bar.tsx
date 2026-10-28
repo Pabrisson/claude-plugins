@@ -5,6 +5,7 @@ import { useTheme } from "next-themes"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
+import { CreditBadge, lastCount } from "@/components/credit-badge"
 import { LOOK, newsKey, NewsTile, newsTitle, UnreadDot, useNews, whenOf } from "@/components/news"
 import { useRun } from "@/components/run-dialog"
 import { CriteriaFields, criteriaArg, NewSearch, TypesField } from "@/components/search-form"
@@ -35,7 +36,7 @@ export const promptText = (slug: string, items: Feedback[]) =>
 export function TopBar({ onNews }: { onNews: () => void }) {
   const { slug, data, state } = useSearch()
   const run = useRun()
-  const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate"
+  const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate", last = lastCount(data)
   const chips = criteriaLabels(s.criteria)
   return (
     <header className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2 md:flex-nowrap md:px-4">
@@ -59,11 +60,11 @@ export function TopBar({ onNews }: { onNews: () => void }) {
           <TooltipTrigger asChild>
             <span>
               <Button size="sm" disabled={!streamOn} onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API payante" })}>
-                <DownloadIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span>{s.stream?.total ? ` (${s.stream.total})` : ""}
+                <DownloadIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span><CreditBadge cost="fetch" />
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>{streamOn ? "Récupérer les annonces de la zone : le coût est annoncé avant" : state.stream_estate ? "Recherche en mode OpenData : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API payante. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
+          <TooltipContent>{streamOn ? `Récupérer les annonces de la zone${last ? ` : ${num(last.total)} trouvées au dernier comptage, ${num(s.max)} au plus par récupération` : ""}. Le coût est annoncé avant.` : state.stream_estate ? "Recherche en mode OpenData : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API payante. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
         </Tooltip>
         <NewsBell onOpen={onNews} />
         <AddListing />
@@ -185,15 +186,11 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
   )
 }
 
-// A listing by its link: Stream Estate looks it up (2 credits, with the user's yes); otherwise, or when it does not
-// know it, Claude reads the page: the link goes into the prompt.
+// A listing by its link or its text: Claude reads it (the API has no lookup by link), so it goes into the prompt.
 function AddListing() {
-  const { slug, data, state, addFeedback } = useSearch()
-  const run = useRun()
+  const { addFeedback } = useSearch()
   const [open, setOpen] = useState(false), [value, setValue] = useState("")
-  const streamOn = state.stream_estate && data.search.mode === "stream-estate", isUrl = /^https?:\/\//.test(value.trim())
-  async function submit() {
-    if (streamOn && isUrl && (await run({ cmd: "add", slug, args: { url: value.trim() }, label: "Ajout de l'annonce" }))) { setOpen(false); setValue(""); return }
+  function submit() {
     addFeedback({ kind: "ajouter", text: value.trim().replace(/\s+/g, " ") })
     toast.success("Ajouté au prompt : Claude lira l'annonce")
     setOpen(false)
@@ -205,13 +202,13 @@ function AddListing() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Ajouter une annonce</DialogTitle>
-          <DialogDescription>{streamOn ? "Un lien : l'API payante la retrouve (2 crédits, après votre accord). Sinon, ou pour un texte, Claude la lit." : "Collez son lien ou son texte : Claude la lira et l'ajoutera."}</DialogDescription>
+          <DialogDescription>Collez son lien ou son texte : Claude la lira et l'ajoutera.</DialogDescription>
         </DialogHeader>
         <Field>
           <FieldLabel htmlFor="listing">Lien ou texte de l'annonce</FieldLabel>
           <Textarea id="listing" value={value} onChange={e => setValue(e.target.value)} placeholder="https://www.seloger.com/annonces/…" rows={4} />
         </Field>
-        <DialogFooter><Button onClick={submit} disabled={!value.trim()}>{streamOn && isUrl ? "Chercher avec l'API payante" : "Ajouter au prompt"}</Button></DialogFooter>
+        <DialogFooter><Button onClick={submit} disabled={!value.trim()}>Ajouter au prompt</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   )

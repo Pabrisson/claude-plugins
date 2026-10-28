@@ -8,7 +8,7 @@ const flat = (x = {}) => ({ id: 'a', property_type: 'flat', area: 55, dpe: { ene
 const listingOf = (d, listings) => matchDpe([d], listings).get(d.number) ?? null
 
 test('a DPE and its listing: by its number first, wherever the engine found it', () => {
-  for (const l of [flat({ building: { dpe_match: dpe.number } }), flat({ building: { address: { certificate: dpe.number } } }), flat({ dpe: { reference: dpe.number } })])
+  for (const l of [flat({ building: { dpe_match: dpe.number } }), flat({ dpe: { reference: dpe.number } })])
     assert.deepEqual(listingOf(dpe, [flat({ id: 'x', area: 30 }), { ...l, id: 'b', area: 30 }]), { id: 'b', how: 'number' })
 })
 

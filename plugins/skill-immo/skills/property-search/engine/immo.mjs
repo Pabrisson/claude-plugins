@@ -2,9 +2,9 @@
 // property-search CLI and local dashboard server. The searches live in the folder Claude Code runs in ($IMMO_DIR
 // overrides it): one folder per search (<slug>/: search.json, listings.json, market.json, area.json, feed.json), the buyer's
 // profile (.profile.json), the measured API prices (.costs.json), the open data cache and the credits log (.cache/).
-// Each search has a mode: stream-estate (listings, analytics, alerts from the API) or classic (open data and assisted
-// listings only, never a credit). Search commands take -p <slug>. Exit codes: 2 the user must agree first (cost), 3 no credits left (402, assisted
-// mode), 4 the listing is unknown to Stream Estate (read it with WebFetch).
+// Each search has a mode: stream-estate (listings, asking prices, alerts from the API v1) or classic (open data and
+// assisted listings only, never a credit). Search commands take -p <slug>. Exit codes: 2 the user must agree first
+// (cost), 3 no credits left (402, assisted mode), 4 a listing URL to read with WebFetch (the API has no lookup by URL).
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
@@ -19,9 +19,9 @@ import { recentDpe } from './lib/dpe.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, bbox, center, circle, corridor, distance, inGeometry, inZone } from './lib/geo.js'
 import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from './lib/listings.js'
-import { badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
+import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { openData } from './lib/opendata.js'
-import { NoCredits, se } from './lib/stream.js'
+import { members, NoCredits, se } from './lib/stream.js'
 
 const SELF = fileURLToPath(import.meta.url)
 // the code this process runs: a dashboard server started from an older immo.mjs gets replaced
@@ -49,7 +49,6 @@ const GITIGNORE = `# skill-immo: what the engine makes again, and the buyer's pr
 !.cache/api-usage.json
 */market.json
 */area.json
-*/alert-events.json
 .profile.json
 .dashboard.log
 .DS_Store
@@ -68,10 +67,10 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
   options: {
     project: { type: 'string', short: 'p' }, slug: { type: 'string' }, json: { type: 'boolean' },
     estimate: { type: 'boolean' }, spend: { type: 'string' }, force: { type: 'boolean' }, 'accept-unknown': { type: 'boolean' },
-    mode: { type: 'string' }, zone: { type: 'string' }, radius: { type: 'string' }, division: { type: 'string' }, type: { type: 'string' }, types: { type: 'string' }, criteria: { type: 'string' }, max: { type: 'string' },
+    mode: { type: 'string' }, zone: { type: 'string' }, radius: { type: 'string' }, type: { type: 'string' }, types: { type: 'string' }, criteria: { type: 'string' }, max: { type: 'string' },
     kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' }, from: { type: 'string' }, channel: { type: 'string' }, date: { type: 'string' }, sent: { type: 'boolean' },
-    url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' }, resolve: { type: 'boolean' },
-    webhook: { type: 'string' }, drop: { type: 'string' }, remote: { type: 'boolean' }, open: { type: 'boolean' },
+    url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' },
+    webhook: { type: 'string' }, open: { type: 'boolean' },
   },
 })
 
@@ -100,7 +99,7 @@ function searchDir(required = true) {
   if (!fs.existsSync(path.join(dir, 'search.json'))) die(`no search ${p} in ${HOME}`)
   return dir
 }
-const version = dir => Math.max(...['search.json', 'listings.json', 'market.json', 'area.json', 'alert-events.json', 'feed.json'].map(f => fs.statSync(path.join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0))
+const version = dir => Math.max(...['search.json', 'listings.json', 'market.json', 'area.json', 'feed.json'].map(f => fs.statSync(path.join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0))
 const load = dir => ({
   search: readJson(path.join(dir, 'search.json')), listings: readJson(path.join(dir, 'listings.json'), []),
   market: readJson(path.join(dir, 'market.json'), {}), area: readJson(path.join(dir, 'area.json'), {}),
@@ -109,11 +108,9 @@ const load = dir => ({
 // --- credits -------------------------------------------------------------------------------------------------
 
 const usageLog = () => readJson(USAGE, [])
-// what a Stream Estate call cost, in the log: the API's figure, else the route's price when it is known
-const charged = slug => ({ route, credits, results }) => {
-  const known = credits ?? estimate(route, { results }, readJson(MEASURED, {}))
-  writeJson(USAGE, [...usageLog(), { date: now(), route, credits: known, results, search: slug ?? null, ...(credits == null && known != null ? { estimated: true } : {}) }])
-}
+// what a Stream Estate call cost, in the log: the route's price for the items it returned (the v1 gives no figure)
+const charged = slug => ({ route, results }) =>
+  writeJson(USAGE, [...usageLog(), { date: now(), route, credits: estimate(route, { results }, readJson(MEASURED, {})), results, search: slug ?? null }])
 const api = (slug, method, p, init) => se(method, p, { ...init, charged: charged(slug) })
 
 // Before a call that may cost: --estimate prints the estimate (JSON) and stops; otherwise the call goes only with the
@@ -136,56 +133,76 @@ const requireStream = s => {
 }
 const withCredits = async fn => { try { return await fn() } catch (e) { if (e instanceof NoCredits) assisted(e.message); throw e } }
 
-// --- Stream Estate criteria ----------------------------------------------------------------------------------
+// --- Stream Estate queries ---------------------------------------------------------------------------------
 
-const range = (gte, lte) => (gte != null || lte != null ? { gte: gte ?? null, lte: lte ?? null } : undefined)
+// ponytail: an outline cut to `max` vertices (every k-th one), enough for a street band or an IRIS; a Douglas-Peucker
+// if a zone ever looks off
+const outline = (ring, max) => { const k = Math.ceil(ring.length / max); return [...ring.filter((_, i) => i % k === 0), ring[0]].map(([x, y]) => [+x.toFixed(5), +y.toFixed(5)]) }
 
-// The search's criteria as a POST /properties criteria tree: properties of its types for sale in the zone, one branch
-// per type with the criteria that type takes (a parking has no rooms). `since`: only what changed from that date, with
-// what expired since; `exclude`: property ids already fetched (the API takes 100).
-function seCriteria(s, { since, exclude = [], alert = false } = {}) {
-  const c = s.criteria ?? {}, z = s.zone
-  const locations = z.division ? { in: { ids: [z.division] } } : z.kind === 'radius'
-    ? { in: { centerPoint: { latitude: z.center[1], longitude: z.center[0], radiusKm: z.radius_m / 1000 } } }
-    : { in: { geoShapes: [z.geometry] } }
-  const property = t => {
-    const on = k => takes(t, k), areas = { displayed: on('area') ? range(c.area_min, c.area_max) : undefined, land: on('land') && c.land_min ? { gte: c.land_min, lte: null } : undefined }
-    return {
-      type: { in: TYPES[t] }, transaction: { type: 'SELL' }, locations,
-      pricing: range(c.budget_min, c.budget_max) && { displayed: range(c.budget_min, c.budget_max) },
-      areas: areas.displayed || areas.land ? areas : undefined,
-      unit: {
-        rooms: on('rooms') ? range(c.rooms_min, c.rooms_max) : undefined, floor: on('floor') && c.floor_min != null ? { gte: c.floor_min, lte: null } : undefined,
-        diagnostic: on('dpe') && c.dpe_max ? { scores: [{ type: 'ENERGY_CONSUMPTION', rating: [...LETTERS.slice(0, LETTERS.indexOf(c.dpe_max) + 1)] }] } : undefined,
-      },
-      amenities: on('elevator') && c.elevator ? { features: { in: ['ELEVATOR'] } } : undefined,
-      id: !alert && exclude.length ? { nin: exclude.slice(0, 100) } : undefined,
-    }
-  }
-  const branch = (t, extra) => {
-    const n = { property: property(t), ...extra }
-    return c.outdoor && takes(t, 'outdoor') ? { and: [n, { or: ['BALCONY', 'TERRACE', 'GARDEN'].map(f => ({ property: { unit: { features: { in: [f] } } } })) }] } : n
-  }
-  const branches = extra => typesOf(s).map(t => branch(t, extra))
-  const all = since ? [...branches({ dates: { updatedAt: { from: since } } }), ...branches({ listings: { expiredAt: { from: since } } })] : branches({})
-  return all.length === 1 ? all[0] : { or: all }
+// where, as v1 filters: around a point, in the commune (its INSEE code), else inside the zone's outline (60 vertices
+// at most in all: the URL must stay under 9 kB)
+function seWhere(s) {
+  const z = s.zone
+  if (z.kind === 'radius') return { lat: z.center[1], lon: z.center[0], radius: z.radius_m / 1000 }
+  if (z.how === 'commune') return { includedInseeCodes: [s.insee] }
+  const polygons = z.geometry.type === 'MultiPolygon' ? z.geometry.coordinates : [z.geometry.coordinates]
+  return { geoShapes: polygons.map(p => outline(p[0], Math.floor(60 / polygons.length))) }
 }
 
-// how many properties match (size 0: no result returned, so no credit). `quiet`: a free answer is not logged (the
-// dashboard server's watch counts every few hours)
-async function seCount(slug, criteria, { quiet = false } = {}) {
+// the criteria of the type t as v1 filters, the same for a listing query and a saved search (an alert)
+function seFilters(s, t) {
+  const c = s.criteria ?? {}, on = k => takes(t, k)
+  return {
+    transactionType: 0, propertyTypes: TYPES[t], budgetMin: c.budget_min, budgetMax: c.budget_max,
+    ...(on('area') ? { surfaceMin: c.area_min, surfaceMax: c.area_max } : {}),
+    ...(on('rooms') ? { roomMin: c.rooms_min, roomMax: c.rooms_max } : {}),
+    ...(on('land') ? { landSurfaceMin: c.land_min } : {}),
+  }
+}
+
+// the criteria the v1 cannot filter on: matches() sorts them out once the listings are fetched (and paid)
+const localOnly = s => ['floor_min', 'elevator', 'outdoor'].filter(k => s.criteria?.[k] != null && s.criteria[k] !== false)
+
+// Online, for the v1: not expired and updated within 90 days. It never expires most of what left the portals: rue
+// Paul Bert, 2026-10-28, 9 420 flats not expired, 7 007 of them not updated for a year; 1 299 updated within 90 days.
+const ONLINE_DAYS = 90
+const onlineSince = () => new Date(Date.now() - ONLINE_DAYS * 86400000).toISOString().slice(0, 10)
+
+// The search as GET /documents/properties queries: one per type, each with the criteria it takes (a parking has no
+// rooms), of what is online. `since`: what changed from that date, and what expired since (a second query per type);
+// `exclude`: the properties already fetched.
+// ponytail: 60 excluded ids at most (the URL's length); past that, a fetch may pay again for a known listing
+function seQueries(s, { since, exclude = [] } = {}) {
+  const c = s.criteria ?? {}, where = seWhere(s)
+  const query = t => ({
+    ...seFilters(s, t), ...where,
+    energyCategories: takes(t, 'dpe') && c.dpe_max ? [...LETTERS.slice(0, LETTERS.indexOf(c.dpe_max) + 1)] : undefined,
+    excludedProperties: exclude.length ? exclude.slice(-60) : undefined,
+  })
+  return typesOf(s).flatMap(t => since
+    ? [{ ...query(t), expired: false, fromUpdatedAt: since }, { ...query(t), expired: true, fromExpiredAt: since }]
+    : [{ ...query(t), expired: false, fromUpdatedAt: onlineSince() }])
+}
+
+// how many properties the queries match (itemsPerPage 0: no item returned, so no credit; the API counts up to
+// 10 000). `quiet`: not logged (the dashboard server's watch counts every few hours)
+async function seCount(slug, queries, { quiet = false } = {}) {
   const log = charged(slug)
-  const { data } = await se('POST', '/properties', { body: { criteria, size: 0 }, accept: 'application/vnd.api+json', charged: c => (quiet && c.credits === 0) || log(c) })
-  return data?.meta?.totalItems ?? 0
+  let total = 0
+  for (const query of queries) total += (await se('GET', '/documents/properties', { query: { ...query, itemsPerPage: 0 }, charged: c => quiet || log(c) })).data?.['hydra:totalItems'] ?? 0
+  return total
 }
 
-// up to `max` properties, 100 a page, newest update first
-async function seFetch(slug, criteria, max) {
+// up to `max` properties, the latest updated first, query after query, never one more than asked: a page holds 30 at
+// most and starts at a multiple of its size, so the last few come in smaller pages
+async function seFetch(slug, queries, max) {
   const out = []
-  for (let page = 1; out.length < max; page++) {
-    const size = Math.min(100, max - out.length), { data } = await api(slug, 'POST', '/properties', { body: { criteria, size, page, paginationType: 'PAGE' } })
-    out.push(...(data ?? []))
-    if (!data || data.length < size) break
+  for (const query of queries) for (let at = 0; out.length < max; ) {
+    const size = [30, 15, 10, 6, 5, 3, 2, 1].find(n => n <= max - out.length && at % n === 0)
+    const got = members((await api(slug, 'GET', '/documents/properties', { query: { ...query, itemsPerPage: size, page: at / size + 1, 'order[updatedAt]': 'desc' } })).data)
+    out.push(...got)
+    at += got.length
+    if (got.length < size) break
   }
   return out
 }
@@ -199,13 +216,10 @@ async function doctor() {
     ['dashboard built', fs.existsSync(path.join(DASHBOARD, 'index.html')), `npm run build in plugins-src/skill-immo/dashboard (${DASHBOARD})`],
   ]
   for (const [name, ok, fix] of checks) console.log(`${ok ? 'ok     ' : 'MISSING'} ${name}${ok ? '' : `: ${fix}`}`)
-  console.log(hasKey() ? 'stream-estate: on (listings, market analytics, transactions, alerts)' : "stream-estate: off (assisted mode: listings from WebSearch, WebFetch or pasted text); the plugin's secret: /plugin configure skill-immo@pabrisson")
-  let remote = ''
-  if (hasKey()) {
-    const r = await api(null, 'GET', '/account/api-usage').catch(e => ({ error: e.message }))
-    remote = r.error ? `; api-usage: ${r.error}` : `; Stream Estate counts ${r.data?.totals?.credits ?? '?'} over 30 days`
-  }
-  console.log(`credits: ${u.last30} in the last 30 days (${euros(u.last30, p.eur_per_credit)}), ${u.month} this month of the ${p.monthly_credit_cap} cap${u.unknown ? `, ${u.unknown} calls of unknown cost` : ''}${remote}`)
+  console.log(hasKey() ? 'stream-estate: on (API v1: listings, asking prices, alerts)' : "stream-estate: off (assisted mode: listings from WebSearch, WebFetch or pasted text); the plugin's secret: /plugin configure skill-immo@pabrisson")
+  // a count returns no item, so it is free: it checks the key
+  const key = hasKey() ? await se('GET', '/documents/properties', { query: { itemsPerPage: 0, transactionType: 0 } }).then(() => '; key accepted', e => `; the key fails: ${e.message}`) : ''
+  console.log(`credits: ${u.last30} in the last 30 days (${euros(u.last30, p.eur_per_credit)}), ${u.month} this month of the ${p.monthly_credit_cap} cap${u.unknown ? `, ${u.unknown} calls of unknown cost` : ''}${key}`)
   console.log(fs.existsSync(PROFILE_FILE) ? `profile: ${PROFILE_FILE}` : 'profile: none yet, run setup (the budget tab needs it)')
   console.log(`searches: ${HOME} (${searches().length})`)
   // in a git repository: none of what the user made ignored, the cache and the profile left out
@@ -273,8 +287,7 @@ async function streetPoints(s) {
 }
 
 // The zone of a search, a polygon: along a street (300 m on each side by default), a circle around an address (500 m),
-// the outline of the commune (or arrondissement), of the IRIS around the point, or of a Stream Estate division (its
-// id, from geo autocomplete).
+// the outline of the commune (or arrondissement), or of the IRIS around the point.
 async function makeZone(s) {
   const kind = opt.zone ?? s.zone?.how ?? (s.type === 'municipality' ? 'commune' : 'radius')
   if (kind === 'radius') {
@@ -293,15 +306,7 @@ async function makeZone(s) {
     if (!i) die('no IRIS at this point')
     return { how: 'iris', kind: 'polygon', geometry: i.geometry, label: `IRIS ${i.name}`, iris: i.code }
   }
-  if (kind === 'division') {
-    const id = opt.division ?? s.zone?.division
-    if (!id || !streamOn(s)) die('--zone division needs Stream Estate and --division <id> (geo autocomplete)')
-    approve('GET /geo/administrative-divisions/{id}/geometry', estimate('GET /geo/administrative-divisions/{id}/geometry', {}, readJson(MEASURED, {})), 'division outline')
-    const [g, d] = await Promise.all(['/geometry', ''].map(x => api(s.slug, 'GET', `/geo/administrative-divisions/${id}${x}`)))
-    if (!g.data) die(`no division ${id}`)
-    return { how: 'division', kind: 'polygon', geometry: g.data.geometry, label: d.data?.name ?? id, division: id }
-  }
-  die('--zone is radius, commune, iris or division')
+  die('--zone is radius, commune or iris')
 }
 
 const ARRONDISSEMENT = /^(751\d\d|6938\d|132\d\d)$/
@@ -370,7 +375,7 @@ async function freeData(dir, s) {
 async function search(query) {
   let dir = opt.project ? searchDir() : null, s = dir ? readJson(path.join(dir, 'search.json')) : null
   if (!s) {
-    if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris|division] [--radius m] [--criteria "k=v …"] [--max n]')
+    if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris] [--radius m] [--criteria "k=v …"] [--max n]')
     const [f] = await od.geocode(query, { type: opt.type, limit: 1 })
     if (!f) die(`no place found for "${query}": try geocode "${query}" and a more precise query`)
     const x = f.properties, slug = (() => { const b = slugify(opt.slug ?? x.label); let sl = b; for (let i = 2; fs.existsSync(path.join(HOME, sl)); i++) sl = `${b}-${i}`; return sl })()
@@ -389,7 +394,7 @@ async function search(query) {
   if (opt.types) s.types = parseTypes(opt.types)
   if (opt.criteria) parseCriteria(opt.criteria, s.criteria)
   if (opt.max) s.max = +opt.max
-  if (!s.zone || opt.zone || opt.radius || opt.division) s.zone = await makeZone(s)
+  if (!s.zone || opt.zone || opt.radius) s.zone = await makeZone(s)
   writeJson(path.join(dir, 'search.json'), s)
   writeGitignore()
   console.log(`search ${s.slug} [${s.mode}] ${typesOf(s).join(', ')}: ${s.zone.label} (${s.label}, insee ${s.insee})`)
@@ -408,11 +413,11 @@ async function search(query) {
   const dl = dpeLine(area.dpe_recent, listingsOf(dir))
   if (dl) console.log(dl)
   if (streamOn(s)) {
-    const total = await withCredits(() => seCount(s.slug, seCriteria(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) })))
+    const total = await withCredits(() => seCount(s.slug, seQueries(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) })))
     s.stream = { total, counted_at: now() }
     writeJson(path.join(dir, 'search.json'), s)
-    const n = Math.min(total, s.max), p = profile()
-    console.log(`Stream Estate: ${total} new listings match, ${n} would be fetched for ${n} credits (${euros(n, p.eur_per_credit)}); ${Math.max(0, p.monthly_credit_cap - usage(usageLog()).month)} left of the monthly cap. Ask the user, then fetch -p ${s.slug} --spend ${n}`)
+    const n = Math.min(total, s.max), p = profile(), local = localOnly(s)
+    console.log(`Stream Estate: ${total} new listings match, ${n} would be fetched for ${n} credits (${euros(n, p.eur_per_credit)}); ${Math.max(0, p.monthly_credit_cap - usage(usageLog()).month)} left of the monthly cap.${local.length ? ` The API does not filter on ${local.join(', ')}: the count includes listings they rule out.` : ''} Ask the user, then fetch -p ${s.slug} --spend ${n}`)
   } else console.log(`${s.mode === 'classic' ? 'OpenData search' : 'Stream Estate: off (no key)'}: assisted listings (WebSearch, WebFetch, pasted text, then add)`)
   console.log(`then: dashboard -p ${s.slug} --open`)
 }
@@ -428,16 +433,10 @@ function writeGitignore() {
 }
 
 // the free building data of a listing: its address, the DPE registry, the condominium register, the risks and the
-// sales of the same building. --resolve asks Stream Estate for the exact address first (beta, unknown cost).
+// sales of the same building
 async function enrichOne(l, s, sales) {
   const b = { ...(l.building ?? {}) }, precise = l.location.accuracy === 'PRECISE' || (l.source !== 'stream-estate' && l.location.address)
-  let point = l.location.point, label = precise ? l.location.address : null
-  if (opt.resolve && l.se_id && streamOn(s)) {
-    const r = await withCredits(() => api(s.slug, 'POST', `/properties/${l.se_id}/resolve-address`))
-    const a = r.data?.address, conf = r.data?.confidence ?? 'NONE'
-    b.address = { confidence: conf, method: r.data?.method ?? null, label: a?.label ?? null, certificate: r.data?.energyCertificateNumber ?? null, shown: ['EXACT', 'HIGH'].includes(conf) ? 'address' : ['MEDIUM', 'LOW'].includes(conf) ? 'probable' : null }
-    if (a?.longitude != null && conf !== 'NONE') { point = [a.longitude, a.latitude]; label = a.label }
-  }
+  const point = l.location.point, label = precise ? l.location.address : null
   if (!point) return l
   const [f] = label ? await od.geocode(addressQuery(label, l.location), { type: 'housenumber', limit: 1 }) : []
   const ban = f?.properties.score > 0.7 ? f.properties.id : null
@@ -488,11 +487,11 @@ const describe = changes => {
 async function fetchListings() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
   requireStream(s)
-  const known = listingsOf(dir).map(l => l.se_id).filter(Boolean), criteria = seCriteria(s, { exclude: known })
-  const total = await withCredits(() => seCount(s.slug, criteria)), n = Math.min(total, +(opt.max ?? s.max))
+  const known = listingsOf(dir).map(l => l.se_id).filter(Boolean), queries = seQueries(s, { exclude: known })
+  const total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? s.max))
   if (!n) return console.log('Stream Estate: no new listing matches')
-  approve('POST /properties', n, `fetch ${n} of ${total} listings`)
-  const raw = await withCredits(() => seFetch(s.slug, criteria, Math.min(n, +opt.spend || n)))
+  approve('GET /documents/properties', n, `fetch ${n} of ${total} listings`)
+  const raw = await withCredits(() => seFetch(s.slug, queries, Math.min(n, +opt.spend || n)))
   const changes = saveMerged(dir, raw.map(fromStreamEstate))
   Object.assign(s, { last_fetch: now(), last_refresh: s.last_refresh ?? now(), stream: { total: total - raw.length, counted_at: now() } })
   writeJson(path.join(dir, 'search.json'), s)
@@ -500,47 +499,30 @@ async function fetchListings() {
   console.log(`fetched ${raw.length} listings: ${describe(changes)}; ${enriched} with building data (enrich -p ${s.slug} --all for the rest)`)
 }
 
-// market -p <slug> --accept-unknown: the asking prices (analytics) and the reconciled sales (transactions) of the zone
+// market -p <slug> [--accept-unknown]: the asking price per m² of the zone's listings (median, and month by month
+// over two years)
 async function market() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
   requireStream(s)
-  const m = readJson(MEASURED, {}), calls = 4
-  const e = [estimate('GET /analytics/listings', { calls }, m), estimate('POST /transactions/search', { results: 100 }, m)]
-  approve('GET /analytics/listings + POST /transactions/search', e.includes(null) ? null : e[0] + e[1], 'market analytics')
-  const [w, so, ea, n] = bbox(s.zone), from = d => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10)
-  // ponytail: the analytics and the reconciled sales of the search's first type only (a median mixing types means
-  // nothing); one call set per type when a search really needs several
-  const main = typesOf(s)[0], q = { property_type: TYPES[main], transaction_type: 'SELL', lng_min: w, lat_min: so, lng_max: ea, lat_max: n }
-  const metrics = ['count', 'median:price_per_sqm', 'median:price', 'median:area']
-  const run = async extra => (await withCredits(() => api(s.slug, 'GET', '/analytics/listings', { query: { ...q, ...extra } }))).data
-  const [trend, dpe, publishers, online] = await Promise.all([
-    run({ event_type: 'CREATED', event_at_from: from(730), time_bucket: 'month', metrics }),
-    run({ event_type: 'CREATED', event_at_from: from(365), group_by: 'dpe_energy_rating', metrics }),
-    run({ event_type: 'CREATED', event_at_from: from(365), group_by: 'publisher_type', metrics }),
-    // days between a listing's creation and its expiry: how long flats stay online here
-    run({ event_type: 'EXPIRED', event_at_from: from(365), metrics: ['count', 'median:days_between_events', 'percentile:days_between_events:75'] }),
-  ])
-  const tx = (await withCredits(() => api(s.slug, 'POST', '/transactions/search', { body: { propertyType: TYPES[main], dateMutation: { after: from(730) }, geoshape: s.zone.geometry, page: { size: 100 } } }))).data
-  const sold = (tx?.data ?? []).filter(t => t.price?.pricePerSqmCents).map(t => ({ id: t.id, source: t.source, date: t.dateMutation, price: t.price.amountCents / 100, ppm2: Math.round(t.price.pricePerSqmCents / 100), area: t.areas?.livingAreaSqm, rooms: t.areas?.roomsCount, point: t.location?.geoPoint ? [t.location.geoPoint.lon, t.location.geoPoint.lat] : null, matched: !!t.matched }))
-  const out = { ...readJson(path.join(dir, 'market.json'), {}), stream: { updated: now(), type: main, trend, dpe, publishers, online, transactions: { type: main, count: sold.length, more: !!tx?.meta?.nextCursor, median_ppm2: median(sold.map(t => t.ppm2)), by_source: Object.fromEntries([...Map.groupBy(sold, t => t.source)].map(([k, v]) => [k, v.length])), items: sold } } }
+  approve('GET /indicators/price_per_meter', estimate('GET /indicators/price_per_meter', {}, readJson(MEASURED, {})), 'asking prices')
+  // ponytail: the search's first type only (a median mixing types means nothing); one call per type when a search
+  // really needs several
+  const main = typesOf(s)[0], from = new Date(Date.now() - 730 * 86400000).toISOString().slice(0, 10)
+  const r = (await withCredits(() => api(s.slug, 'GET', '/indicators/price_per_meter', { query: { transactionType: 0, propertyTypes: TYPES[main], ...seWhere(s), fromDate: from, aggregationInterval: 'month' } }))).data
+  const x = members(r)[0] ?? {}, out = { ...readJson(path.join(dir, 'market.json'), {}), stream: { updated: now(), type: main, median: x.median ?? null, average: x.average ?? null, series: x.series ?? {} } }
   writeJson(path.join(dir, 'market.json'), out)
-  console.log(`asking €/m² (median, 12 months): ${fmt(trend?.data?.at(-1)?.metrics?.['median:price_per_sqm'])} last month; ${sold.length} reconciled sales (${Object.entries(out.stream.transactions.by_source).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}), median ${fmt(out.stream.transactions.median_ppm2)} €/m²`)
+  const last = Object.entries(out.stream.series).at(-1)
+  console.log(`asking €/m² (${main}, listings of the last two years): median ${fmt(x.median)}, average ${fmt(x.average)}${last ? `; ${last[0]}: ${fmt(last[1])}` : ''}`)
 }
 
-// add -p <slug> --url <listing> [--spend 2] | --file <listing.json> [--source websearch|pasted]
+// add -p <slug> --url <listing> | --file <listing.json> [--source websearch|pasted]
 async function add() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
   if (opt.url) {
-    if (!streamOn(s)) die(`${s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}: read ${opt.url} with WebFetch, then add -p ${s.slug} --file listing.json`, 4)
     const known = listingsOf(dir).find(l => l.urls.some(u => normUrl(u.url) === normUrl(opt.url)))
     if (known) return console.log(`already in the search: ${known.id}`)
-    approve('POST /properties/lookup-by-url + GET /properties/{id}', 2, 'look up the listing')
-    const r = await withCredits(() => api(s.slug, 'POST', '/properties/lookup-by-url', { body: { url: opt.url } }))
-    if (!r.data) die(`Stream Estate does not know ${opt.url} (not charged): read it with WebFetch, then add -p ${s.slug} --file listing.json`, 4)
-    const p = await withCredits(() => api(s.slug, 'GET', `/properties/${r.data.id}`))
-    const changes = saveMerged(dir, [fromStreamEstate(p.data)])
-    await autoEnrich(dir, s, changes)
-    return console.log(`added ${r.data.id}: ${describe(changes)}`)
+    // the API v1 has no lookup by URL: a fetch finds the listing later, and merges it with this one by its URL
+    die(`read ${opt.url} with WebFetch, then add -p ${s.slug} --file listing.json`, 4)
   }
   if (!opt.file) die('usage: add -p <slug> --url <listing url> | --file <listing.json> (listing-format.md)')
   const raw = readJson(opt.file === '-' ? 0 : opt.file), items = [raw].flat(), source = opt.source === 'pasted' ? 'pasted' : 'websearch'
@@ -557,12 +539,10 @@ async function add() {
   console.log(`added ${ls.length} listing${ls.length > 1 ? 's' : ''}: ${describe(changes)}`)
 }
 
-// enrich -p <slug> --id <id> | --all [--resolve --accept-unknown]
+// enrich -p <slug> --id <id> | --all
 async function enrich() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), ls = listingsOf(dir)
-  const ids = opt.id ? opt.id.split(',') : opt.all ? ls.filter(l => l.location.point).map(l => l.id) : die('usage: enrich -p <slug> --id <id[,id…]> | --all [--resolve]')
-  if (opt.resolve) requireStream(s)
-  if (opt.resolve) approve('POST /properties/{id}/resolve-address', estimate('POST /properties/{id}/resolve-address', { calls: ids.length }, readJson(MEASURED, {})), `resolve ${ids.length} addresses`)
+  const ids = opt.id ? opt.id.split(',') : opt.all ? ls.filter(l => l.location.point).map(l => l.id) : die('usage: enrich -p <slug> --id <id[,id…]> | --all')
   console.log(`building data for ${await enrichAll(dir, s, ids)} of ${ids.length} listings`)
 }
 
@@ -580,9 +560,9 @@ async function refresh() {
     console.log(`free data refreshed. ${streamOn(s) ? `No Stream Estate fetch yet: fetch -p ${s.slug}` : s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}${assistedCount ? `; ${assistedCount} assisted listings: check each with WebFetch (one page), then add --file to update price or status` : ''}`)
     return dpe()
   }
-  const criteria = seCriteria(s, { since: s.last_refresh }), total = await withCredits(() => seCount(s.slug, criteria)), n = Math.min(total, +(opt.max ?? s.max))
-  if (n) approve('POST /properties', n, `refresh ${n} changed listings`)
-  const raw = n ? await withCredits(() => seFetch(s.slug, criteria, n)) : []
+  const queries = seQueries(s, { since: s.last_refresh }), total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? s.max))
+  if (n) approve('GET /documents/properties', n, `refresh ${n} changed listings`)
+  const raw = n ? await withCredits(() => seFetch(s.slug, queries, n)) : []
   const changes = saveMerged(dir, raw.map(fromStreamEstate))
   s.last_refresh = now()
   writeJson(path.join(dir, 'search.json'), s)
@@ -592,119 +572,81 @@ async function refresh() {
   dpe()
 }
 
-// alert forecast | create [--webhook <https url>] [--drop 3] | list | events | on | off | delete, -p <slug>
+// A v1 saved search (POST or PUT /searches) for the type t of the search: its zone, its criteria (the DPE, the floor,
+// the elevator and the outdoor space have no filter there), and its pushes: new listings, and price changes
+function searchBody(s, t, enabled) {
+  const w = seWhere(s)
+  return {
+    title: `immo ${s.label}${typesOf(s).length > 1 ? ` (${t})` : ''}`, ...seFilters(s, t), ...(w.includedInseeCodes ? { includedZipcodesInsee: w.includedInseeCodes } : w),
+    notificationEnabled: enabled, endpointRecipient: s.alert.hooks.match, eventEndpoint: s.alert.hooks.event, subscribedEvents: ['ad.update.price'],
+  }
+}
+
+// alert create [--webhook <https url>] | list | on | off | delete, -p <slug>: one saved search per type of the search
 async function alert(sub) {
   if (!hasKey()) die('alerts need Stream Estate (no key)')
-  const m = readJson(MEASURED, {}), cost = r => estimate(r, {}, m)
+  const m = readJson(MEASURED, {}), cost = (r, calls = 1) => estimate(r, { calls }, m)
   if (sub === 'list') {
-    approve('GET /alerts', cost('GET /alerts'), 'list alerts')
-    for (const a of (await api(null, 'GET', '/alerts')).data ?? []) console.log(`${a.id} ${a.enabled ? 'on ' : 'off'} ${a.name ?? ''}`)
+    approve('GET /searches', cost('GET /searches'), 'list alerts')
+    for (const a of members((await api(null, 'GET', '/searches')).data)) console.log(`${a['@id']?.split('/').pop()} ${a.notificationEnabled ? 'on ' : 'off'} ${a.title ?? ''}`)
     return
   }
-  const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), criteria = seCriteria(s, { alert: true })
+  const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), types = typesOf(s)
   requireStream(s)
-  if (sub === 'forecast') {
-    const f = (await api(s.slug, 'POST', '/alerts/forecast', { body: { criteria } })).data
-    return console.log(JSON.stringify({ window_days: f?.windowDays, total: f?.total, per_day: f?.perDay, per_hour: f?.perHour }))
-  }
   if (sub === 'create') {
-    if (s.alert?.id) die(`the search already has the alert ${s.alert.id}`)
-    approve('POST /alerts', cost('POST /alerts'), 'create the alert')
+    if (s.alert?.searches?.length) die(`the search already has an alert: alert delete -p ${s.slug} first`)
+    // the v1 refuses a saved search without a maximum budget (or price per m²)
+    if (!s.criteria?.budget_max) die(`an alert needs a maximum budget: ask the user, then search -p ${s.slug} --criteria "budget_max=…"`)
+    approve('POST /searches', cost('POST /searches', types.length), 'create the alert')
     // ntfy.sh by default: a random topic (whoever knows it can read it), the JSON turned into a readable push
-    const topic = `immo-${s.slug.slice(0, 20)}-${randomBytes(8).toString('hex')}`
-    const tpl = new URLSearchParams({ tpl: 'yes', t: '{{.eventType}} · {{.alert.name}}', m: '{{.data.property.unit.rooms}} p. · {{.data.property.area.displayed}} m² · {{.data.property.pricing.displayed}} € — {{.data.property.location.address}}' })
-    const webhook = opt.webhook ?? `https://ntfy.sh/${topic}?${tpl}`
-    if (!/^https:\/\//.test(webhook)) die('the webhook must be HTTPS')
-    const drop = +(opt.drop ?? 3)
-    const a = (await api(s.slug, 'POST', '/alerts', { body: { name: `immo ${s.label}`, enabled: true, criteria, notificationDestination: { webhookUrl: webhook }, notificationConfig: { rules: [{ eventType: 'NEW_MATCH' }, { eventType: 'PRICE_CHANGE', variationPercent: [{ gte: null, lte: -drop }] }] } } })).data
-    s.alert = { id: a.id, created: now(), webhook: opt.webhook ? 'custom' : 'ntfy', topic: opt.webhook ? null : topic, drop }
-    writeJson(path.join(dir, 'search.json'), s)
-    if (a.signingKey) console.log(`webhook signing key (shown once, keep it): ${a.signingKey}`)
-    return console.log(`alert ${a.id}: new listings and drops of ${drop} % or more${opt.webhook ? '' : ` pushed to ntfy: subscribe to the topic ${topic} in the ntfy app (https://ntfy.sh/${topic})`}`)
+    const topic = `immo-${s.slug.slice(0, 20)}-${randomBytes(8).toString('hex')}`, ntfy = (t, msg) => `https://ntfy.sh/${topic}?${new URLSearchParams({ tpl: 'yes', t, m: msg })}`
+    const hooks = opt.webhook ? { match: opt.webhook, event: opt.webhook } : {
+      match: ntfy('Nouvelle annonce · {{.propertyDocument.city.name}}', '{{.propertyDocument.room}} p. · {{.propertyDocument.surface}} m² · {{.propertyDocument.price}} € — {{.propertyDocument.title}}'),
+      event: ntfy('Prix modifié · {{.match.propertyDocument.city.name}}', '{{.adEvent.fieldOldValue}} → {{.adEvent.fieldNewValue}} € ({{.adEvent.percentVariation}} %) — {{.match.propertyDocument.title}}'),
+    }
+    if (!/^https:\/\//.test(hooks.match)) die('the webhook must be HTTPS')
+    s.alert = { searches: [], created: now(), webhook: opt.webhook ? 'custom' : 'ntfy', topic: opt.webhook ? null : topic, hooks, enabled: true }
+    for (const t of types) {
+      const a = (await api(s.slug, 'POST', '/searches', { body: searchBody(s, t, true) })).data
+      s.alert.searches.push({ id: a['@id'].split('/').pop(), type: t })
+      writeJson(path.join(dir, 'search.json'), s)
+    }
+    return console.log(`alert on ${types.join(', ')}: new listings and price changes${opt.webhook ? '' : ` pushed to ntfy: subscribe to the topic ${topic} in the ntfy app (https://ntfy.sh/${topic})`}`)
   }
-  if (!s.alert?.id) die(`no alert on ${s.slug}: alert create -p ${s.slug}`)
-  if (sub === 'events') {
-    approve('GET /alerts/{id}/events', cost('GET /alerts/{id}/events'), 'read the alert events')
-    const ev = (await api(s.slug, 'GET', `/alerts/${s.alert.id}/events`, { query: { 'order[createdAt]': 'desc' } })).data ?? []
-    writeJson(path.join(dir, 'alert-events.json'), ev.map(e => ({ id: e.id, type: e.eventType, property: e.property?.split('/').pop(), at: e.createdAt, notified: e.notifiedAt })))
-    const known = new Set(listingsOf(dir).map(l => l.se_id))
-    return console.log(`${ev.length} events; ${ev.filter(e => !known.has(e.property?.split('/').pop())).length} about properties not in the search yet (refresh fetches them)`)
-  }
+  if (!s.alert?.searches?.length) die(`no alert on ${s.slug}: alert create -p ${s.slug}`)
+  const n = s.alert.searches.length
   if (['on', 'off'].includes(sub)) {
-    approve('PUT /alerts/{id}', cost('PUT /alerts/{id}'), `turn the alert ${sub}`)
-    await api(s.slug, 'PUT', `/alerts/${s.alert.id}`, { body: { enabled: sub === 'on' } })
+    approve('PUT /searches/{id}', cost('PUT /searches/{id}', n), `turn the alert ${sub}`)
+    // a PUT replaces the saved search: the whole body again, with the search's criteria of today
+    for (const a of s.alert.searches) await api(s.slug, 'PUT', `/searches/${a.id}`, { body: searchBody(s, a.type, sub === 'on') })
     s.alert.enabled = sub === 'on'
   } else if (sub === 'delete') {
-    approve('DELETE /alerts/{id}', cost('DELETE /alerts/{id}'), 'delete the alert')
-    await api(s.slug, 'DELETE', `/alerts/${s.alert.id}`)
+    approve('DELETE /searches/{id}', cost('DELETE /searches/{id}', n), 'delete the alert')
+    for (const a of s.alert.searches) await api(s.slug, 'DELETE', `/searches/${a.id}`)
     s.alert = null
-  } else die('usage: alert forecast | create [--webhook <https url>] [--drop 3] | list | events | on | off | delete -p <slug>')
+  } else die('usage: alert create [--webhook <https url>] | list | on | off | delete -p <slug>')
   writeJson(path.join(dir, 'search.json'), s)
   console.log(`alert ${sub}: done`)
 }
 
-// usage [--remote]: the credits spent, per month, search and route; --remote compares with Stream Estate's count
+// usage: the credits spent, per month, search and route
 async function usageCmd() {
   const p = profile(), log = usageLog(), u = usage(log)
   if (opt.json) return console.log(JSON.stringify({ ...u, cap: p.monthly_credit_cap, eur_per_credit: p.eur_per_credit }))
   console.log(`this month: ${u.month} credits (${euros(u.month, p.eur_per_credit)}) of the ${p.monthly_credit_cap} cap; last 30 days: ${u.last30}${u.unknown ? `; ${u.unknown} calls of unknown cost` : ''}`)
   for (const [k, v] of Object.entries(u.by_search)) console.log(`  search ${k}: ${v.credits} credits, ${v.calls} calls`)
   for (const [k, v] of Object.entries(u.by_route)) console.log(`  ${k}: ${v.credits} credits, ${v.calls} calls`)
-  if (opt.remote && hasKey()) {
-    const r = (await api(null, 'GET', '/account/api-usage', { query: { groupBy: 'ROUTE', granularity: 'MONTH' } })).data
-    console.log(`Stream Estate over ${r?.period?.start?.slice(0, 10)} → ${r?.period?.end?.slice(0, 10)}: ${r?.totals?.credits ?? '?'} credits, ${r?.totals?.calls} calls (local log: ${u.last30})`)
-    for (const x of r?.byRoute ?? []) console.log(`  ${x.route}: ${x.credits ?? '?'} credits, ${x.calls} calls, ${x.results} results`)
-  }
 }
 
-// costs | costs set "<route>=<credits>" | costs measure --accept-unknown --spend 1: the price of each route
+// costs | costs set "<route>=<credits>": the price of each route; one of unknown cost is read off Stream Estate's
+// console after a first call, then set here
 async function costs(sub, ...rest) {
   const m = readJson(MEASURED, {})
   if (sub === 'set') {
     for (const x of rest) { const i = x.lastIndexOf('='); if (!(x.slice(0, i) in table())) die(`unknown route ${x.slice(0, i)}`); m[x.slice(0, i)] = +x.slice(i + 1) }
     writeJson(MEASURED, m)
-  } else if (sub === 'measure') {
-    if (!hasKey()) die('costs measure needs the Stream Estate key')
-    approve('POST /properties', 1, 'measure the routes of unknown cost (one property read, then one minimal call per route)')
-    if (!opt['accept-unknown']) die('costs measure calls every route of unknown cost: ask the user, then pass --accept-unknown', 2)
-    const before = (await api(null, 'GET', '/account/api-usage', { query: { groupBy: 'ROUTE' } })).data
-    const [p] = (await api(null, 'POST', '/properties', { body: { criteria: { property: { type: { in: ['FLAT'] }, transaction: { type: 'SELL' }, locations: { countryCode: 'FR', in: { uniqueCodes: ['69383'] } } } }, size: 1 } })).data ?? []
-    if (!p) die('no property to measure with')
-    const city = p.property?.location?.city?.id, header = {}
-    const call = async (route, ...a) => { try { header[route] = (await se(...a, { charged: charged('costs-measure') })).credits } catch (e) { header[route] = `error: ${e.message.slice(0, 80)}` } }
-    await call('POST /properties/{id}/resolve-address', 'POST', `/properties/${p.id}/resolve-address`)
-    await call('GET /analytics/listings', 'GET', '/analytics/listings', { query: { property_type: 'FLAT', metrics: 'count', lat_min: 45.75, lat_max: 45.76, lng_min: 4.84, lng_max: 4.85 } })
-    await call('POST /transactions/search', 'POST', '/transactions/search', { body: { page: { size: 1 } } })
-    await call('GET /geo/autocomplete', 'GET', '/geo/autocomplete', { query: { query: 'lyon', limit: 1 } })
-    if (city) {
-      await call('GET /geo/administrative-divisions/{id}', 'GET', `/geo/administrative-divisions/${city}`)
-      await call('GET /geo/administrative-divisions/{id}/geometry', 'GET', `/geo/administrative-divisions/${city}/geometry`)
-      await call('GET /geo/administrative-divisions/{id}/descendants', 'GET', `/geo/administrative-divisions/${city}/descendants`, { query: { size: 1 } })
-    }
-    await call('GET /sources', 'GET', '/sources')
-    if (p.publishers?.[0]?.id) await call('GET /publishers/{id}', 'GET', `/publishers/${p.publishers[0].id}`)
-    await call('GET /alerts', 'GET', '/alerts')
-    const a = (await se('POST', '/alerts', { body: { name: 'immo cost probe', enabled: false, criteria: { property: { type: { in: ['FLAT'] }, transaction: { type: 'SELL' } } } }, charged: charged('costs-measure') }).catch(() => ({})))
-    if (a.data?.id) {
-      header['POST /alerts'] = a.credits
-      await call('PUT /alerts/{id}', 'PUT', `/alerts/${a.data.id}`, { body: { enabled: false } })
-      await call('GET /alerts/{id}/events', 'GET', `/alerts/${a.data.id}/events`)
-      await call('DELETE /alerts/{id}', 'DELETE', `/alerts/${a.data.id}`)
-    }
-    // the account's count moves a few seconds after the calls
-    await new Promise(ok => setTimeout(ok, 8000))
-    const after = (await api(null, 'GET', '/account/api-usage', { query: { groupBy: 'ROUTE' } })).data
-    const credit = (r, route) => r?.byRoute?.find(x => route.endsWith(x.route.replace(/\{[^}]+\}/g, '{id}')) || x.route.replace(/\{[^}]+\}/g, '{id}').endsWith(route.split(' ')[1]))?.credits ?? 0
-    for (const route of Object.keys(header)) {
-      const diff = credit(after, route) - credit(before, route), h = header[route]
-      const value = typeof h === 'number' ? h : diff
-      console.log(`${route}: header ${h ?? 'absent'}, api-usage +${diff} → ${value}`)
-      if (typeof h !== 'string') m[route] = value
-    }
-    writeJson(MEASURED, m)
-    console.log(`saved to ${MEASURED}; copy the results into references/stream-estate.md and lib/costs.js`)
   }
-  for (const [route, c] of Object.entries(table(m))) console.log(`${route}: ${c.credits == null ? 'unknown' : `${c.credits}${c.per ? ' per result' : ''}`}${c.note ? ` (${c.note})` : ''}`)
+  for (const [route, c] of Object.entries(table(m))) console.log(`${route}: ${c.credits == null ? 'unknown' : `${c.credits}${c.per ? ' per item' : ''}`}${c.note ? ` (${c.note})` : ''}`)
 }
 
 // show -p <slug> [--id <id[,id…]>]: what Claude needs to analyse or compare listings, computed as the dashboard does
@@ -718,8 +660,8 @@ function show() {
     return {
     id: l.id, source: l.source, type: t, title: l.title, url: l.urls.find(u => u.url)?.url ?? null, portals: l.urls.map(u => u.source),
     price: l.price, area: l.area, land_area: l.land_area ?? null, price_per_m2: l.price_per_m2, rooms: l.rooms, floor: l.floor, dpe: l.dpe?.energy, status: l.status,
-    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), address: l.building?.address?.shown ? l.building.address.label : l.location.address,
-    market: { reference: ref, badge: badge(unitPrice(l), ref?.ppm2), street_ppm2: m.dvf?.[t]?.street?.median_ppm2 ?? null, asking_ppm2: m.stream?.type === t ? m.stream?.trend?.data?.at(-1)?.metrics?.['median:price_per_sqm'] ?? null : null },
+    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, favorite: !!l.favorite, notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), address: l.location.address,
+    market: { reference: ref, badge: badge(unitPrice(l), ref?.ppm2), street_ppm2: m.dvf?.[t]?.street?.median_ppm2 ?? null, asking_ppm2: asking(m, t) },
     negotiation: negotiation(l, ref?.ppm2), days_online: daysOnline(l), dropped: Math.round(dropped(l) * 1000) / 1000, urgent: l.urgent, favorites: l.favorites,
     review: review(l, ctx), score: score(l, ctx),
     budget: budget(l, p), rent: rentVsBuy(l, rentOf(l, m.rent), p),
@@ -792,14 +734,14 @@ function sendFile(res, file) {
 // What the dashboard may run, as engine commands with their flags: the paid ones go through the same estimate and
 // approval as Claude's (estimate: true first, then spend / accept_unknown once the user confirmed in the dialog).
 const RUN = {
-  search: ['query', 'mode', 'types', 'criteria', 'zone', 'radius', 'max'], fetch: ['spend', 'max'], market: [], refresh: ['spend'], enrich: ['id', 'all', 'resolve'],
-  add: ['url', 'spend'], alert: ['sub', 'webhook', 'drop'], usage: ['remote'],
+  search: ['query', 'mode', 'types', 'criteria', 'zone', 'radius', 'max'], fetch: ['spend', 'max'], market: [], refresh: ['spend'], enrich: ['id', 'all'],
+  alert: ['sub', 'webhook'], usage: [],
 }
 function runArgs(body) {
   const keys = RUN[body.cmd]
   if (!keys) throw new Error(`cannot run ${body.cmd}`)
   const a = body.args ?? {}, argv = [SELF, body.cmd]
-  if (body.cmd === 'alert') { if (!['forecast', 'create', 'events', 'on', 'off', 'delete'].includes(a.sub)) throw new Error('bad alert'); argv.push(a.sub) }
+  if (body.cmd === 'alert') { if (!['create', 'on', 'off', 'delete'].includes(a.sub)) throw new Error('bad alert'); argv.push(a.sub) }
   if (body.cmd === 'search' && a.query && !body.slug) argv.push(String(a.query))
   if (body.slug) { if (!/^[a-z0-9][a-z0-9-]*$/.test(body.slug)) throw new Error('bad slug'); argv.push('-p', body.slug) }
   for (const k of keys) if (!['query', 'sub'].includes(k) && a[k] != null && a[k] !== false) argv.push(`--${k}`, ...(a[k] === true ? [] : [String(a[k])]))
@@ -859,11 +801,11 @@ async function handle(req, res) {
     if (sub === '/version') return reply(res, 200, { version: version(dir), unread: unread(dir) })
     if (!sub && req.method === 'DELETE') {
       // a search with an alert keeps it: Stream Estate would go on notifying, with no search left to show it
-      if (readJson(path.join(dir, 'search.json')).alert?.id) return reply(res, 409, { error: 'alert' })
+      if (readJson(path.join(dir, 'search.json')).alert?.searches?.length) return reply(res, 409, { error: 'alert' })
       fs.rmSync(dir, { recursive: true, force: true })
       return reply(res, 200, {})
     }
-    if (!sub) { const v = version(dir); return reply(res, 200, { ...load(dir), events: readJson(path.join(dir, 'alert-events.json'), []), feed: feedOf(dir), unread: unread(dir), version: v }) }
+    if (!sub) { const v = version(dir); return reply(res, 200, { ...load(dir), feed: feedOf(dir), unread: unread(dir), version: v }) }
     if (sub === '/feed/read' && post) {
       const f = feedOf(dir)
       writeJson(path.join(dir, 'feed.json'), { ...f, read_at: now() })
@@ -881,6 +823,7 @@ async function handle(req, res) {
       if (!l) return reply(res, 404, { error: 'no such listing' })
       if ('my_status' in body) { if (![null, 'to_visit', 'visited', 'offer', 'dropped'].includes(body.my_status)) return reply(res, 400, { error: 'bad status' }); l.my_status = body.my_status }
       if (typeof body.notes === 'string') l.notes = body.notes.slice(0, 5000)
+      if (typeof body.favorite === 'boolean') l.favorite = body.favorite
       // the conversation: a message the user adds (a reply received, a call), one marked sent or not, one deleted
       if (body.message?.add) {
         try { l.messages = [...(l.messages ?? []), newMessage(l, body.message.add)] } catch (e) { return reply(res, 400, { error: e.message }) }
@@ -923,7 +866,7 @@ async function watch(dir) {
     if (rows.length !== before.size || rows.some(d => !before.has(d.number))) writeJson(f, { ...readJson(f, {}), dpe_recent: rows })
   }
   if (streamOn(s)) {
-    const total = await seCount(s.slug, seCriteria(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) }), { quiet: true })
+    const total = await seCount(s.slug, seQueries(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) }), { quiet: true })
     // the latest count: the search's (search, fetch) or the watch's
     const last = [s.stream, feedOf(dir).stream].filter(Boolean).sort((a, b) => b.counted_at.localeCompare(a.counted_at))[0]
     if (total > (last?.total ?? 0)) news.push({ date: now(), kind: 'listings', count: total, added: total - (last?.total ?? 0) })

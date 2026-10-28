@@ -90,7 +90,7 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
     const out: Partial<Record<PropertyType, Market>> = {}
     for (const t of ["flat", "house", "land", "parking", "premises"] as PropertyType[]) {
       const ref = reference(data.market, t) as Ref | null, d = data.market.dvf?.[t]
-      out[t] = { ref, stats: ref && d && ref.scope !== "transactions" ? d[ref.scope as "recent" | "zone" | "commune"] : null }
+      out[t] = { ref, stats: ref && d ? d[ref.scope as "recent" | "zone" | "commune"] : null }
     }
     return out as Record<PropertyType, Market>
   }, [data.market])

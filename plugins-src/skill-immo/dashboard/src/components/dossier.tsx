@@ -1,14 +1,16 @@
 import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
-import { daysOnline, dropped, isHome, negotiation, typeOf, unitPrice } from "@engine/market.js"
-import { CheckIcon, CircleQuestionMarkIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { asking, daysOnline, dropped, isHome, negotiation, typeOf, unitPrice } from "@engine/market.js"
+import { CheckIcon, ChevronDownIcon, CircleQuestionMarkIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
 import { Dpe } from "@/components/dpe"
 import { nearby } from "@/components/map-view"
 import { Gap, Ruler } from "@/components/ruler"
+import { FavoriteButton } from "@/components/favorite"
+import { Origin } from "@/components/origin"
 import { useRun } from "@/components/run-dialog"
 import { StatusDot } from "@/components/status"
 import { StaleBar } from "@/components/top-bar"
@@ -20,16 +22,16 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Channel, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
-import { ACCURACY_LABEL, CHANNEL_LABEL, date, dateTime, eur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, SOURCE_LABEL, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
+import { ACCURACY_LABEL, CHANNEL_LABEL, date, dateTime, eur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -81,7 +83,7 @@ export function Dossier() {
   return (
     <Sheet open={!!l} onOpenChange={o => !o && select(null)}>
       <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
-        <SheetHeader className="border-b"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)} · ${SOURCE_LABEL[l.source]}`}</SheetDescription></SheetHeader>
+        <SheetHeader className="border-b"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)}`}</SheetDescription></SheetHeader>
         <StaleBar />
         <div className="p-4">{body}</div>
       </SheetContent>
@@ -97,7 +99,7 @@ const DRAFTS = {
 } as const
 
 function DossierBody({ l }: { l: Listing }) {
-  const { slug, data, state, profile, marketFor, aidsFor, reload, compare, toggleCompare, addFeedback } = useSearch()
+  const { slug, data, profile, marketFor, aidsFor, reload, compare, toggleCompare, addFeedback } = useSearch()
   const run = useRun()
   const [notes, setNotes] = useState(l.notes)
   const t = typeOf(l) as PropertyType, home = isHome(t), { ref, stats: refStats } = marketFor(l), aids = aidsFor(l)
@@ -105,7 +107,6 @@ function DossierBody({ l }: { l: Listing }) {
   const b = l.building, dpeReg = b?.dpe.find(d => d.number === b.dpe_match)
   const near = nearby(l.location.point, Array.isArray(data.area.pois) ? data.area.pois : [])
   const travel = (data.area.isochrones ?? []).filter(i => i.geometry && l.location.point && inGeometry(l.location.point, i.geometry))
-  const streamOn = state.stream_estate && data.search.mode === "stream-estate"
   const short = `${titleOf(l)}, ${eur(l.price)}${l.location.address ? `, ${l.location.address}` : ""}`
 
   async function setStatus(s: string) {
@@ -126,29 +127,29 @@ function DossierBody({ l }: { l: Listing }) {
           {l.pictures.map(p => <img key={p} src={p} alt="" loading="lazy" className="h-40 snap-start rounded-lg object-cover" onError={e => e.currentTarget.remove()} />)}
         </div>
       )}
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-3xl font-bold tracking-tight">{eur(l.price)}</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="flex items-center gap-1">
+          <span className="text-3xl font-bold tracking-tight">{eur(l.price)}</span>
+          <FavoriteButton l={l} variant="inline" />
+        </span>
         <span className="text-sm text-muted-foreground">
           {[l.area && `${l.area} m²`, l.land_area && `terrain de ${l.land_area} m²`, l.rooms && `${l.rooms} pièces`, t === "flat" && l.floor != null && (l.floor === 0 ? "rez-de-chaussée" : `${l.floor}ᵉ étage${l.floors ? ` sur ${l.floors}` : ""}`), perUnit(unitPrice(l), t)].filter(Boolean).join(" · ")}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {l.status !== "AVAILABLE" && <Badge variant="outline">{SALE_STATUS[l.status] ?? l.status}</Badge>}
-        {l.urls.map((u, i) => u.url
-          ? <Button key={i} variant="outline" size="xs" asChild><a href={u.url} target="_blank" rel="noreferrer">{u.source ?? "annonce"}<ExternalLinkIcon data-icon="inline-end" /></a></Button>
-          : <Badge key={i} variant="secondary">{u.source}</Badge>)}
-        {l.publishers.map((p, i) => <Badge key={i} variant="secondary">{p.type === "PRIVATE_INDIVIDUAL" ? "Particulier" : p.name ?? "Agence"}{p.card ? ` · carte ${p.card}` : ""}</Badge>)}
-      </div>
-      {l.publishers.some(p => p.phone || p.email) && (
-        <p className="text-sm text-muted-foreground">Contact : {l.publishers.flatMap(p => [p.phone, p.email]).filter(Boolean).join(" · ")}</p>
-      )}
+      <Origin l={l} variant="line" />
+      <Portals l={l} />
+      <Contacts l={l} />
       <div className="flex flex-wrap items-center gap-2">
-        <ToggleGroup type="single" variant="outline" size="sm" value={l.my_status ?? ""} onValueChange={setStatus} aria-label="Mon statut">
-          {Object.entries(STATUS_LABEL).map(([k, v]) => <ToggleGroupItem key={k} value={k}><StatusDot status={k as Status} />{v}</ToggleGroupItem>)}
+        {/* on a phone, the four statuses share the width instead of running off it */}
+        <ToggleGroup type="single" variant="outline" size="sm" value={l.my_status ?? ""} onValueChange={setStatus} aria-label="Mon statut" className="w-full sm:w-auto">
+          {Object.entries(STATUS_LABEL).map(([k, v]) => <ToggleGroupItem key={k} value={k} className="flex-1 gap-1 px-1.5 sm:flex-none sm:px-2.5"><StatusDot status={k as Status} />{v}</ToggleGroupItem>)}
         </ToggleGroup>
-        <Button variant={compare.includes(l.id) ? "secondary" : "outline"} size="sm" onClick={() => toggleCompare(l.id)}><ScaleIcon data-icon="inline-start" />{compare.includes(l.id) ? "Dans le comparateur" : "Comparer"}</Button>
-        <Button variant="outline" size="sm" onClick={() => { addFeedback({ kind: "analyser", text: `${l.id} — ${short}` }); toast.success("Ajouté au prompt pour Claude") }}><MessageSquarePlusIcon data-icon="inline-start" />Analyser avec Claude</Button>
-        <DraftMenu l={l} onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il rédigera le message et l'enregistrera ici") }} />
+        <span className="flex flex-wrap gap-2 sm:ml-auto">
+          <Button variant={compare.includes(l.id) ? "secondary" : "outline"} size="sm" aria-pressed={compare.includes(l.id)} onClick={() => toggleCompare(l.id)}><ScaleIcon data-icon="inline-start" />{compare.includes(l.id) ? "Dans le comparateur" : "Comparer"}</Button>
+          <DraftMenu l={l}
+            onAnalyse={() => { addFeedback({ kind: "analyser", text: `${l.id} — ${short}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il analysera ce bien") }}
+            onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il rédigera le message et l'enregistrera ici") }} />
+        </span>
       </div>
 
       <Synthesis l={l} aids={aids} />
@@ -156,9 +157,9 @@ function DossierBody({ l }: { l: Listing }) {
       <Section title="Prix et négociation">
         {refStats && <Ruler stats={refStats} ticks={[{ id: l.id, ppm2: l.price_per_m2 }]} />}
         <Row label="Écart au prix vendu"><Gap ppm2={l.price_per_m2} refPpm2={ref?.ppm2} long /></Row>
-        <Row label={`Vendu, ${{ recent: "zone (2 ans)", zone: "zone (5 ans)", commune: "commune", transactions: "zone" }[ref?.scope ?? "recent"]}`} hint={ref ? `${ref.count} ventes` : undefined}>{perUnit(ref?.ppm2, t)}</Row>
+        <Row label={`Vendu, ${{ recent: "zone (2 ans)", zone: "zone (5 ans)", commune: "commune" }[ref?.scope ?? "recent"]}`} hint={ref ? `${ref.count} ventes` : undefined}>{perUnit(ref?.ppm2, t)}</Row>
         {data.market.dvf?.[t]?.street?.count ? <Row label={`Vendu, ${data.search.street?.name ?? "rue"}`}>{perUnit(data.market.dvf[t]!.street!.median_ppm2, t)}</Row> : null}
-        {data.market.stream?.type === t && data.market.stream?.trend?.data?.length ? <Row label="Affiché, zone (dernier mois)">{m2(data.market.stream.trend.data.at(-1)?.metrics["median:price_per_sqm"])}</Row> : null}
+        {asking(data.market, t) ? <Row label="Affiché, zone (dernier mois)">{m2(asking(data.market, t))}</Row> : null}
         <Row label="En ligne depuis">{days != null ? `${days} jours` : "—"}{l.urgent ? " · urgent" : ""}{l.favorites ? ` · ${l.favorites} favoris` : ""}</Row>
         {drop > 0 && <Row label="Baisses déjà faites">{pct(-drop, 1)}</Row>}
         {[...l.price_changes.map(c => ({ date: c.date, text: `${eur(c.from)} → ${eur(c.to)}` })), ...(l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, text: `${eur(c.from as number)} → ${eur(c.to as number)}` }))].map((c, i) => (
@@ -176,18 +177,9 @@ function DossierBody({ l }: { l: Listing }) {
       <Conversation l={l} onDraft={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt pour Claude") }} />
 
       <Section title="Bâtiment et risques" action={
-        <span className="flex gap-1.5">
-          <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span><Button size="xs" variant="outline" disabled={!streamOn || !l.se_id} onClick={() => run({ cmd: "enrich", slug, args: { id: l.id, resolve: true }, label: "Adresse exacte (API payante)" })}>Adresse exacte</Button></span>
-            </TooltipTrigger>
-            <TooltipContent>{streamOn && l.se_id ? "L'API payante retrouve l'adresse exacte (bêta), puis le DPE, la copropriété et les ventes de l'immeuble" : "Nécessite l'API payante (clé et recherche en mode API payante)"}</TooltipContent>
-          </Tooltip>
-        </span>
+        <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
       }>
-        {b?.address?.label && <Row label={b.address.shown === "address" ? "Adresse" : "Adresse probable"}>{b.address.shown ? b.address.label : "non trouvée"}</Row>}
-        {!b?.address && <Row label="Localisation">{l.location.address ?? "—"} ({ACCURACY_LABEL[l.location.accuracy ?? "UNKNOWN"] ?? "inconnue"})</Row>}
+        <Row label="Localisation">{l.location.address ?? "—"} ({ACCURACY_LABEL[l.location.accuracy ?? "UNKNOWN"] ?? "inconnue"})</Row>
         {home && <Row label="DPE de l'annonce"><Dpe value={l.dpe?.energy} />{l.dpe?.energy_value ? <span className="ml-2 text-muted-foreground">{l.dpe.energy_value} kWh/m²/an</span> : null}</Row>}
         {home && <Row label="DPE au registre ADEME">{dpeReg ? <><Dpe value={dpeReg.energy} /><span className="ml-2 text-muted-foreground">{date(dpeReg.date)} · {dpeReg.area} m² · {eur(dpeReg.cost)}/an</span></> : b?.dpe.length ? `${b.dpe.length} DPE à l'adresse, aucun de cette surface` : "—"}</Row>}
         {budget(l, profile).rent_ban && <Row label="Location interdite">dès {budget(l, profile).rent_ban!.slice(0, 4)} (classe {l.dpe!.energy})</Row>}
@@ -236,12 +228,25 @@ function DossierBody({ l }: { l: Listing }) {
 }
 
 // "Rédiger avec Claude": a message Claude writes from the prompt. A reply needs a message received, a reminder one sent.
-function DraftMenu({ l, onPick, size = "sm" }: { l: Listing; onPick: (k: keyof typeof DRAFTS) => void; size?: "sm" | "xs" }) {
+// What Claude may do for a listing, through the prompt: in the dossier's header, analyse it or write a message
+// (« Demander à Claude »); in the conversation, write a message only
+function DraftMenu({ l, onPick, onAnalyse, size = "sm" }: { l: Listing; onPick: (k: keyof typeof DRAFTS) => void; onAnalyse?: () => void; size?: "sm" | "xs" }) {
   const ms = l.messages ?? []
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild><Button variant="outline" size={size}><PenLineIcon data-icon="inline-start" />Rédiger avec Claude</Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size={size}>
+          {onAnalyse ? <MessageSquarePlusIcon data-icon="inline-start" /> : <PenLineIcon data-icon="inline-start" />}{onAnalyse ? "Demander à Claude" : "Rédiger avec Claude"}<ChevronDownIcon data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        {onAnalyse && (
+          <>
+            <DropdownMenuItem onSelect={onAnalyse}><SearchCheckIcon />Analyser ce bien</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Rédiger</DropdownMenuLabel>
+          </>
+        )}
         <DropdownMenuItem onSelect={() => onPick("offer")}>Une offre d'achat</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onPick("question")}>Les questions à l'agent</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onPick("visit")}>Une demande de visite</DropdownMenuItem>
@@ -251,6 +256,66 @@ function DraftMenu({ l, onPick, size = "sm" }: { l: Listing; onPick: (k: keyof t
         <DropdownMenuItem disabled={!ms.some(m => m.from !== "them" && m.sent_at)} onSelect={() => onPick("follow_up")}>Une relance</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+// The portals a listing is on, one link each: its latest advert still online there (the latest one, when none is).
+// The others fold into a popover: the ones online twice on a portal first, then the expired ones, newest first. A
+// listing put online again and again sells slowly, a lever to negotiate.
+function Portals({ l }: { l: Listing }) {
+  const ads = l.urls.filter(u => u.url).toSorted((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? ""))
+  const online = ads.filter(u => !u.expired_at), seen = new Set<string>()
+  const main = (online.length ? online : ads).filter(u => { const k = u.source ?? u.url!; return !seen.has(k) && !!seen.add(k) })
+  const rest = ads.filter(u => !main.includes(u)).toSorted((a, b) => +!!a.expired_at - +!!b.expired_at), unlinked = l.urls.filter(u => !u.url)
+  if (!ads.length && !unlinked.length && l.status === "AVAILABLE") return null
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {l.status !== "AVAILABLE" && <Badge variant="outline">{SALE_STATUS[l.status] ?? l.status}</Badge>}
+      {main.map(u => <Button key={u.url} variant="outline" size="xs" asChild><a href={u.url!} target="_blank" rel="noreferrer">{u.source ?? "Annonce"}<ExternalLinkIcon data-icon="inline-end" /></a></Button>)}
+      {unlinked.map((u, i) => <Badge key={i} variant="secondary">{u.source}</Badge>)}
+      {rest.length > 0 && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="xs" className="text-muted-foreground">
+              <HistoryIcon data-icon="inline-start" />{rest.length} autre{rest.length > 1 ? "s" : ""} annonce{rest.length > 1 ? "s" : ""}<ChevronDownIcon data-icon="inline-end" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-96 max-w-[calc(100vw-2rem)] p-0">
+            <PopoverHeader className="px-4 pt-4">
+              <PopoverTitle>Autres annonces de ce bien</PopoverTitle>
+              <PopoverDescription>En double sur un portail, puis expirées. Un bien remis en ligne plusieurs fois se vend lentement : un argument pour négocier.</PopoverDescription>
+            </PopoverHeader>
+            <ul className="flex max-h-72 flex-col overflow-y-auto p-2">
+              {rest.map(u => (
+                <li key={u.url}>
+                  <a href={u.url!} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+                    <span className={cn("flex items-center gap-1.5 font-medium", u.expired_at && "text-muted-foreground")}>{u.source ?? "Annonce"}<ExternalLinkIcon className="size-3.5 text-muted-foreground" /></span>
+                    <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">{u.expired_at ? `du ${date(u.published_at)} au ${date(u.expired_at)}` : <span className="text-foreground">en ligne depuis le {date(u.published_at)}</span>}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  )
+}
+
+// who sells it: the agency (or the private seller) with a phone and an email to reach them, one line each
+function Contacts({ l }: { l: Listing }) {
+  if (!l.publishers.length) return null
+  const link = "underline-offset-4 hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      {l.publishers.map((p, i) => (
+        <p key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+          <span className="flex items-center gap-1.5 font-medium text-foreground"><ContactRoundIcon className="size-4 text-muted-foreground" />{p.type === "PRIVATE_INDIVIDUAL" ? "Particulier" : p.name ?? "Agence"}{p.card && <span className="font-normal text-muted-foreground">carte {p.card}</span>}</span>
+          {p.phone && <a href={`tel:${p.phone.replace(/\s/g, "")}`} className={cn("flex items-center gap-1", link)}><PhoneIcon className="size-3.5" />{p.phone}</a>}
+          {p.email && <a href={`mailto:${p.email}`} className={cn("flex items-center gap-1", link)}><MailIcon className="size-3.5" />{p.email}</a>}
+        </p>
+      ))}
+    </div>
   )
 }
 

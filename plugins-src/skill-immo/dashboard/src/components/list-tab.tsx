@@ -4,6 +4,8 @@ import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, SearchIcon } from "lucide-
 import { useMemo, useState } from "react"
 
 import { Dpe } from "@/components/dpe"
+import { Star } from "@/components/favorite"
+import { Origin } from "@/components/origin"
 import { Gap } from "@/components/ruler"
 import { StatusBadge, statusBand } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
@@ -13,7 +15,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Listing, PropertyType } from "@/lib/api"
-import { eur, num, pct, SALE_STATUS, SOURCE_LABEL, STATUS_LABEL, titleOf, TYPE_PLURAL } from "@/lib/format"
+import { eur, num, pct, SALE_STATUS, STATUS_LABEL, titleOf, TYPE_PLURAL } from "@/lib/format"
 import { isNew } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -22,7 +24,7 @@ type Row = { l: Listing; score: number | null; gap: number | null; days: number 
 // each column: its header, what it sorts on, its cell; `wide` ones only show from a tablet up
 const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string | null; cell: (r: Row) => React.ReactNode; right?: boolean; center?: boolean; wide?: boolean }[] = [
   { key: "type", label: "Type", center: true, sort: r => typeOf(r.l), cell: r => <TypeIcon type={r.l.property_type} className="mx-auto size-4 text-muted-foreground" /> },
-  { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="max-w-64 truncate font-medium">{titleOf(r.l)}</span><span className="text-xs text-muted-foreground">{r.l.urls.map(u => u.source).filter(Boolean).join(", ") || SOURCE_LABEL[r.l.source]}</span></span> },
+  { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="flex max-w-64 items-center gap-1 font-medium">{r.l.favorite && <Star on className="size-3.5 shrink-0" />}<span className="truncate">{titleOf(r.l)}</span></span><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Origin l={r.l} />{[...new Set(r.l.urls.map(u => u.source).filter(Boolean))].join(", ")}</span></span> },
   { key: "price", label: "Prix", right: true, sort: r => r.l.price, cell: r => <PriceCell l={r.l} /> },
   { key: "area", label: "Surface", right: true, sort: r => r.l.area ?? r.l.land_area ?? null, cell: r => (r.l.area ? `${num(r.l.area)} m²` : r.l.land_area ? `${num(r.l.land_area)} m² de terrain` : "—") },
   { key: "ppm2", label: "Prix unitaire", right: true, wide: true, sort: r => unitPrice(r.l), cell: r => num(unitPrice(r.l)) },
@@ -54,7 +56,7 @@ function GapCell({ l }: { l: Listing }) {
 export function ListTab() {
   const { data, types, lastVisit, marketFor, aidsFor, select } = useSearch()
   const [q, setQ] = useState(""), [type, setType] = useState<"all" | PropertyType>("all"), [mine, setMine] = useState("all"), [status, setStatus] = useState("all")
-  const [onlyMatching, setOnlyMatching] = useState(false), [onlyNew, setOnlyNew] = useState(false)
+  const [onlyMatching, setOnlyMatching] = useState(false), [onlyNew, setOnlyNew] = useState(false), [onlyFavorites, setOnlyFavorites] = useState(false)
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: "score", dir: -1 })
   const rows = useMemo(() => data.listings.map(l => ({
     l, score: score(l, aidsFor(l)).value as number | null, gap: badge(unitPrice(l), marketFor(l).ref?.ppm2)?.gap ?? null, days: daysOnline(l),
@@ -65,7 +67,7 @@ export function ListTab() {
     .filter(({ l }) => (!needle || [titleOf(l), l.location.address, l.location.city, ...l.urls.map(u => u.source)].some(x => x?.toLowerCase().includes(needle)))
       && (type === "all" || typeOf(l) === type) && (mine === "all" || (l.my_status ?? "none") === mine)
       && (status === "all" || (status === "online" ? l.status === "AVAILABLE" : l.status === status))
-      && (!onlyMatching || matches(l, data.search.criteria, types)) && (!onlyNew || isNew(l, lastVisit)))
+      && (!onlyMatching || matches(l, data.search.criteria, types)) && (!onlyNew || isNew(l, lastVisit)) && (!onlyFavorites || !!l.favorite))
     .toSorted((a, b) => {
       const col = COLUMNS.find(c => c.key === sort.key)!, x = col.sort(a), y = col.sort(b)
       // what is unknown goes last, whatever the direction
@@ -96,6 +98,7 @@ export function ListTab() {
         </Select>
         <div className="flex items-center gap-2"><Switch id="l-crit" checked={onlyMatching} onCheckedChange={setOnlyMatching} /><Label htmlFor="l-crit">Dans mes critères</Label></div>
         <div className="flex items-center gap-2"><Switch id="l-new" checked={onlyNew} onCheckedChange={setOnlyNew} /><Label htmlFor="l-new">Nouveautés</Label></div>
+        <div className="flex items-center gap-2"><Switch id="l-fav" checked={onlyFavorites} onCheckedChange={setOnlyFavorites} /><Label htmlFor="l-fav"><Star on className="size-3.5" />Favoris</Label></div>
         <span className="ml-auto text-sm text-muted-foreground">{shown.length} bien{shown.length > 1 ? "s" : ""}</span>
       </div>
       <div className="overflow-x-auto rounded-xl border">

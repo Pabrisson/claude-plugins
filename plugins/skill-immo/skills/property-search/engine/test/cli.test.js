@@ -26,17 +26,22 @@ test('a fetch waits for the user: estimate, then --spend; the credits are logged
   assert.equal(r.status, 2)
   assert.match(r.err, /estimated 1 credits \(0,01 €\).*--spend 1/)
   r = await run(home, ['fetch', '-p', 'paul-bert', '--estimate'])
-  assert.deepEqual(JSON.parse(r.out), { what: 'fetch 1 of 1 listings', route: 'POST /properties', credits: 1, eur: 0.01, unknown: false, spent: 0, cap: 500, remaining: 500 })
+  assert.deepEqual(JSON.parse(r.out), { what: 'fetch 1 of 1 listings', route: 'GET /documents/properties', credits: 1, eur: 0.01, unknown: false, spent: 0, cap: 500, remaining: 500 })
   r = await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])
   assert.equal(r.status, 0, r.err)
   assert.match(r.out, /fetched 1 listings: 1 new/)
   const [l] = read(dir, 'listings.json')
-  assert.deepEqual([l.id, l.price, l.first_seen.slice(0, 4), l.building.risks.natural[0].key], [property.id, 280000, String(new Date().getFullYear()), 'seisme'])
-  // the counts cost nothing, the fetch one credit per result
+  assert.deepEqual([l.id, l.price, l.first_seen.slice(0, 4), l.building.risks.natural[0].key], [property.uuid, 280000, String(new Date().getFullYear()), 'seisme'])
+  // the counts cost nothing, the fetch one credit per item
   assert.deepEqual(read(home, '.cache/api-usage.json').map(e => e.credits), [0, 0, 0, 1])
+  // the v1 query: the zone, the type, the criteria, what is online; a page of exactly what was paid for
+  const q = api.seen.findLast(x => x.query?.get('itemsPerPage') === '1').query
+  assert.deepEqual(['propertyTypes[]', 'transactionType', 'lat', 'lon', 'radius', 'roomMin', 'expired', 'page', 'order[updatedAt]'].map(k => q.getAll(k).join()), ['0', '0', '45.756', '4.8455', '0.5', '3', 'false', '1', 'desc'])
+  // online: updated within 90 days (the v1 leaves most of what left the portals unexpired)
+  assert.equal(q.get('fromUpdatedAt'), new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10))
   // the property already fetched is left out of the next count
   await run(home, ['fetch', '-p', 'paul-bert', '--estimate'])
-  assert.deepEqual(api.seen.findLast(x => x.body?.size === 0).body.criteria.property.id, { nin: [property.id] })
+  assert.deepEqual(api.seen.findLast(x => x.query?.get('itemsPerPage') === '0').query.getAll('excludedProperties[]'), [property.uuid])
   assert.equal(api.seen.at(-1).key, 'test-key')
 })
 
@@ -49,8 +54,9 @@ test('refresh: what changed since the last one, a price drop logged', async () =
   assert.equal(r.status, 0, r.err)
   assert.match(r.out, /1 price drops/)
   assert.match(r.out, /price_drop: 280000 → 265000/)
-  const since = api.seen.findLast(x => x.body?.size === 0).body.criteria.or
-  assert.ok(since[0].dates.updatedAt.from && since[1].listings.expiredAt.from)
+  // what changed and is online, then what expired since
+  const [changed, gone] = api.seen.filter(x => x.query?.get('itemsPerPage') === '0').slice(-2).map(x => x.query)
+  assert.ok(changed.get('fromUpdatedAt') && changed.get('expired') === 'false' && gone.get('fromExpiredAt') && gone.get('expired') === 'true')
   assert.deepEqual(read(dir, 'listings.json')[0].price_history.map(h => h.price), [280000, 265000])
 })
 
@@ -99,13 +105,17 @@ test('a classic search never calls Stream Estate', async () => {
   assert.equal(api.seen.length, before)
 })
 
-test('add: a URL Stream Estate knows (2 credits), one it does not (WebFetch), and a listing Claude read', async () => {
+test('add: a URL goes to WebFetch (the API has no lookup by URL), one already fetched is known, a listing Claude read joins', async () => {
   const { home, dir } = searchesFolder()
-  let r = await run(home, ['add', '-p', 'paul-bert', '--url', 'https://www.leboncoin.fr/ad/ventes_immobilieres/1.htm', '--spend', '2'])
+  const before = api.seen.length
+  let r = await run(home, ['add', '-p', 'paul-bert', '--url', 'https://www.leboncoin.fr/ad/ventes_immobilieres/1.htm'])
   assert.equal(r.status, 4)
-  assert.match(r.err, /does not know .*not charged.*WebFetch/)
-  r = await run(home, ['add', '-p', 'paul-bert', '--url', 'https://www.seloger.com/a.htm', '--spend', '2'])
+  assert.match(r.err, /read .*leboncoin.* with WebFetch, then add -p paul-bert --file/)
+  assert.equal(api.seen.length, before)
+  await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])
+  r = await run(home, ['add', '-p', 'paul-bert', '--url', 'https://www.seloger.com/annonces/achat/appartement/lyon-3eme-69/123456789.htm?utm_source=x'])
   assert.equal(r.status, 0, r.err)
+  assert.match(r.out, new RegExp(`already in the search: ${property.uuid}`))
   const file = path.join(home, 'read.json')
   fs.writeFileSync(file, JSON.stringify({ url: 'https://www.pap.fr/annonces/appartement-lyon-3e-r1', price: 255000, area: 52, rooms: 3, dpe: 'C', point: [4.8455, 45.756], publisher: 'Particulier', publisher_type: 'PRIVATE_INDIVIDUAL' }))
   r = await run(home, ['add', '-p', 'paul-bert', '--file', file], { key: null })
@@ -117,15 +127,51 @@ test('add: a URL Stream Estate knows (2 credits), one it does not (WebFetch), an
   assert.equal(r.status, 4)
 })
 
-test('alert forecast is free; usage sums the log', async () => {
-  const { home } = searchesFolder()
-  let r = await run(home, ['alert', 'forecast', '-p', 'paul-bert'])
+test('an alert: a saved search pushing to a random ntfy topic, turned off, then deleted; usage sums the log', async () => {
+  const { home, dir } = searchesFolder()
+  // the v1 refuses a saved search without a maximum budget: asked before any call
+  const before = api.seen.length
+  let r = await run(home, ['alert', 'create', '-p', 'paul-bert', '--accept-unknown'])
+  assert.equal(r.status, 1)
+  assert.match(r.err, /needs a maximum budget/)
+  assert.equal(api.seen.length, before)
+  const f = path.join(dir, 'search.json')
+  fs.writeFileSync(f, JSON.stringify({ ...read(dir, 'search.json'), criteria: { rooms_min: 3, budget_max: 300000 } }))
+  r = await run(home, ['alert', 'create', '-p', 'paul-bert'])
+  assert.equal(r.status, 2)
+  assert.match(r.err, /unknown cost/)
+  r = await run(home, ['alert', 'create', '-p', 'paul-bert', '--accept-unknown'])
   assert.equal(r.status, 0, r.err)
-  assert.equal(JSON.parse(r.out).total, 12)
+  const body = api.seen.findLast(x => x.method === 'POST').body, a = read(dir, 'search.json').alert
+  assert.deepEqual([body.propertyTypes, body.lat, body.radius, body.roomMin, body.budgetMax, body.notificationEnabled, body.subscribedEvents], [[0], 45.756, 0.5, 3, 300000, true, ['ad.update.price']])
+  assert.match(body.endpointRecipient, new RegExp(`^https://ntfy\\.sh/${a.topic}\\?tpl=yes&t=`))
+  assert.match(decodeURIComponent(body.eventEndpoint.replace(/\+/g, ' ')), /\{\{\.adEvent\.fieldOldValue\}\} → \{\{\.adEvent\.fieldNewValue\}\}/)
+  assert.equal(a.searches.length, 1)
+  // a PUT replaces the saved search: the whole body again
+  r = await run(home, ['alert', 'off', '-p', 'paul-bert', '--accept-unknown'])
+  assert.equal(r.status, 0, r.err)
+  const put = api.seen.findLast(x => x.method === 'PUT')
+  assert.deepEqual([put.path, put.body.notificationEnabled, put.body.endpointRecipient, put.body.roomMin], [`/searches/${a.searches[0].id}`, false, body.endpointRecipient, 3])
+  r = await run(home, ['alert', 'delete', '-p', 'paul-bert', '--accept-unknown'])
+  assert.equal(r.status, 0, r.err)
+  assert.deepEqual([api.seen.findLast(x => x.method === 'DELETE').path, read(dir, 'search.json').alert], [`/searches/${a.searches[0].id}`, null])
   await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])
   r = await run(home, ['usage', '--json'])
   const u = JSON.parse(r.out)
-  assert.deepEqual([u.month, u.cap, u.by_search['paul-bert'].credits], [1, 500, 1])
+  assert.deepEqual([u.month, u.cap, u.by_search['paul-bert'].credits, u.unknown], [1, 500, 1, 3])
+})
+
+test('market: the asking price per m² of the zone, its last month shown to Claude', async () => {
+  const { home, dir } = searchesFolder()
+  let r = await run(home, ['market', '-p', 'paul-bert', '--accept-unknown'])
+  assert.equal(r.status, 0, r.err)
+  assert.match(r.out, /median 4\u202f800/)
+  const q = api.seen.findLast(x => x.path === '/indicators/price_per_meter').query
+  assert.deepEqual(['propertyTypes[]', 'radius', 'aggregationInterval', 'roomMin'].map(k => q.get(k)), ['0', '0.5', 'month', null])
+  assert.deepEqual(read(dir, 'market.json').stream, { ...read(dir, 'market.json').stream, type: 'flat', median: 4800, series: { '2026-09': 4750, '2026-10': 4820 } })
+  await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])
+  r = await run(home, ['show', '-p', 'paul-bert'])
+  assert.equal(JSON.parse(r.out)[0].market.asking_ppm2, 4820)
 })
 
 test('a coherent .gitignore: the searches and the credits log kept, the cache and the profile left out', async () => {
@@ -149,15 +195,17 @@ test('a coherent .gitignore: the searches and the credits log kept, the cache an
   assert.equal(text.split('# skill-immo:').length, 2)
 })
 
-test('several types: one Stream Estate branch per type, each with the criteria it takes', async () => {
+test('several types: one v1 query per type, each with the criteria it takes', async () => {
   const { home, dir } = searchesFolder()
   const r = await run(home, ['search', '-p', 'paul-bert', '--types', 'flat,parking', '--criteria', 'rooms_min=3 budget_max=300000 outdoor=true'])
   assert.equal(r.status, 0, r.err)
   assert.deepEqual(read(dir, 'search.json').types, ['flat', 'parking'])
-  const { or: [flat, parking] } = api.seen.findLast(x => x.body?.size === 0).body.criteria
-  // the flat: rooms and an outdoor space; the parking: only the budget
-  assert.deepEqual([flat.and[0].property.type.in, flat.and[0].property.unit.rooms, flat.and[1].or.length], [['FLAT'], { gte: 3, lte: null }, 3])
-  assert.deepEqual([parking.property.type.in, parking.property.unit.rooms, parking.property.pricing.displayed], [['PARKING'], undefined, { gte: null, lte: 300000 }])
+  const [flat, parking] = api.seen.filter(x => x.query?.get('itemsPerPage') === '0').slice(-2).map(x => x.query)
+  // the flat: its rooms; the parking: only the budget
+  assert.deepEqual([flat.getAll('propertyTypes[]'), flat.get('roomMin'), flat.get('budgetMax')], [['0'], '3', '300000'])
+  assert.deepEqual([parking.getAll('propertyTypes[]'), parking.get('roomMin'), parking.get('budgetMax')], [['3'], null, '300000'])
+  // an outdoor space is no v1 filter: the count says it includes listings without one
+  assert.match(r.out, /does not filter on outdoor: the count includes listings they rule out/)
   // the market of each type, and the rent
   const m = read(dir, 'market.json')
   assert.deepEqual([Object.keys(m.dvf ?? {}), m.rent.flat_large.per_m2], [[], 15.22])
@@ -188,7 +236,7 @@ test('a message for a listing: kept with it, shown to Claude', async () => {
   await run(home, ['add', '-p', 'paul-bert', '--file', path.join(dir, 'l.json')], { key: null })
   await run(home, ['search', '-p', 'paul-bert'], { key: null })
   const shown = JSON.parse((await run(home, ['show', '-p', 'paul-bert', '--id', id], { key: null })).out)
-  assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent], ['flat', 3, 883])
+  assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent, shown.favorite], ['flat', 3, 883, false])
   assert.deepEqual(shown.messages.map(x => [x.from, x.channel, !!x.sent_at]), [['them', 'phone', false], ['me', null, false], ['me', null, true]])
   assert.ok(shown.review.questions.length && shown.score.parts.length === 6)
 })

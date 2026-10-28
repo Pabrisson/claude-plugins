@@ -4,6 +4,8 @@ import { useState } from "react"
 
 import { Dpe } from "@/components/dpe"
 import { Gap } from "@/components/ruler"
+import { FavoriteButton } from "@/components/favorite"
+import { Origin } from "@/components/origin"
 import { StatusDot, statusTint, tint } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
 import { Badge } from "@/components/ui/badge"
@@ -100,7 +102,7 @@ function KanbanCard({ l, score, fresh, onOpen, onMove }: { l: Listing; score: nu
     <div draggable style={statusTint(l.my_status)} onDragStart={e => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move" }}
       className={cn("group relative flex cursor-grab flex-col gap-1.5 rounded-lg border p-2.5 text-sm shadow-xs hover:border-ring hover:shadow-md active:cursor-grabbing", tint(l.my_status))}>
       <button type="button" onClick={onOpen} className="flex flex-col gap-1 text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-3 focus-visible:after:ring-ring/50">
-        <span className="flex items-center gap-1.5 pr-7">
+        <span className="flex items-center gap-1.5 pr-14">
           <TypeIcon type={l.property_type} className="size-4 shrink-0 text-muted-foreground" />
           <span className="font-bold">{eur(l.price)}</span>
           {score != null && <span className="ml-auto rounded-md bg-muted px-1.5 text-xs font-semibold tabular-nums" title="Score sur 100">{score}</span>}
@@ -113,9 +115,11 @@ function KanbanCard({ l, score, fresh, onOpen, onMove }: { l: Listing; score: nu
         {days != null && <span className="text-muted-foreground">{days} j</span>}
         {fresh && <Badge className="h-4 px-1.5 text-[10px]">Nouveau</Badge>}
         {l.status !== "AVAILABLE" && <Badge variant="outline" className="h-4 px-1.5 text-[10px]">{SALE_STATUS[l.status] ?? l.status}</Badge>}
+        <Origin l={l} />
         {messages > 0 && <span className="flex items-center gap-1 text-muted-foreground" title={`${messages} message${messages > 1 ? "s" : ""}`}><MailIcon className="size-3.5" />{messages}</span>}
         {offer && <span className="font-medium">offre {eur(offer.amount)}</span>}
       </div>
+      <FavoriteButton l={l} className="absolute top-1.5 right-8" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-xs" className="absolute top-1.5 right-1.5 z-10" aria-label="Déplacer vers…"><EllipsisIcon /></Button>

@@ -15,7 +15,7 @@ export type Listing = {
   se_id: string | null
   source: "stream-estate" | "websearch" | "pasted"
   property_type?: PropertyType
-  urls: { url: string | null; source: string | null; published_at: string | null; favorites: number | null; urgent: boolean }[]
+  urls: { url: string | null; source: string | null; published_at: string | null; expired_at: string | null; favorites: number | null; urgent: boolean }[]
   title: string | null
   description: string | null
   price: number | null
@@ -49,10 +49,11 @@ export type Listing = {
   price_history: { date: string; price: number }[]
   changes: { date: string; kind: "new" | "price_drop" | "price_rise" | "status" | "expired"; from: number | string | null; to: number | string | null }[]
   my_status: Status
+  // the user's star, apart from the status
+  favorite?: boolean
   notes: string
   messages?: Message[]
   building?: {
-    address?: { confidence: string; label: string | null; shown: "address" | "probable" | null }
     ban: string | null
     dpe: { number: string; date: string; energy: string; ghg: string; area: number; floor: number | null; kwh: number; cost: number; heating: string; year: number | null }[]
     dpe_match: string | null
@@ -88,15 +89,8 @@ export type Market = {
   dvf?: Partial<Record<PropertyType, Dvf>> | null
   rent?: { year: number; flat: Rent; flat_small: Rent; flat_large: Rent; house: Rent } | { error: string }
   context?: { dpe: DpeClasses | Failed; tax: Tax | Failed | null; housing: Housing | Failed }
-  stream?: {
-    updated: string
-    type?: PropertyType
-    trend?: { data?: { group: Record<string, string>; metrics: Record<string, number> }[] }
-    dpe?: { data?: { group: Record<string, string>; metrics: Record<string, number> }[] }
-    publishers?: { data?: { group: Record<string, string>; metrics: Record<string, number> }[] }
-    online?: { data?: { metrics: Record<string, number> }[] }
-    transactions?: { count: number; median_ppm2: number | null; by_source: Record<string, number> }
-  }
+  // the zone's asking €/m² (market -p, the paid API): over two years, and month by month
+  stream?: { updated: string; type?: PropertyType; median: number | null; average: number | null; series: Record<string, number> }
 }
 export type Poi = { cat: string; kind: string; name: string | null; point: Point }
 // a DPE of the last 12 months in the zone (ADEME)
@@ -131,13 +125,13 @@ export type Search = {
   last_fetch: string | null
   last_refresh: string | null
   last_visit: string | null
-  alert: { id: string; topic: string | null; drop: number; enabled?: boolean } | null
+  alert: { searches: { id: string; type: PropertyType }[]; topic: string | null; enabled?: boolean } | null
 }
 export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" | "area_max" | "rooms_min" | "rooms_max" | "floor_min" | "land_min", number>> & { dpe_max?: string; elevator?: boolean; outdoor?: boolean }
 // the search's news (feed.json), newest first: a recent DPE no listing matches, Stream Estate listings to fetch
 export type News = { date: string } & ({ kind: "dpe"; dpe: DpeRow } | { kind: "listings"; count: number; added: number })
 export type Feed = { read_at: string | null; stream: { total: number; counted_at: string } | null; items: News[] }
-export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; events: { id: string; type: string; property: string; at: string }[]; feed: Feed; unread: number; version: number }
+export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; feed: Feed; unread: number; version: number }
 export type Profile = { down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
 export type ScoreKey = "price" | "budget" | "energy" | "transport" | "travel" | "outdoor"
 export type UsageEntry = { date: string; route: string; credits: number | null; results: number; search: string | null }
@@ -169,7 +163,7 @@ export const api = {
   readFeed: (slug: string) => post<object>(`/api/s/${slug}/feed/read`, {}),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   saveProfile: (p: Partial<Profile>) => post<Profile>("/api/profile", p),
   autocomplete: (q: string) => json<{ fulltext: string; kind: string; city: string; zipcode: string }[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),

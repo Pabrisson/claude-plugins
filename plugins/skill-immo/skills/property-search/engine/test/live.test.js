@@ -1,5 +1,5 @@
 // The network smoke test, run only with IMMO_LIVE=1: a real search rue Paul Bert (Lyon 3e) on the open data and,
-// with STREAM_ESTATE_API_KEY, Stream Estate at the lowest cost: a count (free), then ONE listing (1 credit).
+// with STREAM_ESTATE_API_KEY (a v1 key), Stream Estate at the lowest cost: a count (no item), then ONE listing (1 item).
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -38,8 +38,8 @@ test('Stream Estate: a free count, then one listing for 1 credit', { skip: (!liv
   assert.equal(r.status, 0, r.stderr)
   const [l] = read('listings.json')
   assert.deepEqual([l.source, l.property_type], ['stream-estate', 'flat'])
-  // the count of search, the count of fetch, then the listing
+  // the count of search, the count of fetch, then the listing: one item
   const log = JSON.parse(fs.readFileSync(path.join(home, '.cache/api-usage.json'), 'utf8'))
-  assert.deepEqual(log.map(e => e.credits), [0, 0, 1], 'X-Credits-Charged: the counts are free, the listing costs 1')
-  console.log(run(['usage', '--remote']).stdout)
+  assert.deepEqual(log.map(e => [e.results, e.credits]), [[0, 0], [0, 0], [1, 1]], 'the counts return no item, the listing one')
+  assert.ok(l.price > 0 && l.location.point && l.urls.length, JSON.stringify(l).slice(0, 300))
 })

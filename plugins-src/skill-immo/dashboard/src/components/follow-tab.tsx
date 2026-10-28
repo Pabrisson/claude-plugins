@@ -2,6 +2,7 @@ import { BellPlusIcon, CheckCheckIcon, DownloadIcon, RefreshCwIcon, SearchIcon }
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
+import { CreditBadge } from "@/components/credit-badge"
 import { DPE_HEX } from "@/components/dpe"
 import { clockOf, dayLabel, LOOK, newsKey, NewsTile, newsTitle, UnreadDot, useNews, type NewsItem } from "@/components/news"
 import { useRun } from "@/components/run-dialog"
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api } from "@/lib/api"
-import { credits, date, dpeAsk, eur, num, pct, SALE_STATUS, SOURCE_LABEL, STATUS_LABEL } from "@/lib/format"
+import { credits, date, dpeAsk, eur, num, pct, ORIGIN, SALE_STATUS, STATUS_LABEL } from "@/lib/format"
 import { isNew } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -19,17 +20,9 @@ import { StatusDot } from "@/components/status"
 import type { Status } from "@/lib/api"
 
 export function FollowTab() {
-  const { slug, data, state, lastVisit, select } = useSearch()
+  const { slug, data, state, lastVisit, select, types } = useSearch()
   const run = useRun()
-  const [forecast, setForecast] = useState<string | null>(null)
   const streamOn = state.stream_estate && data.search.mode === "stream-estate", alert = data.search.alert
-
-  async function askForecast() {
-    const r = await api.run({ cmd: "alert", slug, args: { sub: "forecast" } })
-    if (r.code !== 0) return setForecast(r.err.replace(/^error: /, ""))
-    const f = JSON.parse(r.out)
-    setForecast(`Environ ${num(f.per_day?.average ?? f.total / (f.window_days || 30))} notification(s) par jour (${num(f.total)} sur ${f.window_days} jours).`)
-  }
 
   return (
     <div className="grid gap-4 p-4 lg:grid-cols-[1fr_380px]">
@@ -56,26 +49,23 @@ export function FollowTab() {
       <Card className="h-fit">
         <CardHeader>
           <CardTitle>Alerte de l'API payante</CardTitle>
-          <CardDescription>Nouveaux biens et baisses de prix, poussés sur votre téléphone par ntfy</CardDescription>
+          <CardDescription>Nouveaux biens et changements de prix, poussés sur votre téléphone par ntfy</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           {!streamOn ? (
             <Alert><AlertTitle>Indisponible</AlertTitle><AlertDescription>{state.stream_estate ? "Cette recherche est en mode OpenData." : "Les alertes nécessitent une clé de l'API payante."}</AlertDescription></Alert>
           ) : alert ? (
             <>
-              <p>Alerte active{alert.drop ? `, baisses de ${alert.drop} % ou plus` : ""}.</p>
+              <p>{alert.enabled === false ? "Alerte coupée." : "Alerte active."}</p>
               {alert.topic && <p className="text-muted-foreground">Abonnez-vous au sujet <b className="text-foreground">{alert.topic}</b> dans l'app ntfy. Quiconque le connaît peut le lire.</p>}
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => run({ cmd: "alert", slug, args: { sub: "events" }, label: "Lecture des événements de l'alerte" })}>Lire les événements</Button>
-                <Button size="sm" variant="outline" onClick={() => run({ cmd: "alert", slug, args: { sub: alert.enabled === false ? "on" : "off" }, label: alert.enabled === false ? "Réactiver l'alerte" : "Couper l'alerte" })}>{alert.enabled === false ? "Réactiver" : "Couper"}</Button>
+                <Button size="sm" variant="outline" onClick={() => run({ cmd: "alert", slug, args: { sub: alert.enabled === false ? "on" : "off" }, label: alert.enabled === false ? "Réactiver l'alerte" : "Couper l'alerte" })}>{alert.enabled === false ? "Réactiver" : "Couper"}<CreditBadge cost={{ route: "PUT /searches/{id}", calls: alert.searches.length }} /></Button>
               </div>
-              {data.events.slice(0, 20).map(e => <div key={e.id} className="flex justify-between text-muted-foreground"><span>{e.type === "NEW_MATCH" ? "Nouveau bien" : e.type === "PRICE_CHANGE" ? "Changement de prix" : e.type}</span><span>{date(e.at)}</span></div>)}
             </>
           ) : (
             <>
-              <Button size="sm" variant="outline" onClick={askForecast}>Estimer le volume (gratuit)</Button>
-              {forecast && <p className="text-muted-foreground">{forecast}</p>}
-              <Button size="sm" onClick={() => run({ cmd: "alert", slug, args: { sub: "create" }, label: "Création de l'alerte" })}><BellPlusIcon data-icon="inline-start" />Créer l'alerte</Button>
+              <Button size="sm" disabled={!data.search.criteria.budget_max} onClick={() => run({ cmd: "alert", slug, args: { sub: "create" }, label: "Création de l'alerte" })}><BellPlusIcon data-icon="inline-start" />Créer l'alerte<CreditBadge cost={{ route: "POST /searches", calls: types.length }} /></Button>
+              {!data.search.criteria.budget_max && <p className="text-muted-foreground">L'API demande un budget max : indiquez-le dans les critères.</p>}
             </>
           )}
           <p className="text-xs text-muted-foreground">{data.listings.filter(l => isNew(l, lastVisit)).length} annonce(s) nouvelle(s) ou modifiée(s) depuis votre dernière visite.</p>
@@ -133,7 +123,7 @@ function NewsCard() {
         <CardDescription>{unread ? `${unread} non lue${unread > 1 ? "s" : ""}` : "Tout est lu"}{data.search.last_refresh ? `, dernière actualisation le ${date(data.search.last_refresh)}` : ""}</CardDescription>
         <CardAction className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" size="sm" disabled={!unread} onClick={async () => { await api.readFeed(slug); await reload() }}><CheckCheckIcon data-icon="inline-start" /><span className="max-sm:sr-only">Tout marquer comme lu</span></Button>
-          <Button variant="outline" size="sm" onClick={() => run({ cmd: "refresh", slug, label: "Actualisation de la recherche" })}><RefreshCwIcon data-icon="inline-start" /><span className="max-sm:sr-only">Actualiser</span></Button>
+          <Button variant="outline" size="sm" onClick={() => run({ cmd: "refresh", slug, label: "Actualisation de la recherche" })}><RefreshCwIcon data-icon="inline-start" /><span className="max-sm:sr-only">Actualiser</span><CreditBadge cost="refresh" /></Button>
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -171,9 +161,9 @@ function NewsRow({ n, fresh, lit, latest }: { n: NewsItem; fresh: boolean; lit: 
   const run = useRun()
   const { label, color } = LOOK[n.kind], streamOn = state.stream_estate && data.search.mode === "stream-estate"
   const title = cn("block max-w-full truncate text-left text-sm", fresh ? "font-medium" : "text-muted-foreground")
-  const detail = "l" in n ? n.l.location.address ?? n.l.location.neighborhood ?? n.l.location.city ?? `Source : ${SOURCE_LABEL[n.l.source]}`
+  const detail = "l" in n ? n.l.location.address ?? n.l.location.neighborhood ?? n.l.location.city ?? ORIGIN[n.l.source].long
     : n.kind === "dpe" ? `DPE ${n.dpe.energy} du ${date(n.dpe.date)}, ${n.dpe.address ?? "adresse inconnue"}, sans annonce`
-    : `${n.count} à récupérer, ${credits(n.count, state.usage.eur_per_credit)}`
+    : `${num(n.count)} à récupérer, ${num(Math.min(n.count, data.search.max))} au plus par récupération (${credits(Math.min(n.count, data.search.max), state.usage.eur_per_credit)})`
   return (
     <li id={`news-${newsKey(n)}`}
       className={cn("relative grid scroll-mt-4 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-lg px-3 py-2.5 transition-colors duration-700 sm:grid-cols-[auto_minmax(0,1fr)_auto]",
@@ -203,7 +193,7 @@ function NewsRow({ n, fresh, lit, latest }: { n: NewsItem; fresh: boolean; lit: 
             <SearchIcon data-icon="inline-start" />Chercher l'annonce
           </Button>
         )}
-        {latest && streamOn && <Button size="xs" onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API payante" })}><DownloadIcon data-icon="inline-start" />Récupérer</Button>}
+        {latest && streamOn && <Button size="xs" onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API payante" })}><DownloadIcon data-icon="inline-start" />Récupérer<CreditBadge cost="fetch" /></Button>}
         <span className="ml-auto flex items-center gap-2 sm:ml-0">
           <time dateTime={n.date} className="text-xs text-muted-foreground tabular-nums">{clockOf(n.date)}</time>
           {fresh ? <UnreadDot /> : <i aria-hidden className="size-2" />}

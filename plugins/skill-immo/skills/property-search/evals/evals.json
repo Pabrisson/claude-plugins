@@ -84,16 +84,17 @@
     {
       "id": 6,
       "prompt": "Crée une alerte sur ma recherche paul-bert pour les nouveautés et les baisses de prix.",
-      "expected_output": "The free forecast first, the user's yes on the unknown cost, then the alert on a random ntfy topic whose name the user gets.",
+      "expected_output": "The user's yes on the unknown cost, then the alert on a random ntfy topic whose name the user gets.",
       "files": [],
       "env": {
         "STREAM_ESTATE_API_KEY": "<test key>"
       },
       "expectations": [
-        "Runs `immo.mjs alert forecast -p paul-bert` before creating anything",
+        "Does not create anything before the user agreed",
         "Says « coût inconnu » and asks before `alert create`",
         "Runs `immo.mjs alert create -p paul-bert --accept-unknown` only after the user agreed",
-        "Gives the ntfy topic and says that whoever knows it can read it"
+        "Gives the ntfy topic and says that whoever knows it can read it",
+        "Says that every price change is pushed, rises included (the API has no threshold)"
       ]
     },
     {

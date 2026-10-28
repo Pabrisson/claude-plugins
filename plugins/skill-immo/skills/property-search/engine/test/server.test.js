@@ -23,7 +23,7 @@ test('the searches, one search, the state without the key', async () => {
   await up()
   assert.deepEqual((await (await fetch(base + '/api/searches')).json()).map(s => [s.slug, s.mode, s.listings]), [['paul-bert', 'stream-estate', 0]])
   const s = await (await fetch(base + '/api/s/paul-bert')).json()
-  assert.deepEqual([s.search.slug, s.listings.length, s.events.length], ['paul-bert', 0, 0])
+  assert.deepEqual([s.search.slug, s.listings.length], ['paul-bert', 0])
   const state = await (await fetch(base + '/api/state')).text()
   assert.equal(JSON.parse(state).stream_estate, true)
   assert.ok(!state.includes('test-key'), 'the key never reaches the browser')
@@ -56,10 +56,15 @@ test('a paid action from the dashboard: the estimate first, then the run with th
 })
 
 test("the user's status and notes, the last visit, the profile", async () => {
-  let r = await post(`/api/s/paul-bert/listings/${property.id}`, { my_status: 'to_visit', notes: 'Visite samedi' })
+  let r = await post(`/api/s/paul-bert/listings/${property.uuid}`, { my_status: 'to_visit', notes: 'Visite samedi' })
   assert.equal(r.status, 200)
   assert.deepEqual(Object.values((({ my_status, notes }) => ({ my_status, notes }))(await r.json())), ['to_visit', 'Visite samedi'])
-  assert.equal((await post(`/api/s/paul-bert/listings/${property.id}`, { my_status: 'bought' })).status, 400)
+  assert.equal((await post(`/api/s/paul-bert/listings/${property.uuid}`, { my_status: 'bought' })).status, 400)
+  // a star, apart from the status; anything but a boolean leaves it as it is
+  assert.equal((await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { favorite: true })).json()).favorite, true)
+  assert.equal((await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { favorite: 'yes' })).json()).favorite, true)
+  const fav = await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { favorite: false })).json()
+  assert.deepEqual([fav.favorite, fav.my_status], [false, 'to_visit'])
   assert.equal((await post('/api/s/paul-bert/listings/nope', { notes: 'x' })).status, 404)
   assert.equal((await (await post('/api/s/paul-bert/visit', {})).json()).last_visit, null)
   assert.ok((await (await post('/api/s/paul-bert/visit', {})).json()).last_visit)
@@ -72,12 +77,12 @@ test('a message marked sent: an offer puts the listing in "Offre faite"', async 
   ls[0].messages = [{ id: 'm-1', kind: 'offer', amount: 250000, text: 'x', sent_at: null }]
   ls[0].my_status = 'to_visit'
   fs.writeFileSync(f, JSON.stringify(ls))
-  const l = await (await post(`/api/s/paul-bert/listings/${property.id}`, { message: { id: 'm-1', sent: true } })).json()
+  const l = await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { message: { id: 'm-1', sent: true } })).json()
   assert.ok(l.messages[0].sent_at)
   assert.equal(l.my_status, 'offer')
-  assert.equal((await post(`/api/s/paul-bert/listings/${property.id}`, { message: { id: 'nope', sent: true } })).status, 404)
+  assert.equal((await post(`/api/s/paul-bert/listings/${property.uuid}`, { message: { id: 'nope', sent: true } })).status, 404)
   // the user adds the agent's reply, then deletes it; a bad one is refused
-  const msg = (body) => post(`/api/s/paul-bert/listings/${property.id}`, { message: body })
+  const msg = (body) => post(`/api/s/paul-bert/listings/${property.uuid}`, { message: body })
   let c = await (await msg({ add: { from: 'them', channel: 'email', text: 'Le vendeur accepte 255 000 €.' } })).json()
   const got = c.messages.at(-1)
   assert.deepEqual([got.from, got.channel, got.sent_at, got.text], ['them', 'email', null, 'Le vendeur accepte 255 000 €.'])
@@ -95,7 +100,7 @@ test('the version follows the files; a search is deleted, not one with an alert'
   const gone = path.join(home, 'to-delete'), del = slug => fetch(`${base}/api/s/${slug}`, { method: 'DELETE' })
   fs.cpSync(dir, gone, { recursive: true })
   const f = path.join(gone, 'search.json'), s = JSON.parse(fs.readFileSync(f, 'utf8'))
-  fs.writeFileSync(f, JSON.stringify({ ...s, alert: { id: 'a-1' } }))
+  fs.writeFileSync(f, JSON.stringify({ ...s, alert: { searches: [{ id: 's-1', type: 'flat' }] } }))
   assert.equal((await del('to-delete')).status, 409)
   fs.writeFileSync(f, JSON.stringify({ ...s, alert: null }))
   assert.equal((await del('to-delete')).status, 200)

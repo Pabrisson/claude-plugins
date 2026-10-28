@@ -1,153 +1,117 @@
-# Stream Estate API v2
+# Stream Estate API v1
 
-Extracted from `https://next.docs.stream.estate/openapi.json` (2.0.0, read on 2026-10-27). The spec itself is not
-shipped. The v1 (`api.stream.estate`) stops on 2026-12-31: only v2 is used.
+Extracted from `https://docs.stream.estate/api-reference/openapi.json` (1.0.0, read on 2026-10-28) and checked with a
+v1 key the same day. The spec itself is not shipped. A v1 key does not work on the v2 (`api-v2.stream.estate`), and
+the v2 is not used.
 
-- **Base**: `https://api-v2.stream.estate`. The header `X-API-KEY: <key>` carries the key, read from
+- **Base**: `https://api.stream.estate`. The header `X-API-KEY: <key>` carries the key, read from
   `$STREAM_ESTATE_API_KEY` (the plugin's secret, exported by its SessionStart hook). It never leaves the engine.
-- **Format**: `Accept: application/json` returns plain JSON (a property is `{ id, property, publishers, listings }`).
-  `application/vnd.api+json` returns JSON:API, the only format that carries `meta.totalItems`, which a count needs.
-- **Rate limit**: 500 requests per minute per key. A `429` comes with `X-RateLimit-Retry-After` (a Unix timestamp).
-  `resolve-address` has its own per-minute limit (`429`).
-- **402**: no credits left. The call was neither served nor charged. The engine stops and falls back to the assisted
-  mode (exit 3).
-- **Pricing** (2026-10-27): pay as you go at 0.01 € a credit, with no commitment. The home page says 5 € are offered,
-  which the pricing page does not confirm. Plans: Starter 99 €/month for 15,000 credits, Growth 399 €, Scale 799 €.
+- **Format**: `Accept: application/ld+json` returns a Hydra collection, `{ "hydra:member": [...], "hydra:totalItems" }`.
+  `application/json` returns a bare array, with no total: the engine always asks for JSON-LD.
+- **Query strings**: lists as `propertyTypes[]=0&propertyTypes[]=1`, polygons as `geoShapes[0][3][0]=<lon>` and
+  `geoShapes[0][3][1]=<lat>`. The brackets go raw. A URL of 10 kB is refused (9 kB passes): a zone's outline is cut to
+  60 vertices and the excluded ids to 60.
+- **Errors**: 400, 401 (wrong key), 403, 404, 429 (slow down). Nothing is documented for an empty balance: the engine
+  treats a 402 as one (assisted mode, exit 3).
+- **Pricing** (2026-10-28): billed by **item**, 0.01 € each pay as you go. Plans: Starter 99 €/month for 15,000 items,
+  Growth 399 €, Scale 799 €. The engine calls an item a credit.
 
 ## Costs
 
-Only three routes declare a price in the spec: their answer carries `X-Credits-Charged` and they can return `402`.
-The other routes declare neither. They are probably free, but they stay **unknown** until they are measured. Measure
-them with `immo.mjs costs measure --accept-unknown --spend 1`, which makes one minimal call per route and compares the
-header with `GET /account/api-usage?groupBy=ROUTE`. The results go into the searches folder's `.costs.json`, then into
-this table and `lib/costs.js`.
+The v1 answers carry no cost header and there is no usage route: the engine logs each call at its route's price, from
+this table or the searches folder's `.costs.json` (`costs set "<route>=<credits>"`, read off the console).
 
 | Route | Use | Cost |
 |---|---|---|
-| `POST /properties` | Listings of the zone, counts, refresh | 1 credit per result returned, 0 when none: `size: 0` (count only) costs 0 |
-| `GET /properties/{id}` | One property, after a lookup | 1 credit per property read |
-| `POST /properties/lookup-by-url` | `add <url>` | 1 credit when known, `404` free |
-| `POST /alerts/forecast` | Notifications per day before creating an alert | Free (documented "Not billed") |
-| `GET /account/api-usage` | `doctor`, `usage --remote` | Assumed free (no header, no 402) |
-| `POST /properties/{id}/resolve-address` (beta) | Exact address → ADEME DPE, Géorisques, DVF of the building | Unknown |
-| `GET /analytics/listings` | Asking €/m², time online, by DPE and publisher | Unknown (4 calls per `market`) |
-| `POST /transactions/search` | Sales reconciled across DVF and notaries | Unknown (per result?) |
-| `GET /geo/autocomplete`, `/geo/administrative-divisions/{id}` (+ `/geometry`, `/descendants`) | Division zones and their outline | Unknown |
-| `POST /alerts`, `GET /alerts`, `PUT`/`DELETE /alerts/{id}`, `GET /alerts/{id}/events` | Alerts | Unknown |
-| `GET /sources`, `GET /publishers/{id}` | Portal names, agency details | Unknown (the property already carries both) |
+| `GET /documents/properties` | Listings of the zone, counts, refresh | 1 credit per item returned; `itemsPerPage=0` (a count) returns none |
+| `GET /indicators/price_per_meter` | The zone's asking €/m² (`market`) | Unknown |
+| `GET`, `POST /searches`, `PUT`, `DELETE /searches/{id}` | Alerts | Unknown |
 
-Not used: favorites (the local statuses do the job), and `event-destinations` beyond what an alert creates through
-`notificationDestination.webhookUrl`.
+Not used: `GET /documents/properties/{id}` (the collection returns the same document), `similar-properties`,
+`/indicators/points_of_interest` (Overpass does it), `/public/location-autocomplete` and `/cities` (the zones are the
+engine's own), `/webhook-tester` (used once to check the pushes, below).
 
-## POST /properties
+## GET /documents/properties
 
-Body: `{ criteria, size (0–100), page, paginationType: PAGE|CURSOR, cursor, sort: { field, direction } }`. The default
-sort is `UPDATED_AT DESC`. A criteria node is either flat filters `{ property, publisher, listings, dates, changes }`,
-or `{ and: [...] }`, or `{ or: [...] }`. The filters used:
+The filters used: `transactionType=0` (sale), `propertyTypes[]` (apartment `0`, house `1`, building `2`, parking `3`,
+office `4`, land `5`, shop `6`), `budgetMin`/`budgetMax`, `surfaceMin`/`surfaceMax`, `roomMin`/`roomMax`,
+`landSurfaceMin`, `energyCategories[]`, `excludedProperties[]` (property uuids), `expired`, `fromUpdatedAt`,
+`fromExpiredAt`, `itemsPerPage` (30 at most), `page`, `order[updatedAt]=desc`. The zone is one of:
+- `lat`, `lon`, `radius` (km);
+- `includedInseeCodes[]` for a commune (an arrondissement's code works: `69383`);
+- `geoShapes`, a polygon's outer ring.
 
-- `property.type.in` and `property.transaction.type: SELL`. The types: `FLAT`, `HOUSE`, `LAND`, `PARKING`, and
-  `OFFICE`, `SHOP`, `COMMERCIAL_PREMISES` for premises (`BUILDING` is not used). A search of several types sends one
-  `or` branch per type, each with the criteria that type takes: no rooms for a parking, no DPE for a plot.
-- `property.areas.land {gte}` for `land_min`; a property's `area.land.value` comes in hectares when `area.land.unit` is
-  `HECTARE`.
-- `property.pricing.displayed {gte, lte}`, `property.areas.displayed {gte, lte}`, `property.unit.rooms`, `.floor`.
-- `property.unit.diagnostic.scores: [{ type: ENERGY_CONSUMPTION, rating: [A…max] }]`.
-- `property.amenities.features.in: [ELEVATOR]`, and `property.unit.features.in: [BALCONY|TERRACE|GARDEN]` (one per
-  `or` branch).
-- `property.locations.in`. It takes one of:
-  - `{ centerPoint: { latitude, longitude, radiusKm } }`;
-  - `{ geoShapes: [Polygon|MultiPolygon] }`;
-  - `{ ids: [division] }`;
-  - `{ uniqueCodes: [INSEE] }`, with `countryCode: FR`.
-- `property.id.nin`: up to 100 ids already fetched, so they are not paid twice.
-- **Incremental refresh**: `dates.updatedAt.from` exists. The refresh asks
-  `or: [updatedAt from the last refresh, listings.expiredAt from the last refresh]`. Expired properties are hidden
-  unless `listings.expiredAt` is set.
-- Also available, not used yet: `publisher.type`, `listings.marketing.urgent`, `changes.variationPercent` (drops),
-  `body.description.in`, `building.constructionYear`, `building.numberOfLots`.
+No filter on the floor, the elevator or an outdoor space: `matches()` sorts those listings out once fetched, and
+`search` warns that the count includes them. The criteria differ per type (a parking has no rooms), so a search sends
+one query per type. A count is capped at 10,000.
 
-Each `listings[]` entry gives `url` (absent for a protected source: only its name is shown), `source.slug`,
-`publishedAt`, `expiredAt`, `lastSeenAt` and `marketing.favorites` / `urgent`.
+- **Online**: `expired=false` and `fromUpdatedAt` within 90 days. The v1 never expires most of what left the portals:
+  rue Paul Bert (a 400 m band, flats) on 2026-10-28 held 9,420 properties not expired, 7,007 of them not updated for a
+  year, 3,364 for three; 677 were updated within 30 days, 1,299 within 90.
+- **Incremental refresh**: one query of what is online and updated since the last refresh (`fromUpdatedAt` takes a
+  full ISO date), one of what expired since (`expired=true&fromExpiredAt=`).
+- **Paging**: a page starts at a multiple of its size, so a fetch of 37 asks 30, then 5, then 2: never one more item
+  than the user agreed to.
 
-The fields of `property` used, and what they feed:
+A `PropertyDocument`: `uuid`, `propertyType`, `price`, `pricePerMeter`, `surface`, `room`, `bedroom`, `floor`,
+`landSurface`, `elevator`, `expired`, `expiredAt`, `createdAt`, `updatedAt`, `lastCrawledAt`, `title`, `description`,
+`pictures[]` (URLs), `location { lat, lon }` (the spec says `locations`: the answer says `location`), `city { id, name,
+insee, zipcode }` and `adverts[]`, one per portal, each with:
+- `url`, `publisher { name (the portal: SL, LBC, Bienici…), type (0 individual, 1 professional) }`, `contact { name,
+  phone, email, agency, reference }`;
+- `price`, `priceExcludingFees`, `feesPercentage`, `feesResponsibility` (0 seller, 1 buyer), `condominiumFees` (a year);
+- `energy { category, value }`, `greenHouseGas`, `diagnosticDate`, `constructionYear`, `lotCount`, `floorQuantity`;
+- `features[]`, free text (« Balcon », « 2/5 étage », « 1 parking: Box »), `geoAccuracy` (1 house number, 2 neighborhood);
+- `expired`, `expiredAt`, `createdAt`, `lastCrawledAt`, `daysOnMarket`;
+- `events[] { fieldName (price, expired, title, description, pictures…), fieldOldValue, fieldNewValue (strings),
+  percentVariation, createdAt }`.
 
-- `pricing.displayed` and `pricing.sale.netPrice`.
-- `pricing.sale.fees`:
-  - `agency` (amount, percentage, includedInPrice, paidBy);
-  - `condominium` (total, frequency);
-  - `taxes.propertyTax` (amount, frequency).
-- `changes[]` (attribute `DISPLAYED_PRICE`, numericOld, numericNew, variationPercent): the price history.
-- `transaction.status` (AVAILABLE, UNDER_OFFER, SOLD, WITHDRAWN) and `expired`.
-- `unit`: rooms, floor, lastFloor, orientation, condition, balcony, terrace, cellar, parking, and `diagnostic.scores`
-  (rating and value).
-- `building`: constructionYear, numberOfLots, floors, constructionType, `legalStatus.underLegalProceedings`.
-- `amenities`: elevator, caretaker, bikeRoom, `connectivity` (FIBER).
-- `location`: a GeoJSON point, `accuracy` (PRECISE, STREET, CITY…), `city.uniqueCode` (INSEE), `neighborhood` and
-  `subNeighborhood` (IRIS).
-- `publishers[]`: publisherType, agencyName, professionalCardNumber, `contact` (email, phone), mandate.
-- `pictures[]`.
+What the engine makes of it (`fromStreamEstate`): the DPE class most adverts give (one portal often mistypes it), one
+publisher per phone number, the `price` events of all the adverts once each as the price history, the features from
+the adverts' free text (true when listed, else unknown). There is no address, no IRIS, no transaction status (under
+offer), no property tax and no urgent flag.
 
-## The other routes
+## GET /indicators/price_per_meter
 
-- `POST /properties/lookup-by-url` `{ url }` → `{ id, property }`, then `GET /properties/{id}`.
-- `POST /properties/{id}/resolve-address` → `{ confidence, method, address { label, houseNumber, street, postcode,
-  cityCode, latitude, longitude }, energyCertificateNumber }`. What the confidence allows:
-  - `EXACT` and `HIGH`: show the address;
-  - `MEDIUM` and `LOW`: a "probable address";
-  - `NONE`: nothing.
-- `GET /analytics/listings`. Query parameters:
-  - `property_type`, `transaction_type`, `event_type` (CREATED, UPDATED, EXPIRED, REACTIVATED);
-  - `event_at_from` and `event_at_to`;
-  - the bbox: `lat_min`, `lat_max`, `lng_min`, `lng_max`;
-  - `group_by` (dpe_energy_rating, publisher_type, transaction_status…) and `time_bucket` (month…);
-  - `metrics`: `count`, `median:price_per_sqm`, `median:days_between_events`, `percentile:<field>:<p>`.
+The same filters (the engine sends the type, the zone and `fromDate`, two years back) and `aggregationInterval=month`.
+Returns `[{ average, average_min, average_max, median, series: { "2026-10": 5063.61, … } }]`: the asking €/m² of the
+listings created in the period, expired ones included. Rue Paul Bert, flats, 2026-10-28: median 4,805, average 5,054.
 
-  It returns `{ meta: { sample_size }, data: [{ group, metrics }] }`. `days_between_events` on `EXPIRED` events is
-  taken as the time online: **to check with the key**.
-- `GET /analytics/listings` and `POST /transactions/search` are asked for the search's first type only: a median
-  that mixes houses and flats means nothing.
-- `POST /transactions/search` `{ dateMutation: { after, before }, propertyType, priceAmount (cents), city | district |
-  neighborhood, geoshape, page: { cursor, size ≤ 100 } }` returns `data[]`, each sale with:
-  - `source` (FR_DVF or FR_NOTARIES);
-  - `price.amountCents` and `price.pricePerSqmCents`;
-  - `areas.livingAreaSqm`;
-  - `location.geoPoint`;
-  - `matched`, the reconciled duplicate.
+## Searches (alerts)
 
-  The page's `meta.nextCursor` points to the next one. **To check with the key**: whether the notaries' records
-  cover the Bas-Rhin, the Haut-Rhin and the Moselle, which DVF leaves out.
-- `GET /geo/autocomplete?query=&type=` → `[{ id, name, locationType, parentName, postalCode, centroid }]`.
-  `GET /geo/administrative-divisions/{id}/geometry` → `{ geometry }`, simplified for the division's size.
-- `POST /alerts/forecast` `{ criteria }` (no `dates`, `changes` or `property.id`) → `{ windowDays, total, perDay,
-  perHour }`.
-- `POST /alerts` `{ name, enabled, criteria, notificationDestination: { webhookUrl }, notificationConfig: { rules: [{
-  eventType: NEW_MATCH }, { eventType: PRICE_CHANGE, variationPercent: [{ lte: -3 }] }] } }`. The webhook must be
-  HTTPS. The first webhook of the account gets a `signingKey`, shown only once. `GET /alerts/{id}/events` →
-  `[{ eventType, property, createdAt, notifiedAt }]`.
-- `GET /account/api-usage?groupBy=ROUTE&granularity=MONTH` → `{ totals: { calls, results, credits }, byRoute: [{
-  route, calls, results, credits }] }`. The default period is the last 30 days.
+`POST /searches` takes the same filters as a body (`propertyTypes`, `lat`/`lon`/`radius`, `geoShapes`,
+`includedZipcodesInsee` for INSEE codes, `budgetMin`…, `roomMin`…, `landSurfaceMin`; no energy filter), a `title`,
+`notificationEnabled`, `endpointRecipient` (HTTPS, receives the matches), `eventEndpoint` (HTTPS, receives the events)
+and `subscribedEvents` (`ad.update.price`, `ad.update.surface`, `ad.update.pictures`, `ad.update.expired`,
+`property.ad.create`, `property.ad.update`). Its id is the end of its `@id` (`/searches/<uuid>`). A `PUT` replaces the
+search: the engine sends the whole body again. A failed push is retried five times, an hour apart. There is no history
+of the pushes.
 
-## Webhook and ntfy.sh
+- A **match** POSTs `{ "@type": "Match", property, search, createdAt, propertyDocument: <the PropertyDocument> }`.
+- An **event** POSTs `{ event: "ad.update.price", adEvent: { fieldName, fieldOldValue, fieldNewValue, percentVariation,
+  createdAt }, match: <the match> }`.
 
-Stream Estate POSTs `{ eventType, eventId, alert: { id, name }, listing: { id }, data: <the property, as
-GET /properties/{id}> }`. It signs it with `X-Webhook-Signature: sha256=<HMAC of "{timestamp}.{body}">` and retries 4
-times. By default the alert pushes to **ntfy.sh**. The URL is
+Checked with the key on 2026-10-28 (a search on the rue Paul Bert band, created, turned off, deleted):
+- `budgetMax` (or `pricePerMeterMax`) is required: without it, a `400` « Veuillez saisir au moins un de ces 2
+  critères : Budget maximum ou Prix au m2 ». The engine asks for a `budget_max` first;
+- `geoShapes` as `[[[lon, lat], …]]` is kept as sent, with the endpoints, `subscribedEvents` and `budgetMax`; the API
+  adds `withCoherentPrice: true` and a `token`;
+- a `PUT` with the whole body turns `notificationEnabled` off and keeps the rest; a `DELETE`, then the search answers
+  `404`;
+- `includedZipcodesInsee: ["69383"]` (a commune zone, created and deleted the same day) is kept as `includedCities`,
+  the city « Lyon 3e » (`/cities/28676`): an arrondissement's code gives the arrondissement.
+
+## ntfy.sh
+
+By default an alert pushes to a random ntfy.sh topic (`immo-<slug>-<16 hex>`): whoever knows it can read it, and the
+pushes carry only what the listing shows publicly. ntfy's templating turns the JSON into a readable push, one URL per
+endpoint:
 
 ```
-https://ntfy.sh/<topic>?tpl=yes&t=<title template>&m=<message template>
+https://ntfy.sh/<topic>?tpl=yes&t=Nouvelle annonce · {{.propertyDocument.city.name}}&m={{.propertyDocument.room}} p. · …
+https://ntfy.sh/<topic>?tpl=yes&t=Prix modifié · {{.match.propertyDocument.city.name}}&m={{.adEvent.fieldOldValue}} → …
 ```
 
-ntfy's message templating reads the JSON body, for example
-`{{.data.property.pricing.displayed}}`. **To check with the key**: that a real event renders well.
-
-- **Topic security**: whoever knows the topic name can read it. The engine draws a random one
-  (`immo-<slug>-<16 hex>`), and the pushes only carry what the listing already shows publicly.
-- **Signature**: ntfy does not check the signature. A `--webhook <https url>` that checks it is the alternative.
-
-## Points to settle with the key (phase 0)
-
-- The measured cost of each unknown route (`costs measure`).
-- That `size: 0` costs 0. This is documented; `live.test.js` checks it.
-- What `days_between_events` measures, and whether `/transactions/search` covers Alsace-Moselle.
-- How ntfy renders a real event.
-- Replace `engine/test/fixtures/se-property.json`, which is built from the spec's examples, with a recorded answer.
+Checked on 2026-10-28 with `GET /webhook-tester?endpoint=<url>[&eventType=ad.update.price]`: « Nouvelle annonce · Paris
+8e » / « 3 p. · 100 m² · 900000 € — … », and « Prix modifié · … » / « 900000 → 875000 € (-2.78 %) — … ». The payload
+(about 6 kB) is templated, not turned into an attachment.

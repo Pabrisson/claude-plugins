@@ -1,18 +1,14 @@
-// listings.json: one format whatever the source (references/listing-format.md). A property of Stream Estate (its
-// plain-JSON PropertySearchResult) or a listing Claude read (WebSearch, WebFetch, pasted text) becomes the same
-// object; a refresh merges the new state into the old one and says what changed.
+// listings.json: one format whatever the source (references/listing-format.md). A property of Stream Estate (its v1
+// PropertyDocument, with one advert per portal) or a listing Claude read (WebSearch, WebFetch, pasted text) becomes
+// the same object; a refresh merges the new state into the old one and says what changed.
 import { createHash } from 'node:crypto'
 import { TYPES } from './market.js'
 
-const YEARLY = { WEEKLY: 52, MONTHLY: 12, YEARLY: 1 }
-const yearly = x => (x?.amount ?? x?.total) == null ? null : Math.round((x.amount ?? x.total) * (YEARLY[x.frequency] ?? 1))
 const hash = s => createHash('sha1').update(s).digest('hex').slice(0, 12)
 const ppm2 = (price, area) => (price > 0 && area > 0 ? Math.round(price / area) : null)
 // the earliest of ISO dates
 const first = ds => ds.filter(Boolean).sort()[0] ?? null
 const seType = t => Object.keys(TYPES).find(k => TYPES[k].includes(t)) ?? 'flat'
-// a land area in m² (Stream Estate gives large ones in hectares)
-const landM2 = x => (x?.value > 0 ? Math.round(x.value * (x.unit === 'HECTARE' ? 10000 : 1)) : null)
 
 // what the address base is asked for a listing's address: with its postcode and town when it has no postcode (alone,
 // « 11 Rue de l'Etang » of Louveciennes is found in Versailles)
@@ -26,52 +22,66 @@ export function normUrl(u) {
   } catch { return null }
 }
 
-export function fromStreamEstate(r) {
-  const p = r.property ?? {}, u = p.unit ?? {}, b = p.building ?? {}, am = p.amenities ?? {}, loc = p.location ?? {}
-  const sale = p.pricing?.sale ?? {}, fees = sale.fees ?? {}, scores = u.diagnostic?.scores ?? {}, out = p.area?.outdoor ?? {}
-  const listings = r.listings ?? [], area = p.area?.displayed ?? null, price = p.pricing?.displayed ?? null
-  const type = seType(p.propertyType), land = landM2(p.area?.land)
+// The advertisers behind a property's adverts (an advert's publisher is the portal): one per phone number, else
+// email, else name, the most complete contact kept; those with neither phone nor email only when no other has one.
+function publishersOf(ads) {
+  const filled = c => [c.name, c.phone, c.email].filter(Boolean).length, byKey = new Map()
+  const contacts = ads.map(a => ({ ...a.contact, type: a.publisher?.type })).filter(filled).toSorted((a, b) => filled(b) - filled(a))
+  for (const c of contacts) {
+    const k = c.phone?.replace(/\D/g, '').slice(-9) || c.email || c.name.toLowerCase()
+    if (!byKey.has(k)) byKey.set(k, c)
+  }
+  const all = [...byKey.values()], reach = all.filter(c => c.phone || c.email)
+  return (reach.length ? reach : all).map(c => ({
+    type: { 0: 'PRIVATE_INDIVIDUAL', 1: 'REAL_ESTATE_AGENCY' }[c.type] ?? null, name: c.name ?? null, card: null, website: null,
+    phone: c.phone ?? null, email: c.email ?? null, profile_url: null, mandate: null,
+  }))
+}
+
+export function fromStreamEstate(d) {
+  // the adverts still online first: what a field says now
+  const ads = d.adverts ?? [], now = [...ads.filter(a => !a.expired), ...ads.filter(a => a.expired)]
+  const pick = k => now.map(a => a[k]).find(x => x != null) ?? null
+  // an amenity a portal lists among its features (free text): true, else unknown, never false
+  const has = re => ads.some(a => a.features?.some(f => re.test(f))) || null
+  const price = d.price ?? null, area = d.surface ?? null, type = seType(d.propertyType), land = d.landSurface ?? pick('landSurface')
+  // the rating most portals give (one of them often mistypes it)
+  const most = k => [...Map.groupBy(now.filter(a => a[k]?.category), a => a[k].category).values()].sort((x, y) => y.length - x.length)[0]?.[0][k] ?? null
+  const floor = d.floor ?? null, floors = pick('floorQuantity'), energy = most('energy'), ghg = most('greenHouseGas')
+  const fees = pick('feesPercentage'), paidBy = pick('feesResponsibility'), accuracy = Math.min(...ads.map(a => a.geoAccuracy ?? 9))
+  const seen = new Set(), changes = ads.flatMap(a => a.events ?? []).filter(e => e.fieldName === 'price' && e.fieldNewValue != null)
   return {
-    id: r.id, se_id: r.id, source: 'stream-estate', property_type: type,
-    urls: listings.map(l => ({
-      url: l.url ?? null, source: l.source?.slug ?? null, published_at: l.publishedAt ?? null, expired_at: l.expiredAt ?? null,
-      last_seen_at: l.lastSeenAt ?? null, favorites: l.marketing?.favorites ?? null, urgent: !!l.marketing?.urgent,
-    })),
-    title: p.body?.title ?? null, description: p.body?.description ?? null,
-    price, net_price: sale.netPrice ?? null, area, carrez: p.area?.indoor?.legal?.value ?? null, land_area: land,
+    id: d.uuid, se_id: d.uuid, source: 'stream-estate', property_type: type,
+    urls: ads.map(a => ({ url: a.url ?? null, source: a.publisher?.name ?? null, published_at: a.createdAt ?? null, expired_at: a.expiredAt ?? null, last_seen_at: a.lastCrawledAt ?? null, favorites: null, urgent: false })),
+    title: d.title ?? null, description: d.description ?? null,
+    price, net_price: pick('priceExcludingFees'), area, carrez: null, land_area: land,
     price_per_m2: ppm2(price, type === 'land' ? land ?? area : area),
-    rooms: u.rooms ?? null, bedrooms: u.bedrooms ?? null, floor: u.floor ?? null, floors: b.floors ?? null,
-    last_floor: u.lastFloor ?? null, ground_floor: u.groundFloor ?? null,
-    dpe: { energy: scores.ENERGY_CONSUMPTION?.rating ?? null, energy_value: scores.ENERGY_CONSUMPTION?.value ?? null, ghg: scores.CARBON_EMISSIONS?.rating ?? null, date: u.diagnostic?.date ?? null, reference: u.diagnostic?.reference ?? null },
-    construction_year: b.constructionYear ?? null, lots: b.numberOfLots ?? null, construction_type: b.constructionType ?? null,
-    condition: u.condition ?? null, legal_proceedings: b.legalStatus?.underLegalProceedings ?? null, new_build: p.constructionStatus ? p.constructionStatus !== 'OLD' : null,
+    rooms: d.room ?? null, bedrooms: d.bedroom ?? null, floor, floors,
+    last_floor: type === 'flat' && floor != null && floors ? floor === floors : null, ground_floor: floor === 0 || null,
+    dpe: { energy: energy?.category ?? null, energy_value: energy?.value ?? null, ghg: ghg?.category ?? null, date: pick('diagnosticDate'), reference: null },
+    construction_year: pick('constructionYear'), lots: pick('lotCount'), construction_type: null, condition: null, legal_proceedings: null, new_build: null,
     features: {
-      balcony: u.balcony ?? null, terrace: u.terrace ?? null, garden: u.garden ?? null, cellar: u.cellar ?? null,
-      parking: u.parking?.total > 0 || null, elevator: am.elevator ?? null, caretaker: am.caretaker ?? null, bike_room: am.bikeRoom ?? null,
-      fiber: am.connectivity?.includes('FIBER') ?? null, crossing: u.crossing ?? null, quiet: u.quiet ?? null, orientation: u.orientation ?? [],
-      heating: u.energy?.heating?.[0] ? [u.energy.heating[0].energyCarrier, u.energy.heating[0].collective ? 'collective' : 'individual'].join(' ') : null,
+      balcony: has(/balcon/i), terrace: has(/terrasse/i), garden: has(/jardin/i), cellar: has(/\bcave\b/i), parking: has(/parking|garage|\bbox\b/i),
+      elevator: d.elevator ?? pick('elevator'), caretaker: has(/gardien|concierge/i), bike_room: has(/local (à )?vélo/i), fiber: has(/fibre/i), crossing: has(/traversant/i), quiet: null, orientation: [], heating: null,
     },
-    outdoor_area: [out.terrace, out.balcony, out.garden].some(x => x > 0) ? (out.terrace ?? 0) + (out.balcony ?? 0) + (out.garden ?? 0) : null,
+    outdoor_area: null,
     location: {
-      point: loc.geometry?.type === 'Point' ? loc.geometry.coordinates : null, accuracy: loc.accuracy ?? null, address: loc.address ?? null,
-      city: loc.city?.name ?? null, insee: loc.city?.uniqueCode ?? null, postcode: loc.city?.postalCodes?.[0] ?? null,
-      neighborhood: loc.neighborhood?.name ?? null, iris: loc.subNeighborhood?.name ?? null, city_id: loc.city?.id ?? null,
+      point: d.location ? [d.location.lon, d.location.lat] : null, accuracy: { 1: 'PRECISE', 2: 'NEIGHBORHOOD' }[accuracy] ?? null, address: null,
+      city: d.city?.name ?? null, insee: d.city?.insee ?? null, postcode: d.city?.zipcode ?? null, neighborhood: null, iris: null, city_id: d.city?.id ?? null,
     },
     fees: {
-      agency: fees.agency ? { amount: fees.agency.amount ?? null, percentage: fees.agency.percentage ?? null, included: fees.agency.includedInPrice ?? null, paid_by: fees.agency.paidBy ?? null } : null,
-      condo_yearly: yearly(fees.condominium), property_tax: yearly(fees.taxes?.propertyTax),
+      agency: fees != null || paidBy != null ? { amount: null, percentage: fees, included: null, paid_by: { 0: 'SELLER', 1: 'BUYER' }[paidBy] ?? null } : null,
+      condo_yearly: pick('condominiumFees') ? Math.round(pick('condominiumFees')) : null, property_tax: null,
     },
-    status: p.expired ? 'EXPIRED' : (p.transaction?.status ?? 'AVAILABLE'),
-    publishers: (r.publishers ?? []).map(x => ({
-      type: x.publisherType ?? null, name: x.agencyName ?? null, card: x.professionalCardNumber ?? null, website: x.website ?? null,
-      phone: x.contact?.phone ?? null, email: x.contact?.email ?? null, profile_url: x.contact?.profileUrl ?? null, mandate: x.mandate ?? null,
-    })),
-    pictures: (p.pictures ?? []).map(x => x.url).filter(Boolean).slice(0, 12),
-    published_at: first(listings.map(l => l.publishedAt)), updated_at: p.updatedAt ?? null,
-    urgent: listings.some(l => l.marketing?.urgent), favorites: Math.max(0, ...listings.map(l => l.marketing?.favorites ?? 0)) || null,
-    // the source's own price history, oldest first
-    price_changes: (p.changes ?? []).filter(c => c.attribute === 'DISPLAYED_PRICE' && c.numericNew != null)
-      .map(c => ({ date: c.occurredAt, from: c.numericOld, to: c.numericNew, pct: c.variationPercent })).reverse(),
+    status: d.expired ? 'EXPIRED' : 'AVAILABLE',
+    publishers: publishersOf(ads),
+    pictures: (d.pictures ?? []).slice(0, 12),
+    published_at: first([d.createdAt, ...ads.map(a => a.createdAt)]), updated_at: d.updatedAt ?? null,
+    urgent: false, favorites: null,
+    // the portals' own price changes, oldest first, once each (the same drop shows on every portal)
+    price_changes: changes.toSorted((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map(e => ({ date: e.createdAt, from: +e.fieldOldValue, to: +e.fieldNewValue, pct: e.percentVariation }))
+      .filter(c => !seen.has(`${c.from}>${c.to}`) && seen.add(`${c.from}>${c.to}`)),
   }
 }
 
@@ -97,9 +107,9 @@ export function fromInput(x, source) {
   }
 }
 
-// what the user keeps on a listing (the messages Claude wrote for it included), and what the engine adds, through
-// every refresh
-const KEPT = ['first_seen', 'price_history', 'my_status', 'notes', 'messages', 'building', 'changes']
+// what the user keeps on a listing (their star, the messages Claude wrote for it included), and what the engine
+// adds, through every refresh
+const KEPT = ['first_seen', 'price_history', 'my_status', 'favorite', 'notes', 'messages', 'building', 'changes']
 
 // Merges listings into the known ones (by id, else by URL) on day `now`. A listing seen again keeps the user's status,
 // notes and history; a new price, status or expiry is logged in its `changes` and returned. `gone`: ids a complete

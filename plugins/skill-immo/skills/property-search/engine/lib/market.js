@@ -4,9 +4,10 @@
 const DAY = 86400000
 const LETTERS = 'ABCDEFG'
 
-// The types of property a search covers, as Stream Estate names them, and the criteria each takes: a parking has no
-// rooms, a plot no DPE. A listing without a type is a flat (the searches made before the types).
-export const TYPES = { flat: ['FLAT'], house: ['HOUSE'], land: ['LAND'], parking: ['PARKING'], premises: ['OFFICE', 'SHOP', 'COMMERCIAL_PREMISES'] }
+// The types of property a search covers, with Stream Estate's codes (v1: apartment 0, house 1, parking 3, office 4,
+// land 5, shop 6; a whole building, 2, is not searched), and the criteria each takes: a parking has no rooms, a plot no
+// DPE. A listing without a type is a flat (the searches made before the types).
+export const TYPES = { flat: [0], house: [1], land: [5], parking: [3], premises: [4, 6] }
 const TAKES = {
   flat: ['budget', 'area', 'rooms', 'floor', 'dpe', 'elevator', 'outdoor'], house: ['budget', 'area', 'rooms', 'dpe', 'outdoor', 'land'],
   land: ['budget', 'land'], parking: ['budget'], premises: ['budget', 'area'],
@@ -31,13 +32,15 @@ export function matches(l, c = {}, types) {
 }
 
 // The sold unit price a listing of this type is weighed against: the zone's last two years when they hold 10 sales,
-// else its five years, else the commune's, else Stream Estate's reconciled sales (Alsace-Moselle has no DVF)
+// else its five years, else the commune's (none in Alsace-Moselle, which DVF leaves out)
 export function reference(m, type = 'flat') {
   const d = m?.dvf?.[type]
   for (const scope of ['recent', 'zone', 'commune']) if (d?.[scope]?.count >= 10) return { ppm2: d[scope].median_ppm2, scope, count: d[scope].count, type }
-  const t = m?.stream?.transactions
-  return t?.count >= 10 && (t.type ?? 'flat') === type ? { ppm2: t.median_ppm2, scope: 'transactions', count: t.count, type } : null
+  return null
 }
+
+// the zone's asking price per m² (market -p): its last month, else its median over two years
+export const asking = (m, type = 'flat') => (m?.stream && (m.stream.type ?? 'flat') === type ? Object.values(m.stream.series ?? {}).at(-1) ?? m.stream.median ?? null : null)
 
 // days since the listing was first published (or first seen here)
 export const daysOnline = (l, now = Date.now()) => {
@@ -62,7 +65,7 @@ export function badge(ppm2, ref) {
 // The margin to negotiate, as a range of the asking price, with its reasons. 3 % is the usual gap between asked and
 // sold prices; half of the excess over the sold median, a long time online and the urgent flag add to it, a drop
 // already made takes from it.
-// ponytail: a flat heuristic on four signals, a model fitted on the listings that sold (transactions) when there are enough
+// ponytail: a flat heuristic on four signals, a model fitted on the listings that sold when there are enough
 export function negotiation(l, ref, now = Date.now()) {
   if (!l.price || l.status === 'UNDER_OFFER' || l.status === 'SOLD' || l.status === 'EXPIRED') return null
   const reasons = [], b = badge(unitPrice(l), ref), days = daysOnline(l, now), drop = dropped(l)

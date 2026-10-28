@@ -51,7 +51,8 @@ Run `immo.mjs doctor` once per conversation.
 
 ## Credits: the user's yes before every one
 
-Stream Estate costs 0.01 € a credit (the profile's `eur_per_credit`). Every command that may cost does three things:
+Stream Estate (API v1) bills each item a call returns, 0.01 € pay as you go: the engine calls it a credit (the
+profile's `eur_per_credit`). A count returns no item, so it is free. Every command that may cost does three things:
 - it estimates first;
 - it stops with **exit code 2** and the estimate (credits, €, what is left of the monthly cap);
 - it runs only once you pass the user's answer back.
@@ -62,8 +63,9 @@ Stream Estate costs 0.01 € a credit (the profile's `eur_per_credit`). Every co
 3. Only after a yes, run it again with `--spend <credits>` (and `--max` if they chose fewer).
 
 Three cases need the user's own words before you add the flag:
-- **Unknown cost**: a route not measured yet says `unknown cost`. Say « coût inconnu » and ask. Pass
-  `--accept-unknown` only after a yes.
+- **Unknown cost**: a route whose price is not known yet (`market`, the alerts) says `unknown cost`. Say « coût
+  inconnu » and ask. Pass `--accept-unknown` only after a yes. Its real price shows in Stream Estate's console; the
+  user may set it with `immo.mjs costs set "<route>=<credits>"`.
 - **Monthly cap**: never pass `--force` unless the user explicitly agrees to go over it, in this conversation, for
   this call.
 - **A yes is for one call**: it covers that call only. A refresh next week asks again.
@@ -72,8 +74,8 @@ The other exit codes:
 
 | Exit code | Meaning | What you do |
 |---|---|---|
-| 3 | No credits left (402, neither served nor charged), or no key | Say so, then go on in the assisted mode |
-| 4 | Stream Estate does not know the URL (not charged) | Read the page with WebFetch, then `add --file` |
+| 3 | No credits left (402), or no key | Say so, then go on in the assisted mode |
+| 4 | A listing URL (the API has no lookup by URL) | Read the page with WebFetch, then `add --file` |
 
 ## Listings without Stream Estate: the assisted mode
 
@@ -134,8 +136,7 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
        street's DVF sales and address numbers;
      - for an address, a circle around it (`--radius`: 500 m by default, 300–1000);
      - the commune or arrondissement (`--zone commune`);
-     - the IRIS (`--zone iris`);
-     - with the key, a neighborhood of Stream Estate (`--zone division --division <id>`).
+     - the IRIS (`--zone iris`).
    - The mode, when the key is on: « Stream Estate (annonces de tous les portails, payant) » first, then « OpenData
      (open data et annonces assistées, gratuit) ». It goes in `--mode stream-estate|classic` (`classic` is OpenData).
    - The types, when the request does not say (« un bien », « investir »): a multiple-choice question, « Appartement »
@@ -151,8 +152,10 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
    lot for a parking), the rent, the property tax rate, the homes authorised, the neighborhood, and in Stream Estate
    mode the count and the estimate.
 5. **Listings**:
-   - Stream Estate mode: the credits rule above, then `immo.mjs fetch -p <slug> --spend N [--max N]`. Then offer
-     `immo.mjs market -p <slug>` (asking prices and reconciled sales, unknown cost until measured).
+   - Stream Estate mode: the credits rule above, then `immo.mjs fetch -p <slug> --spend N [--max N]`. The API has no
+     filter on the floor, the elevator or an outdoor space: with those criteria, `search` says the count includes
+     listings they rule out, and you pay for them too. Then offer `immo.mjs market -p <slug>` (the zone's asking price
+     per m², month by month; unknown cost).
    - OpenData mode: the assisted mode.
 6. **Dashboard**: `immo.mjs dashboard -p <slug> --open`. Give the user its URL.
 7. **Summary**: say in a few lines how many listings there are, the zone's sold €/m², the two or three listings
@@ -161,9 +164,9 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
 
 ## add
 
-- **A URL, Stream Estate mode**: `immo.mjs add -p <slug> --url <url>` (2 credits, through the credits rule). On exit 4,
-  read the page with WebFetch.
-- **A URL, OpenData mode**: read the page with WebFetch.
+- **A URL**: read the page with WebFetch, then `add --file`. `immo.mjs add -p <slug> --url <url>` only says whether the
+  search already holds it (exit 4 otherwise): the API cannot look a listing up by its URL. In Stream Estate mode, a
+  later fetch finds the same listing on the portals and merges it with yours by its URL.
 - **Text**: the assisted mode, with `--source pasted`.
 
 Without a search, ask which search it goes to, or start one from the listing's address.
@@ -192,18 +195,22 @@ puts a `[chercher]` item in the prompt, « Récupérer » goes through the credi
 
 ## alert
 
-1. Run `immo.mjs alert forecast -p <slug>`. It is free and gives the expected notifications per day.
-2. Say it, and ask whether to create the alert (unknown cost). Then run `alert create -p <slug> --accept-unknown
-   [--drop 3]`.
-3. By default the alert pushes to a random **ntfy.sh** topic. Give the user its name: they subscribe in the ntfy app,
-   and whoever knows the topic can read it. `--webhook <https url>` sends to their own endpoint instead.
-4. `alert events`, `on`, `off` and `delete` work on the search's alert. `alert list` lists the account's alerts.
+An alert is a Stream Estate saved search per type of the search, with its zone and criteria (the DPE, the floor, the
+elevator and the outdoor space have no filter there): it pushes every new listing and every price change (up or down).
+1. The API refuses an alert without a maximum budget: when the search has no `budget_max`, ask for one and set it
+   with `search -p <slug> --criteria "budget_max=…"`. Ask whether to create the alert (unknown cost). Then run
+   `alert create -p <slug> --accept-unknown`.
+2. By default the alert pushes to a random **ntfy.sh** topic. Give the user its name: they subscribe in the ntfy app,
+   and whoever knows the topic can read it. `--webhook <https url>` sends the raw JSON to their own endpoint instead.
+3. `on`, `off` and `delete` work on the search's alert (`on` and `off` also take the search's criteria of today).
+   `alert list` lists the account's saved searches. There is no history of the pushes: they are on the phone.
 
 ## Analyse and compare
 
 `immo.mjs show -p <slug> --id <id[,id…]>` prints, per listing, what the dashboard computes:
 - its `type`, and the market badge against the sold unit price of that type (`reference.scope` says which: recent zone,
   zone or commune);
+- `favorite`: the user starred it in the dashboard. « Mes favoris » are the listings where it is true;
 - `review`: the strong points and the points to watch (each with its source) and the questions to ask;
 - `score`: out of 100, each part (price, budget, energy, transport, travel, outdoor) and its weight;
 - `rent`: the rent of the same home, the owner's monthly cost, the gross yield, and the years before buying beats
@@ -220,9 +227,8 @@ For a question on the market itself, read the search's `market.json` (`reference
 price trend over 1 and 3 years, the prices by number of rooms, the streets around with their median and its move, and
 `context` (the DPE classes of the zone, the property tax rate against France's, the homes authorised each year).
 
-`immo.mjs enrich -p <slug> --id <id>` fetches the building data again. In Stream Estate mode, `--resolve` first asks
-for the exact address (beta, unknown cost: ask). Show a resolved address only when its `shown` is `address`; say
-« adresse probable » for `probable`.
+`immo.mjs enrich -p <slug> --id <id>` fetches the building data again. A Stream Estate listing has no address, only a
+point (`location.accuracy`: `PRECISE` at the house number, `NEIGHBORHOOD` around it).
 
 Answer with the numbers, then a plain verdict. Below, at or above the market of its type, and why. What to check at the
 visit: start from `review` (its points to watch and questions), the DPE against the registry, the condominium, a G or F
@@ -307,7 +313,7 @@ Do every item in order:
 - `[ajouter]`: the add mode.
 - `[chercher]`: a recent DPE of the map that no listing matches. Look for its listing the assisted way: WebSearch its
   street and town with the type and surface (`maison 204 m² "rue de l'Etang" Louveciennes à vendre`), then one listing
-  page at a time, 5 at most. Found: `add --file` (or `add --url` through the credits rule in Stream Estate mode); its DPE
+  page at a time, 5 at most. Found: `add --file`; its DPE
   then matches it on the map. Not found: say so in one line (not online yet, sold off the portals, or let).
 - `[question]`: answer it.
 
@@ -322,7 +328,7 @@ no need to tell the user to reload it.
 | Passing `--accept-unknown` or `--force` "to save a round trip" | Ask; an unknown cost is the user's call |
 | WebFetching a SeLoger or Leboncoin results page to list flats | WebSearch, then one listing page at a time |
 | Filling a missing DPE or floor from a guess | Leave it out of the JSON |
-| Showing a `MEDIUM` or `LOW` resolved address as the address | « adresse probable » |
+| Giving a Stream Estate listing's point as its address | Say « autour de » the street; the address is unknown |
 | Calling a flat a bargain on the street's median alone | Use `show`'s `reference`, and say its scope and count |
 | Weighing a house or a parking against the flats' prices | Each type has its own reference in `show`; say which |
 | An offer above the asking price, or with an argument the data does not hold | The negotiation range and `review` only |

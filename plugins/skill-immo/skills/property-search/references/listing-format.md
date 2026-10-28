@@ -75,29 +75,29 @@ snake_case.
 
 | Field | Meaning |
 |---|---|
-| `id` | The Stream Estate property id, else `w-<hash>` (websearch) or `p-<hash>` (pasted), hashed from the URL or the text |
+| `id` | The Stream Estate property uuid, else `w-<hash>` (websearch) or `p-<hash>` (pasted), hashed from the URL or the text |
 | `source` | `stream-estate`, `websearch` or `pasted` |
-| `property_type` | `flat`, `house`, `land`, `parking` or `premises` (Stream Estate's OFFICE, SHOP and COMMERCIAL_PREMISES); absent means flat |
+| `property_type` | `flat`, `house`, `land`, `parking` or `premises` (Stream Estate's office and shop); absent means flat |
 | `se_id` | The Stream Estate id, or null |
-| `urls[]` | `{ url, source, published_at, expired_at, last_seen_at, favorites, urgent }` for each portal it is on. `url` is null for a protected source |
+| `urls[]` | `{ url, source, published_at, expired_at, last_seen_at, favorites, urgent }` for each portal it is on (`source`: the portal, SL, LBC, Bienici…) |
 | `price`, `net_price`, `area`, `carrez`, `land_area`, `price_per_m2` | Asking price (€, fees as listed), net seller price, m², Carrez, land in m², €/m² (of land for a plot) |
 | `rooms`, `bedrooms`, `floor`, `floors`, `last_floor`, `ground_floor` | The flat |
 | `dpe` | `{ energy, energy_value, ghg, date, reference }` from the listing |
 | `construction_year`, `lots`, `construction_type`, `condition`, `legal_proceedings`, `new_build` | The building |
 | `features` | `{ balcony, terrace, garden, cellar, parking, elevator, caretaker, bike_room, fiber, crossing, quiet, orientation[], heating }` |
-| `location` | `{ point: [lon, lat], accuracy, address, city, insee, postcode, neighborhood, iris, city_id }` |
+| `location` | `{ point: [lon, lat], accuracy, address, city, insee, postcode, neighborhood, iris, city_id }`. Stream Estate gives no address: `accuracy` says how close its point is (`PRECISE` at the house number, `NEIGHBORHOOD`) |
 | `fees` | `{ agency: { amount, percentage, included, paid_by }, condo_yearly, property_tax }` (€ a year) |
-| `status` | `AVAILABLE`, `UNDER_OFFER`, `SOLD`, `WITHDRAWN` or `EXPIRED` |
+| `status` | `AVAILABLE`, `UNDER_OFFER`, `SOLD`, `WITHDRAWN` or `EXPIRED` (Stream Estate: `AVAILABLE` or `EXPIRED` only) |
 | `publishers[]` | `{ type, name, card, website, phone, email, profile_url, mandate }` |
 | `pictures[]`, `title`, `description` | Up to 12 pictures |
 | `published_at`, `updated_at` | The first publication on any portal, the last crawl |
-| `urgent`, `favorites` | Urgent on a portal (a lever), the highest favorite count (competition) |
-| `price_changes[]` | The source's price history `{ date, from, to, pct }` |
+| `urgent`, `favorites` | Urgent on a portal (a lever), the highest favorite count (competition); a listing Claude read only |
+| `price_changes[]` | The portals' price history `{ date, from, to, pct }`, each change once |
 | `first_seen`, `price_history[]` | When this search first saw it, each price it saw `{ date, price }` |
 | `changes[]` | `{ date, kind: new\|price_drop\|price_rise\|status\|expired, from, to }`, for the "new since your last visit" view |
-| `my_status`, `notes` | The user's: `to_visit`, `visited`, `offer`, `dropped` or null, and free notes |
+| `my_status`, `favorite`, `notes` | The user's: `to_visit`, `visited`, `offer`, `dropped` or null; their star (the dashboard's ☆, apart from the status); free notes |
 | `messages[]` | Its conversation with the agent or the seller (`message`, the dossier's « Ajouter »): `{ id, date, from: me\|them, kind: offer\|question\|visit\|reply\|follow_up\|documents\|other, channel: email\|sms\|phone\|visit\|null, amount, to, text, sent_at }`. `from: me` is a draft until `sent_at` (the user marks it sent); `from: them` is received; `to` is the one on the other side. An old message without `from` is the user's |
-| `building` | Added by the enrichment: `{ address, ban, dpe[], dpe_match, dpe_cost_yearly, construction_year, copro, risks, sales[] }` |
+| `building` | Added by the enrichment: `{ ban, dpe[], dpe_match, dpe_cost_yearly, construction_year, copro, risks, sales[] }` |
 
 The listings are deduplicated by id, else by URL (host and path, without the query or a trailing slash). When Stream
 Estate finds a listing the user added by hand, it takes its place and its id, and the user's status, notes, messages and
@@ -110,13 +110,14 @@ history stay.
   - `mode` (`stream-estate`, or `classic` for OpenData);
   - `types` (`["flat"]` when absent);
   - `point`, `insee`, `dep`, `street { name, code_voie }`, `ban`;
-  - `zone { how: radius|commune|iris|division, kind: radius|polygon, center, radius_m, geometry, label }`. For a
+  - `zone { how: radius|commune|iris, kind: radius|polygon, center, radius_m, geometry, label }`. For a
     street, `how: radius` is a band along the whole street: a polygon (`kind: polygon`) `radius_m` wide on each side,
     its ends taken from the street's DVF sales and address numbers;
   - `criteria { budget_min, budget_max, area_min, area_max, rooms_min, rooms_max, floor_min, land_min, dpe_max,
     elevator, outdoor }`, each applied to the types that have it;
   - `max`, `stream { total, counted_at }`, `last_fetch`, `last_refresh`, `last_visit`, and
-    `alert { id, topic, drop }`.
+    `alert { searches[] { id, type }, topic, hooks { match, event }, webhook, enabled, created }` (one Stream Estate
+    saved search per type).
 - `market.json`:
   - `dvf.<type>` for each type of the search: `{ commune, zone, street, recent, years, trend, by_rooms, streets,
     points[] }`. Each of the four first is a stats object: `count`, `median_ppm2` (the unit price: € per m², of land
@@ -136,7 +137,8 @@ history stay.
   - `rent { year, flat, flat_small, flat_large, house }`: the carte des loyers of the commune, each `{ per_m2, low,
     high, scope, observations }` (€ per m² a month, charges included);
   - `alsace_moselle`;
-  - `stream { type, trend, dpe, publishers, online, transactions }`, filled by `market` for the search's first type.
+  - `stream { type, median, average, series { "2026-10": … } }`: the asking €/m² of the zone's listings over two
+    years, filled by `market` for the search's first type.
 - `area.json`:
   - `center`, `pois[] { cat, kind, name, point }`, `risks`;
   - `crime { commune, department }`, `income { local, department, france }`, `iris`;
@@ -144,7 +146,6 @@ history stay.
   - `dpe_recent[] { number, date, energy, type: flat|house, area, address, ban, point }`: the ADEME DPE of the last 12
     months in the zone, newest first, one per home (`{ error }` when ADEME failed; empty for a search with no home
     type). `lib/dpe.js` gives each listing one of them at most: its own by number (`building.dpe_match`,
-    `building.address.certificate`, `dpe.reference`; a listing whose number is known takes no other), else the one of
+    `dpe.reference`; a listing whose number is known takes no other), else the one of
     its `building.ban` with the closest surface (within 8 %), else the nearest of the same type and surface within
     300 m, with its class and DPE date when the listing gives them. A DPE taken goes to no other listing.
-- `alert-events.json`: the alert's events, written by `alert events`.

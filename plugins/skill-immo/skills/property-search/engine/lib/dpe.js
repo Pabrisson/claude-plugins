@@ -7,14 +7,13 @@ const DAY = 86400000
 const sameArea = (a, b) => !!a && !!b && Math.abs(a - b) / b < 0.08
 
 // The listing each recent DPE belongs to, as its number → { id, how }. A listing takes one DPE at most, the surest way
-// first: its own number (the registry's DPE the enrichment matched, the certificate Stream Estate resolved, the listing's
-// own reference). A listing whose number is known takes no other one (its DPE is older). Else the DPE of its BAN address
+// first: its own number (the registry's DPE the enrichment matched, the listing's own reference). A listing whose number is known takes no other one (its DPE is older). Else the DPE of its BAN address
 // with the closest surface (within 8 %), else, for a listing placed roughly, the nearest of the same type and surface
 // within 300 m, with its class and date when it gives them. A DPE taken goes to no other listing.
 // ponytail: greedy in the listings' order; an optimal assignment if two listings often compete for one DPE
 export function matchDpe(rows, listings) {
   const out = new Map(), recent = new Set(rows.map(d => d.number))
-  const numbers = l => [l.building?.dpe_match, l.building?.address?.certificate, l.dpe?.reference].filter(Boolean)
+  const numbers = l => [l.building?.dpe_match, l.dpe?.reference].filter(Boolean)
   for (const l of listings) for (const n of numbers(l)) if (recent.has(n) && !out.has(n)) out.set(n, { id: l.id, how: 'number' })
   const take = (l, how, ok, by) => {
     const d = rows.filter(d => !out.has(d.number) && ok(d)).sort((a, b) => by(a) - by(b))[0]

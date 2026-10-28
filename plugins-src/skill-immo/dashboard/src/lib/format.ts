@@ -29,7 +29,12 @@ export const SCORE_LABEL = { price: "Prix", budget: "Budget", energy: "Énergie"
 export const LEVEL_LABEL = { below: "sous le marché", at: "au prix du marché", above: "au-dessus du marché" } as const
 export const STATUS_LABEL = { to_visit: "À visiter", visited: "Visité", offer: "Offre faite", dropped: "Écarté" } as const
 export const SALE_STATUS = { AVAILABLE: "Disponible", UNDER_OFFER: "Sous offre", SOLD: "Vendu", WITHDRAWN: "Retiré", EXPIRED: "Expiré" } as Record<string, string>
-export const SOURCE_LABEL = { "stream-estate": "API payante", websearch: "Recherche web", pasted: "Collée" } as const
+// where a listing comes from: the API, or Claude (a page it read, a text the user pasted)
+export const ORIGIN = {
+  "stream-estate": { short: "API", long: "Trouvée par l'API Stream Estate" },
+  websearch: { short: "Claude", long: "Lue par Claude sur le web" },
+  pasted: { short: "Claude", long: "Collée dans Claude" },
+} as const
 export const POI_LABEL: Record<string, string> = { transport: "Métro, tram, gare", bus: "Bus", shops: "Commerces", food: "Cafés et restaurants", schools: "Écoles et crèches", health: "Santé", parks: "Parcs" }
 export const ACCURACY_LABEL: Record<string, string> = { PRECISE: "adresse précise", STREET: "rue", NEIGHBORHOOD: "quartier", DISTRICT: "arrondissement", CITY: "ville", UNKNOWN: "inconnue" }
 

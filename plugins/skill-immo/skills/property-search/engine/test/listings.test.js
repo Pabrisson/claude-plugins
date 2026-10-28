@@ -4,21 +4,24 @@ import test from 'node:test'
 import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from '../lib/listings.js'
 import { badge, daysOnline, dropped, matches, negotiation } from '../lib/market.js'
 
-// a property built from the OpenAPI examples, placed rue Paul Bert (to replace by a recorded one with the key)
+// a v1 PropertyDocument with the shape of a recorded one (2026-10-28), its values made up, placed rue Paul Bert
 const raw = JSON.parse(fs.readFileSync(new URL('./fixtures/se-property.json', import.meta.url), 'utf8'))
 const se = fromStreamEstate(raw)
 
 test('a Stream Estate property becomes a listing', () => {
-  assert.equal(se.id, raw.id)
-  assert.deepEqual([se.price, se.net_price, se.area, se.price_per_m2, se.rooms, se.floor], [280000, 266000, 56, 5000, 3, 2])
+  assert.equal(se.id, raw.uuid)
+  assert.deepEqual([se.price, se.net_price, se.area, se.price_per_m2, se.rooms, se.floor, se.floors, se.last_floor], [280000, 266000, 56, 5000, 3, 2, 6, false])
+  // the rating most portals give: one of the two adverts mistypes it
   assert.deepEqual([se.dpe.energy, se.dpe.energy_value, se.dpe.ghg], ['D', 245, 'D'])
-  assert.deepEqual(se.fees, { agency: { amount: 14000, percentage: 5.26, included: true, paid_by: 'SELLER' }, condo_yearly: 1800, property_tax: 1200 })
-  assert.deepEqual(se.location.point, [4.8455, 45.756])
-  assert.equal(se.urls[0].source, 'seloger')
-  assert.deepEqual([se.urgent, se.favorites, se.published_at], [true, 42, '2026-06-01T08:00:00+00:00'])
+  assert.deepEqual(se.fees, { agency: { amount: null, percentage: 5.26, included: null, paid_by: 'SELLER' }, condo_yearly: 1800, property_tax: null })
+  assert.deepEqual([se.location.point, se.location.accuracy, se.location.insee], [[4.8455, 45.756], 'PRECISE', '69383'])
+  assert.deepEqual(se.urls.map(u => u.source), ['SL', 'Bienici'])
+  assert.equal(se.published_at, '2026-06-01T10:00:00+02:00')
+  // the same drops on both portals, once
   assert.deepEqual(se.price_changes.map(c => [c.from, c.to]), [[300000, 290000], [290000, 280000]])
-  assert.equal(se.publishers[0].phone, '+33 4 00 00 00 00')
-  assert.equal(se.features.elevator, true)
+  // one agency behind both adverts (the same phone, written two ways)
+  assert.deepEqual(se.publishers.map(p => [p.name, p.phone, p.type]), [['AGENCE EXEMPLE', '+33 4 00 00 00 00', 'REAL_ESTATE_AGENCY']])
+  assert.deepEqual([se.features.elevator, se.features.balcony, se.features.cellar, se.features.terrace], [true, true, true, null])
 })
 
 test('the same listing whatever its tracking parameters', () => {
@@ -32,18 +35,19 @@ test('merge: new, deduplicated by URL, the user keeps status and notes, drops an
   assert.deepEqual(r.changes.map(c => c.kind), ['new'])
   const [l] = r.listings
   l.my_status = 'to_visit'
+  l.favorite = true
   l.notes = 'lumineux'
   // Stream Estate finds it later: one listing, its id, the user's fields, and the drop from 290 000 to 280 000
   r = merge([l], [se], '2026-10-27')
   assert.equal(r.listings.length, 1)
   const m = r.listings[0]
-  assert.deepEqual([m.id, m.source, m.my_status, m.notes, m.first_seen], [raw.id, 'stream-estate', 'to_visit', 'lumineux', '2026-10-01'])
+  assert.deepEqual([m.id, m.source, m.my_status, m.favorite, m.notes, m.first_seen], [raw.uuid, 'stream-estate', 'to_visit', true, 'lumineux', '2026-10-01'])
   assert.deepEqual(r.changes.map(c => [c.kind, c.from, c.to]), [['price_drop', 290000, 280000]])
   assert.deepEqual(m.price_history.map(h => h.price), [290000, 280000])
   // under offer, then gone from the zone
   r = merge(r.listings, [{ ...se, status: 'UNDER_OFFER' }], '2026-11-02')
   assert.deepEqual(r.changes.map(c => [c.kind, c.to]), [['status', 'UNDER_OFFER']])
-  r = merge(r.listings, [], '2026-11-20', [raw.id])
+  r = merge(r.listings, [], '2026-11-20', [raw.uuid])
   assert.deepEqual(r.changes.map(c => c.kind), ['expired'])
   assert.equal(r.listings[0].status, 'EXPIRED')
   assert.deepEqual(r.listings[0].changes.map(c => c.kind), ['new', 'price_drop', 'status', 'expired'])
@@ -63,9 +67,11 @@ test('criteria, market badge and negotiation margin', () => {
   assert.equal(daysOnline(se, Date.parse('2026-10-27')), 147)
   assert.ok(Math.abs(dropped(se) - 1 / 15) < 1e-9)
   const n = negotiation(se, 4000, Date.parse('2026-10-27'))
-  // 3 % + half of the 25 % above + 2 % (147 days) + 2 % urgent − half of the 6.7 % already dropped (capped at 5 %)
+  // 3 % + half of the 25 % above + 2 % (147 days) − half of the 6.7 % already dropped (capped at 5 %)
   assert.equal(n.high, 0.15)
-  assert.deepEqual(n.reasons.map(r => r[0]), ['above_market', 'days_online', 'urgent', 'already_dropped'])
+  assert.deepEqual(n.reasons.map(r => r[0]), ['above_market', 'days_online', 'already_dropped'])
+  // an urgent mention (the API has none, a listing Claude read may) adds a lever
+  assert.deepEqual(negotiation({ ...se, urgent: true }, 4000, Date.parse('2026-10-27')).reasons.map(r => r[0]), ['above_market', 'days_online', 'urgent', 'already_dropped'])
   assert.equal(negotiation({ ...se, status: 'UNDER_OFFER' }, 4000), null)
 })
 

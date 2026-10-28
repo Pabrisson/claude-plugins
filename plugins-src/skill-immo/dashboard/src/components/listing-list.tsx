@@ -1,8 +1,10 @@
 import { daysOnline, isHome, matches, typeOf, unitPrice } from "@engine/market.js"
-import { MailIcon } from "lucide-react"
+import { MailIcon, TrendingDownIcon } from "lucide-react"
 import { useState } from "react"
 
 import { Dpe } from "@/components/dpe"
+import { FavoriteButton } from "@/components/favorite"
+import { Origin } from "@/components/origin"
 import { Gap, Ruler } from "@/components/ruler"
 import { StatusBadge, statusTint, tint } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
@@ -11,13 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Listing, PropertyType } from "@/lib/api"
-import { eur, num, perUnit, SALE_STATUS, TYPE_PLURAL, UNIT } from "@/lib/format"
+import { date, eur, num, perUnit, SALE_STATUS, TYPE_PLURAL, UNIT } from "@/lib/format"
 import { isNew, SORTS, useRanked, type Sort } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
-const FILTERS = { online: "En ligne", new: "Nouvelles", followed: "Suivies", dropped: "Écartées", all: "Toutes" } as const
-const SCOPE: Record<string, string> = { recent: "zone, 2 ans", zone: "zone, 5 ans", commune: "commune, 5 ans", transactions: "ventes de l'API payante" }
+const FILTERS = { online: "En ligne", new: "Nouvelles", followed: "Suivies", favorites: "Favoris", dropped: "Écartées", all: "Toutes" } as const
+const SCOPE: Record<string, string> = { recent: "zone, 2 ans", zone: "zone, 5 ans", commune: "commune, 5 ans" }
 
 // the sold market of one type: its median unit price, its quartiles and the listings on its ruler
 function MarketCard({ type, listings }: { type: PropertyType; listings: Listing[] }) {
@@ -27,7 +29,7 @@ function MarketCard({ type, listings }: { type: PropertyType; listings: Listing[
     <Card size="sm">
       <CardHeader>
         <CardTitle>Prix vendu{ref ? `, ${SCOPE[ref.scope]}` : ""}</CardTitle>
-        <CardDescription>{ref ? `${ref.count} ventes ${ref.scope === "transactions" ? "réconciliées" : "DVF"}` : data.market.alsace_moselle ? "Pas de DVF en Alsace-Moselle" : "Pas assez de ventes dans la commune"}</CardDescription>
+        <CardDescription>{ref ? `${ref.count} ventes DVF` : data.market.alsace_moselle ? "Pas de DVF en Alsace-Moselle" : "Pas assez de ventes dans la commune"}</CardDescription>
       </CardHeader>
       {ref && (
         <CardContent className="flex flex-col gap-2">
@@ -71,7 +73,7 @@ export function ListingList({ className }: { className?: string }) {
   const [sort, setSort] = useState<Sort>("score")
   const [filter, setFilter] = useState<keyof typeof FILTERS>("online")
   const kept = data.listings.filter(l => filter === "all" || (filter === "online" ? l.status !== "EXPIRED" && l.my_status !== "dropped" && matches(l, data.search.criteria, types)
-    : filter === "new" ? isNew(l, lastVisit) : filter === "followed" ? !!l.my_status && l.my_status !== "dropped" : l.my_status === "dropped"))
+    : filter === "new" ? isNew(l, lastVisit) : filter === "followed" ? !!l.my_status && l.my_status !== "dropped" : filter === "favorites" ? !!l.favorite : l.my_status === "dropped"))
   const shown = useRanked(kept, sort)
 
   return (
@@ -110,9 +112,16 @@ function ListingCard({ l, score, active, fresh, onOpen }: { l: Listing; score: n
   const seen = (l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, from: c.from as number, to: c.to as number }))
   const days = daysOnline(l), drop = [...l.price_changes, ...seen].toSorted((a, b) => a.date.localeCompare(b.date)).at(-1), messages = l.messages?.length ?? 0
   return (
-    <button type="button" onClick={onOpen} style={statusTint(l.my_status)} className={cn("grid grid-cols-[88px_1fr] gap-3 rounded-xl border p-2.5 text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", tint(l.my_status), active && "border-ring ring-1 ring-ring")}>
-      <div className="grid h-20 place-items-center overflow-hidden rounded-lg bg-muted">
+    <div className="group relative">
+    <button type="button" onClick={onOpen} style={statusTint(l.my_status)} className={cn("grid w-full grid-cols-[88px_1fr] gap-3 rounded-xl border p-2.5 text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", tint(l.my_status), active && "border-ring ring-1 ring-ring")}>
+      <div className="relative grid h-20 place-items-center overflow-hidden rounded-lg bg-muted">
         {l.pictures[0] ? <img src={l.pictures[0]} alt="" loading="lazy" className="size-full object-cover" onError={e => e.currentTarget.remove()} /> : <TypeIcon type={t} className="size-6 text-muted-foreground" />}
+        {/* the last drop on the photo, as the portals tag it: the text lines keep their room */}
+        {drop && drop.to < drop.from && (
+          <span className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-md bg-background/85 px-1 text-[10px] leading-4 font-semibold whitespace-nowrap text-below tabular-nums backdrop-blur-sm" title={`Baisse de ${eur(drop.from - drop.to)} le ${date(drop.date)}`}>
+            <TrendingDownIcon className="size-3" />−{eur(drop.from - drop.to)}
+          </span>
+        )}
       </div>
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
@@ -129,11 +138,10 @@ function ListingCard({ l, score, active, fresh, onOpen }: { l: Listing; score: n
         </span>
         {stats && <Ruler stats={stats} ticks={[{ id: l.id, ppm2: unitPrice(l) }]} />}
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
-          <span className="flex flex-wrap items-center gap-x-2">
-            <Gap ppm2={unitPrice(l)} refPpm2={ref?.ppm2} long />
-            {drop && drop.to < drop.from && <span className="whitespace-nowrap text-below">baisse {eur(drop.from - drop.to)}</span>}
-          </span>
-          <span className="flex items-center gap-2 text-muted-foreground">
+          <Gap ppm2={unitPrice(l)} refPpm2={ref?.ppm2} long />
+          {/* on the right even when it wraps under a long gap: the origin, then the days online at the very end */}
+          <span className="ml-auto flex items-center gap-2 text-muted-foreground">
+            <Origin l={l} />
             {messages > 0 && <span className="flex items-center gap-1" title={`${messages} message${messages > 1 ? "s" : ""}`}><MailIcon className="size-3.5" />{messages}</span>}
             {isHome(t) && <Dpe value={l.dpe?.energy} />}
             {days != null && <span className="whitespace-nowrap">{days} j</span>}
@@ -141,5 +149,7 @@ function ListingCard({ l, score, active, fresh, onOpen }: { l: Listing; score: n
         </div>
       </div>
     </button>
+    <FavoriteButton l={l} className="absolute top-3.5 left-3.5" />
+    </div>
   )
 }

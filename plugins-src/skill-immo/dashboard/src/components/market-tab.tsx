@@ -1,9 +1,10 @@
 import { median } from "@engine/dvf.js"
-import { badge, daysOnline, dropped, typeOf, unitPrice } from "@engine/market.js"
+import { asking, badge, daysOnline, dropped, typeOf, unitPrice } from "@engine/market.js"
 import { ArrowDownRightIcon, ArrowRightIcon, ArrowUpRightIcon, BarChart3Icon, BuildingIcon, CoinsIcon, EyeIcon, HouseIcon, KeyRoundIcon, LandmarkIcon, LeafIcon, MapPinnedIcon, ReceiptTextIcon, TrendingUpIcon, WalletIcon, type LucideIcon } from "lucide-react"
 import { useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart, XAxis, YAxis } from "recharts"
 
+import { CreditBadge } from "@/components/credit-badge"
 import { DPE_HEX, dpeInk } from "@/components/dpe"
 import { useRun } from "@/components/run-dialog"
 import { Gap, levelOf, Ruler } from "@/components/ruler"
@@ -21,7 +22,6 @@ import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 const DAY = 864e5
-const PUBLISHER: Record<string, string> = { PRIVATE_INDIVIDUAL: "Particuliers", REAL_ESTATE_AGENCY: "Agences", COMMERCIAL_AGENT: "Agents commerciaux", MANDATED_AGENT: "Mandataires" }
 const LEVEL_COLOR = { below: "var(--below)", at: "var(--at)", above: "var(--above)" } as const
 const ok = <T,>(x: T | { error: string } | null | undefined): T | null => (x && !(typeof x === "object" && "error" in x) ? (x as T) : null)
 const day = (t: number) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(new Date(t))
@@ -61,7 +61,7 @@ export function MarketTab() {
   const { slug, data, state, types } = useSearch()
   const run = useRun()
   const [type, setType] = useState<PropertyType>(types[0])
-  // the asking prices and their analytics are those of the search's first type (paid API)
+  // the asking prices are those of the search's first type (paid API)
   const d = data.market.dvf?.[type], se = data.market.stream && (data.market.stream.type ?? "flat") === type ? data.market.stream : undefined
   const streamOn = state.stream_estate && data.search.mode === "stream-estate", u = (n: number | null | undefined) => perUnit(n, type)
   const rents = ok(data.market.rent), rent = rents && (type === "flat" || type === "house") ? rents[type] : null
@@ -78,7 +78,7 @@ export function MarketTab() {
         </ToggleGroup>
       )}
       {data.market.alsace_moselle && (
-        <Alert><AlertTitle>Pas de ventes DVF en Alsace-Moselle</AlertTitle><AlertDescription>Le Bas-Rhin, le Haut-Rhin et la Moselle tiennent leur propre livre foncier, absent de DVF. Les ventes réconciliées de l'API payante peuvent le compléter.</AlertDescription></Alert>
+        <Alert><AlertTitle>Pas de ventes DVF en Alsace-Moselle</AlertTitle><AlertDescription>Le Bas-Rhin, le Haut-Rhin et la Moselle tiennent leur propre livre foncier, absent de DVF.</AlertDescription></Alert>
       )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <Kpi title="Vendu, zone (2 ans)" value={u(d?.recent.median_ppm2)} sub={`${num(d?.recent.count)} ventes DVF`} icon={MapPinnedIcon} tone="var(--chart-2)">
@@ -90,7 +90,7 @@ export function MarketTab() {
         </Kpi>
         <Kpi title="Loyer, commune" value={rent ? `${String(rent.per_m2).replace(".", ",")} €/m²` : "—"} sub={rent ? `par mois charges comprises, carte des loyers ${rents!.year}` : type === "flat" || type === "house" ? "Pas de loyer de référence" : "Logements seulement"} icon={KeyRoundIcon} tone="var(--chart-3)" />
         <Kpi title="Rendement brut, zone" value={yieldOf ? share(yieldOf, 1) : "—"} sub={yieldOf ? `${num(1 / yieldOf)} ans de loyer pour payer le prix` : "Loyer et ventes nécessaires"} icon={CoinsIcon} tone="var(--chart-3)" />
-        <Kpi title="Affiché, zone" value={m2(se?.trend?.data?.at(-1)?.metrics["median:price_per_sqm"])} sub={se ? "Dernier mois, API payante" : "Nécessite l'API payante"} icon={EyeIcon} tone="var(--chart-4)" />
+        <Kpi title="Affiché, zone" value={m2(asking(data.market, type))} sub={se ? "Dernier mois, API payante" : "Nécessite l'API payante"} icon={EyeIcon} tone="var(--chart-4)" />
       </div>
       {d && <TrendCard d={d} type={type} se={se} streamOn={streamOn} onAsking={() => run({ cmd: "market", slug, label: "Analyses du marché (API payante)" })} />}
       <div className="grid gap-4 xl:grid-cols-2">
@@ -105,37 +105,10 @@ export function MarketTab() {
           <HousingCard housing={ok(context.housing)} />
         </div>
       )}
-      {se && (
-        <div className="grid gap-3 md:grid-cols-3">
-          <Card size="sm">
-            <CardHeader><CardTitle>Affiché par classe DPE</CardTitle><CardDescription>12 derniers mois</CardDescription></CardHeader>
-            <CardContent className="flex flex-col gap-1 text-sm">
-              {(se.dpe?.data ?? []).filter(x => x.group.dpe_energy_rating).sort((a, b) => a.group.dpe_energy_rating.localeCompare(b.group.dpe_energy_rating)).map(x => (
-                <div key={x.group.dpe_energy_rating} className="flex justify-between"><span>{x.group.dpe_energy_rating}</span><span className="font-medium">{m2(x.metrics["median:price_per_sqm"])} <span className="text-muted-foreground">({num(x.metrics.count)})</span></span></div>
-              ))}
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardHeader><CardTitle>Particuliers et agences</CardTitle><CardDescription>12 derniers mois</CardDescription></CardHeader>
-            <CardContent className="flex flex-col gap-1 text-sm">
-              {(se.publishers?.data ?? []).map(x => (
-                <div key={x.group.publisher_type} className="flex justify-between"><span>{PUBLISHER[x.group.publisher_type] ?? x.group.publisher_type}</span><span className="font-medium">{m2(x.metrics["median:price_per_sqm"])} <span className="text-muted-foreground">({num(x.metrics.count)})</span></span></div>
-              ))}
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardHeader><CardTitle>Ventes réconciliées</CardTitle><CardDescription>DVF et notaires, 2 ans</CardDescription></CardHeader>
-            <CardContent className="flex flex-col gap-1 text-sm">
-              <div className="flex justify-between"><span>Médiane</span><span className="font-medium">{m2(se.transactions?.median_ppm2)}</span></div>
-              {Object.entries(se.transactions?.by_source ?? {}).map(([k, v]) => <div key={k} className="flex justify-between"><span>{k === "FR_NOTARIES" ? "Notaires" : "DVF"}</span><span className="font-medium">{num(v)}</span></div>)}
-            </CardContent>
-          </Card>
-        </div>
-      )}
       {!streamOn && (
         <Alert>
-          <AlertTitle>Prix affichés et durée en ligne de tout le marché : API payante</AlertTitle>
-          <AlertDescription>{state.stream_estate ? "Cette recherche est en mode OpenData. Passez-la en mode API payante pour ajouter les prix affichés, la durée en ligne et les ventes des notaires." : "Sans clé d'API payante, le marché repose sur les ventes réelles DVF et l'open data, gratuits. La clé ajoute les prix affichés, la durée en ligne et les ventes des notaires."}</AlertDescription>
+          <AlertTitle>Prix affichés de tout le marché : API payante</AlertTitle>
+          <AlertDescription>{state.stream_estate ? "Cette recherche est en mode OpenData. Passez-la en mode API payante pour ajouter les prix affichés de la zone, mois par mois." : "Sans clé d'API payante, le marché repose sur les ventes réelles DVF et l'open data, gratuits. La clé ajoute les prix affichés de la zone, mois par mois."}</AlertDescription>
         </Alert>
       )}
       {d && <SalesCard d={d} type={type} />}
@@ -145,7 +118,7 @@ export function MarketTab() {
 
 const trendConfig = {
   sold: { label: "Vendu (DVF, médiane du trimestre)", color: "var(--chart-2)" },
-  asking: { label: "Affiché (API payante, médiane du mois)", color: "var(--chart-4)" },
+  asking: { label: "Affiché (API payante, prix au m² du mois)", color: "var(--chart-4)" },
   count: { label: "Ventes du trimestre", color: "var(--chart-3)" },
 } satisfies ChartConfig
 
@@ -159,10 +132,7 @@ function TrendCard({ d, type, se, streamOn, onAsking }: { d: Dvf; type: Property
     const m = `${q.quarter.slice(0, 4)}-${String((+q.quarter.slice(6) - 1) * 3 + 2).padStart(2, "0")}`
     rows.set(m, { month: m, count: q.count, ...(q.count >= 3 ? { sold: q.median_ppm2 } : {}) })
   }
-  for (const x of se?.trend?.data ?? []) {
-    const m = String(x.group.time_bucket ?? x.group.event_at ?? "").slice(0, 7)
-    if (m) rows.set(m, { ...rows.get(m), month: m, asking: x.metrics["median:price_per_sqm"] })
-  }
+  for (const [m, v] of Object.entries(se?.series ?? {})) rows.set(m, { ...rows.get(m), month: m, asking: v })
   const series = [...rows.values()].sort((a, b) => a.month.localeCompare(b.month))
   const tick = (m: string) => `${m.slice(5)}/${m.slice(2, 4)}`
   return (
@@ -175,7 +145,7 @@ function TrendCard({ d, type, se, streamOn, onAsking }: { d: Dvf; type: Property
         </CardDescription>
         <CardAction>
           <Button variant="outline" size="sm" disabled={!streamOn} title={streamOn ? undefined : "Nécessite l'API payante"} onClick={onAsking}>
-            <BarChart3Icon data-icon="inline-start" />{se ? "Mettre à jour l'affiché" : "Ajouter l'affiché"}
+            <BarChart3Icon data-icon="inline-start" />{se ? "Mettre à jour l'affiché" : "Ajouter l'affiché"}<CreditBadge cost={{ route: "GET /indicators/price_per_meter" }} />
           </Button>
         </CardAction>
       </CardHeader>

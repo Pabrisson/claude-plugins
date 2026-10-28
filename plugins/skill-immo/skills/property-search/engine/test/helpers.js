@@ -1,5 +1,5 @@
 // A throwaway searches folder with one search rue Paul Bert, its open data cache filled (no network), and a fake
-// Stream Estate that answers from the fixture property and charges what the real one documents.
+// Stream Estate API v1 that answers from the fixture property (a v1 PropertyDocument).
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -45,26 +45,28 @@ export function searchesFolder(mode = 'stream-estate') {
   return { home, dir }
 }
 
-// the fake API: state.price changes the property's price, state.broke answers 402
+// the fake API v1: state.price changes the property's price, state.total the number of matches, state.broke answers
+// 402. What it matches is online (an expired=true query matches none) and not excluded.
 export async function fakeStreamEstate(state = {}) {
   const seen = []
   const server = http.createServer((req, res) => {
     let body = ''
     req.on('data', c => (body += c))
     req.on('end', () => {
-      const url = new URL(req.url, 'http://x'), json = body ? JSON.parse(body) : null
-      seen.push({ method: req.method, path: url.pathname, body: json, key: req.headers['x-api-key'], accept: req.headers.accept })
-      const send = (code, data, credits) => { res.writeHead(code, { 'Content-Type': 'application/json', ...(credits != null ? { 'X-Credits-Charged': String(credits) } : {}) }); res.end(data == null ? '' : JSON.stringify(data)) }
+      const url = new URL(req.url, 'http://x'), q = url.searchParams, json = body ? JSON.parse(body) : null
+      seen.push({ method: req.method, path: url.pathname, query: q, body: json, key: req.headers['x-api-key'], accept: req.headers.accept })
+      const send = (code, data) => { res.writeHead(code, { 'Content-Type': 'application/ld+json' }); res.end(data == null ? '' : JSON.stringify(data)) }
       if (state.broke) return send(402, { title: 'Payment Required' })
-      const p = { ...property, property: { ...property.property, pricing: { ...property.property.pricing, displayed: state.price ?? property.property.pricing.displayed } } }
-      if (req.method === 'POST' && url.pathname === '/properties') {
-        if (json.size === 0) return send(200, { data: [], meta: { totalItems: state.total ?? 1 }, links: {} }, 0)
-        const out = Array.from({ length: Math.min(json.size, state.total ?? 1) }, () => p)
-        return send(200, out, out.length)
+      if (req.method === 'GET' && url.pathname === '/documents/properties') {
+        const total = q.get('expired') === 'true' || q.getAll('excludedProperties[]').includes(property.uuid) ? 0 : state.total ?? 1
+        const size = +q.get('itemsPerPage'), from = (+(q.get('page') ?? 1) - 1) * size
+        const member = Array.from({ length: Math.max(0, Math.min(size, total - from)) }, () => ({ ...property, price: state.price ?? property.price }))
+        return send(200, { '@type': 'hydra:Collection', 'hydra:member': member, 'hydra:totalItems': total })
       }
-      if (req.method === 'GET' && url.pathname === `/properties/${property.id}`) return send(200, p, 1)
-      if (req.method === 'POST' && url.pathname === '/properties/lookup-by-url') return json.url.includes('seloger') ? send(200, { id: property.id, property: `/properties/${property.id}` }, 1) : send(404, { title: 'Not found' })
-      if (req.method === 'POST' && url.pathname === '/alerts/forecast') return send(200, { windowDays: 30, total: 12, perDay: { average: 0.4 }, perHour: { average: 0.02 } })
+      if (req.method === 'GET' && url.pathname === '/indicators/price_per_meter') return send(200, [{ average: 4900, median: 4800, series: { '2026-09': 4750, '2026-10': 4820 } }])
+      if (req.method === 'POST' && url.pathname === '/searches') return send(201, { '@id': `/searches/s-${seen.length}`, ...json })
+      if (req.method === 'PUT' && url.pathname.startsWith('/searches/')) return send(200, { '@id': url.pathname, ...json })
+      if (req.method === 'DELETE' && url.pathname.startsWith('/searches/')) return send(204, null)
       send(404, { title: 'Not found' })
     })
   })
