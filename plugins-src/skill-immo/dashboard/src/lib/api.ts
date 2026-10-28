@@ -13,7 +13,7 @@ export type NewMessage = { from: "me" | "them"; channel: Channel; date: string; 
 export type Listing = {
   id: string
   se_id: string | null
-  source: "stream-estate" | "websearch" | "pasted"
+  source: "stream-estate" | "websearch" | "pasted" | "manual"
   property_type?: PropertyType
   urls: { url: string | null; source: string | null; published_at: string | null; expired_at: string | null; favorites: number | null; urgent: boolean }[]
   title: string | null
@@ -95,6 +95,11 @@ export type Market = {
 export type Poi = { cat: string; kind: string; name: string | null; point: Point }
 // a DPE of the last 12 months in the zone (ADEME)
 export type DpeRow = { number: string; date: string; energy: string; type: "flat" | "house"; area: number | null; address: string | null; ban: string | null; point: Point }
+// a box of the map's odds (GET /api/odds, references/data-sources.md): its IRIS with their census, DVF sales and odds,
+// its communes, its DPE of the last 12 months, and the sources that failed
+export type Census = { year: number; homes: number | null; main: number | null; owners: number | null; owner_years: number | null; married: number | null; pacsed: number | null; cohabiting: number | null; widowed: number | null; divorced: number | null; alone_55_79: number | null; alone_80: number | null }
+export type IrisOdds = { code: string; name: string; insee: string; commune: string; kind: string; geometry: Geometry; census: Census | null; sold: number | null; odds: number | null; successions: number | null; separations: number | null }
+export type Odds = { bbox: number[]; years: string[]; failed: string[]; iris: IrisOdds[]; communes: { insee: string; name: string; alsace_moselle: boolean }[]; dpe: DpeRow[] }
 export type Area = {
   center?: Point
   pois?: Poi[] | { error: string }
@@ -146,11 +151,14 @@ export type State = {
 }
 export type SearchSummary = { slug: string; label: string; mode: "stream-estate" | "classic"; types?: PropertyType[]; zone: string; created: string; listings: number; online: number }
 export type Estimate = { what: string; route: string; credits: number | null; eur: number | null; unknown: boolean; spent: number; cap: number; remaining: number }
+// a place of Géoplateforme's autocomplete, at its point x (lon), y (lat)
+export type Hit = { fulltext: string; kind: string; city: string; zipcode: string; x: number; y: number }
 export type RunResult = { code: number; out: string; err: string; estimate?: Estimate }
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `${res.status}`)
+  // the server's error, with what it adds (a 409's id)
+  if (!res.ok) { const b = await res.json().catch(() => null); throw Object.assign(new Error(b?.error ?? `${res.status}`), b) }
   return res.json()
 }
 const post = <T>(url: string, body: unknown) => json<T>(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
@@ -166,7 +174,9 @@ export const api = {
   listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   saveProfile: (p: Partial<Profile>) => post<Profile>("/api/profile", p),
-  autocomplete: (q: string) => json<{ fulltext: string; kind: string; city: string; zipcode: string }[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),
+  addListing: (slug: string, body: Record<string, unknown>) => post<Listing>(`/api/s/${slug}/listings`, body),
+  autocomplete: (q: string) => json<Hit[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),
+  odds: (bbox: number[], signal?: AbortSignal) => json<Odds>(`/api/odds?bbox=${bbox.join(",")}`, { signal }),
   run: (body: { cmd: string; slug?: string; args?: Record<string, string | number | boolean>; estimate?: boolean; accept_unknown?: boolean }) => post<RunResult>("/api/run", body),
 }
 

@@ -1,9 +1,10 @@
 import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
-import { asking, daysOnline, dropped, isHome, negotiation, typeOf, unitPrice } from "@engine/market.js"
+import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
 import { CheckIcon, ChevronDownIcon, CircleQuestionMarkIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
+import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
 
 import { Dpe } from "@/components/dpe"
@@ -19,6 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
@@ -31,10 +33,42 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api, type Channel, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
-import { ACCURACY_LABEL, CHANNEL_LABEL, date, dateTime, eur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
+import { ACCURACY_LABEL, CHANNEL_LABEL, date, dateTime, eur, keur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
+
+const priceConfig = { price: { label: "Prix affiché", color: "var(--chart-4)" } } satisfies ChartConfig
+const day = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" })
+type Step = { date: string; price: number; pct: number | null }
+
+// The asking price over time (lib/market.js priceSteps), when it changed at least once: a step a change, its change in
+// % over it, and the sold price of the market for this surface dashed (`sold`): what is left to negotiate. The list
+// of the changes stays under it, as its table.
+function PriceChart({ l, sold }: { l: Listing; sold: number | null }) {
+  const steps = (priceSteps(l) as Step[]).map(s => ({ ...s, t: Date.parse(s.date) }))
+  if (new Set(steps.map(s => s.price)).size < 2) return null
+  const ys = [...steps.map(s => s.price), ...(sold ? [sold] : [])]
+  return (
+    <ChartContainer config={priceConfig} className="aspect-auto h-44 w-full" aria-label="Historique du prix affiché">
+      {/* room on the right for the label of a change made today */}
+      <LineChart data={steps} margin={{ top: 20, left: 4, right: 36, bottom: 0 }}>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickLine={false} axisLine={false} minTickGap={40} tickFormatter={t => day.format(t)} />
+        <YAxis tickLine={false} axisLine={false} width={56} domain={[Math.min(...ys) * 0.97, Math.max(...ys) * 1.03]} tickFormatter={v => keur(v)} />
+        <ChartTooltip content={<ChartTooltipContent hideIndicator labelFormatter={(_, p) => date(p[0]?.payload.date)} formatter={v => `Prix affiché : ${eur(v as number)}`} />} />
+        {sold && <ReferenceLine y={sold} stroke="var(--muted-foreground)" strokeDasharray="4 4" label={{ value: `Vendu, marché : ${keur(sold)}`, position: "insideBottomRight", fill: "var(--muted-foreground)", fontSize: 11 }} />}
+        <Line dataKey="price" type="stepAfter" stroke="var(--color-price)" strokeWidth={2} isAnimationActive={false}
+          dot={({ cx, cy, payload, index }: { cx?: number; cy?: number; payload: Step; index: number }) => payload.pct == null ? <g key={index} /> : (
+            <g key={index}>
+              <circle cx={cx} cy={cy} r={4} fill="var(--color-price)" stroke="var(--card)" strokeWidth={2} />
+              <text x={cx} y={(cy ?? 0) - 10} textAnchor="middle" fontSize={11} fill="var(--foreground)">{pct(payload.pct, 1)}</text>
+            </g>
+          )} />
+      </LineChart>
+    </ChartContainer>
+  )
+}
 
 const REASON: Record<string, (v: number | boolean) => string> = {
   above_market: v => `affiché ${pct(v as number)} au-dessus du vendu`,
@@ -145,7 +179,7 @@ function DossierBody({ l }: { l: Listing }) {
           {Object.entries(STATUS_LABEL).map(([k, v]) => <ToggleGroupItem key={k} value={k} className="flex-1 gap-1 px-1.5 sm:flex-none sm:px-2.5"><StatusDot status={k as Status} />{v}</ToggleGroupItem>)}
         </ToggleGroup>
         <span className="flex flex-wrap gap-2 sm:ml-auto">
-          <Button variant={compare.includes(l.id) ? "secondary" : "outline"} size="sm" aria-pressed={compare.includes(l.id)} onClick={() => toggleCompare(l.id)}><ScaleIcon data-icon="inline-start" />{compare.includes(l.id) ? "Dans le comparateur" : "Comparer"}</Button>
+          <Button variant={compare.includes(l.id) ? "secondary" : "outline"} size="sm" aria-pressed={compare.includes(l.id)} onClick={() => toggleCompare(l.id)}>{compare.includes(l.id) ? <CheckIcon data-icon="inline-start" /> : <ScaleIcon data-icon="inline-start" />}Comparer</Button>
           <DraftMenu l={l}
             onAnalyse={() => { addFeedback({ kind: "analyser", text: `${l.id} — ${short}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il analysera ce bien") }}
             onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il rédigera le message et l'enregistrera ici") }} />
@@ -155,6 +189,7 @@ function DossierBody({ l }: { l: Listing }) {
       <Synthesis l={l} aids={aids} />
 
       <Section title="Prix et négociation">
+        <PriceChart l={l} sold={ref?.ppm2 ? (t === "parking" ? ref.ppm2 : l.area ? ref.ppm2 * l.area : null) : null} />
         {refStats && <Ruler stats={refStats} ticks={[{ id: l.id, ppm2: l.price_per_m2 }]} />}
         <Row label="Écart au prix vendu"><Gap ppm2={l.price_per_m2} refPpm2={ref?.ppm2} long /></Row>
         <Row label={`Vendu, ${{ recent: "zone (2 ans)", zone: "zone (5 ans)", commune: "commune" }[ref?.scope ?? "recent"]}`} hint={ref ? `${ref.count} ventes` : undefined}>{perUnit(ref?.ppm2, t)}</Row>
@@ -162,8 +197,9 @@ function DossierBody({ l }: { l: Listing }) {
         {asking(data.market, t) ? <Row label="Affiché, zone (dernier mois)">{m2(asking(data.market, t))}</Row> : null}
         <Row label="En ligne depuis">{days != null ? `${days} jours` : "—"}{l.urgent ? " · urgent" : ""}{l.favorites ? ` · ${l.favorites} favoris` : ""}</Row>
         {drop > 0 && <Row label="Baisses déjà faites">{pct(-drop, 1)}</Row>}
-        {[...l.price_changes.map(c => ({ date: c.date, text: `${eur(c.from)} → ${eur(c.to)}` })), ...(l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, text: `${eur(c.from as number)} → ${eur(c.to as number)}` }))].map((c, i) => (
-          <Row key={i} label={date(c.date)}>{c.text}</Row>
+        {/* the portals' changes and those the search saw: a change both saw, once */}
+        {[...new Map([...l.price_changes.map(c => ({ date: c.date, text: `${eur(c.from)} → ${eur(c.to)}` })), ...(l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, text: `${eur(c.from as number)} → ${eur(c.to as number)}` }))].map(c => [`${c.date.slice(0, 10)}|${c.text}`, c])).values()].map(c => (
+          <Row key={`${c.date}|${c.text}`} label={date(c.date)}>{c.text}</Row>
         ))}
         {nego ? (
           <div className="flex flex-col gap-1 rounded-lg bg-muted p-3">

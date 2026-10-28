@@ -20,6 +20,7 @@ import { building, median, summary } from './lib/dvf.js'
 import { around, bbox, center, circle, corridor, distance, inGeometry, inZone } from './lib/geo.js'
 import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from './lib/listings.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
+import { irisOdds } from './lib/odds.js'
 import { openData } from './lib/opendata.js'
 import { members, NoCredits, se } from './lib/stream.js'
 
@@ -370,6 +371,30 @@ async function freeData(dir, s) {
   return { market, area }
 }
 
+// The odds of a box of the map [w, s, e, n] (the dashboard's « Prospection »): its IRIS with their census, DVF sales
+// and odds, its communes, its DPE of the last 12 months. Free open data, each source kept in .cache/ per IRIS or
+// commune: a map moved back comes at once. A source that fails leaves its part empty and is named.
+async function oddsOf(bb) {
+  const iris = await od.irisIn(bb), failed = []
+  const settle = (p, what) => p.catch(e => { failed.push(`${what} (${e.message.slice(0, 80)})`); return null })
+  const [censusOf, communes] = await Promise.all([
+    settle(od.irisCensus(iris.map(i => i.code)), 'recensement INSEE'),
+    Promise.all([...new Map(iris.map(i => [i.insee, i.commune]))].map(async ([insee, name]) => {
+      const [dvf, dpe] = await Promise.all([settle(od.dvf(insee, 3), `DVF ${name}`), settle(od.communeDpe(insee), `DPE ${name}`)])
+      return { insee, name, dvf, dpe }
+    })),
+  ])
+  // the last three whole years DVF has
+  const year = new Date().getFullYear(), years = [...new Set(communes.flatMap(c => c.dvf?.years ?? []))].filter(y => +y < year).sort().slice(-3)
+  const inBox = ([x, y]) => x >= bb[0] && x <= bb[2] && y >= bb[1] && y <= bb[3]
+  return {
+    bbox: bb, years, failed,
+    iris: irisOdds(iris, censusOf ?? {}, Object.fromEntries(communes.map(c => [c.insee, c.dvf && !c.dvf.alsace_moselle ? c.dvf.sales : null])), years),
+    communes: communes.map(c => ({ insee: c.insee, name: c.name, alsace_moselle: !!c.dvf?.alsace_moselle })),
+    dpe: communes.flatMap(c => (c.dpe ?? []).filter(d => inBox(d.point))),
+  }
+}
+
 // search "<address | street | neighborhood>" [--zone …] [--radius m] [--criteria …] [--max n]: a new search, or -p
 // <slug> to change one (zone, criteria) and refresh its free data
 async function search(query) {
@@ -519,13 +544,20 @@ async function market() {
 async function add() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
   if (opt.url) {
-    const known = listingsOf(dir).find(l => l.urls.some(u => normUrl(u.url) === normUrl(opt.url)))
+    const known = byUrl(dir, opt.url)
     if (known) return console.log(`already in the search: ${known.id}`)
     // the API v1 has no lookup by URL: a fetch finds the listing later, and merges it with this one by its URL
     die(`read ${opt.url} with WebFetch, then add -p ${s.slug} --file listing.json`, 4)
   }
   if (!opt.file) die('usage: add -p <slug> --url <listing url> | --file <listing.json> (listing-format.md)')
   const raw = readJson(opt.file === '-' ? 0 : opt.file), items = [raw].flat(), source = opt.source === 'pasted' ? 'pasted' : 'websearch'
+  const { ls, changes } = await addListings(dir, s, items, source)
+  console.log(`added ${ls.length} listing${ls.length > 1 ? 's' : ''}: ${describe(changes)}`)
+}
+
+// Listings Claude read or the user typed: placed (an address without a point), merged, given their building data. A
+// failed enrichment leaves them added (enrich takes them later).
+async function addListings(dir, s, items, source) {
   const ls = await Promise.all(items.map(async x => {
     // an address without a point: the national address base places it
     if (!x.point && x.address) {
@@ -535,8 +567,19 @@ async function add() {
     return fromInput(x, source)
   }))
   const changes = saveMerged(dir, ls)
-  await autoEnrich(dir, s, changes)
-  console.log(`added ${ls.length} listing${ls.length > 1 ? 's' : ''}: ${describe(changes)}`)
+  await autoEnrich(dir, s, changes).catch(e => console.error(`enrich: ${e.message}`))
+  return { ls, changes }
+}
+const byUrl = (dir, url) => listingsOf(dir).find(l => l.urls.some(u => normUrl(u.url) === normUrl(url)))
+
+// A listing the user typed in the dashboard: the fields of add --file, checked at the door. Its link is shown as a
+// link, so http(s) only.
+function manualInput(x) {
+  if (!(+x.price > 0 && +x.area > 0)) throw new Error('price and area are required')
+  if (x.type != null && !Object.hasOwn(TYPES, x.type)) throw new Error('bad type')
+  if (x.url != null && !/^https?:\/\/\S+$/i.test(x.url)) throw new Error('bad url')
+  if (x.point != null && !(Array.isArray(x.point) && x.point.length === 2 && x.point.every(Number.isFinite))) throw new Error('bad point')
+  return { ...x, pictures: [] }
 }
 
 // enrich -p <slug> --id <id> | --all
@@ -555,7 +598,8 @@ async function refresh() {
     if (l) console.log(l)
     if (before && Array.isArray(area.dpe_recent)) addNews(dir, dpeNews(s, area.dpe_recent, listingsOf(dir), before))
   }
-  const assistedCount = listingsOf(dir).filter(l => l.source !== 'stream-estate' && l.status !== 'EXPIRED').length
+  // a listing typed or pasted without a link has no page to check
+  const assistedCount = listingsOf(dir).filter(l => l.source !== 'stream-estate' && l.urls.length && l.status !== 'EXPIRED').length
   if (!streamOn(s) || !s.last_refresh) {
     console.log(`free data refreshed. ${streamOn(s) ? `No Stream Estate fetch yet: fetch -p ${s.slug}` : s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}${assistedCount ? `; ${assistedCount} assisted listings: check each with WebFetch (one page), then add --file to update price or status` : ''}`)
     return dpe()
@@ -785,6 +829,13 @@ async function handle(req, res) {
     return reply(res, 200, profile())
   }
   if (p === '/api/autocomplete') return reply(res, 200, await od.completion(url.searchParams.get('q') ?? '').catch(() => []))
+  // a box of the map at zoom 14 or closer: about 0.15° by 0.1° on a large screen
+  if (p === '/api/odds') {
+    const bb = (url.searchParams.get('bbox') ?? '').split(',').map(Number)
+    if (bb.length !== 4 || !bb.every(Number.isFinite) || bb[0] >= bb[2] || bb[1] >= bb[3]) return reply(res, 400, { error: 'expects ?bbox=w,s,e,n' })
+    if (bb[2] - bb[0] > 0.3 || bb[3] - bb[1] > 0.2) return reply(res, 400, { error: 'zoom' })
+    try { return reply(res, 200, await oddsOf(bb)) } catch (e) { return reply(res, 502, { error: e.message }) }
+  }
   if (p === '/api/run' && post) {
     let argv
     try { argv = runArgs(await readBody(req)) } catch (e) { return reply(res, 400, { error: e.message }) }
@@ -816,6 +867,15 @@ async function handle(req, res) {
       s.last_visit = now()
       writeJson(f, s)
       return reply(res, 200, { last_visit: before })
+    }
+    // a listing the user typed: added as add --file does (free), refused when its link is already in the search
+    if (sub === '/listings' && post) {
+      let x
+      try { x = manualInput(await readBody(req)) } catch (e) { return reply(res, 400, { error: e.message }) }
+      const known = x.url && byUrl(dir, x.url)
+      if (known) return reply(res, 409, { error: 'known', id: known.id })
+      const { ls: [n] } = await addListings(dir, readJson(path.join(dir, 'search.json')), [x], 'manual')
+      return reply(res, 200, listingsOf(dir).find(l => l.id === n.id))
     }
     const lm = sub.match(/^\/listings\/([\w-]+)$/)
     if (lm && post) {

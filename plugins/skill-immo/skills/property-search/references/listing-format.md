@@ -75,8 +75,8 @@ snake_case.
 
 | Field | Meaning |
 |---|---|
-| `id` | The Stream Estate property uuid, else `w-<hash>` (websearch) or `p-<hash>` (pasted), hashed from the URL or the text |
-| `source` | `stream-estate`, `websearch` or `pasted` |
+| `id` | The Stream Estate property uuid, else `w-<hash>` (websearch), `p-<hash>` (pasted) or `m-<hash>` (manual), hashed from the URL or the text |
+| `source` | `stream-estate`, `websearch`, `pasted` or `manual` (typed by the user in the dashboard's form, which posts these same fields to `POST /api/s/<slug>/listings`) |
 | `property_type` | `flat`, `house`, `land`, `parking` or `premises` (Stream Estate's office and shop); absent means flat |
 | `se_id` | The Stream Estate id, or null |
 | `urls[]` | `{ url, source, published_at, expired_at, last_seen_at, favorites, urgent }` for each portal it is on (`source`: the portal, SL, LBC, Bienici…) |

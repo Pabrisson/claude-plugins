@@ -48,12 +48,12 @@ export function FollowTab() {
       </div>
       <Card className="h-fit">
         <CardHeader>
-          <CardTitle>Alerte de l'API payante</CardTitle>
+          <CardTitle>Alerte de l'API</CardTitle>
           <CardDescription>Nouveaux biens et changements de prix, poussés sur votre téléphone par ntfy</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           {!streamOn ? (
-            <Alert><AlertTitle>Indisponible</AlertTitle><AlertDescription>{state.stream_estate ? "Cette recherche est en mode OpenData." : "Les alertes nécessitent une clé de l'API payante."}</AlertDescription></Alert>
+            <Alert><AlertTitle>Indisponible</AlertTitle><AlertDescription>{state.stream_estate ? "Cette recherche est en mode OpenData." : "Les alertes nécessitent une clé de l'API."}</AlertDescription></Alert>
           ) : alert ? (
             <>
               <p>{alert.enabled === false ? "Alerte coupée." : "Alerte active."}</p>
@@ -193,7 +193,7 @@ function NewsRow({ n, fresh, lit, latest }: { n: NewsItem; fresh: boolean; lit: 
             <SearchIcon data-icon="inline-start" />Chercher l'annonce
           </Button>
         )}
-        {latest && streamOn && <Button size="xs" onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API payante" })}><DownloadIcon data-icon="inline-start" />Récupérer<CreditBadge cost="fetch" /></Button>}
+        {latest && streamOn && <Button size="xs" onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API" })}><DownloadIcon data-icon="inline-start" />Récupérer<CreditBadge cost="fetch" /></Button>}
         <span className="ml-auto flex items-center gap-2 sm:ml-0">
           <time dateTime={n.date} className="text-xs text-muted-foreground tabular-nums">{clockOf(n.date)}</time>
           {fresh ? <UnreadDot /> : <i aria-hidden className="size-2" />}

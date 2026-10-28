@@ -92,6 +92,20 @@ test('a message marked sent: an offer puts the listing in "Offre faite"', async 
   assert.ok(!c.messages.some(x => x.id === got.id))
 })
 
+test('a listing the user typed: added free with its building data; refused without a price, with a bad link or type, when its link is known', async () => {
+  const add = body => post('/api/s/paul-bert/listings', body)
+  assert.equal((await add({ area: 50 })).status, 400)
+  assert.equal((await add({ price: 250000, area: 50, url: 'javascript:alert(1)' })).status, 400)
+  assert.equal((await add({ price: 250000, area: 50, type: 'toString' })).status, 400)
+  const r = await add({ type: 'flat', price: 250000, area: 50, rooms: 2, dpe: 'D', point: [4.8455, 45.756], url: 'https://www.example.com/annonce-1' })
+  assert.equal(r.status, 200)
+  const l = await r.json()
+  assert.deepEqual([l.id.slice(0, 2), l.source, l.price_per_m2, l.building.risks.natural[0].key], ['m-', 'manual', 5000, 'seisme'])
+  const again = await add({ price: 240000, area: 50, url: 'https://www.example.com/annonce-1?utm_source=x' })
+  assert.deepEqual([again.status, (await again.json()).id], [409, l.id])
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'listings.json'), 'utf8')).length, 2)
+})
+
 test('the version follows the files; a search is deleted, not one with an alert', async () => {
   const v = (await (await fetch(base + '/api/s/paul-bert/version')).json()).version
   assert.equal((await (await fetch(base + '/api/s/paul-bert')).json()).version, v)
@@ -107,6 +121,11 @@ test('the version follows the files; a search is deleted, not one with an alert'
   assert.ok(!fs.existsSync(gone))
   assert.equal((await del('to-delete')).status, 404)
   assert.equal((await fetch(`${base}/api/s/paul-bert`, { method: 'DELETE', headers: { Origin: 'https://evil.example' } })).status, 403)
+})
+
+test('the odds of a box of the map: refused without a box, or too wide for the map to load', async () => {
+  for (const q of ['', '?bbox=4.8,45.7', '?bbox=4.9,45.7,4.8,45.8']) assert.equal((await fetch(base + '/api/odds' + q)).status, 400)
+  assert.deepEqual(await (await fetch(base + '/api/odds?bbox=4.5,45.5,5,45.9')).json(), { error: 'zoom' })
 })
 
 test('nothing from a foreign site', async () => {

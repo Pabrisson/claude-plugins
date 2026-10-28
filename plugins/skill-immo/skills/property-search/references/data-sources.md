@@ -22,6 +22,9 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 | Crime | SSMSI, communal and departmental bases, through the tabular API | 30 d |
 | Income | INSEE Filosofi, through the Melodi API `https://api.insee.fr/melodi/data/DS_FILOSOFI_CC?GEO=` | 90 d |
 | Zone outlines | geo.api.gouv.fr (commune, arrondissement) and IGN WFS `STATISTICALUNITS.IRIS:contours_iris` (IRIS) | 90 d |
+| IRIS of a box (odds map) | The same WFS, `BBOX=<s>,<w>,<n>,<e>` | none |
+| Census per IRIS (odds map) | INSEE Melodi `DS_RP_MENAGES_PRINC_IRIS` and `DS_RP_LOGEMENT_PRINC_IRIS`, `?GEO=IRIS-<code>&GEO=…` | 90 d |
+| Recent DPE of a commune (odds map) | ADEME `lines?code_insee_ban_eq=<insee>&date_etablissement_dpe_gte=<12 months ago>` | 7 d |
 | Base map | IGN vector tiles, style `https://data.geopf.fr/annexes/ressources/vectorTiles/styles/PLAN.IGN/standard.json` | (browser) |
 
 ## Notes per source
@@ -115,6 +118,41 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
   (`millesime`) days before it opens it and answers 400 until then: the engine reads the dataset's releases and takes
   the newest whose `date_diffusion` has passed. The last year's homes started are not out yet. Lyon 3e: 174 authorised
   in 2025, 472 in 2022.
+
+## The odds map (« Prospection »)
+
+The dashboard's odds map asks the server `GET /api/odds?bbox=<w,s,e,n>` each time it stops (zoom 14 or closer; a box
+wider than 0.3° by 0.2° is refused). The engine (`oddsOf` in `immo.mjs`, `lib/odds.js`) answers the box's IRIS with
+their census, DVF sales and odds, its communes, and its DPE of the last 12 months. Checked live on
+2026-10-28 around rue Paul Bert: 68 IRIS and 7 communes, 15 s the first time, 1.3 s once kept.
+
+- **IRIS of a box** (IGN WFS): `BBOX` as lat lon. Each feature has `code_iris`, `nom_iris`, `code_insee` (the
+  arrondissement's in Paris, Lyon, Marseille: 69383), `nom_commune` and `type_iris` (H homes, A activity, D other, Z a
+  commune not split). 165 IRIS in 0.07° by 0.04° of Lyon, 0.13 MB, 2.8 s.
+- **Census per IRIS** (Melodi, population census 2023): several `GEO=IRIS-<code>` in one call (50 a call; 25 IRIS in
+  6 s and 0.6 s). A row counts what its dimensions other than `_T` say. The ones read:
+  - `DS_RP_LOGEMENT_PRINC_IRIS`: `RP_MEASURE=DWELLINGS` (all homes), with `OCS=DW_MAIN` (main homes), with `TSH=100`
+    (their owners); `DWELLING_L_STAY` with `OCS=DW_MAIN, TSH=100` sums the owners' years in their home;
+  - `DS_RP_MENAGES_PRINC_IRIS`: `RP_MEASURE=POP, AGE=Y_GE15` with `CIVIL_STATUS` 1 married, 2 PACS, 3 living together,
+    4 widowed, 5 divorced, 6 single; `ONEPERS, NOC=P1, OCS=DW_MAIN` with `AGE=Y55T79` and `Y_GE80`: the people living
+    alone. Danton-Bir Hakeim (Lyon 3e): 6,750 homes, 1,512 owners for 13 years, 206 people of 80 and more alone.
+  - The values are the census's estimates (decimals): the engine rounds them.
+- **The odds** (`lib/odds.js`): an IRIS's flats and houses sold a year (DVF's sales of one home, the last three whole
+  years) over its homes is the odds that one of them goes on sale within 12 months (1.2 % to 3.3 % around rue Paul
+  Bert). Successions: people living alone of 55 to 79 × 1.3 % and of 80 and more × 9 % a year (France's death rates
+  by age), × the owners' share of the main homes. Separations: couples × 1 % a year × the same share. Both are
+  estimates, said so in the dashboard.
+- **Not used, on purpose**: no source gives a death or a divorce with an address, and joining people to homes is not
+  allowed.
+  - INSEE's file of deaths (open, monthly) has the name, the birth and the place of death, not the home.
+  - DVF forbids finding who sold, even indirectly (article R112 A-3 of the LPF).
+  - The land register gives a home's owner 5 times a week at most (article R*107 A-3 of the LPF).
+  - Court rulings in open data are pseudonymised, and divorces by mutual consent (at a notary since 2017) are not
+    published. INSEE's divorces per department stop in 2016 (`DS_MAR_PACS_DIV_SERIES`).
+  - Gathering death notices to reach the heirs (living people, under the GDPR) is left out.
+- Tried and dropped (2026-10-28): calibrating « a DPE without a listing → a listing » on DVF. Among the 3,480 DPE of
+  2023 around rue Paul Bert, 24 % were followed by a sale at the same address and surface (±8 %) within 18 months, 177
+  days later at the median (C 30 %, D 22 %, G 14 %). The user kept the recent DPE as they are.
 
 ## The data.gouv.fr MCP
 

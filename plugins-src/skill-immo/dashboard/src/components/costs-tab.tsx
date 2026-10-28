@@ -42,17 +42,17 @@ export function CostsTab() {
             <div className={ratio >= 0.9 ? "h-full bg-destructive" : "h-full bg-foreground"} style={{ width: `${ratio * 100}%` }} />
           </div>
           <p className="text-sm text-muted-foreground">Il reste {num(Math.max(0, u.cap - u.month))} crédits avant le plafond. Le moteur refuse de le dépasser sans votre accord donné à Claude.</p>
-          {!state.stream_estate && <Alert><AlertTitle>API payante désactivée</AlertTitle><AlertDescription>Sans clé, rien n'est facturé : open data et annonces assistées uniquement.</AlertDescription></Alert>}
+          {!state.stream_estate && <Alert><AlertTitle>API désactivée</AlertTitle><AlertDescription>Sans clé, rien n'est facturé : open data et annonces assistées uniquement.</AlertDescription></Alert>}
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
           <CardTitle>Rapprochement</CardTitle>
-          <CardDescription>Le journal local comparé au décompte de l'API payante</CardDescription>
+          <CardDescription>Le journal local comparé au décompte de l'API</CardDescription>
           <CardAction><Button variant="outline" size="sm" disabled={!state.stream_estate || busy} onClick={reconcile}>{busy && <Spinner data-icon="inline-start" />}Comparer</Button></CardAction>
         </CardHeader>
         <CardContent>
-          {remote ? <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{remote}</pre> : <p className="text-sm text-muted-foreground">{state.stream_estate ? "Lit l'usage du compte sur 30 jours (gratuit a priori)." : "Nécessite l'API payante."}</p>}
+          {remote ? <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{remote}</pre> : <p className="text-sm text-muted-foreground">{state.stream_estate ? "Lit l'usage du compte sur 30 jours (gratuit a priori)." : "Nécessite l'API."}</p>}
         </CardContent>
       </Card>
       <Card>

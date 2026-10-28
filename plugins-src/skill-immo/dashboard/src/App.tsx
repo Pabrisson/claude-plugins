@@ -1,4 +1,4 @@
-import { BarChart3Icon, EllipsisIcon, ListIcon, MapIcon, PlusIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
+import { BarChart3Icon, EllipsisIcon, ListIcon, MapIcon, PlusIcon, RadarIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
 import { ThemeProvider } from "next-themes"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -12,6 +12,7 @@ import { ListTab } from "@/components/list-tab"
 import { ListingList } from "@/components/listing-list"
 import { MapView } from "@/components/map-view"
 import { MarketTab } from "@/components/market-tab"
+import { OddsTab } from "@/components/odds-tab"
 import { RunProvider } from "@/components/run-dialog"
 import { NewSearch, StaleBar, ThemeButton, TopBar } from "@/components/top-bar"
 import {
@@ -62,7 +63,8 @@ function SearchPage({ slug }: { slug: string }) {
 }
 
 const VIEWS = [
-  { id: "listings", label: "Cartes", icon: MapIcon },
+  { id: "listings", label: "Annonces", icon: MapIcon },
+  { id: "odds", label: "Prospection", icon: RadarIcon },
   { id: "list", label: "Liste", icon: ListIcon },
   { id: "kanban", label: "Kanban", icon: SquareKanbanIcon },
   { id: "market", label: "Marché", icon: BarChart3Icon },
@@ -73,8 +75,9 @@ const VIEWS = [
 // a phone's bar holds five: the rest goes under "Plus"
 const BAR = ["listings", "list", "kanban", "follow"]
 
-// The map and the listings' cards side by side (one or the other on a phone), the kanban and the list of every
-// listing, each listing's dossier on top; market, comparison, follow-up as tabs, the API costs apart on the right
+// The map and the listings' cards side by side (one or the other on a phone), the map of the odds that a home goes on
+// sale beside its figures, the kanban and the list of every listing, each listing's dossier on top; market, comparison,
+// follow-up as tabs, the API costs apart on the right
 function Workspace() {
   const { slug, reload, compare } = useSearch()
   const mobile = useIsMobile()
@@ -108,6 +111,7 @@ function Workspace() {
               </div>
             )}
           </TabsContent>
+          <TabsContent value="odds" className="min-h-0"><OddsTab /></TabsContent>
           <TabsContent value="kanban" className="min-h-0 pb-16 md:pb-0"><KanbanTab /></TabsContent>
           <TabsContent value="list" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><ListTab /></TabsContent>
           <TabsContent value="market" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><MarketTab /></TabsContent>
@@ -169,7 +173,7 @@ function Home({ error }: { error?: string }) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Recherche immobilière</h1>
-          <p className="text-sm text-muted-foreground">{stream ? "API payante activée" : "Mode OpenData : open data et annonces trouvées par Claude"}</p>
+          <p className="text-sm text-muted-foreground">{stream ? "API activée" : "Mode OpenData : open data et annonces trouvées par Claude"}</p>
         </div>
         <span className="flex gap-1.5"><NewSearch streamEstate={stream} trigger={trigger} /><ThemeButton /></span>
       </div>
@@ -196,7 +200,7 @@ function SearchCard({ s, onDeleted }: { s: SearchSummary; onDeleted: () => void 
       toast.success(`Recherche « ${s.label} » supprimée`)
       onDeleted()
     } catch (e) {
-      toast.error("La recherche n'a pas été supprimée", { description: (e as Error).message === "alert" ? "Elle a une alerte de l'API payante : supprimez d'abord l'alerte, dans son onglet Suivi." : `Détail technique : ${(e as Error).message}` })
+      toast.error("La recherche n'a pas été supprimée", { description: (e as Error).message === "alert" ? "Elle a une alerte de l'API : supprimez d'abord l'alerte, dans son onglet Suivi." : `Détail technique : ${(e as Error).message}` })
     }
   }
   return (
@@ -207,7 +211,7 @@ function SearchCard({ s, onDeleted }: { s: SearchSummary; onDeleted: () => void 
           <span className="flex gap-1 text-muted-foreground">{(s.types ?? ["flat"]).map(t => <TypeIcon key={t} type={t} className="size-4" />)}</span>
         </CardTitle>
         <CardDescription>{(s.types ?? ["flat"]).map(t => TYPE_PLURAL[t]).join(", ")} · {s.zone} · {s.online} annonce{s.online > 1 ? "s" : ""} en ligne · créée le {date(s.created)}</CardDescription>
-        <Badge variant={s.mode === "stream-estate" ? "default" : "secondary"} className="w-fit">{s.mode === "stream-estate" ? "API payante" : "OpenData"}</Badge>
+        <Badge variant={s.mode === "stream-estate" ? "default" : "secondary"} className="w-fit">{s.mode === "stream-estate" ? "API" : "OpenData"}</Badge>
       </CardHeader>
       <AlertDialog>
         <AlertDialogTrigger asChild>

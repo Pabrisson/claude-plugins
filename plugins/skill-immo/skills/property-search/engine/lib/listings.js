@@ -85,12 +85,13 @@ export function fromStreamEstate(d) {
   }
 }
 
-// A listing Claude read: the fields of listing-format.md, whatever it found. Its id is its URL's, else its text's.
+// A listing Claude read, or the user typed in the dashboard (manual): the fields of listing-format.md, whatever it
+// found. Its id is its URL's, else its text's.
 export function fromInput(x, source) {
   const url = x.url ?? null, price = +x.price || null, area = +x.area || null, land = +x.land_area || null
   const key = (url && normUrl(url)) || x.text || JSON.stringify(x), type = x.type in TYPES ? x.type : 'flat'
   return {
-    id: `${source === 'pasted' ? 'p' : 'w'}-${hash(key)}`, se_id: null, source, property_type: type,
+    id: `${{ pasted: 'p', manual: 'm' }[source] ?? 'w'}-${hash(key)}`, se_id: null, source, property_type: type,
     urls: url ? [{ url, source: x.site ?? normUrl(url)?.split('.')[0] ?? null, published_at: x.published_at ?? null, expired_at: null, last_seen_at: null, favorites: null, urgent: !!x.urgent }] : [],
     title: x.title ?? null, description: x.description ?? x.text ?? null,
     price, net_price: null, area, carrez: null, land_area: land, price_per_m2: ppm2(price, type === 'land' ? land ?? area : area),

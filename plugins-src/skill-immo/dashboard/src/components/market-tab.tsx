@@ -90,9 +90,9 @@ export function MarketTab() {
         </Kpi>
         <Kpi title="Loyer, commune" value={rent ? `${String(rent.per_m2).replace(".", ",")} €/m²` : "—"} sub={rent ? `par mois charges comprises, carte des loyers ${rents!.year}` : type === "flat" || type === "house" ? "Pas de loyer de référence" : "Logements seulement"} icon={KeyRoundIcon} tone="var(--chart-3)" />
         <Kpi title="Rendement brut, zone" value={yieldOf ? share(yieldOf, 1) : "—"} sub={yieldOf ? `${num(1 / yieldOf)} ans de loyer pour payer le prix` : "Loyer et ventes nécessaires"} icon={CoinsIcon} tone="var(--chart-3)" />
-        <Kpi title="Affiché, zone" value={m2(asking(data.market, type))} sub={se ? "Dernier mois, API payante" : "Nécessite l'API payante"} icon={EyeIcon} tone="var(--chart-4)" />
+        <Kpi title="Affiché, zone" value={m2(asking(data.market, type))} sub={se ? "Dernier mois, API" : "Nécessite l'API"} icon={EyeIcon} tone="var(--chart-4)" />
       </div>
-      {d && <TrendCard d={d} type={type} se={se} streamOn={streamOn} onAsking={() => run({ cmd: "market", slug, label: "Analyses du marché (API payante)" })} />}
+      {d && <TrendCard d={d} type={type} se={se} streamOn={streamOn} onAsking={() => run({ cmd: "market", slug, label: "Analyses du marché (API)" })} />}
       <div className="grid gap-4 xl:grid-cols-2">
         {d && <BudgetCard d={d} type={type} listings={listings} />}
         <WatchCard type={type} listings={listings} />
@@ -107,8 +107,8 @@ export function MarketTab() {
       )}
       {!streamOn && (
         <Alert>
-          <AlertTitle>Prix affichés de tout le marché : API payante</AlertTitle>
-          <AlertDescription>{state.stream_estate ? "Cette recherche est en mode OpenData. Passez-la en mode API payante pour ajouter les prix affichés de la zone, mois par mois." : "Sans clé d'API payante, le marché repose sur les ventes réelles DVF et l'open data, gratuits. La clé ajoute les prix affichés de la zone, mois par mois."}</AlertDescription>
+          <AlertTitle>Prix affichés de tout le marché : API</AlertTitle>
+          <AlertDescription>{state.stream_estate ? "Cette recherche est en mode OpenData. Passez-la en mode API pour ajouter les prix affichés de la zone, mois par mois." : "Sans clé d'API, le marché repose sur les ventes réelles DVF et l'open data, gratuits. La clé ajoute les prix affichés de la zone, mois par mois."}</AlertDescription>
         </Alert>
       )}
       {d && <SalesCard d={d} type={type} />}
@@ -118,7 +118,7 @@ export function MarketTab() {
 
 const trendConfig = {
   sold: { label: "Vendu (DVF, médiane du trimestre)", color: "var(--chart-2)" },
-  asking: { label: "Affiché (API payante, prix au m² du mois)", color: "var(--chart-4)" },
+  asking: { label: "Affiché (API, prix au m² du mois)", color: "var(--chart-4)" },
   count: { label: "Ventes du trimestre", color: "var(--chart-3)" },
 } satisfies ChartConfig
 
@@ -144,7 +144,7 @@ function TrendCard({ d, type, se, streamOn, onAsking }: { d: Dvf; type: Property
           <Delta x={d.trend?.zone?.y1} label="en 1 an" /><Delta x={d.trend?.zone?.y3} label="en 3 ans" />
         </CardDescription>
         <CardAction>
-          <Button variant="outline" size="sm" disabled={!streamOn} title={streamOn ? undefined : "Nécessite l'API payante"} onClick={onAsking}>
+          <Button variant="outline" size="sm" disabled={!streamOn} title={streamOn ? undefined : "Nécessite l'API"} onClick={onAsking}>
             <BarChart3Icon data-icon="inline-start" />{se ? "Mettre à jour l'affiché" : "Ajouter l'affiché"}<CreditBadge cost={{ route: "GET /indicators/price_per_meter" }} />
           </Button>
         </CardAction>

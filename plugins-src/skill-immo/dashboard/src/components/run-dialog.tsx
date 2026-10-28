@@ -20,8 +20,8 @@ const lastLine = (s: string) => s.split("\n").filter(Boolean).at(-1) ?? ""
 // what went wrong, in French: the engine's exit codes, else its message (technical, in English)
 const failure = (r: RunResult) => ({
   2: "Cette action attend votre accord : relancez-la depuis le dashboard ou demandez-la à Claude.",
-  3: "L'API payante est indisponible (plus de crédits ou pas de clé) : demandez à Claude, il cherchera sans (mode assisté).",
-  4: "L'API payante ne connaît pas cette annonce : ajoutez-la par « Ajouter », Claude la lira.",
+  3: "L'API est indisponible (plus de crédits ou pas de clé) : demandez à Claude, il cherchera sans (mode assisté).",
+  4: "L'API ne connaît pas cette annonce : ajoutez-la par « Ajouter », Claude la lira.",
 }[r.code] ?? `Échec. Détail technique : ${lastLine(r.err).replace(/^error: /, "")}`)
 
 export function RunProvider({ children, onDone }: { children: ReactNode; onDone: () => void | Promise<void> }) {
@@ -62,7 +62,7 @@ export function RunProvider({ children, onDone }: { children: ReactNode; onDone:
             <AlertDialogTitle>{pending?.label}</AlertDialogTitle>
             <AlertDialogDescription>
               {e?.unknown
-                ? "Coût inconnu : cette fonction de l'API payante n'a pas encore été mesurée. Elle est probablement gratuite, mais ce n'est pas garanti."
+                ? "Coût inconnu : cette fonction de l'API n'a pas encore été mesurée. Elle est probablement gratuite, mais ce n'est pas garanti."
                 : e && `Coût estimé : ${fmtCredits(e.credits ?? 0, (e.eur ?? 0) / (e.credits || 1) || 0.01)}.`}{" "}
               {e && `Il reste ${e.remaining} crédits sur le plafond mensuel de ${e.cap} (${e.spent} dépensés ce mois).`}
             </AlertDialogDescription>

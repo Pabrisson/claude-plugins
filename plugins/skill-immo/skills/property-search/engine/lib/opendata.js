@@ -29,16 +29,24 @@ const cityOf = insee => (/^751\d\d$/.test(insee) ? '75056' : /^6938\d$/.test(ins
 // Sitadel (SDES, DiDo): the homes authorised and started per commune and year
 const SITADEL = { api: 'https://data.statistiques.developpement-durable.gouv.fr/dido/api/v1', dataset: '6513ee3a3b05e5cd969c270f', rid: '9c90a880-4ba0-49b4-b99d-d7dd6c810dd0' }
 const sleep = t => new Promise(ok => setTimeout(ok, t))
+const MELODI = 'https://api.insee.fr/melodi/data'
 
 export function openData(cacheDir) {
-  // an answer kept `days` days under .cache/<key>; a failed fetch is not kept
-  async function cached(key, days, fetcher) {
+  // an answer kept `days` days under .cache/<key> (undefined when none is), and kept again
+  const read = (key, days) => {
     const file = path.join(cacheDir, key), st = fs.statSync(file, { throwIfNoEntry: false })
-    if (st && Date.now() - st.mtimeMs < days * 86400000) return JSON.parse(fs.readFileSync(file, 'utf8'))
-    const value = await fetcher()
+    return st && Date.now() - st.mtimeMs < days * 86400000 ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined
+  }
+  const keep = (key, value) => {
+    const file = path.join(cacheDir, key)
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, JSON.stringify(value))
     return value
+  }
+  // an answer kept `days` days; a failed fetch is not kept
+  async function cached(key, days, fetcher) {
+    const value = read(key, days)
+    return value !== undefined ? value : keep(key, await fetcher())
   }
 
   // JSON (or text) with three tries on a busy server (429, 502, 503, 504), 2 then 4 s apart; null on a 404
@@ -57,6 +65,27 @@ export function openData(cacheDir) {
     return d?.resources.filter(r => title.test(r.title)).sort((a, b) => b.last_modified.localeCompare(a.last_modified))[0]?.id ?? fallback
   })
   const tabular = (rid, params) => get(`${TABULAR}/${rid}/data/?${new URLSearchParams({ page_size: 50, ...params })}`)
+  // ADEME's DPE of the last 12 months where `where` says (a box, a commune), one per home: the building DPE and the
+  // flats' DPE generated from them are left out
+  // ponytail: two pages of 10,000 at most (Paris 15e makes 11,400 a year), the newest kept; more pages if one zone needs them
+  const lastYearDpe = (where, key, days) => cached(key, days, async () => {
+    const q = new URLSearchParams({
+      select: 'numero_dpe,date_etablissement_dpe,etiquette_dpe,type_batiment,surface_habitable_logement,adresse_ban,identifiant_ban,_geopoint',
+      size: 10000, sort: '-date_etablissement_dpe', ...where, date_etablissement_dpe_gte: new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10),
+      type_batiment_in: 'appartement,maison', methode_application_dpe_neq: 'dpe appartement généré à partir des données DPE immeuble',
+    })
+    const rows = []
+    for (let url = `https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines?${q}`, i = 0; url && i < 2; i++) {
+      const d = await get(url)
+      rows.push(...(d?.results ?? []))
+      url = d?.next
+    }
+    // _geopoint is "lat,lon"
+    return rows.filter(r => r._geopoint).map(r => ({
+      number: r.numero_dpe, date: r.date_etablissement_dpe, energy: r.etiquette_dpe, type: r.type_batiment === 'maison' ? 'house' : 'flat',
+      area: r.surface_habitable_logement ?? null, address: r.adresse_ban ?? null, ban: r.identifiant_ban ?? null, point: r._geopoint.split(',').map(Number).reverse(),
+    }))
+  })
 
   return {
     cached,
@@ -83,13 +112,35 @@ export function openData(cacheDir) {
       const f = (await get(`${GEOPF}/wfs/ows?${q}`))?.features?.[0]
       return f ? { code: f.properties.code_iris, name: f.properties.nom_iris, geometry: f.geometry } : null
     }),
+    // the IRIS of a box [w, s, e, n] (the WFS takes it as lat lon), with their commune or arrondissement and their type
+    // (H: homes, A: activity, D: other, Z: a commune not split). Not kept: a map moved asks another box.
+    irisIn: async bb => {
+      const q = new URLSearchParams({ SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: 'STATISTICALUNITS.IRIS:contours_iris', OUTPUTFORMAT: 'application/json', BBOX: `${bb[1]},${bb[0]},${bb[3]},${bb[2]}` })
+      return ((await get(`${GEOPF}/wfs/ows?${q}`))?.features ?? []).map(f => ({
+        code: f.properties.code_iris, name: f.properties.nom_iris, insee: f.properties.code_insee, commune: f.properties.nom_commune, kind: f.properties.type_iris, geometry: f.geometry,
+      }))
+    },
+    // The census of IRIS (INSEE Melodi, the population census at the IRIS level): the observations of their households
+    // and couples, and of their homes. Each IRIS kept 90 days; those missing asked 50 a call.
+    async irisCensus(codes) {
+      const key = c => `melodi/iris-${c}.json`, todo = codes.filter(c => read(key(c), 90) === undefined)
+      const parts = Array.from({ length: Math.ceil(todo.length / 50) }, (_, i) => todo.slice(i * 50, i * 50 + 50))
+      // two parts at a time: Melodi without a key takes a few calls a second
+      for (let i = 0; i < parts.length; i += 2) await Promise.all(parts.slice(i, i + 2).map(async part => {
+        const geo = part.map(c => `GEO=IRIS-${c}`).join('&')
+        const [a, b] = await Promise.all(['DS_RP_MENAGES_PRINC_IRIS', 'DS_RP_LOGEMENT_PRINC_IRIS'].map(ds => get(`${MELODI}/${ds}?${geo}&maxResult=10000`)))
+        const all = [...(a?.observations ?? []), ...(b?.observations ?? [])]
+        for (const c of part) keep(key(c), all.filter(o => o.dimensions.GEO.endsWith(`IRIS-${c}`)))
+      }))
+      return Object.fromEntries(codes.map(c => [c, read(key(c), Infinity) ?? []]))
+    },
 
-    // The sales of a commune, every type, over the years geo-DVF publishes (the last five): none for the Bas-Rhin,
-    // the Haut-Rhin and the Moselle, whose land register is not in DVF.
-    async dvf(insee) {
+    // The sales of a commune, every type, over the years geo-DVF publishes (the last five), or the last `back` years:
+    // none for the Bas-Rhin, the Haut-Rhin and the Moselle, whose land register is not in DVF.
+    async dvf(insee, back = 6) {
       const dep = insee.startsWith('97') ? insee.slice(0, 3) : insee.slice(0, 2), now = new Date().getFullYear()
       if (['57', '67', '68'].includes(dep)) return { sales: [], years: [], alsace_moselle: true }
-      const years = await Promise.all(Array.from({ length: 7 }, (_, i) => now - 6 + i).map(y => cached(`dvf/v2-${insee}-${y}.json`, y >= now - 1 ? 30 : 180, async () => {
+      const years = await Promise.all(Array.from({ length: back + 1 }, (_, i) => now - back + i).map(y => cached(`dvf/v2-${insee}-${y}.json`, y >= now - 1 ? 30 : 180, async () => {
         const csv = await get(`https://files.data.gouv.fr/geo-dvf/latest/csv/${y}/communes/${dep}/${insee}.csv`, { text: true })
         return csv ? dvfSales(parseCsv(csv)) : []
       })))
@@ -137,25 +188,9 @@ export function openData(cacheDir) {
     // ADEME's DPE of existing homes made in the last 12 months in a box [w, s, e, n], newest first, one per home as
     // above, each with its BAN address and point. Kept a week, or `days` (the dashboard server's watch reads them
     // fresher): they are the zone's news.
-    // ponytail: two pages of 10,000 at most (Paris 15e makes 11,400 a year), the newest kept; more pages if one zone needs them
-    recentDpe: (bb, days = 7) => cached(`ademe/recent-${bb.map(x => x.toFixed(4)).join(',')}.json`, days, async () => {
-      const q = new URLSearchParams({
-        select: 'numero_dpe,date_etablissement_dpe,etiquette_dpe,type_batiment,surface_habitable_logement,adresse_ban,identifiant_ban,_geopoint',
-        size: 10000, sort: '-date_etablissement_dpe', bbox: bb.join(','), date_etablissement_dpe_gte: new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10),
-        type_batiment_in: 'appartement,maison', methode_application_dpe_neq: 'dpe appartement généré à partir des données DPE immeuble',
-      })
-      const rows = []
-      for (let url = `https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines?${q}`, i = 0; url && i < 2; i++) {
-        const d = await get(url)
-        rows.push(...(d?.results ?? []))
-        url = d?.next
-      }
-      // _geopoint is "lat,lon"
-      return rows.filter(r => r._geopoint).map(r => ({
-        number: r.numero_dpe, date: r.date_etablissement_dpe, energy: r.etiquette_dpe, type: r.type_batiment === 'maison' ? 'house' : 'flat',
-        area: r.surface_habitable_logement ?? null, address: r.adresse_ban ?? null, ban: r.identifiant_ban ?? null, point: r._geopoint.split(',').map(Number).reverse(),
-      }))
-    }),
+    recentDpe: (bb, days = 7) => lastYearDpe({ bbox: bb.join(',') }, `ademe/recent-${bb.map(x => x.toFixed(4)).join(',')}.json`, days),
+    // the same in a commune (or an arrondissement): the prospection map asks each commune it shows once a week
+    communeDpe: insee => lastYearDpe({ code_insee_ban_eq: insee }, `ademe/recent-${insee}.json`, 7),
 
     // The property tax rates (taxe foncière sur le bâti, %) of the latest year: the commune's, its intercommunality's,
     // their total with the small extras (syndicates, GEMAPI…), the waste tax apart, and France's total weighted by

@@ -34,7 +34,7 @@ export function useNews() {
 export const newsKey = (n: NewsItem) => `${n.kind}-${n.date}-${"l" in n ? n.l.id : n.kind === "dpe" ? n.dpe.number : n.count}`
 export const newsTitle = (n: NewsItem) => "l" in n ? titleOf(n.l)
   : n.kind === "dpe" ? `${TYPE_LABEL[n.dpe.type]}${n.dpe.area ? ` ${num(n.dpe.area)} m²` : ""}`
-  : `${n.added} nouvelle${n.added > 1 ? "s" : ""} sur l'API payante`
+  : `${n.added} nouvelle${n.added > 1 ? "s" : ""} sur l'API`
 
 // the dot of an unread one, next to its time
 export const UnreadDot = () => <i aria-hidden className="size-2 shrink-0 rounded-full bg-primary" />

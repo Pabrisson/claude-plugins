@@ -34,6 +34,7 @@ export const ORIGIN = {
   "stream-estate": { short: "API", long: "Trouvée par l'API Stream Estate" },
   websearch: { short: "Claude", long: "Lue par Claude sur le web" },
   pasted: { short: "Claude", long: "Collée dans Claude" },
+  manual: { short: "Vous", long: "Saisie à la main" },
 } as const
 export const POI_LABEL: Record<string, string> = { transport: "Métro, tram, gare", bus: "Bus", shops: "Commerces", food: "Cafés et restaurants", schools: "Écoles et crèches", health: "Santé", parks: "Parcs" }
 export const ACCURACY_LABEL: Record<string, string> = { PRECISE: "adresse précise", STREET: "rue", NEIGHBORHOOD: "quartier", DISTRICT: "arrondissement", CITY: "ville", UNKNOWN: "inconnue" }

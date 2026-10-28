@@ -1,11 +1,12 @@
 import { WEIGHTS } from "@engine/decide.js"
 import { matches } from "@engine/market.js"
-import { BellIcon, CheckCheckIcon, ClipboardCopyIcon, DownloadIcon, HomeIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { BellIcon, CheckCheckIcon, ClipboardCopyIcon, DownloadIcon, HomeIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PencilIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { CreditBadge, lastCount } from "@/components/credit-badge"
+import { ManualListing } from "@/components/manual-listing"
 import { LOOK, newsKey, NewsTile, newsTitle, UnreadDot, useNews, whenOf } from "@/components/news"
 import { useRun } from "@/components/run-dialog"
 import { CriteriaFields, criteriaArg, NewSearch, TypesField } from "@/components/search-form"
@@ -45,8 +46,8 @@ export function TopBar({ onNews }: { onNews: () => void }) {
         <span className="flex min-w-0 items-center gap-2">
           <h1 className="truncate text-sm font-bold md:text-base">{s.label}</h1>
           <Tooltip>
-            <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"} className="shrink-0">{s.mode === "stream-estate" ? "API payante" : "OpenData"}</Badge></TooltipTrigger>
-            <TooltipContent>{s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API payante (payant, avec votre accord)" : "Mode API payante, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
+            <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"} className="shrink-0">{s.mode === "stream-estate" ? "API" : "OpenData"}</Badge></TooltipTrigger>
+            <TooltipContent>{s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API (payant, avec votre accord)" : "Mode API, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
           </Tooltip>
         </span>
         <span className="truncate text-xs text-muted-foreground">{s.zone.label}</span>
@@ -59,12 +60,12 @@ export function TopBar({ onNews }: { onNews: () => void }) {
         <Tooltip>
           <TooltipTrigger asChild>
             <span>
-              <Button size="sm" disabled={!streamOn} onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API payante" })}>
+              <Button size="sm" disabled={!streamOn} onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API" })}>
                 <DownloadIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span><CreditBadge cost="fetch" />
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>{streamOn ? `Récupérer les annonces de la zone${last ? ` : ${num(last.total)} trouvées au dernier comptage, ${num(s.max)} au plus par récupération` : ""}. Le coût est annoncé avant.` : state.stream_estate ? "Recherche en mode OpenData : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API payante. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
+          <TooltipContent>{streamOn ? `Récupérer les annonces de la zone${last ? ` : ${num(last.total)} trouvées au dernier comptage, ${num(s.max)} au plus par récupération` : ""}. Le coût est annoncé avant.` : state.stream_estate ? "Recherche en mode OpenData : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
         </Tooltip>
         <NewsBell onOpen={onNews} />
         <AddListing />
@@ -156,7 +157,7 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
   const typesChanged = types.join(",") !== was.join(",")
   const engine = [criteriaArg(diff), typesChanged && `types=${types.join(",")}`, mode !== s.mode && `mode=${mode}`].filter(Boolean).join(" ")
   function add() {
-    const words = [criteriaLabels(c).join(", ") || "aucun critère", types.map(t => TYPE_PLURAL[t].toLowerCase()).join(", "), mode === "classic" ? "OpenData" : "API payante"].join(" · ")
+    const words = [criteriaLabels(c).join(", ") || "aucun critère", types.map(t => TYPE_PLURAL[t].toLowerCase()).join(", "), mode === "classic" ? "OpenData" : "API"].join(" · ")
     addFeedback({ kind: "affiner", text: `${engine} — ${words}` })
     toast.success("Ajouté au prompt : Claude enregistrera ces critères")
     setOpen(false)
@@ -171,12 +172,12 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-h-[80dvh] w-[min(30rem,calc(100vw-2rem))] overflow-y-auto" align="center">
-        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>Le prompt copié, Claude enregistre ces critères : la liste se filtre dessus, et l'API payante les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
+        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>Le prompt copié, Claude enregistre ces critères : la liste se filtre dessus, et l'API les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
         <div className="mt-3 flex flex-col gap-3">
           <TypesField value={types} onChange={setTypes} />
           <CriteriaFields value={c} onChange={setC} types={types} />
           <ToggleGroup type="single" variant="outline" size="sm" value={mode} onValueChange={v => v && setMode(v as typeof mode)}>
-            <ToggleGroupItem value="stream-estate" disabled={!state.stream_estate}>API payante</ToggleGroupItem>
+            <ToggleGroupItem value="stream-estate" disabled={!state.stream_estate}>API</ToggleGroupItem>
             <ToggleGroupItem value="classic">OpenData</ToggleGroupItem>
           </ToggleGroup>
           <Button onClick={add} disabled={!engine}><MessageSquarePlusIcon data-icon="inline-start" />{engine ? "Ajouter au prompt" : "Rien n'a changé"}</Button>
@@ -186,10 +187,11 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
   )
 }
 
-// A listing by its link or its text: Claude reads it (the API has no lookup by link), so it goes into the prompt.
+// A listing by its link or its text: Claude reads it (the API has no lookup by link), so it goes into the prompt. One
+// typed by hand needs no reading: the second dialog adds it directly.
 function AddListing() {
   const { addFeedback } = useSearch()
-  const [open, setOpen] = useState(false), [value, setValue] = useState("")
+  const [open, setOpen] = useState(false), [value, setValue] = useState(""), [manual, setManual] = useState(false)
   function submit() {
     addFeedback({ kind: "ajouter", text: value.trim().replace(/\s+/g, " ") })
     toast.success("Ajouté au prompt : Claude lira l'annonce")
@@ -208,8 +210,12 @@ function AddListing() {
           <FieldLabel htmlFor="listing">Lien ou texte de l'annonce</FieldLabel>
           <Textarea id="listing" value={value} onChange={e => setValue(e.target.value)} placeholder="https://www.seloger.com/annonces/…" rows={4} />
         </Field>
-        <DialogFooter><Button onClick={submit} disabled={!value.trim()}>Ajouter au prompt</Button></DialogFooter>
+        <DialogFooter className="sm:justify-between">
+          <Button variant="link" className="px-0" onClick={() => { setOpen(false); setManual(true) }}><PencilIcon data-icon="inline-start" />Ou saisir l'annonce à la main</Button>
+          <Button onClick={submit} disabled={!value.trim()}>Ajouter au prompt</Button>
+        </DialogFooter>
       </DialogContent>
+      <ManualListing open={manual} onOpenChange={setManual} onBack={() => { setManual(false); setOpen(true) }} />
     </Dialog>
   )
 }
@@ -351,7 +357,7 @@ function PromptButton() {
               ))}
             </FieldSet>
             <Input value={other} onChange={e => setOther(e.target.value)} placeholder="Autre : la rue voisine, une autre commune…" aria-label="Autre façon d'élargir" />
-            <FieldDescription>Claude change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode API payante, le coût est annoncé avant.</FieldDescription>
+            <FieldDescription>Claude change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode API, le coût est annoncé avant.</FieldDescription>
           </FieldGroup>
           <Separator />
           <Field>
@@ -375,7 +381,7 @@ export function ProfileDialog() {
     ["down_payment", "Apport (€)"], ["net_income_monthly", "Revenus nets du foyer (€/mois)"], ["other_loans_monthly", "Autres crédits (€/mois)"],
     ["rate", "Taux du crédit (%)"], ["years", "Durée (ans)"], ["insurance_rate", "Assurance (% par an)"],
     ["notary_old", "Frais de notaire, ancien", "0,075 = 7,5 %"], ["notary_new", "Frais de notaire, neuf", "0,025 = 2,5 %"],
-    ["monthly_credit_cap", "Plafond de crédits de l'API payante par mois"], ["eur_per_credit", "Prix d'un crédit (€)"],
+    ["monthly_credit_cap", "Plafond de crédits de l'API par mois"], ["eur_per_credit", "Prix d'un crédit (€)"],
   ]
   return (
     <Dialog onOpenChange={o => o && setP(profile)}>

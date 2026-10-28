@@ -55,6 +55,21 @@ export function dropped(l) {
   return top > 0 && l.price ? Math.max(0, (top - l.price) / top) : 0
 }
 
+// The asking price over time, for the dossier's chart: the portals' changes (they can predate the search) and the
+// prices the search saw, from the first known price to `now`, one step a change, each with its change from the step
+// before (`pct`, -0.05 = 5 % off). The first price starts at the listing's publication or first sight when they come
+// before its first change, else at that change.
+export function priceSteps(l, now = new Date().toISOString()) {
+  const changes = [...(l.price_changes ?? [])].sort((a, b) => a.date.localeCompare(b.date))
+  const start = changes[0] && { date: [l.published_at, l.first_seen].filter(d => d && d < changes[0].date).sort()[0] ?? changes[0].date, price: changes[0].from }
+  // the start first: at the same date as the first change, it still comes before it (the sort keeps the order of ties)
+  const points = [start, ...(l.price_history ?? []), ...changes.map(c => ({ date: c.date, price: c.to }))].filter(p => p?.price > 0).sort((a, b) => a.date.localeCompare(b.date))
+  const steps = []
+  for (const p of points) if (p.price !== steps.at(-1)?.price) steps.push({ date: p.date, price: p.price, pct: steps.length ? p.price / steps.at(-1).price - 1 : null })
+  if (steps.length && steps.at(-1).date < now) steps.push({ date: now, price: steps.at(-1).price, pct: null })
+  return steps
+}
+
 // below, at or above the market: within 5 % of the sold median is "at"
 export function badge(ppm2, ref) {
   if (!ppm2 || !ref) return null

@@ -168,6 +168,8 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
   search already holds it (exit 4 otherwise): the API cannot look a listing up by its URL. In Stream Estate mode, a
   later fetch finds the same listing on the portals and merges it with yours by its URL.
 - **Text**: the assisted mode, with `--source pasted`.
+- **Typed by hand**: the dashboard's « Ajouter » → « Ou saisir l'annonce à la main » adds it itself, as `add --file`
+  does (`source: manual`, id `m-…`, free): nothing for you to do.
 
 Without a search, ask which search it goes to, or start one from the listing's address.
 
@@ -182,8 +184,13 @@ recheck the ones the user follows, one WebFetch each.
 Its last line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
 refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or
 a lease, so a recent one without a listing may be a home about to go on sale (ADEME does not say which). Say the new ones
-in one line; the dashboard's map rings them (layer « DPE récents »), and those of the search's types and criteria go to
-its news.
+in one line; the dashboard's « Prospection » map rings them (layer « DPE récents »), and those of the search's types and
+criteria go to its news.
+
+The « Prospection » tab colors the IRIS of the map's box by the odds that a home goes on sale within 12 months (DVF
+sales over the census's homes), and estimates the sales a year after successions and separations from public figures
+per IRIS and commune (`references/data-sources.md`). It never names a person: if the user asks for the deaths or
+divorces of an address, say that no source gives them and that joining people to homes is not allowed.
 
 ## The dashboard server's watch
 
