@@ -295,7 +295,7 @@ Claude helps buy property in France: a flat, a house, a plot, a parking or a box
 
 `claude plugin install skill-security@pabrisson` — requires Node (for the skill's validators).
 
-Cloudflare's [`security-audit`](https://github.com/cloudflare/security-audit-skill) skill (MIT), **not copied here**: the entry is a `github` source on their repo, with no `version`, so the installed copy follows their latest commit on `main`. `claude plugin marketplace update pabrisson && claude plugin update skill-security@pabrisson` fetches it, or turn on auto-update for `pabrisson` under **Marketplaces** in `/plugin`. To hold a version, add `"sha": "<commit>"` to the entry's `source`.
+Cloudflare's [`security-audit`](https://github.com/cloudflare/security-audit-skill) skill (MIT), **not copied here**: the entry is a `github` source on their repo, with no `version`, so the installed copy follows their latest commit on `main`. `claude plugin marketplace update pabrisson && claude plugin update skill-security@pabrisson` fetches it, or `"autoUpdate": true` on `extraKnownMarketplaces.pabrisson` in `~/.claude/settings.json` updates it at every session start. To hold a version, add `"sha": "<commit>"` to the entry's `source`.
 
 **`security-audit`**: a security question or a focused review (`find security vulnerabilities in ./src`) gets an answer in guidance mode. An explicit audit or pen-test request (`security audit this codebase`) runs the full workflow:
 
