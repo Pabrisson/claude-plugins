@@ -135,9 +135,10 @@ export function openData(cacheDir) {
     }),
 
     // ADEME's DPE of existing homes made in the last 12 months in a box [w, s, e, n], newest first, one per home as
-    // above, each with its BAN address and point. Kept a week: they are the zone's news.
+    // above, each with its BAN address and point. Kept a week, or `days` (the dashboard server's watch reads them
+    // fresher): they are the zone's news.
     // ponytail: two pages of 10,000 at most (Paris 15e makes 11,400 a year), the newest kept; more pages if one zone needs them
-    recentDpe: bb => cached(`ademe/recent-${bb.map(x => x.toFixed(4)).join(',')}.json`, 7, async () => {
+    recentDpe: (bb, days = 7) => cached(`ademe/recent-${bb.map(x => x.toFixed(4)).join(',')}.json`, days, async () => {
       const q = new URLSearchParams({
         select: 'numero_dpe,date_etablissement_dpe,etiquette_dpe,type_batiment,surface_habitable_logement,adresse_ban,identifiant_ban,_geopoint',
         size: 10000, sort: '-date_etablissement_dpe', bbox: bb.join(','), date_etablissement_dpe_gte: new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10),

@@ -1,5 +1,5 @@
 // French formats: 289 000 €, 4 661 €/m², −13 %, 12 j, 27 oct.
-import type { Criteria, Listing } from "@/lib/api"
+import type { Criteria, DpeRow, Listing } from "@/lib/api"
 
 const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 })
 const df = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" })
@@ -47,3 +47,5 @@ const SMALL = new Set(["de", "des", "du", "la", "le", "les", "et", "au", "aux", 
 export const titleCase = (s: string) => s.toLowerCase().split(" ").map((w, i) => (/^\d/.test(w) ? w.toUpperCase() : i && SMALL.has(w) ? w : w.replace(/^([dl]')?(\p{L})/u, (_, p = "", c: string) => p + c.toUpperCase()))).join(" ")
 // "oct. 2025"
 export const month = (d: string) => new Intl.DateTimeFormat("fr-FR", { month: "short", year: "numeric" }).format(new Date(d))
+// what the prompt asks Claude to look for: the listing of a recent DPE
+export const dpeAsk = (d: DpeRow) => `l'annonce du DPE ${d.number} : ${TYPE_LABEL[d.type].toLowerCase()}${d.area ? ` ${num(d.area)} m²` : ""}, DPE ${d.energy} du ${date(d.date)}, ${d.address ?? `près de ${d.point[1].toFixed(5)}, ${d.point[0].toFixed(5)}`}`

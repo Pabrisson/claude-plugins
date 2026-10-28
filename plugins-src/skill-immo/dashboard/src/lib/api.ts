@@ -134,13 +134,18 @@ export type Search = {
   alert: { id: string; topic: string | null; drop: number; enabled?: boolean } | null
 }
 export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" | "area_max" | "rooms_min" | "rooms_max" | "floor_min" | "land_min", number>> & { dpe_max?: string; elevator?: boolean; outdoor?: boolean }
-export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; events: { id: string; type: string; property: string; at: string }[]; version: number }
+// the search's news (feed.json), newest first: a recent DPE no listing matches, Stream Estate listings to fetch
+export type News = { date: string } & ({ kind: "dpe"; dpe: DpeRow } | { kind: "listings"; count: number; added: number })
+export type Feed = { read_at: string | null; stream: { total: number; counted_at: string } | null; items: News[] }
+export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; events: { id: string; type: string; property: string; at: string }[]; feed: Feed; unread: number; version: number }
 export type Profile = { down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
 export type ScoreKey = "price" | "budget" | "energy" | "transport" | "travel" | "outdoor"
 export type UsageEntry = { date: string; route: string; credits: number | null; results: number; search: string | null }
 export type State = {
   home: string
   stream_estate: boolean
+  // the dashboard server's watch: every so many hours, 0 when off
+  watch_hours: number
   costs: Record<string, { credits: number | null; per?: string; note?: string }>
   usage: { month: number; last30: number; unknown: number; cap: number; eur_per_credit: number; by_search: Record<string, { calls: number; credits: number }>; by_route: Record<string, { calls: number; credits: number }>; by_month: Record<string, number> }
   log: UsageEntry[]
@@ -160,7 +165,8 @@ export const api = {
   state: () => json<State>("/api/state"),
   searches: () => json<SearchSummary[]>("/api/searches"),
   search: (slug: string) => json<SearchData>(`/api/s/${slug}`),
-  version: (slug: string) => json<{ version: number }>(`/api/s/${slug}/version`),
+  version: (slug: string) => json<{ version: number; unread: number }>(`/api/s/${slug}/version`),
+  readFeed: (slug: string) => post<object>(`/api/s/${slug}/feed/read`, {}),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
   listing: (slug: string, id: string, body: { my_status?: Status; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),

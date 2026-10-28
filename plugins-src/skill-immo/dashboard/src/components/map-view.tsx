@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { DpeRow, Listing, Poi, Point, PropertyType } from "@/lib/api"
-import { date, eur, keur, LEVEL_LABEL, month, num, pct, perUnit, POI_LABEL, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
+import { date, dpeAsk, eur, keur, LEVEL_LABEL, month, num, pct, perUnit, POI_LABEL, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -97,8 +97,6 @@ function dpeTip(g: DpeGroup, listings: Listing[], buttons = false) {
   const g7 = g.items.some(d => !d.listing && d.energy === "G") ? `<div class="dpe-row"><span>G : location interdite depuis 2025, plutôt une vente</span></div>` : ""
   return `<b>${esc(g.address ?? "Adresse inconnue")}</b>${rows.join("")}${more}${g7}`
 }
-// what the prompt asks Claude to look for
-const dpeAsk = (d: DpeRow) => `l'annonce du DPE ${d.number} : ${TYPE_LABEL[d.type].toLowerCase()}${d.area ? ` ${num(d.area)} m²` : ""}, DPE ${d.energy} du ${date(d.date)}, ${d.address ?? `près de ${d.point[1].toFixed(5)}, ${d.point[0].toFixed(5)}`}`
 
 // the world with the zone cut out: the veil that darkens everything outside it
 const WORLD: Position[] = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]

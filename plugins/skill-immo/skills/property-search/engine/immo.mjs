@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // property-search CLI and local dashboard server. The searches live in the folder Claude Code runs in ($IMMO_DIR
-// overrides it): one folder per search (<slug>/: search.json, listings.json, market.json, area.json), the buyer's
+// overrides it): one folder per search (<slug>/: search.json, listings.json, market.json, area.json, feed.json), the buyer's
 // profile (.profile.json), the measured API prices (.costs.json), the open data cache and the credits log (.cache/).
 // Each search has a mode: stream-estate (listings, analytics, alerts from the API) or classic (open data and assisted
 // listings only, never a credit). Search commands take -p <slug>. Exit codes: 2 the user must agree first (cost), 3 no credits left (402, assisted
@@ -33,6 +33,8 @@ const HOME = (() => {
   return fs.existsSync(path.join(process.cwd(), 'search.json')) ? path.dirname(process.cwd()) : process.cwd()
 })()
 const PORT = +(process.env.IMMO_PORT || 41287)
+// the dashboard server's watch of the searches: at its start, then every so many hours (0 turns it off)
+const WATCH_HOURS = +(process.env.IMMO_WATCH_HOURS ?? 6)
 // the dashboard, built from plugins-src/skill-immo/dashboard and served as is
 const DASHBOARD = path.join(ENGINE, 'dashboard/dist')
 const CACHE = path.join(HOME, '.cache'), USAGE = path.join(CACHE, 'api-usage.json')
@@ -98,7 +100,7 @@ function searchDir(required = true) {
   if (!fs.existsSync(path.join(dir, 'search.json'))) die(`no search ${p} in ${HOME}`)
   return dir
 }
-const version = dir => Math.max(...['search.json', 'listings.json', 'market.json', 'area.json', 'alert-events.json'].map(f => fs.statSync(path.join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0))
+const version = dir => Math.max(...['search.json', 'listings.json', 'market.json', 'area.json', 'alert-events.json', 'feed.json'].map(f => fs.statSync(path.join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0))
 const load = dir => ({
   search: readJson(path.join(dir, 'search.json')), listings: readJson(path.join(dir, 'listings.json'), []),
   market: readJson(path.join(dir, 'market.json'), {}), area: readJson(path.join(dir, 'area.json'), {}),
@@ -169,9 +171,11 @@ function seCriteria(s, { since, exclude = [], alert = false } = {}) {
   return all.length === 1 ? all[0] : { or: all }
 }
 
-// how many properties match (size 0: no result returned, so no credit)
-async function seCount(slug, criteria) {
-  const { data } = await api(slug, 'POST', '/properties', { body: { criteria, size: 0 }, accept: 'application/vnd.api+json' })
+// how many properties match (size 0: no result returned, so no credit). `quiet`: a free answer is not logged (the
+// dashboard server's watch counts every few hours)
+async function seCount(slug, criteria, { quiet = false } = {}) {
+  const log = charged(slug)
+  const { data } = await se('POST', '/properties', { body: { criteria, size: 0 }, accept: 'application/vnd.api+json', charged: c => (quiet && c.credits === 0) || log(c) })
   return data?.meta?.totalItems ?? 0
 }
 
@@ -309,6 +313,23 @@ function dpeLine(rows, listings, before) {
   return `recent DPE (12 months): ${rows.length}, ${open.length} without a listing${before ? `, ${fresh} new since the last refresh` : ''}`
 }
 const dpeNumbers = dir => { const r = readJson(path.join(dir, 'area.json'), {}).dpe_recent; return Array.isArray(r) ? new Set(r.map(d => d.number)) : null }
+
+// The news of a search (<slug>/feed.json), newest first: a recent DPE of its types and criteria that no listing
+// matches and the area.json before did not hold (a home about to go on sale?), Stream Estate listings to fetch. The
+// listings' own changes (new, drops, expiries) stay in listings.json; both are unread until `read_at`.
+const feedOf = dir => readJson(path.join(dir, 'feed.json'), { read_at: null, stream: null, items: [] })
+function addNews(dir, items, extra) {
+  if (!items.length && !extra) return
+  const f = feedOf(dir)
+  // ponytail: the last 500 news kept, older ones dropped; an archive if anyone scrolls that far
+  writeJson(path.join(dir, 'feed.json'), { ...f, ...extra, items: [...items, ...f.items].slice(0, 500) })
+}
+const dpeNews = (s, rows, listings, before) => recentDpe(rows, listings, { types: typesOf(s), criteria: s.criteria }).flatMap(a => a.items)
+  .filter(d => !d.listing && !before.has(d.number)).map(({ listing, ...dpe }) => ({ date: now(), kind: 'dpe', dpe }))
+const unread = dir => {
+  const f = feedOf(dir)
+  return [...f.items, ...listingsOf(dir).flatMap(l => l.changes ?? [])].filter(n => n.date > (f.read_at ?? '')).length
+}
 const pool = async (items, n, fn) => { const out = [], it = items.entries(); await Promise.all(Array.from({ length: n }, async () => { for (const [i, x] of it) out[i] = await fn(x) })); return out }
 
 // the free market and neighborhood data of a search: DVF sales, shops and services, travel times to the user's
@@ -549,7 +570,11 @@ async function enrich() {
 async function refresh() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), before = dpeNumbers(dir)
   const { area } = await freeData(dir, s)
-  const dpe = () => { const l = dpeLine(area.dpe_recent, listingsOf(dir), before); if (l) console.log(l) }
+  const dpe = () => {
+    const l = dpeLine(area.dpe_recent, listingsOf(dir), before)
+    if (l) console.log(l)
+    if (before && Array.isArray(area.dpe_recent)) addNews(dir, dpeNews(s, area.dpe_recent, listingsOf(dir), before))
+  }
   const assistedCount = listingsOf(dir).filter(l => l.source !== 'stream-estate' && l.status !== 'EXPIRED').length
   if (!streamOn(s) || !s.last_refresh) {
     console.log(`free data refreshed. ${streamOn(s) ? `No Stream Estate fetch yet: fetch -p ${s.slug}` : s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}${assistedCount ? `; ${assistedCount} assisted listings: check each with WebFetch (one page), then add --file to update price or status` : ''}`)
@@ -805,7 +830,7 @@ async function handle(req, res) {
   }
   if (p === '/api/state') {
     const pr = profile(), u = usage(usageLog())
-    return reply(res, 200, { home: HOME, stream_estate: hasKey(), costs: table(readJson(MEASURED, {})), usage: { ...u, cap: pr.monthly_credit_cap, eur_per_credit: pr.eur_per_credit }, log: usageLog().slice(-300) })
+    return reply(res, 200, { home: HOME, stream_estate: hasKey(), watch_hours: WATCH_HOURS, costs: table(readJson(MEASURED, {})), usage: { ...u, cap: pr.monthly_credit_cap, eur_per_credit: pr.eur_per_credit }, log: usageLog().slice(-300) })
   }
   if (p === '/api/searches') return reply(res, 200, searches().map(x => { const { search: s, listings: ls } = load(path.join(HOME, x)); return { slug: x, label: s.label, mode: s.mode ?? 'classic', types: typesOf(s), zone: s.zone?.label, created: s.created, listings: ls.length, online: ls.filter(l => l.status !== 'EXPIRED').length } }))
   if (p === '/api/profile') {
@@ -831,14 +856,19 @@ async function handle(req, res) {
     if (!fs.existsSync(path.join(dir, 'search.json'))) return reply(res, 404, { error: `no search ${m[1]}` })
     // the search's version: its files' latest change, taken before reading them, so that what Claude writes
     // meanwhile still shows as new to the page (it asks /version every few seconds)
-    if (sub === '/version') return reply(res, 200, { version: version(dir) })
+    if (sub === '/version') return reply(res, 200, { version: version(dir), unread: unread(dir) })
     if (!sub && req.method === 'DELETE') {
       // a search with an alert keeps it: Stream Estate would go on notifying, with no search left to show it
       if (readJson(path.join(dir, 'search.json')).alert?.id) return reply(res, 409, { error: 'alert' })
       fs.rmSync(dir, { recursive: true, force: true })
       return reply(res, 200, {})
     }
-    if (!sub) { const v = version(dir); return reply(res, 200, { ...load(dir), events: readJson(path.join(dir, 'alert-events.json'), []), version: v }) }
+    if (!sub) { const v = version(dir); return reply(res, 200, { ...load(dir), events: readJson(path.join(dir, 'alert-events.json'), []), feed: feedOf(dir), unread: unread(dir), version: v }) }
+    if (sub === '/feed/read' && post) {
+      const f = feedOf(dir)
+      writeJson(path.join(dir, 'feed.json'), { ...f, read_at: now() })
+      return reply(res, 200, {})
+    }
     if (sub === '/visit' && post) {
       const f = path.join(dir, 'search.json'), s = readJson(f), before = s.last_visit
       s.last_visit = now()
@@ -874,7 +904,66 @@ async function handle(req, res) {
 
 function serve() {
   http.createServer((req, res) => handle(req, res).catch(e => reply(res, 500, { error: e.message })))
-    .listen(PORT, '127.0.0.1', () => console.log(`dashboard server on http://127.0.0.1:${PORT}/ for ${HOME}`))
+    .listen(PORT, '127.0.0.1', () => {
+      console.log(`dashboard server on http://127.0.0.1:${PORT}/ for ${HOME}`)
+      if (WATCH_HOURS > 0) { watchAll(); setInterval(watchAll, WATCH_HOURS * 3600000) }
+    })
+}
+
+// The watch of a search, free: the zone's recent DPE (downloaded again once 90 % of the watch's period has gone, so
+// that a server restarted meanwhile reads its cache) and, in Stream Estate mode, the count of the listings not
+// fetched yet. What is new goes to feed.json, and area.json takes the DPE for the map.
+async function watch(dir) {
+  const s = readJson(path.join(dir, 'search.json')), before = dpeNumbers(dir), news = []
+  let stream
+  if (before && typesOf(s).some(isHome)) {
+    const rows = (await od.recentDpe(bbox(s.zone), WATCH_HOURS / 24 * 0.9)).filter(d => inZone(d.point, s.zone))
+    news.push(...dpeNews(s, rows, listingsOf(dir), before))
+    const f = path.join(dir, 'area.json')
+    if (rows.length !== before.size || rows.some(d => !before.has(d.number))) writeJson(f, { ...readJson(f, {}), dpe_recent: rows })
+  }
+  if (streamOn(s)) {
+    const total = await seCount(s.slug, seCriteria(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) }), { quiet: true })
+    // the latest count: the search's (search, fetch) or the watch's
+    const last = [s.stream, feedOf(dir).stream].filter(Boolean).sort((a, b) => b.counted_at.localeCompare(a.counted_at))[0]
+    if (total > (last?.total ?? 0)) news.push({ date: now(), kind: 'listings', count: total, added: total - (last?.total ?? 0) })
+    if (total !== last?.total) stream = { total, counted_at: now() }
+  }
+  addNews(dir, news, stream && { stream })
+  return { s, news }
+}
+
+// every search's watch, one desktop notification per search with news
+async function watchAll() {
+  for (const x of searches()) {
+    try {
+      const { s, news } = await watch(path.join(HOME, x)), d = news.filter(n => n.kind === 'dpe').length, l = news.find(n => n.kind === 'listings')
+      if (!news.length) continue
+      const text = [d && `${d} nouveau${d > 1 ? 'x' : ''} DPE sans annonce`, l && `${l.added} nouvelle${l.added > 1 ? 's' : ''} annonce${l.added > 1 ? 's' : ''} à récupérer`].filter(Boolean).join(', ')
+      console.log(`watch ${x}: ${text}`)
+      notify(`Immo · ${s.label}`, text, `http://127.0.0.1:${PORT}/${x}/`)
+    } catch (e) { console.log(`watch ${x}: ${e.message}`) }
+  }
+}
+
+// Windows PowerShell 5.1 toast (as hook-notify): the XML comes from an env var so nothing needs quoting
+const PS_TOAST = '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;'
+  + '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null;'
+  + '$x = New-Object Windows.Data.Xml.Dom.XmlDocument; $x.LoadXml($env:IMMO_TOAST);'
+  + "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($x))"
+// A desktop notification, never fatal: on macOS terminal-notifier (a click opens the dashboard) else osascript, on
+// Linux notify-send, on Windows a toast. IMMO_NOTIFY=0 turns them off (the tests).
+function notify(title, message, url) {
+  if (process.env.IMMO_NOTIFY === '0') return
+  const xml = t => t.replace(/[<>&"]/g, c => `&#${c.charCodeAt(0)};`)
+  const env = { ...process.env, IMMO_TOAST: `<toast><visual><binding template="ToastGeneric"><text>${xml(title)}</text><text>${xml(message)}</text></binding></visual></toast>` }
+  const tries = {
+    darwin: [['terminal-notifier', '-title', title, '-message', message, '-open', url, '-sound', 'default'],
+      ['osascript', '-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv) sound name "default"', '-e', 'end run', title, message]],
+    win32: [['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', PS_TOAST]],
+  }[process.platform] ?? [['notify-send', title, message]]
+  const next = ([[bin, ...argv] = [], ...rest]) => bin && spawn(bin, argv, { env, stdio: 'ignore', windowsHide: true }).on('error', () => next(rest)).unref()
+  next(tries)
 }
 
 // the Claude processes the server works for (each `dashboard` adds its own): it quits once they have all quit. A

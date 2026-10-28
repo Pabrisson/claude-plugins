@@ -18,9 +18,12 @@ test('open data: zone, DVF, shops, crime, income, risks', { skip: !live && 'IMMO
   const r = run(['search', 'rue Paul Bert, Lyon 3e', '--radius', '400', '--mode', 'classic'])
   assert.equal(r.status, 0, r.stderr)
   const s = read('search.json'), m = read('market.json'), a = read('area.json')
-  assert.deepEqual([s.insee, s.street.code_voie, s.mode], ['69383', '5245', 'classic'])
-  assert.ok(m.dvf.commune.count > 1000 && m.dvf.street.count > 20, 'five years of sales in Lyon 3e')
-  assert.ok(m.dvf.zone.median_ppm2 > 2500 && m.dvf.zone.median_ppm2 < 8000)
+  assert.deepEqual([s.insee, s.street.code_voie, s.mode, s.types], ['69383', '5245', 'classic', ['flat']])
+  // market.dvf holds one summary per type of the search
+  const flat = m.dvf.flat
+  assert.ok(flat.commune.count > 1000 && flat.street.count > 20, 'five years of sales of flats in Lyon 3e')
+  assert.ok(flat.zone.median_ppm2 > 2500 && flat.zone.median_ppm2 < 8000)
+  assert.ok(Array.isArray(a.dpe_recent) && a.dpe_recent.length > 0, `the zone's recent DPE: ${JSON.stringify(a.dpe_recent).slice(0, 200)}`)
   assert.ok(Array.isArray(a.pois) && a.pois.some(p => p.cat === 'transport'), JSON.stringify(a.pois).slice(0, 200))
   assert.ok(a.crime.commune.rows.length > 5 && a.income.local.median > 0 && a.risks.natural.length > 0)
   assert.equal(a.isochrones.length, 3)
@@ -33,6 +36,9 @@ test('Stream Estate: a free count, then one listing for 1 credit', { skip: (!liv
   assert.ok(read('search.json').stream.total >= 0)
   r = run(['fetch', '-p', 'rue-paul-bert-69003-lyon', '--max', '1', '--spend', '1'])
   assert.equal(r.status, 0, r.stderr)
+  const [l] = read('listings.json')
+  assert.deepEqual([l.source, l.property_type], ['stream-estate', 'flat'])
+  // the count of search, the count of fetch, then the listing
   const log = JSON.parse(fs.readFileSync(path.join(home, '.cache/api-usage.json'), 'utf8'))
   assert.deepEqual(log.map(e => e.credits), [0, 0, 1], 'X-Credits-Charged: the counts are free, the listing costs 1')
   console.log(run(['usage', '--remote']).stdout)

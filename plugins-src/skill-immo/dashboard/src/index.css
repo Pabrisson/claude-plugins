@@ -95,6 +95,14 @@
     --status-visited: #1baf7a;
     --status-offer: #eda100;
     --status-dropped: oklch(0.7 0.01 286);
+    /* the follow-up's news, one color per kind, as text on the card (contrast 5:1 and more): a DPE, a new listing, a
+       drop (as --below), a rise (as --above), the paid API's listings, a status or an expiry */
+    --news-dpe: oklch(0.52 0.13 145);
+    --news-new: oklch(0.52 0.1 200);
+    --news-drop: oklch(0.52 0.16 255);
+    --news-rise: oklch(0.56 0.15 50);
+    --news-stream: oklch(0.52 0.18 300);
+    --news-other: oklch(0.55 0.015 286);
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.141 0.005 285.823);
     --sidebar-primary: oklch(0.21 0.006 285.885);
@@ -142,6 +150,12 @@
     --status-visited: #199e70;
     --status-offer: #c98500;
     --status-dropped: oklch(0.45 0.01 286);
+    --news-dpe: oklch(0.75 0.14 145);
+    --news-new: oklch(0.75 0.11 200);
+    --news-drop: oklch(0.72 0.14 255);
+    --news-rise: oklch(0.75 0.14 55);
+    --news-stream: oklch(0.72 0.15 300);
+    --news-other: oklch(0.68 0.015 286);
     --sidebar: oklch(0.21 0.006 285.885);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.92 0.004 286.32);

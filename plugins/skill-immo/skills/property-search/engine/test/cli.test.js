@@ -64,6 +64,8 @@ test('the recent DPE of the zone: kept in area.json, those without a listing, th
   fs.writeFileSync(path.join(home, '.cache/ademe', file), JSON.stringify([{ ...rows[0], number: '2669E0000004D' }, ...rows]))
   r = await run(home, ['refresh', '-p', 'paul-bert'], { key: null })
   assert.match(r.out, /recent DPE \(12 months\): 3, 3 without a listing, 1 new since the last refresh/)
+  // the new one is news: a flat, as the search's type
+  assert.deepEqual(read(dir, 'feed.json').items.map(n => n.dpe.number), ['2669E0000004D'])
 })
 
 test('the monthly cap stops a call, --force passes it', async () => {

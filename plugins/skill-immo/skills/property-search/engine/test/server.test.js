@@ -9,7 +9,10 @@ import { ENGINE, fakeStreamEstate, property, searchesFolder } from './helpers.js
 // the dashboard server on a free port, over a throwaway searches folder and the fake Stream Estate
 const api = await fakeStreamEstate()
 const { home, dir } = searchesFolder(), port = 41700 + Math.floor(Math.random() * 300)
-const server = spawn(process.execPath, [ENGINE, 'serve'], { env: { ...process.env, IMMO_DIR: home, IMMO_PORT: `${port}`, STREAM_ESTATE_BASE: api.url, STREAM_ESTATE_API_KEY: 'test-key' } })
+// the zone's DPE as the last refresh saw them: one, so that the watch at the server's start finds the other
+const ademe = path.join(home, '.cache/ademe'), dpe = JSON.parse(fs.readFileSync(path.join(ademe, fs.readdirSync(ademe).find(f => f.startsWith('recent-'))), 'utf8'))
+fs.writeFileSync(path.join(dir, 'area.json'), JSON.stringify({ dpe_recent: dpe.filter(d => d.number === '2669E0000002B') }))
+const server = spawn(process.execPath, [ENGINE, 'serve'], { env: { ...process.env, IMMO_DIR: home, IMMO_PORT: `${port}`, IMMO_NOTIFY: '0', STREAM_ESTATE_BASE: api.url, STREAM_ESTATE_API_KEY: 'test-key' } })
 const base = `http://127.0.0.1:${port}`
 test.after(() => { server.kill(); api.close() })
 
@@ -25,6 +28,19 @@ test('the searches, one search, the state without the key', async () => {
   assert.equal(JSON.parse(state).stream_estate, true)
   assert.ok(!state.includes('test-key'), 'the key never reaches the browser')
   assert.equal((await fetch(base + '/api/s/nope')).status, 404)
+})
+
+test("the server's watch at its start: a new DPE and the listings to fetch are news, unread until marked read", async () => {
+  let s
+  for (let i = 0; i < 50 && !(s = await (await fetch(base + '/api/s/paul-bert')).json()).feed.items.length; i++) await new Promise(ok => setTimeout(ok, 100))
+  // the flat's DPE in the zone (the house is not of the search's types, the third one is outside the 500 m)
+  assert.deepEqual(s.feed.items.map(n => n.dpe?.number ?? `${n.kind} ${n.count}`), ['2669E0000001A', 'listings 1'])
+  assert.deepEqual(s.area.dpe_recent.map(d => d.number), ['2669E0000001A', '2669E0000002B'])
+  assert.equal(s.unread, 2)
+  assert.equal((await post('/api/s/paul-bert/feed/read', {})).status, 200)
+  assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).unread, 0)
+  // the watch's free count is not logged
+  assert.ok(!fs.existsSync(path.join(home, '.cache/api-usage.json')))
 })
 
 test('a paid action from the dashboard: the estimate first, then the run with the spend the user accepted', async () => {

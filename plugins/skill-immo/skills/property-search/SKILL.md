@@ -179,7 +179,16 @@ recheck the ones the user follows, one WebFetch each.
 Its last line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
 refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or
 a lease, so a recent one without a listing may be a home about to go on sale (ADEME does not say which). Say the new ones
-in one line; the dashboard's map rings them (layer « DPE récents »).
+in one line; the dashboard's map rings them (layer « DPE récents »), and those of the search's types and criteria go to
+its news.
+
+## The dashboard server's watch
+
+While the dashboard server runs (`dashboard` starts it, it stops once every Claude it worked for has quit), it watches
+every search, free: at its start, then every 6 hours. It reads the zone's new DPE that no listing matches and, in Stream
+Estate mode, counts the new listings (free). The news go to `<slug>/feed.json`, with a desktop notification. In the
+dashboard, the bell counts what is not read and opens the latest, and « Suivi » lists it with the listings' changes: « Chercher l'annonce »
+puts a `[chercher]` item in the prompt, « Récupérer » goes through the credits dialog. The watch never spends a credit.
 
 ## alert
 

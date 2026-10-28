@@ -24,8 +24,14 @@ type Ctx = {
   // what the decision aids of a listing read (lib/decide.js)
   aidsFor: (l: Listing) => { ref: Ref | null; pois: Poi[]; isochrones: NonNullable<SearchData["area"]["isochrones"]>; profile: Profile; criteria: SearchData["search"]["criteria"] }
   lastVisit: string | null
-  // the search changed on disk since the page loaded it (Claude at work): reloading the page takes the change
+  // the search changed on disk since the page loaded it (Claude or the server's watch at work): reloading the page
+  // takes the change
   stale: boolean
+  // the news not read yet, as of the last check (every few seconds)
+  unread: number
+  // the news the follow-up scrolls to and lights up (components/news newsKey), "all" for the list's top
+  newsFocus: string | null
+  focusNews: (key: string | null) => void
   selected: string | null
   select: (id: string | null) => void
   compare: string[]
@@ -61,18 +67,21 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
   useEffect(() => save(`immo:${slug}:feedback`, feedback), [slug, feedback])
 
   const [stale, setStale] = useState(false)
+  const [unread, setUnread] = useState(initial.unread)
+  const [newsFocus, focusNews] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     const [d, s] = await Promise.all([api.search(slug), api.state()])
     setData(d)
     setState(s)
+    setUnread(d.unread)
     setStale(false)
   }, [slug])
   // every few seconds, while the page is shown: a newer version than the data's is a change made elsewhere. The
   // page's own changes reload the data, which moves its version along.
   useEffect(() => {
     const t = setInterval(() => {
-      if (document.visibilityState === "visible") api.version(slug).then(v => v.version > data.version && setStale(true), () => {})
+      if (document.visibilityState === "visible") api.version(slug).then(v => { if (v.version > data.version) setStale(true); setUnread(v.unread) }, () => {})
     }, 4000)
     return () => clearInterval(t)
   }, [slug, data.version])
@@ -92,7 +101,7 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
     marketOf: t => markets[t],
     marketFor: l => markets[typeOf(l) as PropertyType],
     aidsFor: l => ({ ref: markets[typeOf(l) as PropertyType].ref, pois, isochrones: data.area.isochrones ?? [], profile, criteria: data.search.criteria }),
-    lastVisit, stale, selected, select, compare,
+    lastVisit, stale, unread, newsFocus, focusNews, selected, select, compare,
     toggleCompare: id => setCompare(c => (c.includes(id) ? c.filter(x => x !== id) : [...c, id].slice(-4))),
     clearCompare: () => setCompare([]),
     feedback,

@@ -83,7 +83,7 @@ function Workspace() {
   return (
     <RunProvider onDone={reload}>
       <div className="flex h-dvh flex-col">
-        <TopBar />
+        <TopBar onNews={() => setView("follow")} />
         <StaleBar />
         <Tabs value={view} onValueChange={setView} className="min-h-0 flex-1 gap-0">
           <TabsList variant="line" className="hidden w-full justify-start rounded-none border-b bg-card px-3 md:flex">

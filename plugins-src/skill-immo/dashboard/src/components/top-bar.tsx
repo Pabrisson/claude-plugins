@@ -1,10 +1,11 @@
 import { WEIGHTS } from "@engine/decide.js"
 import { matches } from "@engine/market.js"
-import { ClipboardCopyIcon, DownloadIcon, HomeIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { BellIcon, CheckCheckIcon, ClipboardCopyIcon, DownloadIcon, HomeIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useTheme } from "next-themes"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
+import { LOOK, newsKey, NewsTile, newsTitle, UnreadDot, useNews, whenOf } from "@/components/news"
 import { useRun } from "@/components/run-dialog"
 import { CriteriaFields, criteriaArg, NewSearch, TypesField } from "@/components/search-form"
 import { TypeIcon } from "@/components/type-icon"
@@ -22,15 +23,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Criteria, type Profile, type PropertyType, type ScoreKey } from "@/lib/api"
-import { criteriaLabels, eur, SCORE_LABEL, TYPE_PLURAL } from "@/lib/format"
+import { criteriaLabels, eur, num, SCORE_LABEL, TYPE_PLURAL } from "@/lib/format"
 import { useSearch, type Feedback } from "@/lib/store"
+import { cn } from "@/lib/utils"
 
 
 // the Copy prompt, as the skill's "apply this feedback" mode reads it
 export const promptText = (slug: string, items: Feedback[]) =>
   `/skill-immo:property-search apply this feedback (recherche ${slug})\n${items.map((f, i) => `${i + 1}. [${f.kind}] ${f.text}`).join("\n")}`
 
-export function TopBar() {
+export function TopBar({ onNews }: { onNews: () => void }) {
   const { slug, data, state } = useSearch()
   const run = useRun()
   const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate"
@@ -63,12 +65,80 @@ export function TopBar() {
           </TooltipTrigger>
           <TooltipContent>{streamOn ? "Récupérer les annonces de la zone : le coût est annoncé avant" : state.stream_estate ? "Recherche en mode OpenData : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API payante. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
         </Tooltip>
+        <NewsBell onOpen={onNews} />
         <AddListing />
         <PromptButton />
         <ProfileDialog />
         <ThemeButton />
       </span>
     </header>
+  )
+}
+
+// The bell: the count of the news not read yet (the server's watch, Claude's refresh), a toast when more come in, and
+// on a click the latest ones. A listing's opens its dossier, the others the follow-up on them.
+function NewsBell({ onOpen }: { onOpen: () => void }) {
+  const { slug, unread, stale, state, select, focusNews, reload } = useSearch()
+  const { items, fresh } = useNews()
+  const [open, setOpen] = useState(false)
+  const before = useRef(unread), away = useRef(false)
+  // a news picked: the panel closes on the follow-up or the dossier, and the focus goes there rather than to the bell
+  const leave = () => { away.current = true; setOpen(false) }
+  const follow = (key: string) => { focusNews(key); onOpen(); leave() }
+  useEffect(() => {
+    const more = unread - before.current
+    if (more > 0) toast(`${more} nouveauté${more > 1 ? "s" : ""} dans le suivi`, { action: { label: "Voir", onClick: () => { focusNews("all"); onOpen() } } })
+    before.current = unread
+  }, [unread, onOpen, focusNews])
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon-sm" className="relative" aria-label={unread ? `${unread} notification${unread > 1 ? "s" : ""} non lue${unread > 1 ? "s" : ""}` : "Notifications"}>
+              <BellIcon />
+              {unread > 0 && <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] tabular-nums">{unread > 99 ? "99+" : unread}</Badge>}
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Nouveaux DPE et annonces{state.watch_hours ? ` : le serveur vérifie à son démarrage, puis toutes les ${num(state.watch_hours)} h` : ""}</TooltipContent>
+      </Tooltip>
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] gap-0 p-0" onCloseAutoFocus={e => { if (away.current) e.preventDefault(); away.current = false }}>
+        <div className="flex items-baseline justify-between gap-3 px-4 pt-3 pb-2">
+          <p className="text-sm font-medium">Notifications</p>
+          <p className="text-xs text-muted-foreground">{unread ? `${unread} non lue${unread > 1 ? "s" : ""}` : "Tout est lu"}</p>
+        </div>
+        {stale && (
+          <div className="mx-3 mb-2 flex items-center justify-between gap-2 rounded-md bg-muted px-2.5 py-1.5 text-xs">
+            De nouvelles notifications sont arrivées.<Button size="xs" variant="secondary" onClick={() => location.reload()}>Recharger</Button>
+          </div>
+        )}
+        {items.length ? (
+          <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5">
+            {items.slice(0, 6).map(n => (
+              <li key={newsKey(n)}>
+                <button type="button" onClick={() => { if ("l" in n) { select(n.l.id); leave() } else follow(newsKey(n)) }}
+                  className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
+                  <NewsTile n={n} dim={!fresh(n)} className="size-8" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold" style={{ color: LOOK[n.kind].color }}>{LOOK[n.kind].label}{fresh(n) && <span className="sr-only">, non lue</span>}</span>
+                    <span className={cn("block truncate text-sm", fresh(n) ? "font-medium" : "text-muted-foreground")}>{newsTitle(n)}</span>
+                  </span>
+                  <time dateTime={n.date} className="shrink-0 text-xs text-muted-foreground tabular-nums">{whenOf(n.date)}</time>
+                  {fresh(n) ? <UnreadDot /> : <i aria-hidden className="size-2 shrink-0" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="px-4 pb-4 text-sm text-muted-foreground">Aucune notification pour l'instant : le serveur vérifie les DPE et les annonces de la zone à son démarrage, puis régulièrement.</p>
+        )}
+        <div className="flex items-center justify-between gap-2 border-t p-2">
+          <Button variant="ghost" size="sm" disabled={!unread} onClick={async () => { await api.readFeed(slug); await reload() }}><CheckCheckIcon data-icon="inline-start" />Tout marquer comme lu</Button>
+          <Button variant="secondary" size="sm" onClick={() => follow("all")}>Voir tout le suivi</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -347,7 +417,7 @@ export function StaleBar() {
   if (!stale) return null
   return (
     <div role="status" className="flex items-center justify-center gap-3 border-b bg-primary px-3 py-1.5 text-sm text-primary-foreground">
-      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (Claude a mis la recherche à jour).
+      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (Claude ou la veille du serveur ont mis la recherche à jour).
       <Button size="xs" variant="secondary" onClick={() => location.reload()}>Recharger</Button>
     </div>
   )
