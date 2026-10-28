@@ -109,7 +109,7 @@ Band above the prompt, in the terminal as well as in the desktop app. Text color
 
 - **Line 1**: model (`Opus 5.5`) • effort (`○ Low` to `◈ Max`) | folder • git branch • `⚡` number of tools run, then the running tool ("Bash running 3s") or the last one used.
 - **Agent line**: when an agent's transcript is opened from the task list, a line `▸ name ● status • ◷ time since spawned • Σ tokens generated • ⧉ its position among agents • ✎ its task`, and lines 1 and 2 show its model, effort, tools and context.
-- **Line 2**: 5h and 7d usage gauges with their reset time, context (percentage and tokens), session cost (hidden while it is $0.00). In a narrow window, the line drops the reset times first, then the cost, then the tokens.
+- **Line 2**: 5h and 7d usage gauges, each with its gap to an even pace until the reset (`+5%`: used faster than the window runs out, `-5%` slower, `±0%` on pace: Agent Burn's gap, signed on usage) and its reset time, context (percentage and tokens), session cost (hidden while it is $0.00). In a narrow window, the line drops the reset times and pace gaps first, then the cost, then the tokens.
 - **Line 3**: a new Claude Code version is available, with an **Update** button (brew, winget, mise, otherwise `claude update`). Once installed: "restart Claude to use it".
 - **Alerts**: a toast when the context goes over 85% ("consider /compact") and when 5h usage goes over 90%, once per crossing.
 - **`⇄` icon**: opens and closes the [`mod-ports`](#mod-ports) pane; without it, a toast says so.

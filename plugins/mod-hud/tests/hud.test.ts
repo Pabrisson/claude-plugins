@@ -81,8 +81,9 @@ test('terminal: one rule above, the 3 lines with theme colors, 1M tokens, cost, 
     /xHigh/,
     /\.claude/,
     /master/,
-    /5h ━{4}─{6} 42% \(2h 13m\)/,
-    /7d ━{2}─{8} 18% \(3d 4h\)/,
+    // used minus an even pace: 2h 13m left of 5h is 56% elapsed, 3d 4h left of 7d 55%
+    /5h ━{4}─{6} 42% -14% \(2h 13m\)/,
+    /7d ━{2}─{8} 18% -37% \(3d 4h\)/,
     /ctx ━{3}─{7} 32% \(323k\/1M\) \| \$1\.23/,
     /2\.1\.294 → 2\.1\.300/,
   ]) {
@@ -122,6 +123,22 @@ for (const updated of [true, false]) {
   })
 }
 
+test('the pace delta: + above an even pace, ±0% on it, gray like the reset time', async ($, on) => {
+  engine(on, {
+    ...USAGE,
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: 70, resetsAt: '2026-10-10T14:13:00Z' },
+      { kind: 'seven_day', percentUsed: 55, resetsAt: '2026-10-13T16:00:00Z' },
+    ],
+  })
+  await $.session.start(START)
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ text: /5h ━{7}─{3} 70% \+14% \(2h 13m\)/ })).toBeDefined()
+  expect(await ui.find({ text: /7d ━{6}─{4} 55% ±0% \(3d 4h\)/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^ \+14%$/ }))?.props).toMatchObject({ color: 'inactive', dimColor: true })
+  await ui.unmount()
+})
+
 test('terminal fullscreen and narrow: folder and branch stay, line 2 drops resets then cost', async ($, on) => {
   engine(on)
   await $.session.start(START)
@@ -131,7 +148,7 @@ test('terminal fullscreen and narrow: folder and branch stay, line 2 drops reset
     props: { ...BAND.props, bodyColumns: 70 },
     viewport: { columns: 75, rows: 30, isFullscreen: true },
   })
-  for (const text of [/\(2h 13m\)/, /\$1\.23/]) {
+  for (const text of [/\(2h 13m\)/, /-14%/, /\$1\.23/]) {
     expect(await ui.find({ text })).toBeUndefined()
   }
   for (const text of [/Opus 5\.5 • ◉ xHigh \| \.claude • master/, /\(323k\/1M\)/]) {

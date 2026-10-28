@@ -71,6 +71,13 @@ const until = (iso: string | undefined, now: number) => {
   return days ? `${days}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`
 }
 
+// used minus an even pace until the reset (Agent Burn's delta, signed on usage): + burns faster than the window runs out
+const pace = (pct: number, iso: string | undefined, span: number, now: number) => {
+  if (!iso) return ''
+  const d = Math.round(pct - 100 + Math.min(100, Math.max(0, ((Date.parse(iso) - now) / span) * 100)))
+  return d > 0 ? `+${d}%` : d < 0 ? `${d}%` : '±0%'
+}
+
 // 840 → 840, 323000 → 323k, 1000000 → 1M, 1500000 → 1.5M
 const tokens = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.floor(n / 1000)}k` : `${n}`)
 
@@ -341,12 +348,16 @@ const hudLines = async (
   // line 2: 5h • 7d | ctx | $, each figure a gauge: on the terminal a thin line then the percentage, no
   // background (a background fills the whole cell, line height included, and touches the rows around);
   // on the desktop an SVG pill with the percentage centered inside
-  const quotas = [
-    ['five_hour', '5h'],
-    ['seven_day', '7d'],
-  ].flatMap(([kind, name]) => {
+  const quotas = (
+    [
+      ['five_hour', '5h', 5 * HOUR],
+      ['seven_day', '7d', 168 * HOUR],
+    ] as const
+  ).flatMap(([kind, name, span]) => {
     const q = usage.rateLimits.find(r => r.kind === kind)
-    return q && name ? [{ name, pct: q.percentUsed, detail: until(q.resetsAt, now) }] : []
+    return q
+      ? [{ name, pct: q.percentUsed, detail: until(q.resetsAt, now), delta: pace(q.percentUsed, q.resetsAt, span, now) }]
+      : []
   })
   const ctx = agentId ? agentContext(loop, sessionModel, usage.context.window) : usage.context
   const ctxTokens = ctx.tokens === undefined ? '' : `${tokens(ctx.tokens)}/${tokens(ctx.window)}`
@@ -354,10 +365,10 @@ const hudLines = async (
   const usd = usage.cost?.usd ?? 0
   const cost = usd >= 0.005 ? `$${usd.toFixed(2)}` : ''
   const width = (fit: Fit) => {
-    const meter = (name: string, pct: number, detail: string) =>
-      name.length + 1 + BAR + 1 + `${Math.round(pct)}%`.length + (detail ? detail.length + 3 : 0)
+    const meter = (name: string, pct: number, detail: string, delta = '') =>
+      name.length + 1 + BAR + 1 + `${Math.round(pct)}%`.length + (delta ? delta.length + 1 : 0) + (detail ? detail.length + 3 : 0)
     const parts = [
-      ...quotas.map(q => meter(q.name, q.pct, fit.resets ? q.detail : '')),
+      ...quotas.map(q => meter(q.name, q.pct, fit.resets ? q.detail : '', fit.resets ? q.delta : '')),
       ...(ctx.percent === undefined ? [] : [meter('ctx', ctx.percent, fit.tokens ? ctxTokens : '')]),
       ...(fit.cost && cost ? [cost.length] : []),
     ]
@@ -365,7 +376,7 @@ const hudLines = async (
   }
   const fit = isCli ? (FITS.find(f => width(f) <= view.columns) ?? FITS[FITS.length - 1]!) : FITS[0]!
 
-  const meter = (name: string, pct: number, detail: string) => {
+  const meter = (name: string, pct: number, detail: string, delta = '') => {
     const n = Math.round((Math.min(100, Math.max(0, pct)) / 100) * BAR)
     const label = `${Math.round(pct)}%`
     const fill = level(pct)
@@ -380,10 +391,12 @@ const hudLines = async (
     return [
       <Text color={C.muted}>{gap(`${name} `)}</Text>,
       ...bar,
+      delta ? <Text color={C.muted} dimColor>{gap(` ${delta}`)}</Text> : null,
       detail ? <Text color={C.muted} dimColor>{gap(` (${detail})`)}</Text> : null,
     ]
   }
-  const quotaMeters = quotas.map(q => meter(q.name, q.pct, fit.resets ? q.detail : ''))
+  // the delta goes with the reset time on a narrow terminal
+  const quotaMeters = quotas.map(q => meter(q.name, q.pct, fit.resets ? q.detail : '', fit.resets ? q.delta : ''))
   const ctxMeter = ctx.percent === undefined ? [] : meter('ctx', ctx.percent, fit.tokens ? ctxTokens : '')
   const parts = [
     ...quotaMeters.flatMap((q, i) => (i ? [sep(' • '), ...q] : q)),
