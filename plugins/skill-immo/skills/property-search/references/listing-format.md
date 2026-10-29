@@ -110,9 +110,11 @@ history stay.
   - `mode` (`stream-estate`, or `classic` for OpenData);
   - `types` (`["flat"]` when absent);
   - `point`, `insee`, `dep`, `street { name, code_voie }`, `ban`;
-  - `zone { how: radius|commune|iris, kind: radius|polygon, center, radius_m, geometry, label }`. For a
-    street, `how: radius` is a band along the whole street: a polygon (`kind: polygon`) `radius_m` wide on each side,
-    its ends taken from the street's DVF sales and address numbers;
+  - `zone { how: radius|commune|iris|drawn, kind: radius|polygon, center, radius_m, geometry, label }`. For a
+    street, `how: radius` is a band along the whole street: a polygon (`kind: polygon`), every point within `radius_m`
+    of the street's line (BD TOPO), a MultiPolygon when its segments lie apart; without a known line, a straight band
+    between its farthest DVF sales and address numbers. `how: drawn` is the outline the user drew on the dashboard's
+    map, 60 corners at most (its draft waits in `zone-draft.json` until `search --zone drawn`);
   - `criteria { budget_min, budget_max, area_min, area_max, rooms_min, rooms_max, floor_min, land_min, dpe_max,
     elevator, outdoor }`, each applied to the types that have it;
   - `stream { total, counted_at }`, `last_fetch`, `last_refresh`, `last_visit` (a fetch takes the profile's

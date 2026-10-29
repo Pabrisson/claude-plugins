@@ -116,6 +116,10 @@ export function takes(a, n, s) {
 // the alerts on that take a news
 export const firing = (alerts, n, s) => alerts.filter(a => a.enabled && takes(a, n, s))
 
+// a street's BAN id: its commune's INSEE code (2A, 2B in Corsica), then FANTOIR's 4 characters or the BAN's newer
+// ones (6: `13207_dqffc7`, the Corniche Kennedy)
+export const BAN_STREET = /^[0-9AB]{5}_[a-z0-9]{4,8}$/i
+
 // an alert's place, checked: the search's zone, else (for an event watched anywhere) a street by its BAN id, a
 // commune by its code, a circle of 50 m to 3 km, each with its label and point
 function cleanPlace(p, event) {
@@ -123,7 +127,7 @@ function cleanPlace(p, event) {
   if (!EVENTS[event].anywhere) throw new Error(`${event} is watched in the search's zone only`)
   const label = String(p.label ?? '').trim().slice(0, 120), point = p.point?.length === 2 && p.point.every(Number.isFinite) ? [+p.point[0], +p.point[1]] : null
   if (!label || !point) throw new Error('a place needs a label and a point')
-  if (p.how === 'street' && /^[0-9AB]{5}_[a-z0-9]{4,5}$/i.test(p.ban ?? '')) return { how: 'street', ban: p.ban, label, point }
+  if (p.how === 'street' && BAN_STREET.test(p.ban ?? '')) return { how: 'street', ban: p.ban, label, point }
   if (p.how === 'commune' && /^[0-9AB]{5}$/i.test(p.insee ?? '')) return { how: 'commune', insee: p.insee, label, point }
   if (p.how === 'radius' && +p.radius_m >= 50 && +p.radius_m <= 3000) return { how: 'radius', radius_m: Math.round(+p.radius_m), label, point }
   throw new Error('bad place')

@@ -154,6 +154,22 @@ test('the version follows the files; a search is deleted, not one with an alert'
   assert.equal((await fetch(`${base}/api/s/paul-bert`, { method: 'DELETE', headers: { Origin: 'https://evil.example' } })).status, 403)
 })
 
+test('a zone drawn on the map: kept as a draft for Claude, closed and rounded; the search does not change', async () => {
+  const v = (await (await fetch(base + '/api/s/paul-bert/version')).json()).version
+  for (const geometry of [null, { type: 'Point', coordinates: [4.85, 45.75] }, { type: 'Polygon', coordinates: [[[4.85, 45.75], [4.86, 45.75]]] }, { type: 'Polygon', coordinates: [[[4.85, 45.75], [4.86, 'x'], [4.86, 45.76]]] }, { type: 'Polygon', coordinates: [Array.from({ length: 61 }, (_, i) => [4.85 + i / 1e5, 45.75 + (i % 2) / 1e4])] }])
+    assert.equal((await post('/api/s/paul-bert/zone', { geometry })).status, 400, JSON.stringify(geometry).slice(0, 80))
+  const r = await post('/api/s/paul-bert/zone', { geometry: { type: 'Polygon', coordinates: [[[4.85, 45.75], [4.86, 45.75], [4.8600004, 45.7600004]]] } })
+  assert.equal(r.status, 200)
+  const draft = JSON.parse(fs.readFileSync(path.join(dir, 'zone-draft.json'), 'utf8'))
+  assert.deepEqual(draft.geometry, { type: 'Polygon', coordinates: [[[4.85, 45.75], [4.86, 45.75], [4.86, 45.76], [4.85, 45.75]]] })
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'search.json'), 'utf8')).zone.how, 'radius')
+  assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).version, v, 'no « Recharger » bar for a draft')
+  // 60 corners: the most the map's editor and Stream Estate take
+  const sixty = Array.from({ length: 60 }, (_, i) => [+(4.85 + 0.01 * Math.cos(i / 9.55)).toFixed(6), +(45.75 + 0.01 * Math.sin(i / 9.55)).toFixed(6)])
+  assert.equal((await post('/api/s/paul-bert/zone', { geometry: { type: 'Polygon', coordinates: [sixty] } })).status, 200)
+  fs.rmSync(path.join(dir, 'zone-draft.json'))
+})
+
 test('the odds of a box of the map: refused without a box, or too wide for the map to load', async () => {
   for (const q of ['', '?bbox=4.8,45.7', '?bbox=4.9,45.7,4.8,45.8']) assert.equal((await fetch(base + '/api/odds' + q)).status, 400)
   assert.deepEqual(await (await fetch(base + '/api/odds?bbox=4.5,45.5,5,45.9')).json(), { error: 'zoom' })

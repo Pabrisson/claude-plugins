@@ -7,7 +7,13 @@ import { openData } from '../lib/opendata.js'
 
 // the open data answers recorded on 2026-10-27 around 20 rue Paul Bert (Lyon 3e), served by a fake fetch
 const fixture = f => fs.readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8')
+// the BD TOPO's line of rue Paul Bert by its BAN id; none for the Corniche Kennedy (no BAN link), found by its name
+// next to two other streets the name query also brings (another kind of street, another name)
+const DECOYS = [['AV DU PRESIDENT JOHN KENNEDY', [[5.37, 43.27], [5.371, 43.271]]], ['BD DU PRESIDENT WILSON', [[5.38, 43.28], [5.381, 43.281]]]]
+const kennedy = () => { const d = JSON.parse(fixture('bdtopo-13207-president.json')); d.features.push(...DECOYS.map(([n, c]) => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: c }, properties: { nom_collaboratif_gauche: n, nom_collaboratif_droite: n } }))); return JSON.stringify(d) }
 const ROUTES = [
+  [/troncon_de_route.*identifiant_voie_ban_gauche%3D%2769383_5245/, 'bdtopo-69383_5245.json'], [/troncon_de_route.*identifiant_voie_ban/, () => '{"type":"FeatureCollection","features":[]}'],
+  [/troncon_de_route.*nom_collaboratif/, kennedy],
   [/geocodage\/search/, 'geocode-20-rue-paul-bert.json'], [/georisques/, 'georisques-20-rue-paul-bert.json'], [/overpass/, 'overpass-paul-bert.json'],
   [/navigation\/isochrone/, 'isochrone-pedestrian-15.json'], [/wfs/, 'iris-moncey.json'],
   [/data\.gouv\.fr\/api\/1\/datasets\/\?q=Carte/, 'rent-datasets.json'], [/tabular-api.*INSEE_C__exact=69383/, 'rent-69383.json'],
@@ -18,7 +24,7 @@ const asked = []
 mock.method(globalThis, 'fetch', async (url, init) => {
   asked.push({ url: String(url), ua: init?.headers?.['User-Agent'] })
   const hit = ROUTES.find(([re]) => re.test(String(url)))
-  return hit ? new Response(fixture(hit[1]), { status: 200 }) : new Response('', { status: 404 })
+  return hit ? new Response(typeof hit[1] === 'function' ? hit[1]() : fixture(hit[1]), { status: 200 }) : new Response('', { status: 404 })
 })
 const od = openData(fs.mkdtempSync(path.join(os.tmpdir(), 'immo-od-')))
 const point = [4.845472, 45.755958]
@@ -90,4 +96,15 @@ test('the homes authorised: the newest release already out, never one announced 
   assert.deepEqual(h.years.at(-1), { year: 2025, authorised: 174, started: null })
   assert.equal(h.years[0].year, 2013)
   assert.ok(asked.some(a => a.url.includes('millesime=2026-09')) && !asked.some(a => a.url.includes('millesime=2099')))
+})
+
+test("a street's line in the BD TOPO: by its BAN id, else by its name in the commune (its kind abbreviated)", async () => {
+  const bert = await od.streetLine('69383_5245', 'Rue Paul Bert')
+  assert.equal(bert.length, 47)
+  assert.ok(bert.flat().every(([lon, lat]) => lon > 4.83 && lon < 4.89 && lat > 45.75 && lat < 45.77), 'Lyon 3e')
+  const corniche = await od.streetLine('13207_dqffc7', 'Corniche president john f kennedy')
+  assert.equal(corniche.length, 50, 'the Corniche only: not the avenue nor the boulevard')
+  const q = new URL(asked.findLast(a => a.url.includes('nom_collaboratif')).url).searchParams.get('CQL_FILTER')
+  assert.match(q, /insee_commune_gauche='13207' AND nom_collaboratif_gauche ILIKE '%PRESIDENT%'/)
+  assert.deepEqual(await od.streetLine("69383_5245' OR 1=1 --", 'Rue Paul Bert'), [], 'only a BAN id goes in the filter')
 })

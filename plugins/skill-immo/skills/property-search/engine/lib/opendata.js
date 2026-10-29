@@ -2,7 +2,7 @@
 // Every source is public and keyless; Overpass asks for a User-Agent that names the client.
 import fs from 'node:fs'
 import path from 'node:path'
-import { atPlace, cityCodes } from './alerts.js'
+import { atPlace, BAN_STREET, cityCodes } from './alerts.js'
 import { dvfSales, parseCsv } from './dvf.js'
 
 const UA = 'skill-immo/1.0 (+https://github.com/Pabrisson/claude-plugins)'
@@ -164,6 +164,25 @@ export function openData(cacheDir) {
         if (fc?.features?.length) return { name: fc.features[0].properties.nom, geometry: fc.features[0].geometry }
       }
       return null
+    }),
+    // The line of a street in IGN's BD TOPO, its segments ([lon, lat]): by its BAN id (`<insee>_<voie>`), else by its
+    // name in the commune (the BD TOPO lacks the BAN link of some streets, often those of the BAN's newer ids)
+    streetLine: (ban, name) => cached(`bdtopo/${ban}.json`, 30, async () => {
+      if (!BAN_STREET.test(ban)) return []
+      const wfs = filter => get(`${GEOPF}/wfs/ows?${new URLSearchParams({ SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: 'BDTOPO_V3:troncon_de_route', OUTPUTFORMAT: 'application/json', COUNT: 1000, CQL_FILTER: filter })}`).then(d => d?.features ?? [])
+      let found = await wfs(`identifiant_voie_ban_gauche='${ban}' OR identifiant_voie_ban_droite='${ban}'`)
+      // ponytail: a name matched by its words of 3 letters or more and its kind's abbreviation (« COR » for Corniche,
+      // « BD » for Boulevard), enough for the streets without the link; their own BAN link if IGN adds it
+      const words = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean)
+      const [kind = '', ...rest] = words(name ?? ''), key = rest.filter(w => w.length > 2), longest = [...key].sort((a, b) => b.length - a.length)[0]
+      // « BD » abbreviates BOULEVARD: its first letter, then its others in order
+      const abbreviates = (a, w) => { let i = 0; for (const ch of w) if (ch === a[i]) i++; return a[0] === w[0] && i === a.length }
+      const named = n => { const [k, ...ws] = words(n ?? ''); return !!k && abbreviates(k, kind) && key.every(w => ws.includes(w)) }
+      if (!found.length && longest) {
+        const insee = ban.slice(0, 5), side = s => `(insee_commune_${s}='${insee}' AND nom_collaboratif_${s} ILIKE '%${longest}%')`
+        found = (await wfs(`${side('gauche')} OR ${side('droite')}`)).filter(f => named(f.properties.nom_collaboratif_gauche) || named(f.properties.nom_collaboratif_droite))
+      }
+      return found.flatMap(f => (f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : [f.geometry.coordinates])).map(l => l.map(([x, y]) => [x, y]))
     }),
     // the IRIS a point is in (IGN's WFS takes the point as lat lon)
     irisAt: ([lon, lat]) => cached(`polygon/iris-${lon.toFixed(5)},${lat.toFixed(5)}.json`, 90, async () => {

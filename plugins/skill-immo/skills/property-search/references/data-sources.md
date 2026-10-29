@@ -22,6 +22,7 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 | Crime | SSMSI, communal and departmental bases, through the tabular API | 30 d |
 | Income | INSEE Filosofi, through the Melodi API `https://api.insee.fr/melodi/data/DS_FILOSOFI_CC?GEO=` | 90 d |
 | Zone outlines | geo.api.gouv.fr (commune, arrondissement) and IGN WFS `STATISTICALUNITS.IRIS:contours_iris` (IRIS) | 90 d |
+| A street's line | IGN WFS `BDTOPO_V3:troncon_de_route`, `CQL_FILTER=identifiant_voie_ban_gauche='<ban>' OR …_droite` | 30 d |
 | IRIS of a box (odds map) | The same WFS, `BBOX=<s>,<w>,<n>,<e>` | none |
 | Census per IRIS (odds map) | INSEE Melodi `DS_RP_MENAGES_PRINC_IRIS` and `DS_RP_LOGEMENT_PRINC_IRIS`, `?GEO=IRIS-<code>&GEO=…` | 90 d |
 | Recent DPE of a commune (odds map) | ADEME `lines?code_insee_ban_eq=<insee>&date_etablissement_dpe_gte=<12 months ago>` | 7 d |
@@ -127,6 +128,7 @@ their census, DVF sales, odds and prices, its communes, and its DPE, energy audi
 months. Checked live on 2026-10-29 around rue Paul Bert: 86 IRIS, 10,058 DPE, 63 audits and 22 permits, 13 s the first
 time, about 1 s once kept.
 
+- **A street's line** (IGN WFS, BD TOPO): its segments by the street's BAN id (`69383_5245`: 47 segments, 2.7 km, 18 kB). Some streets lack the link, often those of the BAN's newer ids (`13207_dqffc7`, the Corniche Kennedy): then by `nom_collaboratif_gauche|droite` in the commune (`insee_commune_*`), upper case with the street's kind abbreviated (`COR DU PRESIDENT JOHN FITZGERALD KENNEDY`, `BD`, `MTE`). Checked live on 2026-10-29 on 8 streets of Paris, Lyon and Marseille: the band along it holds the whole street, where the capsule of its farthest sales lost up to 80 %.
 - **IRIS of a box** (IGN WFS): `BBOX` as lat lon. Each feature has `code_iris`, `nom_iris`, `code_insee` (the
   arrondissement's in Paris, Lyon, Marseille: 69383), `nom_commune` and `type_iris` (H homes, A activity, D other, Z a
   commune not split). 165 IRIS in 0.07° by 0.04° of Lyon, 0.13 MB, 2.8 s.

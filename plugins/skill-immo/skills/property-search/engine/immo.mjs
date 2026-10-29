@@ -18,7 +18,7 @@ import { estimate, gate, table, usage } from './lib/costs.js'
 import { review, score, WEIGHTS } from './lib/decide.js'
 import { recentDpe } from './lib/dpe.js'
 import { building, median, summary } from './lib/dvf.js'
-import { around, bbox, center, circle, corridor, distance, inGeometry, inZone } from './lib/geo.js'
+import { around, band, bbox, center, circle, corridor, distance, inGeometry, inZone, thin } from './lib/geo.js'
 import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from './lib/listings.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
@@ -147,11 +147,11 @@ const withCredits = async fn => { try { return await fn() } catch (e) { if (e in
 
 // --- Stream Estate queries ---------------------------------------------------------------------------------
 
-// ponytail: an outline cut to `max` vertices (every k-th one), enough for a street band or an IRIS; a Douglas-Peucker
-// if a zone ever looks off
-const outline = (ring, max) => { const k = Math.ceil(ring.length / max); return [...ring.filter((_, i) => i % k === 0), ring[0]].map(([x, y]) => [+x.toFixed(5), +y.toFixed(5)]) }
+// an outline cut to `max` corners (its first one repeated at its end), its shape kept: a winding street's band keeps its
+// bends, a zone drawn on the map (60 corners at most) stays as drawn
+const outline = (ring, max) => thin(ring, max + 1).map(([x, y]) => [+x.toFixed(5), +y.toFixed(5)])
 
-// where, as v1 filters: around a point, in the commune (its INSEE code), else inside the zone's outline (60 vertices
+// where, as v1 filters: around a point, in the commune (its INSEE code), else inside the zone's outline (60 corners
 // at most in all: the URL must stay under 9 kB)
 function seWhere(s) {
   const z = s.zone
@@ -299,15 +299,44 @@ async function streetPoints(s) {
     .filter(p => distance(p, s.point) <= 3000)
 }
 
-// The zone of a search, a polygon: along a street (300 m on each side by default), a circle around an address (500 m),
-// the outline of the commune (or arrondissement), or of the IRIS around the point.
-async function makeZone(s) {
-  const kind = opt.zone ?? s.zone?.how ?? (s.type === 'municipality' ? 'commune' : 'radius')
+// a zone drawn on the dashboard's map: a Polygon or a MultiPolygon, their outer rings only (closed, 3 corners or more,
+// [lon, lat]), 60 corners at most in all (what Stream Estate takes, the map's editor too)
+function cleanDrawn(g) {
+  const polygons = g?.type === 'Polygon' ? [g.coordinates] : g?.type === 'MultiPolygon' ? g.coordinates : null
+  if (!Array.isArray(polygons) || !polygons.length) throw new Error('expects a Polygon or a MultiPolygon')
+  const rings = polygons.map(p => {
+    const r = Array.isArray(p?.[0]) ? p[0] : []
+    if (!r.every(x => Array.isArray(x) && Number.isFinite(x[0]) && Number.isFinite(x[1]) && Math.abs(x[0]) <= 180 && Math.abs(x[1]) <= 90)) throw new Error('expects [lon, lat] positions')
+    const ring = r.map(([x, y]) => [+x.toFixed(6), +y.toFixed(6)])
+    if (ring.length && ring[0].join() !== ring.at(-1).join()) ring.push(ring[0])
+    if (ring.length < 4) throw new Error('a ring has 3 corners or more')
+    return ring
+  })
+  if (rings.reduce((a, r) => a + r.length - 1, 0) > 60) throw new Error('60 corners at most in all')
+  return rings.length === 1 ? { type: 'Polygon', coordinates: rings } : { type: 'MultiPolygon', coordinates: rings.map(r => [r]) }
+}
+
+// The zone of a search, a polygon: along a street (300 m on each side by default: its line in the BD TOPO, else the
+// capsule of its sales and numbers), a circle around an address (500 m), the outline of the commune (or
+// arrondissement), of the IRIS around the point, or the one drawn on the dashboard's map (its draft, taken once applied).
+async function makeZone(s, dir) {
+  const kind = opt.zone ?? (s.zone?.how === 'drawn' && opt.radius ? 'radius' : s.zone?.how) ?? (s.type === 'municipality' ? 'commune' : 'radius')
   if (kind === 'radius') {
     const street = s.type === 'street' && s.street?.code_voie, r = +(opt.radius ?? s.zone?.radius_m ?? (street ? 300 : 500))
+    const along = { how: 'radius', kind: 'polygon', radius_m: r, label: `${r} m de part et d'autre de la ${s.street?.name}` }
+    const line = street ? await od.streetLine(s.ban, s.street.name).catch(e => { console.log(`BD TOPO: ${e.message}, the street's sales and numbers instead`); return [] }) : []
+    if (line.length) return { ...along, geometry: band(line, r) }
     const points = street ? await streetPoints(s) : []
-    if (points.length >= 2) return { how: 'radius', kind: 'polygon', radius_m: r, geometry: corridor(points, r), label: `${r} m de part et d'autre de la ${s.street.name}` }
+    if (points.length >= 2) return { ...along, geometry: corridor(points, r) }
     return { how: 'radius', kind: 'radius', center: s.point, radius_m: r, geometry: circle(s.point, r), label: `${r} m autour de ${s.label}` }
+  }
+  if (kind === 'drawn') {
+    const f = path.join(dir, 'zone-draft.json'), draft = readJson(f, null)
+    if (!draft) return s.zone?.how === 'drawn' ? s.zone : die('no zone drawn: « Modifier la zone » on the dashboard map, then « Valider »')
+    let geometry
+    try { geometry = cleanDrawn(draft.geometry) } catch (e) { die(`zone-draft.json: ${e.message}`) }
+    fs.rmSync(f)
+    return { how: 'drawn', kind: 'polygon', geometry, label: 'Zone dessinée sur la carte' }
   }
   if (kind === 'commune') {
     const c = await od.communePolygon(s.insee)
@@ -319,7 +348,7 @@ async function makeZone(s) {
     if (!i) die('no IRIS at this point')
     return { how: 'iris', kind: 'polygon', geometry: i.geometry, label: `IRIS ${i.name}`, iris: i.code }
   }
-  die('--zone is radius, commune or iris')
+  die('--zone is radius, commune, iris or drawn')
 }
 
 const ARRONDISSEMENT = /^(751\d\d|6938\d|132\d\d)$/
@@ -477,7 +506,7 @@ async function oddsOf(bb) {
 async function search(query) {
   let dir = opt.project ? searchDir() : null, s = dir ? readJson(path.join(dir, 'search.json')) : null
   if (!s) {
-    if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris] [--radius m] [--criteria "k=v …"]')
+    if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris|drawn] [--radius m] [--criteria "k=v …"]')
     const [f] = await od.geocode(query, { type: opt.type, limit: 1 })
     if (!f) die(`no place found for "${query}": try geocode "${query}" and a more precise query`)
     const x = f.properties, slug = (() => { const b = slugify(opt.slug ?? x.label); let sl = b; for (let i = 2; fs.existsSync(path.join(HOME, sl)); i++) sl = `${b}-${i}`; return sl })()
@@ -495,7 +524,7 @@ async function search(query) {
   s.mode = opt.mode ?? s.mode ?? (hasKey() ? 'stream-estate' : 'classic')
   if (opt.types) s.types = parseTypes(opt.types)
   if (opt.criteria) parseCriteria(opt.criteria, s.criteria)
-  if (!s.zone || opt.zone || opt.radius) s.zone = await makeZone(s)
+  if (!s.zone || opt.zone || opt.radius) s.zone = await makeZone(s, dir)
   writeJson(path.join(dir, 'search.json'), s)
   writeGitignore()
   console.log(`search ${s.slug} [${s.mode}] ${typesOf(s).join(', ')}: ${s.zone.label} (${s.label}, insee ${s.insee})`)
@@ -1007,6 +1036,13 @@ async function handle(req, res) {
         const hits = (await SOURCES[k].place(a.place, 1)).filter(row => alertTakes(a, { kind: k, [k]: row, outside: true }, s))
         return reply(res, 200, { count: hits.length, items: hits.slice(0, 5) })
       } catch (e) { return reply(res, 502, { error: e.message }) }
+    }
+    // the zone drawn on the map, kept as a draft: nothing changes until Claude applies it (search --zone drawn)
+    if (sub === '/zone' && post) {
+      let g
+      try { g = cleanDrawn((await readBody(req)).geometry) } catch (e) { return reply(res, 400, { error: e.message }) }
+      writeJson(path.join(dir, 'zone-draft.json'), { geometry: g, drawn: now() })
+      return reply(res, 200, { geometry: g })
     }
     // read: all of them, or some (their keys, 2 000 kept)
     if (sub === '/feed/read' && post) {

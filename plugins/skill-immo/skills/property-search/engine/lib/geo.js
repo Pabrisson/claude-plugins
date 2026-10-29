@@ -40,9 +40,86 @@ export function circle([lon, lat], radius_m, n = 64) {
   return { type: 'Polygon', coordinates: [ring] }
 }
 
-// The zone along a street: a capsule `radius_m` wide on each side of the segment between its two farthest points
-// (its sales and its numbers), the ends rounded. A street shorter than its width becomes a circle.
-// ponytail: a capsule fits straight streets; a buffer along the ordered points if a curved one overflows it
+// meters around a point, enough for a few kilometers: to [x, y] and back to [lon, lat]
+function plane([lon0, lat0]) {
+  const my = 111320, mx = my * Math.cos((lat0 * Math.PI) / 180)
+  return { to: ([lon, lat]) => [(lon - lon0) * mx, (lat - lat0) * my], back: ([x, y]) => [+(lon0 + x / mx).toFixed(6), +(lat0 + y / my).toFixed(6)] }
+}
+// the distance of p to the segment ab, in the plane
+function toSegment([px, py], [ax, ay], [bx, by]) {
+  const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy, t = l ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l)) : 0
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy)
+}
+// Douglas-Peucker: the points of a line that keep it within `tol` of where it was (extra items of a point are kept)
+function simplify(pts, tol) {
+  let k = 0, far = 0
+  for (let i = 1; i < pts.length - 1; i++) { const d = toSegment(pts[i], pts[0], pts.at(-1)); if (d > far) [k, far] = [i, d] }
+  return far <= tol ? [pts[0], pts.at(-1)] : [...simplify(pts.slice(0, k + 1), tol).slice(0, -1), ...simplify(pts.slice(k), tol)]
+}
+const area = ring => ring.reduce((a, [x, y], i) => { const [u, v] = ring[(i + 1) % ring.length]; return a + x * v - u * y }, 0) / 2
+
+// A ring cut to `max` vertices at most, its shape kept: Douglas-Peucker in meters, from 1 m, the tolerance doubled
+// until it fits
+export function thin(ring, max) {
+  if (ring.length <= max) return ring
+  const p = plane(ring[0]), pts = ring.map((x, i) => [...p.to(x), i])
+  for (let tol = 1; ; tol *= 2) {
+    const kept = simplify(pts, tol)
+    if (kept.length <= max) return kept.map(x => ring[x[2]])
+  }
+}
+
+// The zone along a street's real line (its segments, lib/opendata.js streetLine): every point within `radius_m` of it,
+// a Polygon, or a MultiPolygon when its segments lie apart. On a grid of cells a tenth of the width, those within reach,
+// their outline traced along their sides (inside on the left: the outer rings counterclockwise, the holes clockwise),
+// then simplified to a cell.
+export function band(lines, radius_m) {
+  const r = radius_m, p = plane(lines[0][0]), xy = lines.map(l => l.map(p.to))
+  const c = Math.max(4, r / 10), all = xy.flat(), xs = all.map(q => q[0]), ys = all.map(q => q[1])
+  const x0 = Math.min(...xs) - r - 2 * c, y0 = Math.min(...ys) - r - 2 * c
+  const W = Math.ceil((Math.max(...xs) + r + 2 * c - x0) / c), H = Math.ceil((Math.max(...ys) + r + 2 * c - y0) / c)
+  // a cell is in when its center is within reach: each segment looks at the cells of its own box
+  const grid = new Uint8Array(W * H)
+  for (const l of xy)
+    for (let k = 1; k < l.length; k++) {
+      const [a, b] = [l[k - 1], l[k]]
+      const i0 = Math.floor((Math.min(a[0], b[0]) - r - x0) / c), i1 = Math.ceil((Math.max(a[0], b[0]) + r - x0) / c)
+      const j0 = Math.floor((Math.min(a[1], b[1]) - r - y0) / c), j1 = Math.ceil((Math.max(a[1], b[1]) + r - y0) / c)
+      for (let j = j0; j <= j1; j++)
+        for (let i = i0; i <= i1; i++) if (!grid[j * W + i] && toSegment([x0 + (i + 0.5) * c, y0 + (j + 0.5) * c], a, b) <= r) grid[j * W + i] = 1
+    }
+  const at = (i, j) => i >= 0 && j >= 0 && i < W && j < H && grid[j * W + i] === 1
+  // the sides between a cell in and one out, from corner to corner; a corner where two cells in touch by a tip has
+  // two ways out
+  const next = new Map(), side = (i, j, to) => { const k = `${i},${j}`; next.has(k) ? next.get(k).push(to) : next.set(k, [to]) }
+  for (let j = 0; j < H; j++)
+    for (let i = 0; i < W; i++) {
+      if (!at(i, j)) continue
+      if (!at(i, j - 1)) side(i, j, [i + 1, j])
+      if (!at(i + 1, j)) side(i + 1, j, [i + 1, j + 1])
+      if (!at(i, j + 1)) side(i + 1, j + 1, [i, j + 1])
+      if (!at(i - 1, j)) side(i, j + 1, [i, j])
+    }
+  const rings = []
+  for (const [start, outs] of next) {
+    if (!outs.length) continue
+    const ring = []
+    for (let k = start; next.get(k)?.length; ) {
+      const [i, j] = k.split(',').map(Number), [a, b] = next.get(k).pop()
+      ring.push([x0 + i * c, y0 + j * c])
+      k = `${a},${b}`
+    }
+    rings.push(simplify([...ring, ring[0]], c))
+  }
+  // each hole goes with the outer ring around it
+  const polygons = rings.filter(g => area(g) > 0).map(g => [g])
+  for (const h of rings.filter(g => area(g) < 0)) polygons.find(([o]) => inRings(h[0], [o]))?.push(h)
+  const out = polygons.map(rs => rs.map(g => g.map(p.back)))
+  return out.length === 1 ? { type: 'Polygon', coordinates: out[0] } : { type: 'MultiPolygon', coordinates: out }
+}
+
+// The zone along a street with no known line: a capsule `radius_m` wide on each side of the segment between its two
+// farthest points (its sales and its numbers), the ends rounded. A street shorter than its width becomes a circle.
 export function corridor(points, radius_m, n = 16) {
   let a = points[0], b = points[0], far = 0
   for (let i = 0; i < points.length; i++)

@@ -87,6 +87,10 @@ test('alerts.json checked at the door', () => {
   bad({ field: 'street', op: 'is', value: ' ' })
   bad(null, { event: 'new', place: garibaldi })
   bad(null, { place: { how: 'street', ban: '../x', label: 'x', point: [1, 2] } })
+  // a street of the BAN's newer ids (6 characters, not FANTOIR's 4): the Corniche Kennedy, Marseille 7e
+  const corniche = { how: 'street', ban: '13207_dqffc7', label: 'Corniche Président John F Kennedy 13007 Marseille', point: [5.3539, 43.2816] }
+  assert.deepEqual(cleanAlerts({ custom: [{ id: 'c', name: 'x', event: 'dpe', place: corniche }] }).custom[0].place, corniche)
+  bad(null, { place: { ...corniche, ban: "13207_dqffc7' OR 1=1" } })
   bad(null, { place: { how: 'radius', radius_m: 10000, label: 'x', point: [1, 2] } })
   bad({ field: 'permit_kind', op: 'is', value: 'renovate' }, { event: 'permit' })
   bad({ field: 'energy', op: 'gte', value: 'F' }, { event: 'permit' })

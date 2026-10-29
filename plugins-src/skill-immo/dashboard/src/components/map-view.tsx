@@ -1,12 +1,12 @@
 import { recentDpe } from "@engine/dpe.js"
-import { around, inZone } from "@engine/geo.js"
+import { around, inZone, thin } from "@engine/geo.js"
 import { isHome, matches, typeOf, unitPrice } from "@engine/market.js"
 import type { Feature, FeatureCollection, Geometry, Point as GeoPoint, Position } from "geojson"
 import { LngLatBounds, Map as MapLibre, NavigationControl, Popup, setWorkerUrl, type GeoJSONSource, type MapLayerMouseEvent, type StyleSpecification } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url"
 import { useTheme } from "next-themes"
-import { ChevronDownIcon, CrossIcon, LayersIcon, MapPinIcon, SchoolIcon, ShoppingBasketIcon, TrainFrontIcon, TreesIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, CrossIcon, LayersIcon, MapPinIcon, PencilIcon, SchoolIcon, ShoppingBasketIcon, TrainFrontIcon, TreesIcon } from "lucide-react"
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
@@ -14,6 +14,7 @@ import { AuditBadge, mapBadges, PermitBadge } from "@/components/badges"
 import { DPE_HEX, dpeInk } from "@/components/dpe"
 import { levelOf } from "@/components/ruler"
 import { TypeIcon } from "@/components/type-icon"
+import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -25,6 +26,7 @@ import { shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
+import { geometryOf, ringsOf, zoneEditor, type Rings } from "@/components/zone-editor"
 
 // MapLibre looks for its worker next to its own module, which the bundle does not keep: Vite ships it as an asset
 setWorkerUrl(workerUrl)
@@ -194,6 +196,8 @@ export type OddsMap = {
   hover: { iris?: string; dpe?: string; point?: Point } | null
 }
 
+// the corners of a zone drawn on the map, in all: what Stream Estate takes
+const MAX_CORNERS = 60
 // the layers' column, docked on the left of a computer's map
 const PANEL = 320
 // the map's layers the panel's switches show or hide: at the map's making (its theme) and at each switch
@@ -205,7 +209,7 @@ function showLayers(m: MapLibre, layers: string[]) {
 // `right`: the width of what covers the map on its right (the listings' column), which its camera and controls keep clear of.
 // With `odds`, the odds tab's map: the IRIS colored by their odds, the recent DPE of the box shown, the listings neutral.
 export function MapView({ className, right = 0, odds }: { className?: string; right?: number; odds?: OddsMap }) {
-  const { data, types, marketOf, selected, select, addFeedback, spot } = useSearch()
+  const { slug, data, types, marketOf, selected, select, feedback, addFeedback, removeFeedback, spot } = useSearch()
   // the listing the map shows larger and goes to: the dossier's, or the one it sent here (« Voir »), where the map opens
   const pointed = selected ?? spot, spotAt = useRef<[number, number] | null>(null)
   useEffect(() => { spotAt.current = (spot && data.listings.find(l => l.id === spot)?.location.point) || null })
@@ -227,6 +231,11 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
   const [dpeDays, setDpeDays] = useState("180"), [dpeScope, setDpeScope] = useState("all")
   // the DPE groups, audits, permits and listings a click on the map reads, the odds tab's callbacks (the map's
   // handlers are made once), and how a card is pinned (made with the map)
+  // the zone being edited (the listings' map only: « Modifier la zone »), its rings as they go, and the zone drawn and
+  // sent to the prompt, dashed until Claude applies it. `ready` counts the map's loads (a theme change makes it again).
+  const [editing, setEditing] = useState(false), [edit, setEdit] = useState({ corners: 0, drawing: false }), [drawn, setDrawn] = useState<Rings | null>(null)
+  const [ready, setReady] = useState(0), rings = useRef<Rings>([]), editor = useRef<ReturnType<typeof zoneEditor> | null>(null), editingRef = useRef(false)
+  useEffect(() => { editingRef.current = editing })
   const dpeRef = useRef<{ groups: Map<string, DpeGroup>; audits: Map<string, AuditRow>; permits: Map<string, PermitRow>; listings: Listing[] }>({ groups: new Map(), audits: new Map(), permits: new Map(), listings: [] })
   const oddsRef = useRef(odds), pin = useRef<(s: Spot) => void>(() => {})
   useEffect(() => { oddsRef.current = odds })
@@ -260,6 +269,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
     return {
       veil: fc([{ type: "Feature", geometry: outside(zone), properties: {} }]),
       zone: fc([{ type: "Feature", geometry: zone, properties: {} }]),
+      drawn: fc(drawn ? [{ type: "Feature", geometry: geometryOf(drawn), properties: {} }] : []),
       sales: fc(types.filter(on).flatMap(t => (data.market.dvf?.[t]?.points ?? []).map(p => ({
         type: "Feature" as const, geometry: { type: "Point" as const, coordinates: p.point },
         properties: { level: levelOf(p.ppm2, marketOf(t).ref?.ppm2) ?? "at", tip: `<b>Vendu ${eur(p.price)}</b><br>${TYPE_LABEL[t]}${p.area ? ` · ${p.area} m²` : ""} · ${perUnit(p.ppm2, t)}${gapTip(p.ppm2, marketOf(t).ref?.ppm2)}<br>${titleCase(p.address)} · ${month(p.date)}` },
@@ -284,7 +294,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
       isochrones: fc((data.area.isochrones ?? []).filter(i => i.geometry && layers.includes(`place:${i.place}`) && i.profile === "pedestrian").map(i => ({ type: "Feature", geometry: i.geometry as Geometry, properties: { place: places.indexOf(i.place), minutes: i.minutes } }))),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, hidden, dpe, odds?.data, odds?.metric, recent])
+  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, hidden, dpe, odds?.data, odds?.metric, recent, drawn])
 
   // the map, made again when the theme changes (its style is not the same)
   useEffect(() => {
@@ -316,6 +326,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
         m.addLayer({ id: "zone-fill", type: "fill", source: "zone", paint: { "fill-color": ink, "fill-opacity": dark ? 0.05 : 0.04 } })
         m.addLayer({ id: "zone-halo", type: "line", source: "zone", paint: { "line-color": ink, "line-width": 6, "line-opacity": 0.12 } })
         m.addLayer({ id: "zone", type: "line", source: "zone", paint: { "line-color": ink, "line-width": 2 } })
+        m.addLayer({ id: "drawn", type: "line", source: "drawn", paint: { "line-color": ink, "line-width": 2, "line-dasharray": [2, 1.5] } })
         m.addLayer({ id: "iris-selected", type: "line", source: "iris", filter: ["==", ["get", "code"], oddsRef.current?.iris ?? ""], paint: { "line-color": hi, "line-width": 3.5 } })
         m.addLayer({ id: "isochrones", type: "fill", source: "isochrones", paint: { "fill-color": ["match", ["get", "place"], 0, cssColor(PLACE_COLORS[0]), 1, cssColor(PLACE_COLORS[1]), cssColor(PLACE_COLORS[2])], "fill-opacity": ["case", ["<=", ["get", "minutes"], 15], 0.18, 0.08] } })
         // the DPE grow with the zoom: a whole district shows thousands, as small dots that leave the IRIS readable
@@ -357,7 +368,8 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
           m.on("mouseenter", id, (e: MapLayerMouseEvent) => { m.getCanvas().style.cursor = "pointer"; const f = e.features?.[0]; if (f) popup.setLngLat((f.geometry as GeoPoint).coordinates as [number, number]).setHTML(f.properties.tip).addTo(m) })
           m.on("mouseleave", id, () => { m.getCanvas().style.cursor = ""; popup.remove() })
         }
-        m.on("click", "listings", (e: MapLayerMouseEvent) => select(e.features?.[0]?.properties.id ?? null))
+        // a listing clicked opens its dossier, not while the zone is edited (a click there is a corner)
+        m.on("click", "listings", (e: MapLayerMouseEvent) => { if (!editingRef.current) select(e.features?.[0]?.properties.id ?? null) })
         // an IRIS: its tooltip follows the pointer, a click selects it (unless a DPE or a listing is under it)
         const dot = (e: MapLayerMouseEvent) => m.queryRenderedFeatures(e.point, { layers: ["dpe", "listings", "audits", "permits"] }).length > 0
         m.on("mousemove", "iris-fill", (e: MapLayerMouseEvent) => { if (!dot(e) && e.features?.[0]) popup.setLngLat(e.lngLat).setHTML(e.features[0].properties.tip).addTo(m) })
@@ -389,6 +401,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
           popup.remove()
           pinned.setLngLat(s.kind === "dpe" ? s.group.point : s.row.point).setDOMContent(el).addTo(m)
         }
+        setReady(n => n + 1)
       })
     })
     return () => { gone = true; map.current?.remove(); map.current = null }
@@ -414,6 +427,32 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
     if (l?.location.point) m.easeTo({ center: l.location.point, zoom: spot === l.id ? Math.max(m.getZoom(), 16) : m.getZoom(), duration: 400 })
   }, [sources, pointed, spot, layers, data.listings, dpe.groups, metric, irisCode, hover, odds?.data])
 
+  // the zone's editor on the map while editing, over each map made
+  useEffect(() => {
+    const m = map.current
+    if (!editing || !m?.getLayer("labels")) return
+    const e = zoneEditor(m, rings.current, MAX_CORNERS, cssColor("--foreground"), cssColor("--card"), (r, drawing) => { rings.current = r; setEdit({ corners: drawing ? drawing.length : r.reduce((a, x) => a + x.length, 0), drawing: !!drawing }) })
+    editor.current = e
+    return () => { e.stop(); editor.current = null }
+  }, [editing, ready])
+  // from the zone drawn before, else the search's outer rings, cut to 60 corners in all, their shape kept (a circle has
+  // 64, a long street's band more)
+  const startEdit = () => {
+    const rs = drawn ?? ringsOf(data.search.zone.geometry), each = Math.floor(MAX_CORNERS / rs.length)
+    rings.current = rs.map(r => (thin([...r, r[0]], each + 1) as Rings[number]).slice(0, -1))
+    setEditing(true)
+  }
+  // « Valider »: the draft kept by the server, one [zone] item in the prompt (the last one drawn); Claude applies it
+  async function saveZone() {
+    try { await api.saveZone(slug, geometryOf(rings.current)) } catch (e) { return void toast.error(`Zone non enregistrée : ${(e as Error).message}`) }
+    setDrawn(rings.current.map(r => r.slice()))
+    setEditing(false)
+    const i = feedback.findIndex(f => f.kind === "zone")
+    if (i >= 0) removeFeedback(i)
+    addFeedback({ kind: "zone", text: `dessinée sur la carte (${edit.corners} sommets)` })
+    toast.success("Zone enregistrée : copiez le prompt, Claude l'appliquera")
+  }
+
   // a DPE, an audit or a permit picked in the odds tab's column: the map goes to it and pins its card
   const focus = odds?.focus
   useEffect(() => {
@@ -427,10 +466,25 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
     <div className={cn("immo-map", className)} style={{ "--map-right": `${right}px` } as React.CSSProperties}>
       {/* maplibre-gl.css, outside the layers, makes it position: relative: it takes the whole box by its size */}
       <div ref={box} className="h-full w-full" />
-      <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales }}
+      {editing && (
+        // between the layers' column and the zoom buttons
+        <div className="absolute top-3 z-20 flex flex-wrap items-center gap-2 rounded-lg border bg-card/90 p-2 text-xs shadow-sm backdrop-blur-md" style={{ left: left + 12, maxWidth: `calc(100% - ${left + right + 64}px)` }}>
+          <span className="min-w-0 flex-1 basis-60 text-muted-foreground">
+            {edit.drawing ? "Cliquez pour poser les sommets ; double-cliquez, ou cliquez le premier, pour fermer." : "Glissez un sommet pour le déplacer, un point au milieu d'un côté pour en ajouter un ; double-cliquez un sommet pour le retirer."}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className={cn("whitespace-nowrap tabular-nums", edit.corners >= MAX_CORNERS ? "text-foreground" : "text-muted-foreground")}>{edit.corners} / {MAX_CORNERS} sommets</span>
+            <Button size="xs" variant="outline" onClick={() => editor.current?.redraw()} disabled={edit.drawing}><PencilIcon data-icon="inline-start" />Redessiner</Button>
+            <Button size="xs" variant="ghost" onClick={() => setEditing(false)}>Annuler</Button>
+            <Button size="xs" onClick={saveZone} disabled={edit.drawing || edit.corners < 3}><CheckIcon data-icon="inline-start" />Valider</Button>
+          </div>
+        </div>
+      )}
+      {!(editing && mobile) && <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales }}
         dpe={{ days: dpeDays, setDays: setDpeDays, scope: dpeScope, setScope: setDpeScope, count: dpe.count, open: dpe.open }}
         sources={{ audits: recent.audits, permits: recent.permits, inPeriod: recent.inPeriod, kinds, setKinds, auditDays, setAuditDays, permitDays, setPermitDays }}
-        odds={odds && { metric, setMetric: odds.setMetric, listings: sources.listings.features.length, onPlace: h => map.current?.flyTo({ center: [h.x, h.y], zoom: zoomOf(h), duration: 1200 }) }} />
+        odds={odds && { metric, setMetric: odds.setMetric, listings: sources.listings.features.length, onPlace: h => map.current?.flyTo({ center: [h.x, h.y], zoom: zoomOf(h), duration: 1200 }) }}
+        edit={odds ? undefined : { start: startEdit, editing, drawn: !!drawn }} />}
     </div>
   )
 }
@@ -478,7 +532,7 @@ function PlaceSearch({ onPlace }: { onPlace: (h: Hit) => void }) {
 // color and its count. On the odds map: a search to move it, the IRIS's figure, the recent DPE, the search's listings,
 // the zone. On a computer a column docked on the left, its whole height, always open (the listings' column on the
 // right); on a phone it floats, folded until tapped.
-function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales, dpe, sources, odds }: {
+function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales, dpe, sources, odds, edit }: {
   docked: boolean; cats: string[]; setCats: (v: string[]) => void; layers: string[]; setLayers: (v: string[]) => void; scope: string; setScope: (v: string) => void
   hidden: string[]; flip: (k: string) => void
   shownTypes: string[]; setShownTypes: (v: string[]) => void; pois: Poi[]; places: string[]; sales: number
@@ -488,6 +542,8 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
     auditDays: string; setAuditDays: (v: string) => void; permitDays: string; setPermitDays: (v: string) => void
   }
   odds?: { metric: Metric; setMetric: (m: Metric) => void; listings: number; onPlace: (h: Hit) => void }
+  // the listings' map: the zone redrawn there
+  edit?: { start: () => void; editing: boolean; drawn: boolean }
 }) {
   const { types, data } = useSearch()
   const [unfolded, setUnfolded] = useState(false), open = docked || unfolded
@@ -503,6 +559,8 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
   const zone = (
     <Group title="Zone">
       <div className="flex items-center gap-2"><Switch id="veil" checked={layers.includes("veil")} onCheckedChange={v => toggle("veil", v)} /><Label htmlFor="veil" className="text-xs">Assombrir l'extérieur de la zone</Label></div>
+      {edit && <Button size="xs" variant="outline" className="self-start" onClick={edit.start} disabled={edit.editing}><PencilIcon data-icon="inline-start" />Modifier la zone</Button>}
+      {edit?.drawn && <p className="text-muted-foreground">En pointillés : la zone dessinée, ajoutée au prompt. Claude l'applique quand vous le collez.</p>}
     </Group>
   )
   return (

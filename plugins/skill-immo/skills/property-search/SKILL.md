@@ -143,11 +143,13 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
    and ask which one.
 2. **Zone and mode**: ask in one AskUserQuestion call what the request leaves open.
    - The zone, always a polygon:
-     - for a street, a band along the whole street, `--radius` on each side (300 m by default). Its ends come from the
-       street's DVF sales and address numbers;
+     - for a street, a band along the whole street that follows its bends (its line in IGN's BD TOPO), `--radius` on
+       each side (300 m by default). Without a known line, a straight band between its farthest DVF sales and
+       address numbers;
      - for an address, a circle around it (`--radius`: 500 m by default, 300–1000);
      - the commune or arrondissement (`--zone commune`);
-     - the IRIS (`--zone iris`).
+     - the IRIS (`--zone iris`);
+     - the zone the user drew on the dashboard's map (`--zone drawn`), only from a `[zone]` item (below).
    - The mode, when the key is on: « Stream Estate (annonces de tous les portails, payant) » first, then « OpenData
      (open data et annonces assistées, gratuit) ». It goes in `--mode stream-estate|classic` (`classic` is OpenData).
    - The types, when the request does not say (« un bien », « investir »): a multiple-choice question, « Appartement »
@@ -330,13 +332,14 @@ The dashboard's « Copier le prompt » gives:
 apply this feedback (recherche <slug>)
 1. [affiner] rooms_min=3 dpe_max=D elevator= types=flat,house mode=classic — <the same in words>
 2. [élargir] zone : tout le quartier (IRIS Moncey)
-3. [annonces] cherche de nouvelles annonces sur l'API (crédits avec mon accord) et sur le web
-4. [analyser] <id> — <a short description>
-5. [comparer] <id>, <id>
-6. [message] offre pour <id> — <a short description> : rédige une offre d'achat (…)
-7. [ajouter] <url or text>
-8. [chercher] l'annonce du DPE <number> : maison 204 m², DPE D du 19 oct. 2026, <address>
-9. [question] <free text>
+3. [zone] dessinée sur la carte (14 sommets)
+4. [annonces] cherche de nouvelles annonces sur l'API (crédits avec mon accord) et sur le web
+5. [analyser] <id> — <a short description>
+6. [comparer] <id>, <id>
+7. [message] offre pour <id> — <a short description> : rédige une offre d'achat (…)
+8. [ajouter] <url or text>
+9. [chercher] l'annonce du DPE <number> : maison 204 m², DPE D du 19 oct. 2026, <address>
+10. [question] <free text>
 ```
 
 Do every item in order:
@@ -353,6 +356,9 @@ Do every item in order:
     (immobilier.notaires.fr) and the local agencies' sites, then one listing page at a time, as in the assisted mode.
   Then look for the new listings: in Stream Estate mode the count is free and a fetch goes through the credits rule; in
   OpenData mode, the assisted mode. Say what the wider search brings.
+- `[zone]`: the outline the user drew on the dashboard's map (« Modifier la zone »), kept as the search's draft:
+  `search -p <slug> --zone drawn` (free), alone or with the `[élargir]` items' criteria (it replaces their zone). Then
+  the new listings as for `[élargir]`. Say the zone changed; the dashboard shows « Recharger ».
 - `[annonces]`: the header's « Annonces ». « sur l'API … et sur le web »: in Stream Estate mode, `fetch -p <slug>` without
   `--spend` counts for free and stops on the estimate (exit 2): the credits rule, then `fetch --spend`; then the assisted
   mode, 5 to 10 listing pages at most. « sur le web » (no key, an OpenData search or the API off): the assisted mode only. Say what each brought.

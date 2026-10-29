@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
+import { band, bbox, center } from '../lib/geo.js'
 import { ENGINE, fakeStreamEstate, property, searchesFolder } from './helpers.js'
 
 const api = await fakeStreamEstate()
@@ -262,4 +263,52 @@ test('a message for a listing: kept with it, shown to Claude', async () => {
   assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent, shown.favorite], ['flat', 3, 883, false])
   assert.deepEqual(shown.messages.map(x => [x.from, x.channel, !!x.sent_at]), [['them', 'phone', false], ['me', null, false], ['me', null, true]])
   assert.ok(shown.review.questions.length && shown.score.parts.length === 6)
+})
+
+// the open data a new zone asks, kept in the cache beforehand: its box's places, DPE and audits, its center's risks and
+// IRIS, the DPE classes (`classes`: around the center, or the commune's)
+function zoneCache(home, zone, classes) {
+  const put = (rel, v) => { fs.mkdirSync(path.dirname(path.join(home, '.cache', rel)), { recursive: true }); fs.writeFileSync(path.join(home, '.cache', rel), JSON.stringify(v)) }
+  const box = pad => bbox(zone, pad).map(x => x.toFixed(4)).join(','), c = center(zone).map(x => x.toFixed(5)).join(',')
+  put(`overpass/${box(600)}.json`, [{ cat: 'parks', kind: 'park', name: 'Square du test', point: center(zone) }])
+  for (const k of ['recent', 'audits']) put(`ademe/${k}-${box(0)}.json`, [])
+  put(`georisques/${c}.json`, { natural: [], technological: [], url: null })
+  put(`polygon/iris-${c}.json`, { code: '693830201', name: 'Moncey', geometry: null })
+  put(`ademe/classes-${classes}.json`, { flat: { D: 1 } })
+}
+
+test("a street's zone follows its line in the BD TOPO; a zone drawn on the map replaces it once Claude applies it", async () => {
+  const { home, dir } = searchesFolder()
+  const line = read(path.dirname(new URL('./fixtures/bdtopo-69383_5245.json', import.meta.url).pathname), 'bdtopo-69383_5245.json').features.map(f => f.geometry.coordinates)
+  fs.mkdirSync(path.join(home, '.cache/bdtopo'))
+  fs.writeFileSync(path.join(home, '.cache/bdtopo/69383_5245.json'), JSON.stringify(line))
+  const along = { how: 'radius', kind: 'polygon', radius_m: 300, label: "300 m de part et d'autre de la Rue Paul Bert", geometry: band(line, 300) }
+  zoneCache(home, along, `${center(along).map(x => x.toFixed(4)).join(',')}-300`)
+  let r = await run(home, ['search', '-p', 'paul-bert', '--radius', '300'])
+  assert.equal(r.status, 0, r.err)
+  assert.deepEqual(read(dir, 'search.json').zone, along)
+  assert.equal(read(dir, 'area.json').pois[0].name, 'Square du test', "the new zone's places")
+  // the API gets its outline, 60 corners at most (its first one repeated at its end)
+  const q = api.seen.findLast(x => x.path === '/documents/properties').query, vertices = [...q.keys()].filter(k => /^geoShapes\[0\]\[\d+\]\[0\]$/.test(k))
+  assert.ok(vertices.length > 10 && vertices.length - 1 <= 60, `${vertices.length} vertices`)
+
+  // the dashboard's draft (the server's route checks it the same way), then search --zone drawn takes it once
+  const drawn = { type: 'Polygon', coordinates: [[[4.85, 45.755], [4.86, 45.755], [4.86, 45.759], [4.85, 45.755]]] }
+  fs.writeFileSync(path.join(dir, 'zone-draft.json'), JSON.stringify({ geometry: drawn }))
+  const zone = { how: 'drawn', kind: 'polygon', geometry: drawn, label: 'Zone dessinée sur la carte' }
+  zoneCache(home, zone, '69383')
+  r = await run(home, ['search', '-p', 'paul-bert', '--zone', 'drawn'])
+  assert.equal(r.status, 0, r.err)
+  assert.deepEqual(read(dir, 'search.json').zone, zone)
+  assert.ok(!fs.existsSync(path.join(dir, 'zone-draft.json')), 'the draft is taken')
+  assert.match(r.out, /Zone dessinée sur la carte/)
+  // no draft: the drawn zone stays; --radius goes back to the street's band
+  assert.equal((await run(home, ['search', '-p', 'paul-bert', '--zone', 'drawn'])).status, 0)
+  assert.deepEqual(read(dir, 'search.json').zone, zone)
+  fs.writeFileSync(path.join(dir, 'zone-draft.json'), JSON.stringify({ geometry: { type: 'Polygon', coordinates: [[[4.85, 45.755], [4.86, 45.755]]] } }))
+  r = await run(home, ['search', '-p', 'paul-bert', '--zone', 'drawn'])
+  assert.equal(r.status, 1)
+  assert.match(r.err, /zone-draft.json: a ring has 3 corners or more/)
+  r = await run(home, ['search', '-p', 'paul-bert', '--radius', '300'])
+  assert.deepEqual(read(dir, 'search.json').zone, along)
 })
