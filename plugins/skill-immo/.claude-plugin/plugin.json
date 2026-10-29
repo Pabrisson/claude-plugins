@@ -1,6 +1,6 @@
 {
   "name": "skill-immo",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "Skill property-search: find property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, enriched with open data (DVF sales per type, rents, DPE, energy audits, building permits, risks, condominiums, shops, travel times, crime, income) and the Stream Estate API v1, with a review and a score per listing, offer letters, and a local dashboard (listings map, odds map, kanban, list, dossier, market, follow-up, alerts, settings, API costs)",
   "author": {
     "name": "Pierre Alain BRISSON"

@@ -483,7 +483,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
       {!(editing && mobile) && <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales }}
         dpe={{ days: dpeDays, setDays: setDpeDays, scope: dpeScope, setScope: setDpeScope, count: dpe.count, open: dpe.open }}
         sources={{ audits: recent.audits, permits: recent.permits, inPeriod: recent.inPeriod, kinds, setKinds, auditDays, setAuditDays, permitDays, setPermitDays }}
-        odds={odds && { metric, setMetric: odds.setMetric, listings: sources.listings.features.length, onPlace: h => map.current?.flyTo({ center: [h.x, h.y], zoom: zoomOf(h), duration: 1200 }) }}
+        odds={odds && { metric, setMetric: odds.setMetric, listings: sources.listings.features.length, iris: odds.data?.iris?.length ?? 0, onPlace: h => map.current?.flyTo({ center: [h.x, h.y], zoom: zoomOf(h), duration: 1200 }) }}
         edit={odds ? undefined : { start: startEdit, editing, drawn: !!drawn }} />}
     </div>
   )
@@ -541,7 +541,7 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
     audits: AuditRow[]; permits: PermitRow[]; inPeriod: PermitRow[]; kinds: PermitKind[]; setKinds: (v: PermitKind[]) => void
     auditDays: string; setAuditDays: (v: string) => void; permitDays: string; setPermitDays: (v: string) => void
   }
-  odds?: { metric: Metric; setMetric: (m: Metric) => void; listings: number; onPlace: (h: Hit) => void }
+  odds?: { metric: Metric; setMetric: (m: Metric) => void; listings: number; iris: number; onPlace: (h: Hit) => void }
   // the listings' map: the zone redrawn there
   edit?: { start: () => void; editing: boolean; drawn: boolean }
 }) {
@@ -579,10 +579,10 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
           {odds && !docked && <PlaceSearch onPlace={odds.onPlace} />}
           {odds ? (
             <>
-              <Group title="Probabilités">
+              <Group title="Quartiers INSEE">
                 <div className="flex items-center gap-2">
                   <Switch id="iris" checked={layers.includes("iris")} onCheckedChange={v => toggle("iris", v)} />
-                  <Hint text={IRIS_HELP}><Label htmlFor="iris" className="text-xs">Quartiers INSEE (IRIS)</Label></Hint>
+                  <Hint text={IRIS_HELP}><Label htmlFor="iris" className="text-xs">Quartiers de la carte <span className="text-muted-foreground">({num(odds.iris)})</span></Label></Hint>
                 </div>
                 {/* one figure colors the IRIS: a probability (first row) or a figure of the quarter (second row) */}
                 {(["odds", "iris"] as const).map(row => (
@@ -626,7 +626,7 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                             <Label htmlFor="dpe-only" className="text-xs">Seulement ceux-là</Label>
                           </div>
                           <p className="text-muted-foreground">
-                            Un DPE précède une vente ou une location : sans annonce, le bien est peut-être bientôt en vente. Hors de la zone de la recherche, les annonces ne sont pas connues : ces DPE ne sont pas signalés.
+                            Un DPE précède une vente ou une location : sans annonce, le bien est peut-être bientôt en vente. Hors de la zone de la recherche, les annonces ne sont pas connues.
                             {data.search.mode === "classic" && " En OpenData, c'est sans annonce dans cette recherche."}
                           </p>
                         </>
@@ -646,7 +646,7 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                       <ToggleGroup type="single" size="sm" variant="outline" value={sources.auditDays} onValueChange={v => v && sources.setAuditDays(v)} className="justify-start" aria-label="Période des audits">
                         {PERIODS.map(([v, l]) => <ToggleGroupItem className={CHIP} key={v} value={v}>{l}</ToggleGroupItem>)}
                       </ToggleGroup>
-                      <p className="text-muted-foreground">Un carré dans la couleur de sa classe DPE, marqué d'un presse-papier. Obligatoire pour vendre une maison ou un immeuble entier classé E, F ou G : souvent une vente proche.</p>
+                      <p className="text-muted-foreground">Obligatoire pour vendre une maison ou un immeuble entier classé E, F ou G.</p>
                     </>
                   )}
                 </Group>
@@ -668,7 +668,6 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                         </ToggleGroupItem>
                       ))}
                     </ToggleGroup>
-                    <p className="text-muted-foreground">Construire : des logements créés (permis ou déclaration préalable). Démolir : un terrain ou un programme à venir. Aménager : un terrain divisé en lots.</p>
                     <p className="text-muted-foreground">Datés de leur autorisation, ils arrivent en retard dans Sitadel (publié chaque mois) : environ 6 mois pour construire, 1 mois pour démolir ou aménager. Sur 3 mois, les permis de construire manquent presque tous.</p>
                   </>
                 )}
@@ -678,7 +677,7 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                   <Switch id="listings" checked={layers.includes("listings")} onCheckedChange={v => toggle("listings", v)} />
                   <Label htmlFor="listings" className="text-xs">Annonces de la recherche <span className="text-muted-foreground">({num(odds.listings)})</span></Label>
                 </div>
-                <p className="text-muted-foreground">Celles déjà chargées dans l'onglet Annonces, aux mêmes positions : aucune nouvelle recherche.</p>
+                <p className="text-muted-foreground">Celles déjà chargées dans l'onglet Annonces, aux mêmes positions.</p>
               </Group>
               {zone}
             </>
