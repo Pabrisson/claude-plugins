@@ -104,6 +104,10 @@ export type PermitKind = "build" | "demolish" | "develop"
 export type PermitRow = { number: string; kind: PermitKind; form: "PC" | "DP" | "PD" | "PA"; date: string; homes: number | null; demolished: number | null; land: number | null; address: string; ban: string | null; point: Point }
 // a source's row the « Prospection » map shows, and the follow-up sends it
 export type MapRow = { kind: "dpe"; row: DpeRow } | { kind: "audit"; row: AuditRow } | { kind: "permit"; row: PermitRow }
+// an address of the « Estimations » (engine lib/odds.js addressOdds): its DPE (those of a day together, `rows`), audits
+// and permits each with their chance, its IRIS and its share of sales (with a DPE), out of the search's zone or not, its
+// odds of going on sale soon
+export type OddsPlace = { key: string; point: Point; address: string | null; iris: string | null; out: boolean; sale: number | null; odds: number; signals: (MapRow & { p: number; rows?: DpeRow[] })[] }
 // a box of the map's odds (GET /api/odds, references/data-sources.md): its IRIS with their census, DVF sales, odds and
 // prices, its communes, its DPE, energy audits and building permits of the last 12 months, and the sources that failed
 export type Census = {

@@ -149,6 +149,15 @@ time, about 1 s once kept.
   Bert). Successions: people living alone of 55 to 79 × 1.3 % and of 80 and more × 9 % a year (France's death rates
   by age), × the owners' share of the main homes. Separations: couples × 1 % a year × the same share. Both are
   estimates, said so in the dashboard.
+- **The odds of an address** (« Estimations », `addressOdds` in `lib/odds.js`, run by the dashboard on the box's
+  rows): its DPE, audits and permits (by BAN id, else point), each a chance p, together 1 − Π(1 − p). The DPE of one
+  address and one day are one signal, the likeliest: around rue Paul Bert, 126 addresses had 3 or more the same day
+  (34 at 42 rue Tronchet), a whole building diagnosed or a home diagnosed twice. A DPE: its IRIS's
+  share of sales, DVF's sales a year / (sales + tenants × 1/5 moving out a year), France's 30 % without figures (10 to
+  30 % around rue Paul Bert, median 15 %), at least 80 % for a G. An audit: 50 %. Both whole for 2 months, half to 6, a
+  quarter after. A permit to develop 70 %, to build 2 homes or more 60 %, to demolish 50 %, one house 10 %. A DPE a
+  listing of the search has is left out. Reasoned weights, not measured; they could be set on DVF's sales at the DPE's
+  address in the 12 months after it.
 - **The prices**: the median € per m² of an IRIS's flats and houses sold over the same three years, together then apart,
   from 5 sales on. The map's five classes are Lyon's and Villeurbanne's quintiles (117 IRIS, 2026-10-29): 3,600, 4,200,
   4,700, 5,100 €/m²; the vacant homes' 6, 7.5, 9 and 11 %.

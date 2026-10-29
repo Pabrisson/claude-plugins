@@ -210,9 +210,14 @@ The « Prospection » tab colors the IRIS of the map's box by the odds that a ho
 sales over the census's homes), by the sales a year after successions and separations, by their share of vacant homes
 or by their sold price per m², from public figures per IRIS and commune (`references/data-sources.md`). Its IRIS card
 adds the second homes, the homes built before 1946, heated with oil, and whose household moved in 10 years ago or more.
-Its map shows the box's recent DPE, energy audits and building permits (never the applicant). It never names a person:
-if the user asks for the deaths or divorces of an address, say that no source gives them and that joining people to
-homes is not allowed.
+Its map shows the box's recent DPE, energy audits and building permits (never the applicant). Its « Estimations »
+switch hides the rest and shows each address of the box, in the search's zone or not, with its odds of going on sale
+soon (red to green): its DPE (those of one day count once), audits and permits of the last 12 months, its IRIS's sales
+against its tenants moving out; in the zone, a DPE a listing has does not count. An address clicked opens its block.
+« Type de bien » filters the DPE, audits and listings of both maps (never the permits).
+The weights are reasoned, not measured: say so if the user takes a % for a fact. It
+never names a person: if the user asks for the deaths or divorces of an address, say that no source gives them and that
+joining people to homes is not allowed.
 
 ## The dashboard server's watch
 

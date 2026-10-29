@@ -1,11 +1,13 @@
 import { inZone } from "@engine/geo.js"
 import { isHome } from "@engine/market.js"
-import { CalculatorIcon, ChevronDownIcon, ClipboardCheckIcon, GaugeIcon, InfoIcon, ListIcon, ListOrderedIcon, MapIcon, MapPinnedIcon, RefreshCwIcon, StampIcon, XIcon, type LucideIcon } from "lucide-react"
+import { addressOdds, AUDIT_SALE, G_SALE, PERMIT_SALE, SALE_SHARE, saleShare, TURNOVER } from "@engine/odds.js"
+import { CalculatorIcon, ChevronDownIcon, ClipboardCheckIcon, GaugeIcon, InfoIcon, ListIcon, ListOrderedIcon, MapIcon, MapPinnedIcon, PercentIcon, RefreshCwIcon, SearchIcon, StampIcon, XIcon, type LucideIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 
 import { AuditBadge, PermitBadge } from "@/components/badges"
 import { DPE_HEX, dpeInk } from "@/components/dpe"
-import { AUDIT_HELP, DPE_HELP, Hint, IRIS_HELP, MapView, METRICS, MIN_ZOOM, PERMIT_HELP, type DpeGroup, type Metric, type OddsMap, type Shown, type Spot } from "@/components/map-view"
+import { AUDIT_HELP, DPE_HELP, Hint, IRIS_HELP, MapView, METRICS, MIN_ZOOM, oddsTypes, PERMIT_HELP, PROBA, PROBA_HELP, type DpeGroup, type Metric, type OddsMap, type Shown, type Spot } from "@/components/map-view"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
@@ -13,8 +15,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api, type IrisOdds, type Odds } from "@/lib/api"
-import { date, keur, m2, num, permitLabel, permitWhat, share, TYPE_LABEL } from "@/lib/format"
+import { api, type IrisOdds, type Odds, type OddsPlace } from "@/lib/api"
+import { auditAsk, date, dpeAsk, keur, m2, num, permitLabel, permitWhat, share, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -33,13 +35,25 @@ export function OddsTab() {
   const [hover, setHover] = useState<OddsMap["hover"]>(null), [shownRows, setShownRows] = useState<Shown>({ audits: [], permits: [], months: { audit: 12, permit: 12 } })
   // a DPE, an audit or a permit the follow-up asks to show: once the map is up, it goes there and pins its card, until
   // another is picked
-  const { data: search, mapFocus, focusMap } = useSearch()
+  const { data: search, types, mapFocus, focusMap } = useSearch()
   const followed = useMemo<Spot | null>(() => {
     if (mapFocus?.kind !== "dpe") return mapFocus
     const d = mapFocus.row
     return { kind: "dpe", group: { key: d.ban ?? d.point.join(","), point: d.point, address: d.address, out: !inZone(d.point, search.search.zone as Parameters<typeof inZone>[1]), items: [{ ...d, listing: null }] } }
   }, [mapFocus, search.search.zone])
   useEffect(() => () => focusMap(null), [focusMap])
+  // the types the map shows, the estimations' too
+  const [shownTypes, setShownTypes] = useState<string[]>(() => oddsTypes(types))
+  // the « Estimations »: the box's addresses by their odds of going on sale soon (the DPE and audits of the types shown;
+  // a whole building's audit as a flat's), the search's listings telling which DPE of its zone are on sale already; the
+  // address opened in the column (picked in its ranking or on the map)
+  const [proba, setProba] = useState(false), [placeKey, setPlaceKey] = useState<string | null>(null)
+  const places = useMemo(() => {
+    if (!proba || !data) return null
+    const rows = { dpe: data.dpe.filter(d => shownTypes.includes(d.type)), audits: data.audits.filter(a => shownTypes.includes(a.building ? "flat" : a.type)), permits: data.permits }
+    return addressOdds(rows, data.iris, { listings: search.listings, zone: search.search.zone }) as OddsPlace[]
+  }, [proba, data, shownTypes, search.listings, search.search.zone])
+  const place = places?.find(g => g.key === placeKey)
   const shown = (view && followed) || focus
   // before the map says its box (it is loading), as loading
   const near = !view || view.zoom >= MIN_ZOOM - 0.01, busy = near && (loading || !view)
@@ -58,9 +72,11 @@ export function OddsTab() {
     return () => { clearTimeout(t); ctl.abort() }
   }, [view, near, tries])
 
-  const odds = { data, metric, setMetric, onView: setView, iris, onIris: setIris, onDpe: setGroups, onShown: setShownRows, focus: shown, hover }
+  const odds = { data, metric, setMetric, onView: setView, iris, onIris: setIris, onDpe: setGroups, onShown: setShownRows, focus: shown, hover, proba: { on: proba, set: setProba, places: places ?? [], pick: setPlaceKey, at: place?.point ?? null } }
+  const typeFilter = { shown: shownTypes, set: setShownTypes }
   const status = <MapStatus near={near} loading={busy} error={error} retry={() => setTries(tries + 1)} />
-  const panel = <OddsPanel data={data} near={near} loading={busy} metric={metric} iris={iris} onIris={setIris} groups={groups} rows={shownRows} onFocus={sp => { focusMap(null); setFocus(sp); if (mobile) setShow("map") }} onHover={setHover} />
+  const panel = <OddsPanel data={data} near={near} loading={busy} metric={metric} iris={iris} onIris={setIris} groups={groups} rows={shownRows} places={places} place={place} onPlace={setPlaceKey}
+    onFocus={sp => { focusMap(null); setFocus(sp); if (sp.kind === "place") setPlaceKey(sp.place.key); if (mobile) setShow("map") }} onHover={setHover} />
   return mobile ? (
     <div className="relative flex h-full flex-col">
       <ToggleGroup type="single" variant="outline" size="sm" value={show} onValueChange={v => v && setShow(v)} className="m-3 mb-0 self-start" aria-label="Affichage">
@@ -69,7 +85,7 @@ export function OddsTab() {
       </ToggleGroup>
       {show === "map" ? (
         <div className="relative mt-3 mb-16 min-h-0 flex-1">
-          <MapView className="absolute inset-0" odds={odds} />
+          <MapView className="absolute inset-0" odds={odds} typeFilter={typeFilter} />
           <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-center">{status}</div>
         </div>
       ) : <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-20">{panel}</div>}
@@ -77,7 +93,7 @@ export function OddsTab() {
   ) : (
     // as the listings' map: under both columns, the layers on its left, the column on its right
     <div className="relative h-full">
-      <MapView className="absolute inset-0" right={440} odds={odds} />
+      <MapView className="absolute inset-0" right={440} odds={odds} typeFilter={typeFilter} />
       <div className="pointer-events-none absolute top-3 right-[452px] left-[332px] z-10 flex justify-center">{status}</div>
       <div className="absolute inset-y-0 right-0 z-10 w-[440px] overflow-y-auto border-l bg-background/60 p-3 backdrop-blur-md">{panel}</div>
     </div>
@@ -148,9 +164,11 @@ function Block({ icon: Icon, title, help, action, folded = false, children }: { 
 
 // The column of the odds map, in blocks: the box shown in figures, the IRIS clicked, the IRIS ranked by the figure the
 // map colors (the map's table), its recent DPE, energy audits and building permits (picked, the map goes to it), the
-// method
-function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, onFocus, onHover }: {
-  data: Odds | null; near: boolean; loading: boolean; metric: Metric; iris: string | null; onIris: (c: string | null) => void; groups: DpeGroup[]; rows: Shown; onFocus: (s: Spot) => void
+// method. In the « Estimations » (`places`), the address opened and the addresses ranked by their odds in place of the
+// IRIS and the rows.
+function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, places, place, onPlace, onFocus, onHover }: {
+  data: Odds | null; near: boolean; loading: boolean; metric: Metric; iris: string | null; onIris: (c: string | null) => void; groups: DpeGroup[]; rows: Shown
+  places: OddsPlace[] | null; place: OddsPlace | undefined; onPlace: (k: string | null) => void; onFocus: (s: Spot) => void
   onHover: (h: OddsMap["hover"]) => void
 }) {
   // a row or a block the pointer (or the keyboard) is on: its IRIS or DPE set off on the map
@@ -183,8 +201,30 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, on
           <Stat label="Prix au m²" help={METRICS.price.help} value={m2(price)} hint="médiane des quartiers de la carte (DVF)" />
         </div>
       </Block>
-      {selected && <IrisBlock key={selected.code} i={selected} years={data.years} onClose={() => { onHover(null); onIris(null) }} hover={on({ iris: selected.code })} />}
-      <Block icon={ListOrderedIcon} title={`Quartiers par ${m.label.toLowerCase()}`} help={`Les quartiers INSEE (IRIS) de la carte visible, du plus haut au plus bas, classés par le chiffre qui colore la carte (« ${m.label} », à choisir dans les calques). Un clic ouvre la fiche du quartier.`}>
+      {place && <PlaceBlock key={place.key} g={place} i={data.iris.find(i => i.code === place.iris)} onClose={() => { onHover(null); onPlace(null) }} hover={on({ point: place.point })} />}
+      {places && (
+        <Block icon={PercentIcon} title="Adresses les plus probables" help={`${PROBA_HELP} Celles de la carte visible, de la plus probable à la moins probable ; un clic centre la carte sur l'adresse.`}>
+          {places.length ? (
+            <ol className="-mx-1 flex flex-col">
+              {places.slice(0, 30).map(g => (
+                <li key={g.key}>
+                  <button type="button" onClick={() => onFocus({ kind: "place", place: g })} aria-pressed={g.key === place?.key} {...on({ point: g.point })} className={cn(row, "items-center", g.key === place?.key && "bg-accent")}>
+                    <i className="size-2.5 shrink-0 rounded-sm" style={{ background: `var(--estim-${1 + PROBA.steps.filter(s => g.odds >= s).length})` }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{g.address ?? "Adresse inconnue"}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{g.signals.map(s => (s.kind === "permit" ? permitLabel(s.row) : `${s.kind === "dpe" ? "DPE" : "Audit"} ${s.row.energy}${(s.rows?.length ?? 1) > 1 ? ` ×${s.rows!.length}` : ""}`)).join(" · ")}{g.out ? " · hors de votre zone" : ""}</span>
+                    </span>
+                    <span className="tabular-nums">{share(g.odds)}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : <p className="text-xs text-muted-foreground">Aucun DPE, audit ni permis récent sur la carte.</p>}
+          {places.length > 30 && <p className="text-xs text-muted-foreground">+ {num(places.length - 30)} autres adresses sur la carte.</p>}
+        </Block>
+      )}
+      {!places && selected && <IrisBlock key={selected.code} i={selected} years={data.years} onClose={() => { onHover(null); onIris(null) }} hover={on({ iris: selected.code })} />}
+      {!places && <Block icon={ListOrderedIcon} title={`Quartiers par ${m.label.toLowerCase()}`} help={`Les quartiers INSEE (IRIS) de la carte visible, du plus haut au plus bas, classés par le chiffre qui colore la carte (« ${m.label} », à choisir dans les calques). Un clic ouvre la fiche du quartier.`}>
         <ol className="-mx-1 flex flex-col text-sm">
           {(all ? ranked : ranked.slice(0, 8)).map(i => (
             <li key={i.code}>
@@ -198,8 +238,8 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, on
           ))}
         </ol>
         {ranked.length > 8 && <Button variant="ghost" size="xs" className="self-start" onClick={() => setAll(!all)}>{all ? "Moins" : `Voir les ${ranked.length}`}</Button>}
-      </Block>
-      {types.some(isHome) && (
+      </Block>}
+      {!places && types.some(isHome) && (
         <Block icon={GaugeIcon} title="DPE récents" help={`${DPE_HELP} Ceux de la carte visible, avec les filtres du calque « DPE récents », dans l'ordre choisi ; un clic centre la carte sur l'adresse.`}
           action={
             <Select value={dpeSort} onValueChange={v => setDpeSort(v as keyof typeof DPE_SORTS)}>
@@ -230,7 +270,7 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, on
           {sorted.length > 30 && <p className="text-xs text-muted-foreground">+ {num(sorted.length - 30)} autres adresses sur la carte.</p>}
         </Block>
       )}
-      {types.some(isHome) && (
+      {!places && types.some(isHome) && (
         <Block icon={ClipboardCheckIcon} title="Audits énergétiques récents" help={`${AUDIT_HELP} Ceux de la carte visible, sur la période du calque « Audits énergétiques », les plus récents d'abord ; un clic centre la carte sur l'adresse.`}>
           {audits.length ? (
             <ul className="-mx-1 flex flex-col">
@@ -250,7 +290,7 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, on
           {audits.length > 30 && <p className="text-xs text-muted-foreground">+ {num(audits.length - 30)} autres sur la carte.</p>}
         </Block>
       )}
-      <Block icon={StampIcon} title="Permis récents" help={`${PERMIT_HELP} Ceux de la carte visible, avec la période et les natures du calque « Permis », les plus récents d'abord ; un clic centre la carte sur l'adresse.`}>
+      {!places && <Block icon={StampIcon} title="Permis récents" help={`${PERMIT_HELP} Ceux de la carte visible, avec la période et les natures du calque « Permis », les plus récents d'abord ; un clic centre la carte sur l'adresse.`}>
         {permits.length ? (
           <ul className="-mx-1 flex flex-col">
             {permits.slice(0, 30).map(p => (
@@ -267,13 +307,20 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, on
           </ul>
         ) : <p className="text-xs text-muted-foreground">Aucun permis autorisé sur la carte depuis {months.permit} mois (calque « Permis »).</p>}
         {permits.length > 30 && <p className="text-xs text-muted-foreground">+ {num(permits.length - 30)} autres sur la carte.</p>}
-      </Block>
+      </Block>}
       <Block icon={CalculatorIcon} title="Comment c'est calculé" help="Les sources et les calculs de cet onglet, et pourquoi aucune personne n'y est identifiée." folded>
         <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
           <p>Vente à 12 mois : les appartements et maisons vendus seuls dans le quartier (DVF, {data.years.join(", ") || "—"}), divisés par ses logements (recensement de la population, INSEE).</p>
           <p>Successions : les personnes vivant seules de 55 à 79 ans et de 80 ans et plus, multipliées par les taux de décès de la France à ces âges, puis par la part de propriétaires du quartier.</p>
           <p>Séparations : les couples du quartier (mariés, pacsés, en union libre), multipliés par 1 % de séparations par an, puis par la part de propriétaires.</p>
           <p>Logements vacants : les logements vides au recensement, sur tous ses logements. Prix au m² : la médiane des appartements et maisons vendus (DVF, mêmes années), à partir de 5 ventes.</p>
+          <p>
+            Estimations : chaque DPE, audit énergétique et permis des 12 derniers mois d'une adresse donne une chance p, réunies en 1 − (1 − p₁)(1 − p₂)… : la chance qu'un logement au moins soit mis en vente.
+            Les DPE d'une adresse faits le même jour comptent une fois : un propriétaire qui fait diagnostiquer tout un immeuble, ou un logement diagnostiqué deux fois.
+            Un DPE précède une vente ou une location : sa chance est la part des ventes dans ce que son quartier met sur le marché (ses ventes DVF par an, contre ses locataires qui déménagent, {share(TURNOVER)} par an), au moins {share(G_SALE)} pour un G, qui ne peut plus être loué depuis 2025.
+            Un audit : {share(AUDIT_SALE)}. Tous deux comptent en entier pendant 2 mois, à moitié jusqu'à 6 mois, au quart ensuite. Un permis d'aménager : {share(PERMIT_SALE.develop)}, de construire 2 logements ou plus : {share(PERMIT_SALE.homes)}, de démolir : {share(PERMIT_SALE.demolish)}, une seule maison : {share(PERMIT_SALE.home)}.
+            Dans la zone de la recherche, un DPE qui a son annonce est déjà en vente : il ne compte pas. Ce sont des poids raisonnés, pas mesurés.
+          </p>
           <p>Audits énergétiques : ceux de l'ADEME des 12 derniers mois. Permis : les listes Sitadel des permis de construire, de démolir et d'aménager, placés à leur adresse par la Base Adresse Nationale ; le demandeur n'est jamais affiché.</p>
           <p>Que des chiffres publics par quartier ou par commune : aucune personne n'est identifiée. Les décès et divorces individuels ne sont pas publiés avec une adresse, et DVF interdit de retrouver qui a vendu.</p>
         </div>
@@ -282,13 +329,17 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, on
   )
 }
 
-// the IRIS clicked on the map or in the ranking: its census, its sales and its odds. Opened (made again for each IRIS),
-// the column scrolls to it.
-function IrisBlock({ i, years, onClose, hover }: { i: IrisOdds; years: string[]; onClose: () => void; hover: { onMouseEnter: () => void; onMouseLeave: () => void } }) {
+// the column scrolls to the block opened (made again for each IRIS or address)
+function useScrolledTo() {
   const ref = useRef<HTMLDivElement>(null)
   // braces: Chrome's scrollIntoView returns a promise, which React would take for the effect's cleanup
   useEffect(() => { ref.current?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }) }, [])
-  const c = i.census
+  return ref
+}
+
+// the IRIS clicked on the map or in the ranking: its census, its sales and its odds. Opened, the column scrolls to it.
+function IrisBlock({ i, years, onClose, hover }: { i: IrisOdds; years: string[]; onClose: () => void; hover: { onMouseEnter: () => void; onMouseLeave: () => void } }) {
+  const ref = useScrolledTo(), c = i.census
   const rows: [string, string][] = c ? [
     ["Logements", num(c.homes)],
     ["Résidences principales", num(c.main)],
@@ -320,6 +371,81 @@ function IrisBlock({ i, years, onClose, hover }: { i: IrisOdds; years: string[];
             {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="text-right tabular-nums">{v}</dd></div>)}
           </dl>
         ) : <p className="text-sm text-muted-foreground">Pas de chiffres INSEE pour ce quartier (quartier d'activité ou peu habité).</p>}
+      </Block>
+    </div>
+  )
+}
+
+// The address opened in the « Estimations » (its row in the ranking, its dot on the map): its odds, its quarter's
+// figures behind a DPE's chance, each signal with its chance (a home's value at its quarter's median price, « Chercher
+// l'annonce » for a DPE or an audit). Opened, the column scrolls to it.
+function PlaceBlock({ g, i, onClose, hover }: { g: OddsPlace; i: IrisOdds | undefined; onClose: () => void; hover: { onMouseEnter: () => void; onMouseLeave: () => void } }) {
+  const ref = useScrolledTo(), { addFeedback } = useSearch(), [asked, setAsked] = useState<string[]>([])
+  const ask = (n: string, text: string) => (
+    <Button size="xs" variant="outline" className="shrink-0" disabled={asked.includes(n)} onClick={() => { addFeedback({ kind: "chercher", text }); setAsked([...asked, n]); toast.success("Ajouté au prompt : Claude cherchera l'annonce") }}>
+      <SearchIcon data-icon="inline-start" />Chercher l'annonce
+    </Button>
+  )
+  // a home at the quarter's median price of its type
+  const value = (type: "flat" | "house", area: number | null) => { const p = type === "flat" ? i?.ppm2_flat : i?.ppm2_house; return p && area ? ` · ≈ ${keur(p * area)} au prix médian du quartier` : "" }
+  const c = i?.census, muted = "min-w-0 flex-1 text-xs text-muted-foreground"
+  const rows: [string, string][] = i && c ? [
+    ["Ventes parmi les biens mis sur le marché", share(saleShare(i))],
+    ["Vente à 12 mois", i.odds == null ? "—" : share(i.odds, 1)],
+    ["Ventes par an", i.sold == null ? "—" : num(i.sold)],
+    ["Propriétaires occupants", `${num(c.owners)}${c.main ? ` (${share((c.owners ?? 0) / c.main)})` : ""}`],
+    ["Locataires", c.main != null && c.owners != null ? num(c.main - c.owners) : "—"],
+    ["Logements vacants", c.vacant == null ? "—" : `${num(c.vacant)}${c.homes ? ` (${share(c.vacant / c.homes, 1)})` : ""}`],
+    ["Prix au m², appartements", m2(i.ppm2_flat)],
+    ["Prix au m², maisons", m2(i.ppm2_house)],
+  ] : []
+  return (
+    <div ref={ref} className="scroll-mt-3" onMouseEnter={hover.onMouseEnter} onMouseLeave={hover.onMouseLeave}>
+      <Block icon={MapPinnedIcon} title={g.address ?? "Adresse inconnue"} help={`L'adresse ouverte : ses DPE, audits énergétiques et permis des 12 derniers mois avec leur chance, et les chiffres de son quartier. ${PROBA_HELP}`} action={<Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Fermer l'adresse"><XIcon /></Button>}>
+        <p className="text-xs text-muted-foreground">{[i?.commune, i && `quartier ${i.name}`, g.out ? "hors de votre zone : annonces inconnues" : "dans votre zone"].filter(Boolean).join(" · ")}</p>
+        <div className="flex items-center gap-2">
+          <i className="size-3 shrink-0 rounded-sm" style={{ background: `var(--estim-${1 + PROBA.steps.filter(x => g.odds >= x).length})` }} />
+          <span className="text-2xl font-semibold tracking-tight tabular-nums">{share(g.odds)}</span>
+          <span className="text-xs text-muted-foreground">de chance de mise en vente prochaine</span>
+        </div>
+        <h3 className="mt-1 text-xs font-semibold">Le quartier</h3>
+        {rows.length ? (
+          <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm">
+            {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="text-right tabular-nums">{v}</dd></div>)}
+          </dl>
+        ) : <p className="text-sm text-muted-foreground">Pas de chiffres INSEE pour ce quartier : un DPE y prend la part des ventes de la France ({share(SALE_SHARE)}).</p>}
+        <h3 className="mt-1 text-xs font-semibold">Signaux</h3>
+        <ul className="flex flex-col gap-2.5">
+          {g.signals.map(s => {
+            const day = s.kind === "dpe" ? (s.rows ?? [s.row]) : []
+            return (
+              <li key={`${s.kind}-${s.row.number}`} className="flex items-start gap-2 text-sm">
+                {s.kind === "dpe" ? <b className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-sm text-[10px]" style={{ background: DPE_HEX[s.row.energy], color: dpeInk(s.row.energy) }}>{s.row.energy}</b>
+                  : s.kind === "audit" ? <AuditBadge energy={s.row.energy} className="mt-0.5" /> : <PermitBadge kind={s.row.kind} className="mt-0.5" />}
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="flex gap-2">
+                    <span className="min-w-0 flex-1">{s.kind === "dpe" ? (day.length > 1 ? `${day.length} DPE du ${date(s.row.date)}, comptés une fois` : `DPE du ${date(s.row.date)}`) : s.kind === "audit" ? `Audit énergétique du ${date(s.row.date)}` : `${permitLabel(s.row)} du ${date(s.row.date)}`}</span>
+                    <span className="tabular-nums">{share(s.p)}</span>
+                  </div>
+                  {s.kind === "dpe" && (
+                    <>
+                      {day.length > 1 && <p className="text-xs text-muted-foreground">Un propriétaire qui fait diagnostiquer tout un immeuble, ou un logement diagnostiqué deux fois.</p>}
+                      {day.slice(0, 5).map(d => <div key={d.number} className="flex items-center gap-2"><span className={muted}>{day.length > 1 && `${d.energy} · `}{TYPE_LABEL[d.type]}{d.area ? ` ${num(d.area)} m²` : ""}{value(d.type, d.area)}</span>{ask(d.number, dpeAsk(d))}</div>)}
+                      {day.length > 5 && <p className="text-xs text-muted-foreground">+ {num(day.length - 5)} autres DPE ce jour-là</p>}
+                    </>
+                  )}
+                  {s.kind === "audit" && (
+                    <div className="flex items-center gap-2">
+                      <span className={muted}>{s.row.building ? "Immeuble entier" : TYPE_LABEL[s.row.type]}{s.row.area ? ` ${num(s.row.area)} m²` : ""}{s.row.period ? ` · construit ${/^(avant|après)/.test(s.row.period) ? s.row.period : `en ${s.row.period}`}` : ""}{s.row.building ? "" : value(s.row.type, s.row.area)}</span>
+                      {ask(s.row.number, auditAsk(s.row))}
+                    </div>
+                  )}
+                  {s.kind === "permit" && permitWhat(s.row) && <span className="text-xs text-muted-foreground">{permitWhat(s.row)}</span>}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       </Block>
     </div>
   )

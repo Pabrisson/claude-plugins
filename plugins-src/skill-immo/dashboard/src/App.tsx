@@ -83,9 +83,11 @@ const BAR = ["listings", "list", "kanban", "follow"]
 // sale beside its figures, the kanban and the list of every listing, each listing's dossier on top; market, comparison,
 // follow-up as tabs, the alerts, the settings and the API costs apart on the right
 function Workspace() {
-  const { slug, reload, compare, data, spotListing } = useSearch()
+  const { slug, reload, compare, data, spotListing, types } = useSearch()
   const mobile = useIsMobile()
   const [view, setTab] = useTabState(`immo:${slug}:view`, "listings"), [showMap, setShowMap] = useState("list")
+  // the types the listings' map and cards show (a choice from two types on)
+  const [shownTypes, setShownTypes] = useState<string[]>(types), typeFilter = { shown: shownTypes, set: setShownTypes }
   // another tab: the listing a dossier pointed at (« Voir ») is let go, so it is lit in the view it was sent to only
   const setView = (v: string) => { spotListing(null); setTab(v) }
   // « Comparer » only once a listing still in the search is chosen; emptied while open, back to the listings
@@ -111,13 +113,13 @@ function Workspace() {
                   <ToggleGroupItem value="list"><ListIcon />Liste</ToggleGroupItem>
                   <ToggleGroupItem value="map"><MapIcon />Carte</ToggleGroupItem>
                 </ToggleGroup>
-                {showMap === "map" ? <MapView className="relative mt-3 min-h-0 flex-1 mb-16" /> : <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-20"><ListingList /></div>}
+                {showMap === "map" ? <MapView className="relative mt-3 min-h-0 flex-1 mb-16" typeFilter={typeFilter} /> : <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-20"><ListingList shownTypes={shownTypes} /></div>}
               </div>
             ) : (
               // the map under both columns, a bit see-through: the layers on its left, the listings on its right (darker)
               <div className="relative h-full">
-                <MapView className="absolute inset-0" right={440} />
-                <div className="absolute inset-y-0 right-0 z-10 w-[440px] overflow-y-auto border-l bg-background/60 p-3 backdrop-blur-md"><ListingList /></div>
+                <MapView className="absolute inset-0" right={440} typeFilter={typeFilter} />
+                <div className="absolute inset-y-0 right-0 z-10 w-[440px] overflow-y-auto border-l bg-background/60 p-3 backdrop-blur-md"><ListingList shownTypes={shownTypes} /></div>
               </div>
             )}
           </TabsContent>

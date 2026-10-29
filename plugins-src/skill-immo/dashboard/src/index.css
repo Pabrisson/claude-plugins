@@ -102,6 +102,13 @@
     --odds-3: #2a78d6;
     --odds-4: #1c5cab;
     --odds-5: #104281;
+    /* the « Estimations »: the addresses' odds of going on sale in five classes, red to green (the user's choice), the
+       lightness monotone to the most salient (dataviz's validator, ordinal: all but its one-hue check) */
+    --estim-1: #f8867f;
+    --estim-2: #e3732f;
+    --estim-3: #af7500;
+    --estim-4: #647800;
+    --estim-5: #006d25;
     /* what the odds map sets off (the IRIS or the DPE under the pointer in its column, the IRIS opened): a bright red,
        the user's choice, against the blue IRIS (the DPE G is red too, but a dot, not a halo or an outline) */
     --highlight: #e5132b;
@@ -175,6 +182,11 @@
     --odds-3: #3987e5;
     --odds-4: #6da7ec;
     --odds-5: #9ec5f4;
+    --estim-1: #901e1c;
+    --estim-2: #a14206;
+    --estim-3: #a36a00;
+    --estim-4: #819808;
+    --estim-5: #44bd60;
     --highlight: #ff3347;
     --news-dpe: oklch(0.75 0.14 145);
     --news-new: oklch(0.75 0.11 200);

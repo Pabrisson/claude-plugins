@@ -68,12 +68,13 @@ function MarketsCard({ listings }: { listings: Listing[] }) {
   )
 }
 
-export function ListingList({ className }: { className?: string }) {
+// `shownTypes`: the types the listings' map shows, the cards too (from two types on)
+export function ListingList({ className, shownTypes }: { className?: string; shownTypes: string[] }) {
   const { data, types, lastVisit, selected, select, spot } = useSearch()
   const [sort, setSort] = useState<Sort>("score")
   const [filter, setFilter] = useState<keyof typeof FILTERS>("online")
   // an expired listing waiting to be sorted never shows here; one the user follows does, with its « Expiré » badge
-  const kept = data.listings.filter(l => l.id === spot || !shelved(l) && (filter === "all" || (filter === "online" ? l.my_status !== "dropped" && matches(l, data.search.criteria, types)
+  const kept = data.listings.filter(l => l.id === spot || !shelved(l) && (types.length < 2 || shownTypes.includes(typeOf(l))) && (filter === "all" || (filter === "online" ? l.my_status !== "dropped" && matches(l, data.search.criteria, types)
     : filter === "new" ? isNew(l, lastVisit) : filter === "followed" ? !!l.my_status && l.my_status !== "dropped" : filter === "favorites" ? !!l.favorite : l.my_status === "dropped")))
   const shown = useRanked(kept, sort)
   useEffect(() => { if (spot) document.getElementById(`listing-${spot}`)?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }) }, [spot])
