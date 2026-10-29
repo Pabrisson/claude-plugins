@@ -88,7 +88,11 @@ function Workspace() {
   const [view, setTab] = useTabState(`immo:${slug}:view`, "listings"), [showMap, setShowMap] = useState("list")
   // another tab: the listing a dossier pointed at (« Voir ») is let go, so it is lit in the view it was sent to only
   const setView = (v: string) => { spotListing(null); setTab(v) }
-  const more = VIEWS.filter(v => !BAR.includes(v.id))
+  // « Comparer » only once a listing still in the search is chosen; emptied while open, back to the listings
+  const compared = compare.filter(id => data.listings.some(l => l.id === id)).length
+  if (view === "compare" && !compared) setTab("listings")
+  const views = VIEWS.filter(v => v.id !== "compare" || compared)
+  const more = views.filter(v => !BAR.includes(v.id))
   return (
     <RunProvider onDone={reload}>
       <div className="flex h-dvh flex-col">
@@ -96,8 +100,8 @@ function Workspace() {
         <StaleBar />
         <Tabs value={view} onValueChange={setView} className="min-h-0 flex-1 gap-0">
           <TabsList variant="line" className="hidden w-full justify-start rounded-none border-b bg-card px-3 md:flex">
-            {VIEWS.map(v => (
-              <TabsTrigger key={v.id} value={v.id} className={cn("flex-none", v.id === "alerts" && "ml-auto")}><v.icon />{v.label}{v.id === "compare" && compare.length > 0 && <Badge variant="secondary">{compare.length}</Badge>}</TabsTrigger>
+            {views.map(v => (
+              <TabsTrigger key={v.id} value={v.id} className={cn("flex-none", v.id === "alerts" && "ml-auto")}><v.icon />{v.label}{v.id === "compare" && <Badge variant="secondary">{compared}</Badge>}</TabsTrigger>
             ))}
           </TabsList>
           <TabsContent value="listings" className="min-h-0">
