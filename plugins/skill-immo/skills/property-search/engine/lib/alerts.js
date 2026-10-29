@@ -1,17 +1,20 @@
 // The alerts of a search (<slug>/alerts.json), shared by Node and the dashboard: what of its news reaches « Suivi »,
 // the bell, the desktop notifications and Claude's refresh. An alert takes one event, at a place, when all its
 // conditions on the news' fields (FIELDS) hold; a news shows when one alert that is on takes it. The listings' events
-// happen in the search's zone only; a source's (`anywhere`: the DPE, other open data later) is watched at the alert's
-// own place too: a street, around an address, a commune. The default alerts carry the follow-up as it was, each on
-// until the user turns it off.
+// happen in the search's zone only; a source's (`anywhere`: the DPE, the energy audits, the building permits) is
+// watched at the alert's own place too: a street, around an address, a commune. The default alerts carry the
+// follow-up, each on until the user turns it off.
 import { distance } from './geo.js'
 import { matches, TYPES, typeOf } from './market.js'
 
 const LETTERS = 'ABCDEFG'
 // the events, the news kinds each one takes, and whether it may be watched outside the search's zone. A new source:
-// an event here with `anywhere`, its fields below, its fetch in immo.mjs (placeNews) and opendata.js
+// an event here with `anywhere` (its news carry their row under their kind: n.dpe, n.audit), its fields below, its
+// fetch in opendata.js and immo.mjs (SOURCES)
 export const EVENTS = {
   dpe: { kinds: ['dpe'], anywhere: true },
+  audit: { kinds: ['audit'], anywhere: true },
+  permit: { kinds: ['permit'], anywhere: true },
   new: { kinds: ['new'] },
   price_drop: { kinds: ['price_drop'] },
   price_rise: { kinds: ['price_rise'] },
@@ -19,7 +22,9 @@ export const EVENTS = {
   expired: { kinds: ['expired'] },
 }
 export const STATUSES = ['none', 'to_visit', 'visited', 'offer', 'dropped']
-const LISTING = ['new', 'price_drop', 'price_rise', 'status', 'expired'], HOME = ['dpe', ...LISTING]
+// a permit's kind: homes built (a building permit or a prior declaration), a demolition, a plot divided
+export const PERMITS = ['build', 'demolish', 'develop']
+const LISTING = ['new', 'price_drop', 'price_rise', 'status', 'expired'], HOME = ['dpe', 'audit', ...LISTING]
 
 // the default alerts: alerts.json keeps only the ids turned off (`off`), so a default added later is on
 export const DEFAULTS = [
@@ -30,6 +35,9 @@ export const DEFAULTS = [
   { id: 'status', event: 'status', conditions: [] },
   // a listing gone that the user follows (a status of theirs): the others leave the map and the cards quietly
   { id: 'expired', event: 'expired', conditions: [{ field: 'my_status', op: 'not', value: 'none' }] },
+  // every new energy audit and building permit of the zone (1.10)
+  { id: 'audit', event: 'audit', conditions: [] },
+  { id: 'permit', event: 'permit', conditions: [] },
 ]
 
 // the commune codes a DPE of a commune may carry: Paris, Lyon and Marseille give their arrondissement's
@@ -40,14 +48,20 @@ export const cityCodes = insee => ARRONDISSEMENTS[insee] ?? [insee]
 // the street of an address: « 311 bis Rue Paul Bert 69003 Lyon » → « Rue Paul Bert »
 export const streetOf = a => a?.split(',')[0].replace(/\s+\d{5}\b.*$/, '').replace(/^\s*\d+\s*(bis|ter|quater|[a-d])?\s+/i, '').trim() || null
 // a news' id, for its read mark and the page: its kind, its date and what it is about
-export const newsKey = n => `${n.kind}-${n.date}-${n.l?.id ?? n.dpe?.number ?? n.count ?? ''}`
-// what a news is about, as a listing: a DPE's home, or the listing of a change
-const subject = n => (n.kind === 'dpe' ? { property_type: n.dpe.type, area: n.dpe.area, dpe: { energy: n.dpe.energy }, location: { address: n.dpe.address } } : n.l)
+export const newsKey = n => `${n.kind}-${n.date}-${n.l?.id ?? n[n.kind]?.number ?? n.count ?? ''}`
+// a source's row of a news (its DPE, audit or permit), none for a listing's
+export const rowOf = n => (EVENTS[n.kind]?.anywhere ? n[n.kind] : null)
+// what a news is about, as a listing: a DPE's or an audit's home, a permit's address, or the listing of a change
+const subject = n => {
+  const r = rowOf(n)
+  if (!r) return n.l
+  return n.kind === 'permit' ? { location: { address: r.address } } : { property_type: r.type, area: r.area, dpe: { energy: r.energy }, location: { address: r.address } }
+}
 
 // The fields a condition reads, the events that have them, and their kind (the operators it takes). A value the news
 // does not give (an address a listing lacks) fails the condition.
 export const FIELDS = {
-  street: { kind: 'text', events: HOME, of: n => streetOf(subject(n).location?.address) },
+  street: { kind: 'text', events: [...HOME, 'permit'], of: n => streetOf(subject(n).location?.address) },
   type: { kind: 'type', events: HOME, of: n => typeOf(subject(n)) },
   energy: { kind: 'class', events: HOME, of: n => subject(n).dpe?.energy },
   area: { kind: 'number', events: HOME, of: n => subject(n).area },
@@ -58,6 +72,9 @@ export const FIELDS = {
   favorite: { kind: 'bool', events: LISTING, of: n => !!n.l.favorite },
   my_status: { kind: 'status', events: LISTING, of: n => n.l.my_status ?? 'none' },
   criteria: { kind: 'bool', events: HOME, of: (n, s) => matches(subject(n), s.criteria, s.types ?? ['flat']) },
+  building: { kind: 'bool', events: ['audit'], of: n => !!n.audit.building },
+  permit_kind: { kind: 'permit', events: ['permit'], of: n => n.permit.kind },
+  homes: { kind: 'number', events: ['permit'], of: n => n.permit.homes },
 }
 
 const norm = v => String(v).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
@@ -66,13 +83,13 @@ export const OPS = {
   text: { contains: (v, x) => norm(v).includes(norm(x)), is: (v, x) => norm(v) === norm(x) },
   number: { gte: (v, x) => v >= x, lte: (v, x) => v <= x },
   class: { lte: (v, x) => LETTERS.includes(v) && v <= x, gte: (v, x) => LETTERS.includes(v) && v >= x },
-  type: { is }, status: { is, not: (v, x) => v !== x }, bool: { is },
+  type: { is }, status: { is, not: (v, x) => v !== x }, bool: { is }, permit: { is },
 }
 
-// is a DPE at an alert's place: its BAN id on the street or in the commune (an id starts with its commune's code), its
-// point within the circle
+// is a source's row (a DPE, an audit, a permit) at an alert's place: its BAN id on the street or in the commune (an id
+// starts with its commune's code), its point within the circle
 export function atPlace(p, d) {
-  if (p.how === 'street') return !!d.ban?.startsWith(`${p.ban}_`)
+  if (p.how === 'street') return d.ban === p.ban || !!d.ban?.startsWith(`${p.ban}_`)
   if (p.how === 'commune') return cityCodes(p.insee).some(c => !!d.ban?.startsWith(`${c}_`))
   if (p.how === 'radius') return !!d.point && distance(p.point, d.point) <= p.radius_m
   return false
@@ -90,7 +107,7 @@ export const alertsOf = (file = {}) => [
 export function takes(a, n, s) {
   if (!EVENTS[a.event]?.kinds.includes(n.kind)) return false
   const p = a.place ?? { how: 'zone' }
-  if (p.how === 'zone' ? n.outside : !(n.kind === 'dpe' && atPlace(p, n.dpe))) return false
+  if (p.how === 'zone' ? n.outside : !(rowOf(n) && atPlace(p, rowOf(n)))) return false
   return a.conditions.every(c => {
     const f = FIELDS[c.field], v = f?.events.includes(a.event) ? f.of(n, s) : null
     return v != null && OPS[f.kind][c.op](v, c.value)
@@ -124,7 +141,7 @@ export function cleanAlerts(x) {
       const f = FIELDS[c.field]
       if (!f || !f.events.includes(event) || !OPS[f.kind][c.op]) throw new Error(`bad condition ${c.field} ${c.op} for ${event}`)
       const value = f.kind === 'number' ? (c.value === '' || c.value == null ? NaN : +c.value) : f.kind === 'bool' ? c.value === true : String(c.value ?? '').trim().slice(0, 80)
-      const ok = { number: Number.isFinite(value), class: LETTERS.includes(value) && value.length === 1, type: Object.hasOwn(TYPES, value), status: STATUSES.includes(value), text: value !== '', bool: true }[f.kind]
+      const ok = { number: Number.isFinite(value), class: LETTERS.includes(value) && value.length === 1, type: Object.hasOwn(TYPES, value), status: STATUSES.includes(value), permit: PERMITS.includes(value), text: value !== '', bool: true }[f.kind]
       if (!ok) throw new Error(`bad value for ${c.field}`)
       return { field: c.field, op: c.op, value }
     })

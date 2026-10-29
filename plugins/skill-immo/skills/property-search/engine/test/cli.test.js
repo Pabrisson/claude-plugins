@@ -74,6 +74,21 @@ test('the recent DPE of the zone: kept in area.json, those without a listing, th
   assert.deepEqual(read(dir, 'feed.json').items.map(n => n.dpe.number), ['2669E0000004D'])
 })
 
+test("the zone's energy audits and building permits: kept in area.json, the new ones news at the next refresh", async () => {
+  const { home, dir } = searchesFolder('classic')
+  let r = await run(home, ['search', '-p', 'paul-bert'], { key: null })
+  assert.match(r.out, /^energy audits \(12 months\): 1$/m)
+  assert.match(r.out, /^building permits \(12 months\): 1$/m, "Lyon's permit in the 9e is outside the zone")
+  const add = (f, row) => fs.writeFileSync(path.join(home, '.cache', f), JSON.stringify([row, ...read(home, `.cache/${f}`)]))
+  const audits = `ademe/${fs.readdirSync(path.join(home, '.cache/ademe')).find(f => f.startsWith('audits-'))}`, [a] = read(home, `.cache/${audits}`)
+  add(audits, { ...a, number: 'A26690000002B', building: true })
+  add('sitadel/permits-69123.json', { ...read(home, '.cache/sitadel/permits-69123.json')[0], number: 'PC06912326V0009', kind: 'build', homes: 8 })
+  r = await run(home, ['refresh', '-p', 'paul-bert'], { key: null })
+  assert.match(r.out, /energy audits \(12 months\): 2, 1 new since the last refresh/)
+  assert.match(r.out, /building permits \(12 months\): 2, 1 new since the last refresh/)
+  assert.deepEqual(read(dir, 'feed.json').items.map(n => [n.kind, n[n.kind].number]), [['audit', 'A26690000002B'], ['permit', 'PC06912326V0009']])
+})
+
 test("the account: unknown to the API; the console's € deposited and items, money added, less what the log spent since", async () => {
   const { home } = searchesFolder()
   let r = await run(home, ['doctor'])

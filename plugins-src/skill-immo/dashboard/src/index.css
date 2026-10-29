@@ -113,6 +113,16 @@
     --news-rise: oklch(0.56 0.15 50);
     --news-stream: oklch(0.52 0.18 300);
     --news-other: oklch(0.55 0.015 286);
+    /* an energy audit (red, a passoire for sale) and a building permit (amber) in the follow-up, as text on the card */
+    --news-audit: oklch(0.53 0.17 25);
+    --news-permit: oklch(0.52 0.11 75);
+    /* a listing the user follows that expired: raspberry, between the API's violet and the audits' red */
+    --news-expired: oklch(0.55 0.16 355);
+    /* the permits on the odds map, by kind: the reference palette's orange, violet and aqua (validate_palette.js,
+       --pairs all, both modes; the light aqua under 3:1 on white wears the card's ring and has the column's list) */
+    --permit-build: #eb6834;
+    --permit-demolish: #6250d6;
+    --permit-develop: #1baf7a;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.141 0.005 285.823);
     --sidebar-primary: oklch(0.21 0.006 285.885);
@@ -172,6 +182,12 @@
     --news-rise: oklch(0.75 0.14 55);
     --news-stream: oklch(0.72 0.15 300);
     --news-other: oklch(0.68 0.015 286);
+    --news-audit: oklch(0.74 0.14 25);
+    --news-permit: oklch(0.76 0.12 80);
+    --news-expired: oklch(0.74 0.13 355);
+    --permit-build: #d95926;
+    --permit-demolish: #9085e9;
+    --permit-develop: #199e70;
     --sidebar: oklch(0.21 0.006 285.885);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.92 0.004 286.32);

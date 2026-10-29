@@ -1,10 +1,11 @@
 import { inZone } from "@engine/geo.js"
 import { isHome } from "@engine/market.js"
-import { CalculatorIcon, ChevronDownIcon, GaugeIcon, InfoIcon, ListIcon, ListOrderedIcon, MapIcon, MapPinnedIcon, RefreshCwIcon, XIcon, type LucideIcon } from "lucide-react"
+import { CalculatorIcon, ChevronDownIcon, ClipboardCheckIcon, GaugeIcon, InfoIcon, ListIcon, ListOrderedIcon, MapIcon, MapPinnedIcon, RefreshCwIcon, StampIcon, XIcon, type LucideIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { AuditBadge, PermitBadge } from "@/components/badges"
 import { DPE_HEX, dpeInk } from "@/components/dpe"
-import { DPE_HELP, Hint, IRIS_HELP, MapView, METRICS, MIN_ZOOM, type DpeGroup, type Metric, type OddsMap } from "@/components/map-view"
+import { AUDIT_HELP, DPE_HELP, Hint, IRIS_HELP, MapView, METRICS, MIN_ZOOM, PERMIT_HELP, type DpeGroup, type Metric, type OddsMap, type Shown, type Spot } from "@/components/map-view"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
@@ -13,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api, type IrisOdds, type Odds } from "@/lib/api"
-import { date, keur, num, share, TYPE_LABEL } from "@/lib/format"
+import { date, keur, m2, num, permitLabel, permitWhat, share, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -28,12 +29,17 @@ export function OddsTab() {
   const [view, setView] = useState<View | null>(null), [data, setData] = useState<Odds | null>(null)
   const [loading, setLoading] = useState(false), [error, setError] = useState<string | null>(null), [tries, setTries] = useState(0)
   const [metric, setMetric] = useState<Metric>("odds"), [iris, setIris] = useState<string | null>(null)
-  const [groups, setGroups] = useState<DpeGroup[]>([]), [focus, setFocus] = useState<DpeGroup | null>(null), [show, setShow] = useState("map")
-  const [hover, setHover] = useState<OddsMap["hover"]>(null)
-  // a DPE the follow-up asks to show: once the map is up, it goes there and pins its card, until another is picked
-  const { data: search, dpeFocus, focusDpe } = useSearch()
-  const followed = useMemo<DpeGroup | null>(() => dpeFocus && { key: dpeFocus.ban ?? dpeFocus.point.join(","), point: dpeFocus.point, address: dpeFocus.address, out: !inZone(dpeFocus.point, search.search.zone as Parameters<typeof inZone>[1]), items: [{ ...dpeFocus, listing: null }] }, [dpeFocus, search.search.zone])
-  useEffect(() => () => focusDpe(null), [focusDpe])
+  const [groups, setGroups] = useState<DpeGroup[]>([]), [focus, setFocus] = useState<Spot | null>(null), [show, setShow] = useState("map")
+  const [hover, setHover] = useState<OddsMap["hover"]>(null), [shownRows, setShownRows] = useState<Shown>({ audits: [], permits: [], months: { audit: 12, permit: 12 } })
+  // a DPE, an audit or a permit the follow-up asks to show: once the map is up, it goes there and pins its card, until
+  // another is picked
+  const { data: search, mapFocus, focusMap } = useSearch()
+  const followed = useMemo<Spot | null>(() => {
+    if (mapFocus?.kind !== "dpe") return mapFocus
+    const d = mapFocus.row
+    return { kind: "dpe", group: { key: d.ban ?? d.point.join(","), point: d.point, address: d.address, out: !inZone(d.point, search.search.zone as Parameters<typeof inZone>[1]), items: [{ ...d, listing: null }] } }
+  }, [mapFocus, search.search.zone])
+  useEffect(() => () => focusMap(null), [focusMap])
   const shown = (view && followed) || focus
   // before the map says its box (it is loading), as loading
   const near = !view || view.zoom >= MIN_ZOOM - 0.01, busy = near && (loading || !view)
@@ -52,9 +58,9 @@ export function OddsTab() {
     return () => { clearTimeout(t); ctl.abort() }
   }, [view, near, tries])
 
-  const odds = { data, metric, setMetric, onView: setView, iris, onIris: setIris, onDpe: setGroups, focus: shown, hover }
+  const odds = { data, metric, setMetric, onView: setView, iris, onIris: setIris, onDpe: setGroups, onShown: setShownRows, focus: shown, hover }
   const status = <MapStatus near={near} loading={busy} error={error} retry={() => setTries(tries + 1)} />
-  const panel = <OddsPanel data={data} near={near} loading={busy} metric={metric} iris={iris} onIris={setIris} groups={groups} onFocus={g => { focusDpe(null); setFocus({ ...g }); if (mobile) setShow("map") }} onHover={setHover} />
+  const panel = <OddsPanel data={data} near={near} loading={busy} metric={metric} iris={iris} onIris={setIris} groups={groups} rows={shownRows} onFocus={sp => { focusMap(null); setFocus(sp); if (mobile) setShow("map") }} onHover={setHover} />
   return mobile ? (
     <div className="relative flex h-full flex-col">
       <ToggleGroup type="single" variant="outline" size="sm" value={show} onValueChange={v => v && setShow(v)} className="m-3 mb-0 self-start" aria-label="Affichage">
@@ -141,9 +147,10 @@ function Block({ icon: Icon, title, help, action, folded = false, children }: { 
 }
 
 // The column of the odds map, in blocks: the box shown in figures, the IRIS clicked, the IRIS ranked by the figure the
-// map colors (the map's table), its recent DPE (picked, the map goes to it), the method
-function OddsPanel({ data, near, loading, metric, iris, onIris, groups, onFocus, onHover }: {
-  data: Odds | null; near: boolean; loading: boolean; metric: Metric; iris: string | null; onIris: (c: string | null) => void; groups: DpeGroup[]; onFocus: (g: DpeGroup) => void
+// map colors (the map's table), its recent DPE, energy audits and building permits (picked, the map goes to it), the
+// method
+function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, onFocus, onHover }: {
+  data: Odds | null; near: boolean; loading: boolean; metric: Metric; iris: string | null; onIris: (c: string | null) => void; groups: DpeGroup[]; rows: Shown; onFocus: (s: Spot) => void
   onHover: (h: OddsMap["hover"]) => void
 }) {
   // a row or a block the pointer (or the keyboard) is on: its IRIS or DPE set off on the map
@@ -155,6 +162,10 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, onFocus,
   const m = METRICS[metric], homes = sum(data.iris, i => i.census?.homes), sold = sum(data.iris, i => i.sold), ranked = data.iris.filter(i => m.of(i) != null).sort((a, b) => m.of(b)! - m.of(a)!)
   const selected = data.iris.find(i => i.code === iris)
   const items = groups.flatMap(g => g.items), open = groups.reduce((a, g) => a + g.items.filter(d => !g.out && !d.listing).length, 0)
+  const { audits, permits, months } = rows, vacant = sum(data.iris, i => i.census?.vacant)
+  // the quarters' median prices, their median: the box's price in one figure
+  const prices = data.iris.map(i => i.ppm2).filter((x): x is number => !!x).sort((a, b) => a - b), price = prices.length ? prices[Math.floor(prices.length / 2)] : null
+  const row = "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
   const sorted = [...groups].sort(DPE_SORTS[dpeSort].by)
   return (
     <div className={cn("flex flex-col gap-3 transition-opacity", loading && "opacity-60")} aria-busy={loading}>
@@ -166,6 +177,10 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, onFocus,
           <Stat label="Successions" help={METRICS.successions.help} value={perYear(sum(data.iris, i => i.successions))} hint="ventes après le décès d'un propriétaire vivant seul" />
           <Stat label="Séparations" help={METRICS.separations.help} value={perYear(sum(data.iris, i => i.separations))} hint="ventes après la séparation d'un couple de propriétaires" />
           <Stat label="DPE récents" help={DPE_HELP} value={num(items.length)} hint={`${num(open)} sans annonce dans votre zone`} />
+          <Stat label="Audits énergétiques" help={AUDIT_HELP} value={num(audits.length)} hint={`sur ${months.audit} mois · ${num(audits.filter(a => a.building).length)} immeubles entiers`} />
+          <Stat label="Permis" help={PERMIT_HELP} value={num(permits.length)} hint={`sur ${months.permit} mois · ${num(permits.filter(p => p.kind === "demolish").length)} démolitions, ${num(permits.reduce((a, p) => a + (p.homes ?? 0), 0))} logements créés`} />
+          <Stat label="Logements vacants" help={METRICS.vacant.help} value={homes ? share(vacant / homes, 1) : "—"} hint={`${num(vacant)} logements vides au recensement`} />
+          <Stat label="Prix au m²" help={METRICS.price.help} value={m2(price)} hint="médiane des quartiers de la carte (DVF)" />
         </div>
       </Block>
       {selected && <IrisBlock key={selected.code} i={selected} years={data.years} onClose={() => { onHover(null); onIris(null) }} hover={on({ iris: selected.code })} />}
@@ -198,7 +213,7 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, onFocus,
                 const d = g.items[0], l = d.listing && search.listings.find(x => x.id === d.listing!.id)
                 return (
                   <li key={g.key}>
-                    <button type="button" onClick={() => onFocus(g)} {...on({ dpe: g.key })} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+                    <button type="button" onClick={() => onFocus({ kind: "dpe", group: g })} {...on({ dpe: g.key })} className={row}>
                       <b className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-sm text-[10px]" style={{ background: DPE_HEX[d.energy], color: dpeInk(d.energy) }}>{d.energy}</b>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{g.address ?? "Adresse inconnue"}</span>
@@ -215,11 +230,51 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, onFocus,
           {sorted.length > 30 && <p className="text-xs text-muted-foreground">+ {num(sorted.length - 30)} autres adresses sur la carte.</p>}
         </Block>
       )}
+      {types.some(isHome) && (
+        <Block icon={ClipboardCheckIcon} title="Audits énergétiques récents" help={`${AUDIT_HELP} Ceux de la carte visible, sur la période du calque « Audits énergétiques », les plus récents d'abord ; un clic centre la carte sur l'adresse.`}>
+          {audits.length ? (
+            <ul className="-mx-1 flex flex-col">
+              {audits.slice(0, 30).map(a => (
+                <li key={a.number}>
+                  <button type="button" onClick={() => onFocus({ kind: "audit", row: a })} {...on({ point: a.point })} className={row}>
+                    <AuditBadge energy={a.energy} className="mt-0.5" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{a.address ?? "Adresse inconnue"}</span>
+                      <span className="block text-xs text-muted-foreground">Classe {a.energy} · {a.building ? "immeuble entier" : TYPE_LABEL[a.type].toLowerCase()}{a.area ? ` · ${num(a.area)} m²` : ""} · {date(a.date)}{a.period ? ` · ${a.period}` : ""}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-xs text-muted-foreground">Aucun audit énergétique sur la carte depuis {months.audit} mois.</p>}
+          {audits.length > 30 && <p className="text-xs text-muted-foreground">+ {num(audits.length - 30)} autres sur la carte.</p>}
+        </Block>
+      )}
+      <Block icon={StampIcon} title="Permis récents" help={`${PERMIT_HELP} Ceux de la carte visible, avec la période et les natures du calque « Permis », les plus récents d'abord ; un clic centre la carte sur l'adresse.`}>
+        {permits.length ? (
+          <ul className="-mx-1 flex flex-col">
+            {permits.slice(0, 30).map(p => (
+              <li key={p.number}>
+                <button type="button" onClick={() => onFocus({ kind: "permit", row: p })} {...on({ point: p.point })} className={row}>
+                  <PermitBadge kind={p.kind} className="mt-0.5" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{p.address}</span>
+                    <span className="block text-xs text-muted-foreground">{permitLabel(p)} · {date(p.date)}{permitWhat(p) ? ` · ${permitWhat(p)}` : ""}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-xs text-muted-foreground">Aucun permis autorisé sur la carte depuis {months.permit} mois (calque « Permis »).</p>}
+        {permits.length > 30 && <p className="text-xs text-muted-foreground">+ {num(permits.length - 30)} autres sur la carte.</p>}
+      </Block>
       <Block icon={CalculatorIcon} title="Comment c'est calculé" help="Les sources et les calculs de cet onglet, et pourquoi aucune personne n'y est identifiée." folded>
         <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
           <p>Vente à 12 mois : les appartements et maisons vendus seuls dans le quartier (DVF, {data.years.join(", ") || "—"}), divisés par ses logements (recensement de la population, INSEE).</p>
           <p>Successions : les personnes vivant seules de 55 à 79 ans et de 80 ans et plus, multipliées par les taux de décès de la France à ces âges, puis par la part de propriétaires du quartier.</p>
           <p>Séparations : les couples du quartier (mariés, pacsés, en union libre), multipliés par 1 % de séparations par an, puis par la part de propriétaires.</p>
+          <p>Logements vacants : les logements vides au recensement, sur tous ses logements. Prix au m² : la médiane des appartements et maisons vendus (DVF, mêmes années), à partir de 5 ventes.</p>
+          <p>Audits énergétiques : ceux de l'ADEME des 12 derniers mois. Permis : les listes Sitadel des permis de construire, de démolir et d'aménager, placés à leur adresse par la Base Adresse Nationale ; le demandeur n'est jamais affiché.</p>
           <p>Que des chiffres publics par quartier ou par commune : aucune personne n'est identifiée. Les décès et divorces individuels ne sont pas publiés avec une adresse, et DVF interdit de retrouver qui a vendu.</p>
         </div>
       </Block>
@@ -248,6 +303,13 @@ function IrisBlock({ i, years, onClose, hover }: { i: IrisOdds; years: string[];
     ["Séparations", i.separations == null ? "—" : perYear(i.separations)],
     ["Veufs et veuves", num(c.widowed)],
     ["Divorcés", num(c.divorced)],
+    ["Logements vacants", c.vacant == null ? "—" : `${num(c.vacant)}${c.homes ? ` (${share(c.vacant / c.homes, 1)})` : ""}`],
+    ["Résidences secondaires", num(c.secondary)],
+    ["Construits avant 1946", c.before_1946 == null ? "—" : `${num(c.before_1946)}${c.main ? ` (${share(c.before_1946 / c.main)})` : ""}`],
+    ["Chauffés au fioul", num(c.oil)],
+    ["Installés depuis 10 ans et plus", c.settled_10 == null ? "—" : `${num(c.settled_10)}${c.main ? ` (${share(c.settled_10 / c.main)})` : ""}`],
+    ["Prix au m², appartements", m2(i.ppm2_flat)],
+    ["Prix au m², maisons", m2(i.ppm2_house)],
   ] : []
   return (
     <div ref={ref} className="scroll-mt-3" onMouseEnter={hover.onMouseEnter} onMouseLeave={hover.onMouseLeave}>

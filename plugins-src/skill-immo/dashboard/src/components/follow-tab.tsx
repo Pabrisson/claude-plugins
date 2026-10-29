@@ -16,7 +16,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Alert, type Status } from "@/lib/api"
-import { date, dpeAsk, eur, num, ORIGIN, pct, SALE_STATUS, STATUS_LABEL } from "@/lib/format"
+import { auditAsk, date, dpeAsk, eur, num, ORIGIN, pct, permitLabel, SALE_STATUS, STATUS_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -70,9 +70,11 @@ const FILTERS: Record<string, { label: string; of: (n: NewsItem) => boolean; swa
   all: { label: "Tout", of: () => true, swatch: null },
   mine: { label: "Mes alertes", of: n => n.alerts.length > 0, swatch: "var(--primary)" },
   dpe: { label: "DPE", of: n => n.kind === "dpe", swatch: `linear-gradient(90deg, ${Object.values(DPE_HEX).join(", ")})` },
+  audits: { label: "Audits", of: n => n.kind === "audit", swatch: "var(--news-audit)" },
+  permits: { label: "Permis", of: n => n.kind === "permit", swatch: "var(--news-permit)" },
   listings: { label: "Annonces", of: n => n.kind === "new", swatch: "var(--news-new)" },
   prices: { label: "Prix", of: n => n.kind === "price_drop" || n.kind === "price_rise", swatch: "conic-gradient(var(--news-drop) 0 50%, var(--news-rise) 0)" },
-  status: { label: "Statuts", of: n => n.kind === "status" || n.kind === "expired", swatch: "var(--news-other)" },
+  status: { label: "Statuts", of: n => n.kind === "status" || n.kind === "expired", swatch: "conic-gradient(var(--news-other) 0 50%, var(--news-expired) 0)" },
 }
 const PAGE = 50
 // news of one kind found by one watch (the same minute), for the same alerts, fold into one row past this many
@@ -181,15 +183,15 @@ function NewsCard({ onView }: { onView: (v: string) => void }) {
 function GroupRow({ g, open, onToggle, children }: { g: Group; open: boolean; onToggle: () => void; children: React.ReactNode }) {
   const { fresh } = useNews()
   const n = g.items[0], { label, color } = LOOK[n.kind], unreadCount = g.items.filter(fresh).length
-  const where = [...new Set(g.items.map(x => (x.kind === "dpe" ? x.dpe.address : "l" in x ? x.l.location.address : null)?.replace(/^\s*\d+\s*(bis|ter|[a-d])?\s+/i, "").replace(/\s+\d{5}\b.*$/, "")).filter(Boolean))]
-  const plural = { dpe: "nouveaux DPE", new: "nouvelles annonces", price_drop: "baisses de prix", price_rise: "hausses de prix", status: "changements de statut", expired: "annonces expirées", listings: "", changed: "" }[n.kind]
+  const where = [...new Set(g.items.map(x => (x.kind === "dpe" ? x.dpe.address : x.kind === "audit" ? x.audit.address : x.kind === "permit" ? x.permit.address : "l" in x ? x.l.location.address : null)?.replace(/^\s*\d+\s*(bis|ter|[a-d])?\s+/i, "").replace(/\s+\d{5}\b.*$/, "")).filter(Boolean))]
+  const plural = { dpe: "nouveaux DPE", audit: "nouveaux audits énergétiques", permit: "nouveaux permis", new: "nouvelles annonces", price_drop: "baisses de prix", price_rise: "hausses de prix", status: "changements de statut", expired: "annonces expirées", listings: "", changed: "" }[n.kind]
   return (
     <li className="flex flex-col">
       <button type="button" onClick={onToggle} aria-expanded={open} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
         <span aria-hidden className={cn("relative grid size-9 place-items-center rounded-lg text-sm font-bold tabular-nums", !unreadCount && "opacity-55")} style={{ color, background: `color-mix(in oklab, ${color} 16%, transparent)` }}>{g.items.length}</span>
         <span className="min-w-0">
           <span className="flex items-center gap-2 text-xs font-semibold" style={{ color }}>{label}{n.alerts.map(a => <AlertPill key={a.id} a={a} />)}</span>
-          <span className={cn("block truncate text-sm", unreadCount ? "font-medium" : "text-muted-foreground")}>{g.items.length} {plural}{n.alerts[0] ? "" : n.kind === "dpe" ? " sans annonce dans la zone" : ""}</span>
+          <span className={cn("block truncate text-sm", unreadCount ? "font-medium" : "text-muted-foreground")}>{g.items.length} {plural}{n.alerts[0] ? "" : n.kind === "dpe" ? " sans annonce dans la zone" : n.kind === "audit" || n.kind === "permit" ? " dans la zone" : ""}</span>
           <span className="block truncate text-xs text-muted-foreground">{where.slice(0, 3).join(", ")}{where.length > 3 ? ` et ${where.length - 3} autre${where.length > 4 ? "s" : ""} rue${where.length > 4 ? "s" : ""}` : ""}</span>
         </span>
         <span className="flex items-center gap-2">
@@ -217,11 +219,13 @@ function AlertPill({ a }: { a: Alert }) {
 // its price or status and its time, close to it. Its actions show on hover or focus (always on a phone). A listing's
 // opens its dossier.
 function NewsRow({ n, fresh, lit, onOpen, onRead, onView }: { n: NewsItem; fresh: boolean; lit: boolean; onOpen: () => void; onRead: () => void; onView: (v: string) => void }) {
-  const { select, addFeedback, focusDpe } = useSearch()
+  const { select, addFeedback, focusMap } = useSearch()
   const { label, color } = LOOK[n.kind]
   const title = cn("block max-w-full truncate text-left text-sm", fresh ? "font-medium" : "text-muted-foreground")
   const detail = "l" in n ? n.l.location.address ?? n.l.location.neighborhood ?? n.l.location.city ?? ORIGIN[n.l.source].long
-    : n.kind === "dpe" ? `DPE ${n.dpe.energy} du ${date(n.dpe.date)}, ${n.dpe.address ?? "adresse inconnue"}, sans annonce` : ""
+    : n.kind === "dpe" ? `DPE ${n.dpe.energy} du ${date(n.dpe.date)}, ${n.dpe.address ?? "adresse inconnue"}, sans annonce`
+    : n.kind === "audit" ? `Audit du ${date(n.audit.date)}, ${n.audit.address ?? "adresse inconnue"}`
+    : n.kind === "permit" ? `${permitLabel(n.permit)} du ${date(n.permit.date)}, ${n.permit.address}` : ""
   const actions = "flex items-center gap-1 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
   return (
     <li id={`news-${newsKey(n)}`}
@@ -239,10 +243,17 @@ function NewsRow({ n, fresh, lit, onOpen, onRead, onView }: { n: NewsItem; fresh
         <span className={cn(actions, "relative z-10")}>
           {n.kind === "dpe" && (
             <>
-              <Button variant="ghost" size="xs" onClick={() => { onOpen(); focusDpe(n.dpe); onView("odds") }}><MapIcon data-icon="inline-start" />Carte</Button>
+              <Button variant="ghost" size="xs" onClick={() => { onOpen(); focusMap({ kind: "dpe", row: n.dpe }); onView("odds") }}><MapIcon data-icon="inline-start" />Carte</Button>
               <Button variant="ghost" size="xs" onClick={() => { onOpen(); addFeedback({ kind: "chercher", text: dpeAsk(n.dpe) }); toast.success("Ajouté au prompt : Claude cherchera l'annonce") }}><SearchIcon data-icon="inline-start" />Chercher l'annonce</Button>
             </>
           )}
+          {n.kind === "audit" && (
+            <>
+              <Button variant="ghost" size="xs" onClick={() => { onOpen(); focusMap({ kind: "audit", row: n.audit }); onView("odds") }}><MapIcon data-icon="inline-start" />Carte</Button>
+              <Button variant="ghost" size="xs" onClick={() => { onOpen(); addFeedback({ kind: "chercher", text: auditAsk(n.audit) }); toast.success("Ajouté au prompt : Claude cherchera l'annonce") }}><SearchIcon data-icon="inline-start" />Chercher l'annonce</Button>
+            </>
+          )}
+          {n.kind === "permit" && <Button variant="ghost" size="xs" onClick={() => { onOpen(); focusMap({ kind: "permit", row: n.permit }); onView("odds") }}><MapIcon data-icon="inline-start" />Carte</Button>}
           {fresh && <Button variant="ghost" size="icon-xs" aria-label="Marquer comme lue" onClick={onRead}><CheckIcon /></Button>}
         </span>
         {(n.kind === "price_drop" || n.kind === "price_rise") && (

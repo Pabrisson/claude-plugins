@@ -10,6 +10,7 @@ import { ChevronDownIcon, CrossIcon, LayersIcon, MapPinIcon, SchoolIcon, Shoppin
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
+import { AuditBadge, mapBadges, PermitBadge } from "@/components/badges"
 import { DPE_HEX, dpeInk } from "@/components/dpe"
 import { levelOf } from "@/components/ruler"
 import { TypeIcon } from "@/components/type-icon"
@@ -18,8 +19,8 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, type DpeRow, type Hit, type IrisOdds, type Listing, type Odds, type Poi, type Point, type PropertyType } from "@/lib/api"
-import { date, dpeAsk, eur, keur, LEVEL_LABEL, month, num, pct, perUnit, POI_LABEL, share, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
+import { api, type AuditRow, type DpeRow, type Hit, type IrisOdds, type Listing, type Odds, type PermitKind, type PermitRow, type Poi, type Point, type PropertyType } from "@/lib/api"
+import { auditAsk, date, dpeAsk, eur, keur, LEVEL_LABEL, m2, month, num, pct, PERMIT_LABEL, permitLabel, permitWhat, perUnit, POI_LABEL, share, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
 import { shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
@@ -107,10 +108,22 @@ function dpeTip(g: DpeGroup, listings: Listing[], buttons = false) {
   return `<b>${esc(g.address ?? "Adresse inconnue")}</b>${rows.join("")}${more}${g7}`
 }
 
-// an IRIS's tooltip: its name and commune, then its three figures
+// an energy audit's card: its class, what it is, when; « Chercher l'annonce » once pinned
+export const AUDIT_HELP = "L'audit énergétique est obligatoire pour vendre une maison ou un immeuble entier classé E, F ou G (ADEME) : un audit récent signale souvent une vente proche. Il sert aussi à demander une aide à la rénovation, et rien ne distingue les deux."
+function auditTip(a: AuditRow, buttons = false) {
+  const what = `${a.building ? "Immeuble entier" : TYPE_LABEL[a.type]}${a.area ? ` · ${num(a.area)} m²` : ""}${a.period ? ` · construit ${a.period.startsWith("avant") || a.period.startsWith("après") ? a.period : `en ${a.period}`}` : ""}`
+  return `<b>${esc(a.address ?? "Adresse inconnue")}</b><div class="dpe-row"><b class="dpe-chip" style="background:${DPE_HEX[a.energy]};color:${dpeInk(a.energy)}">${esc(a.energy)}</b>Audit énergétique du ${date(a.date)}<br><span>${what}</span>${buttons ? `<button type="button" data-n="${esc(a.number)}">Chercher l'annonce</button>` : ""}</div>`
+}
+// a building permit's card: its kind, when, what it builds or knocks down
+export const PERMIT_HELP = "Les permis de construire, de démolir et d'aménager autorisés depuis 12 mois (Sitadel, publié chaque mois avec du retard : environ 6 mois pour construire, 1 mois pour démolir ou aménager) : une démolition annonce un terrain ou un programme, une maison divisée des logements à vendre, un programme neuf un achat sur plan, mais aussi des travaux ou un vis-à-vis. Le demandeur n'est jamais affiché."
+function permitTip(p: PermitRow) {
+  return `<b>${esc(p.address)}</b><div class="dpe-row"><b class="dpe-chip" style="background:var(--permit-${p.kind});color:#fff">${p.form}</b>${permitLabel(p)} du ${date(p.date)}${permitWhat(p) ? `<br><span>${permitWhat(p)}</span>` : ""}</div>`
+}
+
+// an IRIS's tooltip: its name and commune, then its figures
 function irisTip(i: IrisOdds) {
   const f = (m: Metric) => { const x = METRICS[m].of(i); return x == null ? "—" : METRICS[m].format(x) }
-  const figures = i.census ? `<br>Vente à 12 mois : ${f("odds")}<br>Successions : ${f("successions")} · Séparations : ${f("separations")}` : "<br><span>Pas de chiffres INSEE (quartier d'activité ou peu habité)</span>"
+  const figures = i.census ? `<br>Vente à 12 mois : ${f("odds")}<br>Successions : ${f("successions")} · Séparations : ${f("separations")}<br>Logements vacants : ${f("vacant")} · Prix : ${i.ppm2 ? m2(i.ppm2) : "—"}` : "<br><span>Pas de chiffres INSEE (quartier d'activité ou peu habité)</span>"
   return `<b>${esc(i.name)}</b><br><span>${esc(i.commune)}</span>${figures}`
 }
 
@@ -126,21 +139,33 @@ export const MIN_ZOOM = 14
 // a share of the IRIS's homes: the sales a year after successions or separations over its homes
 const perHome = (x: number | null, i: IrisOdds) => (x == null || !i.census?.homes ? null : x / i.census.homes)
 // What the odds map colors each IRIS by, in five fixed classes (a color means the same wherever the map goes; set on
-// the quintiles of 151 IRIS of Lyon and Villeurbanne): the odds that one of its homes goes on sale within 12 months,
-// for any reason, after a succession, after a separation; `help` says what it is, under the legend and on hovering
-// its button or its figure
+// the quintiles of 151 IRIS of Lyon and Villeurbanne, 117 for the last two): the odds that one of its homes goes on
+// sale within 12 months, for any reason, after a succession, after a separation (row « odds »); its vacant homes and
+// its sold price per m² (row « iris »). `help` says what it is, under the legend and on hovering its button or its
+// figure; `legend` its unit, under the legend (`short` its classes' figures there, when `format` is too long).
+const PER_YEAR = "En % des logements du quartier, sur 12 mois."
 export const METRICS = {
   odds: {
-    label: "Vente à 12 mois", of: (i: IrisOdds) => i.odds, steps: [0.015, 0.02, 0.025, 0.03], format: (x: number) => share(x, 1),
+    label: "Vente à 12 mois", row: "odds", of: (i: IrisOdds) => i.odds, steps: [0.015, 0.02, 0.025, 0.03], format: (x: number) => share(x, 1), legend: PER_YEAR,
     help: "La probabilité qu'un logement du quartier soit mis en vente dans les 12 mois : la part de ses logements vendus en un an, d'après les ventes réelles (DVF) des 3 dernières années.",
   },
   successions: {
-    label: "Successions", of: (i: IrisOdds) => perHome(i.successions, i), steps: [0.001, 0.0015, 0.002, 0.003], format: (x: number) => share(x, 2),
+    label: "Successions", row: "odds", of: (i: IrisOdds) => perHome(i.successions, i), steps: [0.001, 0.0015, 0.002, 0.003], format: (x: number) => share(x, 2), legend: PER_YEAR,
     help: "Une succession : le logement vendu par les héritiers après le décès de son propriétaire. La probabilité qu'un logement du quartier soit mis en vente pour cette raison dans les 12 mois, estimée avec les personnes de 55 ans et plus vivant seules (recensement), les taux de décès par âge en France et la part de propriétaires.",
   },
   separations: {
-    label: "Séparations", of: (i: IrisOdds) => perHome(i.separations, i), steps: [0.0008, 0.0011, 0.0014, 0.0018], format: (x: number) => share(x, 2),
+    label: "Séparations", row: "odds", of: (i: IrisOdds) => perHome(i.separations, i), steps: [0.0008, 0.0011, 0.0014, 0.0018], format: (x: number) => share(x, 2), legend: PER_YEAR,
     help: "Une séparation : le logement vendu quand un couple de propriétaires se sépare (divorce, fin de PACS ou d'union libre). La probabilité qu'un logement du quartier soit mis en vente pour cette raison dans les 12 mois, estimée avec les couples du quartier (recensement), environ 1 % de séparations par an et la part de propriétaires.",
+  },
+  vacant: {
+    label: "Logements vacants", row: "iris", of: (i: IrisOdds) => (i.census?.homes && i.census.vacant != null ? i.census.vacant / i.census.homes : null), steps: [0.06, 0.075, 0.09, 0.11], format: (x: number) => share(x, 1),
+    legend: "En % des logements du quartier (recensement).",
+    help: "La part des logements vides au recensement : à vendre, à louer, en attente d'une succession ou de travaux. Un quartier qui en compte beaucoup offre plus d'occasions, souvent à rénover.",
+  },
+  price: {
+    label: "Prix au m²", row: "iris", of: (i: IrisOdds) => i.ppm2 ?? null, steps: [3600, 4200, 4700, 5100], format: (x: number) => m2(x), short: (x: number) => (x / 1000).toFixed(1).replace(".", ","),
+    legend: "En milliers d'€ par m², appartements et maisons vendus (DVF, 3 dernières années).",
+    help: "Le prix médian au m² des appartements et maisons vendus dans le quartier (DVF, 3 dernières années), à partir de 5 ventes. Les classes sont calées sur Lyon : ailleurs, comparez les quartiers entre eux.",
   },
 }
 export const DPE_HELP = "Le DPE (diagnostic de performance énergétique) est obligatoire avant une vente ou une location (ADEME) : un DPE récent sans annonce signale un logement peut-être bientôt en vente."
@@ -152,22 +177,27 @@ export function Hint({ text, children }: { text: string; children: React.ReactEl
 export type Metric = keyof typeof METRICS
 // the five classes of a metric, as the legend says them (its unit said once under it): « < 1,5 », « 1,5–2,0 »…, « ≥ 3,0 »
 const classes = (m: Metric) => {
-  const { steps, format } = METRICS[m], f = (x: number) => format(x).replace(/ %$/, "")
+  const { steps, format, short }: { steps: number[]; format: (x: number) => string; short?: (x: number) => string } = METRICS[m], f = (x: number) => (short ?? format)(x).replace(/ %$/, "")
   return [`< ${f(steps[0])}`, ...steps.slice(1).map((x, i) => `${f(steps[i])}–${f(x)}`), `≥ ${f(steps.at(-1)!)}`]
 }
+// the audits and permits the odds map shows, with the layers' period (months) and kinds: its column lists them
+export type Shown = { audits: AuditRow[]; permits: PermitRow[]; months: { audit: number; permit: number } }
+// what the odds map pins and goes to: the DPE of an address, an energy audit, a building permit
+export type Spot = { kind: "dpe"; group: DpeGroup } | { kind: "audit"; row: AuditRow } | { kind: "permit"; row: PermitRow }
 // The odds tab's map: its box's data, what colors the IRIS, the box shown (at each stop), the IRIS selected, the DPE
-// shown (for the column beside), a DPE to show (picked in that column)
+// shown (for the column beside), a DPE, audit or permit to show (picked in that column)
 export type OddsMap = {
   data: Odds | null; metric: Metric; setMetric: (m: Metric) => void; onView: (v: { bbox: number[]; zoom: number }) => void
-  iris: string | null; onIris: (code: string | null) => void; onDpe: (groups: DpeGroup[]) => void; focus: DpeGroup | null
-  // what the pointer is on in the column beside: an IRIS (its row, its block) or a DPE, set off on the map
-  hover: { iris?: string; dpe?: string } | null
+  iris: string | null; onIris: (code: string | null) => void; onDpe: (groups: DpeGroup[]) => void; onShown: (s: Shown) => void; focus: Spot | null
+  // what the pointer is on in the column beside: an IRIS (its row, its block), a DPE, an audit or a permit (its
+  // point), set off on the map
+  hover: { iris?: string; dpe?: string; point?: Point } | null
 }
 
 // the layers' column, docked on the left of a computer's map
 const PANEL = 320
 // the map's layers the panel's switches show or hide: at the map's making (its theme) and at each switch
-const SWITCHED = { sales: ["sales"], veil: ["veil"], dpe: ["dpe-ring", "dpe", "dpe-count", "dpe-hover"], iris: ["iris-fill", "iris-line", "iris-hover", "iris-hover-line", "iris-selected"], listings: ["listings", "labels"] }
+const SWITCHED = { sales: ["sales"], veil: ["veil"], dpe: ["dpe-ring", "dpe", "dpe-count", "dpe-hover"], iris: ["iris-fill", "iris-line", "iris-hover", "iris-hover-line", "iris-selected"], listings: ["listings", "labels"], audits: ["audits"], permits: ["permits"] }
 function showLayers(m: MapLibre, layers: string[]) {
   for (const [k, ids] of Object.entries(SWITCHED)) for (const id of ids) m.setLayoutProperty(id, "visibility", layers.includes(k) ? "visible" : "none")
 }
@@ -183,7 +213,11 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
   const mobile = useIsMobile()
   const box = useRef<HTMLDivElement>(null), map = useRef<MapLibre | null>(null)
   const [cats, setCats] = useState<string[]>(odds ? [] : ["transport"])
-  const [layers, setLayers] = useState<string[]>(odds ? ["iris", "dpe", "dpe-open", "listings"] : ["sales", "veil", "listings"])
+  const [layers, setLayers] = useState<string[]>(odds ? ["iris", "dpe", "dpe-open", "listings", "audits", "permits"] : ["sales", "veil", "listings"])
+  // the audits' and permits' period (days, the 12 months the server sends by default) and the permits' kinds shown on
+  // the odds map
+  const [kinds, setKinds] = useState<PermitKind[]>(["build", "demolish", "develop"])
+  const [auditDays, setAuditDays] = useState("365"), [permitDays, setPermitDays] = useState("365")
   // a computer's map keeps the layers' column clear (a phone's floats, folded)
   const left = mobile ? 0 : PANEL
   const [scope, setScope] = useState("all"), [shownTypes, setShownTypes] = useState<string[]>(types)
@@ -191,10 +225,10 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
   const [hidden, setHidden] = useState<string[]>([])
   const flip = (k: string) => setHidden(h => (h.includes(k) ? h.filter(x => x !== k) : [...h, k]))
   const [dpeDays, setDpeDays] = useState("180"), [dpeScope, setDpeScope] = useState("all")
-  // the DPE groups and listings the click on a DPE reads, the odds tab's callbacks (the map's handlers are made once),
-  // and how a DPE's card is pinned (made with the map)
-  const dpeRef = useRef<{ groups: Map<string, DpeGroup>; listings: Listing[] }>({ groups: new Map(), listings: [] })
-  const oddsRef = useRef(odds), pin = useRef<(g: DpeGroup) => void>(() => {})
+  // the DPE groups, audits, permits and listings a click on the map reads, the odds tab's callbacks (the map's
+  // handlers are made once), and how a card is pinned (made with the map)
+  const dpeRef = useRef<{ groups: Map<string, DpeGroup>; audits: Map<string, AuditRow>; permits: Map<string, PermitRow>; listings: Listing[] }>({ groups: new Map(), audits: new Map(), permits: new Map(), listings: [] })
+  const oddsRef = useRef(odds), pin = useRef<(s: Spot) => void>(() => {})
   useEffect(() => { oddsRef.current = odds })
   const pois = useMemo(() => (Array.isArray(data.area.pois) ? data.area.pois : []), [data.area.pois])
   const places = useMemo(() => [...new Set((data.area.isochrones ?? []).map(i => i.place))], [data.area.isochrones])
@@ -211,6 +245,15 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
   }, [rows, data.listings, data.search.criteria, data.search.zone, types, dpeDays, dpeScope, layers])
   const onDpe = odds?.onDpe, metric = odds?.metric ?? "odds", irisCode = odds?.iris ?? null, hover = odds?.hover
   useEffect(() => { onDpe?.(dpe.groups) }, [onDpe, dpe.groups])
+  // the box's audits and permits of the period (the permits of every kind, for the kinds' counts), then those shown
+  const audits = odds?.data?.audits, permits = odds?.data?.permits, [now] = useState(() => Date.now())
+  const recent = useMemo(() => {
+    const since = (days: string) => new Date(now - +days * 86400000).toISOString().slice(0, 10)
+    const inPeriod = (permits ?? []).filter(p => p.date >= since(permitDays))
+    return { audits: (audits ?? []).filter(a => a.date >= since(auditDays)), inPeriod, permits: inPeriod.filter(p => kinds.includes(p.kind)) }
+  }, [audits, permits, auditDays, permitDays, kinds, now])
+  const onShown = odds?.onShown
+  useEffect(() => { onShown?.({ audits: recent.audits, permits: recent.permits, months: { audit: Math.round(+auditDays / 30.4), permit: Math.round(+permitDays / 30.4) } }) }, [onShown, recent, auditDays, permitDays])
 
   const sources = useMemo(() => {
     const zone = data.search.zone.geometry as Geometry
@@ -232,18 +275,23 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
       pois: fc(pois.filter(p => cats.includes(p.cat)).map((p: Poi) => ({ type: "Feature", geometry: { type: "Point", coordinates: p.point }, properties: { cat: p.cat, tip: `${p.name ?? p.kind}<br><span>${POI_LABEL[p.cat] ?? p.cat}</span>` } }))),
       // a dot per address in the class of its newest DPE, ringed when one has no listing (the switch on, in the zone)
       dpe: fc(dpe.groups.map(g => ({ type: "Feature", geometry: { type: "Point", coordinates: g.point }, properties: { key: g.key, energy: g.items[0].energy, count: g.items.length, open: dpe.flag && !g.out && g.items.some(d => !d.listing), tip: dpeTip(g, data.listings) } }))),
-      // each IRIS in the class of the metric shown (-1 without figures), its tooltip with the three
+      // the box's energy audits of the period in the class of their DPE, its permits of the period and kinds shown in
+      // their kind's color
+      audits: fc(recent.audits.map(a => ({ type: "Feature", geometry: { type: "Point", coordinates: a.point }, properties: { n: a.number, energy: a.energy, tip: auditTip(a) } }))),
+      permits: fc(recent.permits.map(p => ({ type: "Feature", geometry: { type: "Point", coordinates: p.point }, properties: { n: p.number, kind: p.kind, tip: permitTip(p) } }))),
+      // each IRIS in the class of the metric shown (-1 without figures), its tooltip with its figures
       iris: fc((odds?.data?.iris ?? []).map(i => ({ type: "Feature", geometry: i.geometry as Geometry, properties: { code: i.code, value: METRICS[odds!.metric].of(i) ?? -1, tip: irisTip(i) } }))),
       isochrones: fc((data.area.isochrones ?? []).filter(i => i.geometry && layers.includes(`place:${i.place}`) && i.profile === "pedestrian").map(i => ({ type: "Feature", geometry: i.geometry as Geometry, properties: { place: places.indexOf(i.place), minutes: i.minutes } }))),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, hidden, dpe, odds?.data, odds?.metric])
+  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, hidden, dpe, odds?.data, odds?.metric, recent])
 
   // the map, made again when the theme changes (its style is not the same)
   useEffect(() => {
     let gone = false
     const dark = resolvedTheme === "dark"
-    loadStyle(dark).then(style => {
+    // the style, and the audits' and permits' badges in this theme's colors (without them, the map still comes)
+    Promise.all([loadStyle(dark), mapBadges(cssColor, cssColor("--card")).catch(e => { console.error(e); return {} })]).then(([style, badges]) => {
       if (gone || !box.current) return
       const z = data.search.zone, center = z.center ?? data.search.point
       const m = new MapLibre({ container: box.current, style, center, zoom: 15, attributionControl: { compact: true }, locale: LOCALE })
@@ -255,6 +303,8 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
         const status = Object.fromEntries(Object.keys(STATUS_LABEL).map(k => [k, cssColor(`--status-${k}`)]))
         const poiColor = Object.fromEntries(Object.keys(CATS).map(c => [c, cssColor(POI_COLOR[c] ?? "--poi-other")]))
         for (const [id, s] of Object.entries(sources)) m.addSource(id, { type: "geojson", data: s })
+        // the point of an audit or a permit under the pointer in the column (set as it moves)
+        m.addSource("spot", { type: "geojson", data: fc([]) })
         // outside the zone darker, inside a light tint and a solid outline with a halo: the zone stands out
         m.addLayer({ id: "veil", type: "fill", source: "veil", paint: { "fill-color": "#000", "fill-opacity": dark ? 0.55 : 0.28 } })
         // the IRIS in the five classes of their figure, a thin outline in the card's color between them; grey without figures
@@ -273,6 +323,11 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
         m.addLayer({ id: "dpe-ring", type: "circle", source: "dpe", filter: ["get", "open"], paint: { "circle-radius": grow(10, 13, 0.45), "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": ink, "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 14, 1.5, 16.5, 2.5] } })
         m.addLayer({ id: "dpe", type: "circle", source: "dpe", paint: { "circle-radius": grow(6, 9, 0.45), "circle-color": ["match", ["get", "energy"], ...Object.entries(DPE_HEX).flat(), "#888"] as never, "circle-stroke-color": card, "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 14, 0.5, 16.5, 1.5] } })
         m.addLayer({ id: "dpe-count", type: "symbol", source: "dpe", minzoom: 15.5, filter: [">", ["get", "count"], 1], layout: { "text-field": ["to-string", ["get", "count"]], "text-font": ["Source Sans Pro Bold"], "text-size": 11, "text-allow-overlap": true }, paint: { "text-color": ["match", ["get", "energy"], ["A", "G"], "#fff", "#000"] } })
+        // over the DPE dots: the permits' discs and the audits' rounded squares, each with its icon (components/badges)
+        for (const [k, img] of Object.entries(badges)) m.addImage(k, img, { pixelRatio: 2 })
+        const icon = (image: unknown, small: number, large: number) => ({ "icon-image": image, "icon-size": ["interpolate", ["linear"], ["zoom"], 14, small, 16.5, large], "icon-allow-overlap": true, "icon-ignore-placement": true }) as never
+        m.addLayer({ id: "permits", type: "symbol", source: "permits", layout: icon(["concat", "permit-", ["get", "kind"]], 0.85, 1.15) })
+        m.addLayer({ id: "audits", type: "symbol", source: "audits", layout: icon(["concat", "audit-", ["get", "energy"]], 0.85, 1.15) })
         m.addLayer({ id: "pois", type: "circle", source: "pois", paint: { "circle-radius": 4, "circle-color": ["match", ["get", "cat"], "transport", poiColor.transport, "shops", poiColor.shops, "schools", poiColor.schools, poiColor.parks], "circle-stroke-color": card, "circle-stroke-width": 1 } })
         // the sales as rings, the listings as dots: both in the color of their gap to the market
         m.addLayer({ id: "sales", type: "circle", source: "sales", paint: { "circle-radius": 4, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": ["match", ["get", "level"], "below", below, "above", above, at], "circle-stroke-width": 1.5, "circle-stroke-opacity": 0.85 } })
@@ -280,6 +335,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
         // the DPE under the pointer in the column, over everything: a halo in the highlight, wider than the rings of the
         // DPE without a listing
         m.addLayer({ id: "dpe-hover", type: "circle", source: "dpe", filter: ["==", ["get", "key"], ""], paint: { "circle-radius": 22, "circle-color": hi, "circle-opacity": 0.3, "circle-stroke-color": hi, "circle-stroke-width": 4 } })
+        m.addLayer({ id: "spot-hover", type: "circle", source: "spot", paint: { "circle-radius": 22, "circle-color": hi, "circle-opacity": 0.3, "circle-stroke-color": hi, "circle-stroke-width": 4 } })
         m.addLayer({ id: "labels", type: "symbol", source: "listings", layout: { "text-field": ["get", "label"], "text-font": ["Source Sans Pro Bold"], "text-size": 12, "text-offset": [0, -1.5], "text-allow-overlap": false }, paint: { "text-color": ink, "text-halo-color": card, "text-halo-width": 2 } })
         showLayers(m, layers)
         const all = [...sources.listings.features, ...sources.sales.features]
@@ -297,13 +353,13 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
         // the odds map opens where it loads: its zoom at least
         if (oddsRef.current && m.getZoom() < MIN_ZOOM) m.setZoom(MIN_ZOOM)
         const popup = new Popup({ closeButton: false, closeOnClick: false, className: "immo-popup" })
-        for (const id of ["listings", "sales", "pois", "dpe"]) {
+        for (const id of ["listings", "sales", "pois", "dpe", "audits", "permits"]) {
           m.on("mouseenter", id, (e: MapLayerMouseEvent) => { m.getCanvas().style.cursor = "pointer"; const f = e.features?.[0]; if (f) popup.setLngLat((f.geometry as GeoPoint).coordinates as [number, number]).setHTML(f.properties.tip).addTo(m) })
           m.on("mouseleave", id, () => { m.getCanvas().style.cursor = ""; popup.remove() })
         }
         m.on("click", "listings", (e: MapLayerMouseEvent) => select(e.features?.[0]?.properties.id ?? null))
         // an IRIS: its tooltip follows the pointer, a click selects it (unless a DPE or a listing is under it)
-        const dot = (e: MapLayerMouseEvent) => m.queryRenderedFeatures(e.point, { layers: ["dpe", "listings"] }).length > 0
+        const dot = (e: MapLayerMouseEvent) => m.queryRenderedFeatures(e.point, { layers: ["dpe", "listings", "audits", "permits"] }).length > 0
         m.on("mousemove", "iris-fill", (e: MapLayerMouseEvent) => { if (!dot(e) && e.features?.[0]) popup.setLngLat(e.lngLat).setHTML(e.features[0].properties.tip).addTo(m) })
         m.on("mouseleave", "iris-fill", () => popup.remove())
         m.on("click", "iris-fill", (e: MapLayerMouseEvent) => { if (!dot(e)) oddsRef.current?.onIris(e.features?.[0]?.properties.code ?? null) })
@@ -315,22 +371,23 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
         }
         m.on("moveend", view)
         view()
-        // a DPE clicked: its card stays, each DPE without a listing with « Chercher l'annonce » (a prompt item for Claude)
+        // a DPE, an audit or a permit clicked: its card stays, each DPE without a listing and each audit with « Chercher
+        // l'annonce » (a prompt item for Claude)
         const pinned = new Popup({ className: "immo-popup", maxWidth: "300px" })
-        m.on("click", "dpe", (e: MapLayerMouseEvent) => {
-          const g = dpeRef.current.groups.get(e.features?.[0]?.properties.key)
-          if (g) pin.current(g)
-        })
-        pin.current = g => {
+        const clicked = (e: MapLayerMouseEvent) => e.features?.[0]?.properties
+        m.on("click", "dpe", e => { const g = dpeRef.current.groups.get(clicked(e)?.key); if (g) pin.current({ kind: "dpe", group: g }) })
+        m.on("click", "audits", e => { const a = dpeRef.current.audits.get(clicked(e)?.n); if (a) pin.current({ kind: "audit", row: a }) })
+        m.on("click", "permits", e => { const p = dpeRef.current.permits.get(clicked(e)?.n); if (p) pin.current({ kind: "permit", row: p }) })
+        pin.current = s => {
           const el = document.createElement("div")
-          el.innerHTML = dpeTip(g, dpeRef.current.listings, true)
+          el.innerHTML = s.kind === "dpe" ? dpeTip(s.group, dpeRef.current.listings, true) : s.kind === "audit" ? auditTip(s.row, true) : permitTip(s.row)
           for (const b of el.querySelectorAll<HTMLButtonElement>("button[data-n]")) b.onclick = () => {
-            addFeedback({ kind: "chercher", text: dpeAsk(g.items.find(d => d.number === b.dataset.n)!) })
+            addFeedback({ kind: "chercher", text: s.kind === "audit" ? auditAsk(s.row) : dpeAsk((s.kind === "dpe" ? s.group.items : []).find(d => d.number === b.dataset.n)!) })
             toast.success("Ajouté au prompt : Claude cherchera l'annonce")
             b.disabled = true
           }
           popup.remove()
-          pinned.setLngLat(g.point).setDOMContent(el).addTo(m)
+          pinned.setLngLat(s.kind === "dpe" ? s.group.point : s.row.point).setDOMContent(el).addTo(m)
         }
       })
     })
@@ -341,7 +398,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
 
   // new data, filters, selection: the sources and the selected dot change in place
   useEffect(() => {
-    dpeRef.current = { groups: new Map(dpe.groups.map(g => [g.key, g])), listings: data.listings }
+    dpeRef.current = { groups: new Map(dpe.groups.map(g => [g.key, g])), audits: new Map((odds?.data?.audits ?? []).map(a => [a.number, a])), permits: new Map((odds?.data?.permits ?? []).map(p => [p.number, p])), listings: data.listings }
     // the map's layers made (its load done): isStyleLoaded() is false while tiles load, and would skip this change
     const m = map.current
     if (!m?.getLayer("labels")) return
@@ -351,16 +408,17 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
     m.setFilter("iris-selected", ["==", ["get", "code"], irisCode ?? ""])
     for (const id of ["iris-hover", "iris-hover-line"]) m.setFilter(id, ["==", ["get", "code"], hover?.iris ?? ""])
     m.setFilter("dpe-hover", ["==", ["get", "key"], hover?.dpe ?? ""])
+    ;(m.getSource("spot") as GeoJSONSource).setData(fc(hover?.point ? [{ type: "Feature", geometry: { type: "Point", coordinates: hover.point }, properties: {} }] : []))
     showLayers(m, layers)
     const l = data.listings.find(x => x.id === pointed)
     if (l?.location.point) m.easeTo({ center: l.location.point, zoom: spot === l.id ? Math.max(m.getZoom(), 16) : m.getZoom(), duration: 400 })
-  }, [sources, pointed, spot, layers, data.listings, dpe.groups, metric, irisCode, hover])
+  }, [sources, pointed, spot, layers, data.listings, dpe.groups, metric, irisCode, hover, odds?.data])
 
-  // a DPE picked in the odds tab's column: the map goes to it and pins its card
+  // a DPE, an audit or a permit picked in the odds tab's column: the map goes to it and pins its card
   const focus = odds?.focus
   useEffect(() => {
     if (!focus || !map.current) return
-    map.current.easeTo({ center: focus.point, zoom: Math.max(map.current.getZoom(), 16), duration: 600 })
+    map.current.easeTo({ center: focus.kind === "dpe" ? focus.group.point : focus.row.point, zoom: Math.max(map.current.getZoom(), 16), duration: 600 })
     pin.current(focus)
   }, [focus])
 
@@ -371,6 +429,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
       <div ref={box} className="h-full w-full" />
       <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales }}
         dpe={{ days: dpeDays, setDays: setDpeDays, scope: dpeScope, setScope: setDpeScope, count: dpe.count, open: dpe.open }}
+        sources={{ audits: recent.audits, permits: recent.permits, inPeriod: recent.inPeriod, kinds, setKinds, auditDays, setAuditDays, permitDays, setPermitDays }}
         odds={odds && { metric, setMetric: odds.setMetric, listings: sources.listings.features.length, onPlace: h => map.current?.flyTo({ center: [h.x, h.y], zoom: zoomOf(h), duration: 1200 }) }} />
     </div>
   )
@@ -378,6 +437,8 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
 
 // the panel's toggles, smaller than the page's
 const CHIP = "h-7 px-2 text-xs"
+// the periods of the recent DPE, audits and permits, in days
+const PERIODS = [["90", "3 mois"], ["180", "6 mois"], ["365", "12 mois"]]
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return <section className="flex flex-col gap-2"><h3 className="text-xs font-semibold text-foreground">{title}</h3>{children}</section>
@@ -417,11 +478,15 @@ function PlaceSearch({ onPlace }: { onPlace: (h: Hit) => void }) {
 // color and its count. On the odds map: a search to move it, the IRIS's figure, the recent DPE, the search's listings,
 // the zone. On a computer a column docked on the left, its whole height, always open (the listings' column on the
 // right); on a phone it floats, folded until tapped.
-function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales, dpe, odds }: {
+function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales, dpe, sources, odds }: {
   docked: boolean; cats: string[]; setCats: (v: string[]) => void; layers: string[]; setLayers: (v: string[]) => void; scope: string; setScope: (v: string) => void
   hidden: string[]; flip: (k: string) => void
   shownTypes: string[]; setShownTypes: (v: string[]) => void; pois: Poi[]; places: string[]; sales: number
   dpe: { days: string; setDays: (v: string) => void; scope: string; setScope: (v: string) => void; count: number; open: number }
+  sources: {
+    audits: AuditRow[]; permits: PermitRow[]; inPeriod: PermitRow[]; kinds: PermitKind[]; setKinds: (v: PermitKind[]) => void
+    auditDays: string; setAuditDays: (v: string) => void; permitDays: string; setPermitDays: (v: string) => void
+  }
   odds?: { metric: Metric; setMetric: (m: Metric) => void; listings: number; onPlace: (h: Hit) => void }
 }) {
   const { types, data } = useSearch()
@@ -461,14 +526,17 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                   <Switch id="iris" checked={layers.includes("iris")} onCheckedChange={v => toggle("iris", v)} />
                   <Hint text={IRIS_HELP}><Label htmlFor="iris" className="text-xs">Quartiers INSEE (IRIS)</Label></Hint>
                 </div>
-                <ToggleGroup type="single" size="sm" variant="outline" value={odds.metric} onValueChange={v => v && odds.setMetric(v as Metric)} className="w-full" aria-label="Couleur des quartiers">
-                  {Object.entries(METRICS).map(([k, m]) => <Hint key={k} text={m.help}><ToggleGroupItem className={cn(CHIP, "flex-auto")} value={k}>{m.label}</ToggleGroupItem></Hint>)}
-                </ToggleGroup>
-                <div className="grid grid-cols-5 gap-0.5 text-[10px] whitespace-nowrap text-muted-foreground" aria-label="Légende, en % des logements sur 12 mois">
+                {/* one figure colors the IRIS: a probability (first row) or a figure of the quarter (second row) */}
+                {(["odds", "iris"] as const).map(row => (
+                  <ToggleGroup key={row} type="single" size="sm" variant="outline" value={METRICS[odds.metric].row === row ? odds.metric : ""} onValueChange={v => v && odds.setMetric(v as Metric)} className="w-full" aria-label={row === "odds" ? "Couleur des quartiers : probabilités" : "Couleur des quartiers : logements et prix"}>
+                    {Object.entries(METRICS).filter(([, m]) => m.row === row).map(([k, m]) => <Hint key={k} text={m.help}><ToggleGroupItem className={cn(CHIP, "flex-auto")} value={k}>{m.label}</ToggleGroupItem></Hint>)}
+                  </ToggleGroup>
+                ))}
+                <div className="grid grid-cols-5 gap-0.5 text-[10px] whitespace-nowrap text-muted-foreground" aria-label={`Légende. ${METRICS[odds.metric].legend}`}>
                   {classes(odds.metric).map((c, k) => <span key={c} className="flex flex-col gap-1"><i className="h-2 rounded-sm" style={{ background: `var(--odds-${k + 1})` }} />{c}</span>)}
                 </div>
-                <p className="-mt-1 text-[10px] text-muted-foreground">En % des logements du quartier, sur 12 mois.</p>
-                <p className="text-muted-foreground">{METRICS[odds.metric].help} Gris : pas de chiffres INSEE.</p>
+                <p className="-mt-1 text-[10px] text-muted-foreground">{METRICS[odds.metric].legend}</p>
+                <p className="text-muted-foreground">{METRICS[odds.metric].help} Gris : pas de chiffres INSEE{odds.metric === "price" ? " ou moins de 5 ventes" : ""}.</p>
               </Group>
               {types.some(isHome) && (
                 <Group title="DPE récents">
@@ -479,7 +547,7 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                   {layers.includes("dpe") && (
                     <>
                       <ToggleGroup type="single" size="sm" variant="outline" value={dpe.days} onValueChange={v => v && dpe.setDays(v)} className="justify-start" aria-label="Période des DPE">
-                        {[["90", "3 mois"], ["180", "6 mois"], ["365", "12 mois"]].map(([v, l]) => <ToggleGroupItem className={CHIP} key={v} value={v}>{l}</ToggleGroupItem>)}
+                        {PERIODS.map(([v, l]) => <ToggleGroupItem className={CHIP} key={v} value={v}>{l}</ToggleGroupItem>)}
                       </ToggleGroup>
                       <ToggleGroup type="single" size="sm" variant="outline" value={dpe.scope} onValueChange={v => v && dpe.setScope(v)} className="justify-start" aria-label="DPE affichés">
                         <ToggleGroupItem className={CHIP} value="all">Tous</ToggleGroupItem>
@@ -509,6 +577,44 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                   )}
                 </Group>
               )}
+              {types.some(isHome) && (
+                <Group title="Audits énergétiques">
+                  <div className="flex items-center gap-2">
+                    <Switch id="audits" checked={layers.includes("audits")} onCheckedChange={v => toggle("audits", v)} />
+                    <Hint text={AUDIT_HELP}><Label htmlFor="audits" className="text-xs"><AuditBadge className="size-3.5" />Audits récents de la carte <span className="text-muted-foreground">({num(sources.audits.length)})</span></Label></Hint>
+                  </div>
+                  {layers.includes("audits") && (
+                    <>
+                      <ToggleGroup type="single" size="sm" variant="outline" value={sources.auditDays} onValueChange={v => v && sources.setAuditDays(v)} className="justify-start" aria-label="Période des audits">
+                        {PERIODS.map(([v, l]) => <ToggleGroupItem className={CHIP} key={v} value={v}>{l}</ToggleGroupItem>)}
+                      </ToggleGroup>
+                      <p className="text-muted-foreground">Un carré dans la couleur de sa classe DPE, marqué d'un presse-papier. Obligatoire pour vendre une maison ou un immeuble entier classé E, F ou G : souvent une vente proche.</p>
+                    </>
+                  )}
+                </Group>
+              )}
+              <Group title="Permis">
+                <div className="flex items-center gap-2">
+                  <Switch id="permits" checked={layers.includes("permits")} onCheckedChange={v => toggle("permits", v)} />
+                  <Hint text={PERMIT_HELP}><Label htmlFor="permits" className="text-xs">Permis récents de la carte <span className="text-muted-foreground">({num(sources.permits.length)})</span></Label></Hint>
+                </div>
+                {layers.includes("permits") && (
+                  <>
+                    <ToggleGroup type="single" size="sm" variant="outline" value={sources.permitDays} onValueChange={v => v && sources.setPermitDays(v)} className="justify-start" aria-label="Période des permis">
+                      {PERIODS.map(([v, l]) => <ToggleGroupItem className={CHIP} key={v} value={v}>{l}</ToggleGroupItem>)}
+                    </ToggleGroup>
+                    <ToggleGroup type="multiple" size="sm" variant="outline" value={sources.kinds} onValueChange={v => sources.setKinds(v as PermitKind[])} className="flex-wrap justify-start" aria-label="Permis affichés">
+                      {(Object.keys(PERMIT_LABEL) as PermitKind[]).map(k => (
+                        <ToggleGroupItem className={CHIP} key={k} value={k}>
+                          <PermitBadge kind={k} className="size-3.5" />{{ build: "Construire", demolish: "Démolir", develop: "Aménager" }[k]}<span className="text-muted-foreground">{sources.inPeriod.filter(p => p.kind === k).length}</span>
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                    <p className="text-muted-foreground">Construire : des logements créés (permis ou déclaration préalable). Démolir : un terrain ou un programme à venir. Aménager : un terrain divisé en lots.</p>
+                    <p className="text-muted-foreground">Datés de leur autorisation, ils arrivent en retard dans Sitadel (publié chaque mois) : environ 6 mois pour construire, 1 mois pour démolir ou aménager. Sur 3 mois, les permis de construire manquent presque tous.</p>
+                  </>
+                )}
+              </Group>
               <Group title="Annonces">
                 <div className="flex items-center gap-2">
                   <Switch id="listings" checked={layers.includes("listings")} onCheckedChange={v => toggle("listings", v)} />

@@ -150,12 +150,20 @@ history stay.
     `dpe.reference`; a listing whose number is known takes no other), else the one of
     its `building.ban` with the closest surface (within 8 %), else the nearest of the same type and surface within
     300 m, with its class and DPE date when the listing gives them. A DPE taken goes to no other listing.
+  - `audit_recent[] { number, date, energy, type: flat|house, building, area, period, address, ban, point }`: ADEME's
+    energy audits of the last 12 months in the zone (`building`: a whole building, `area` its own); for a search of
+    homes.
+  - `permit_recent[] { number, kind: build|demolish|develop, form: PC|DP|PD|PA, date, homes, demolished, land, address,
+    ban, point }`: Sitadel's building permits authorised in the last 12 months in the zone (the search's city), placed
+    by the BAN; any search.
 - `feed.json`: `read_at` (all read up to then) and `read[]` (the keys of news read one by one: `<kind>-<date>-<listing
-  id | DPE number>`), the news newest first (`items[]`, 500 at most), and the server's last counts of the API (`stream
+  id | DPE, audit or permit number>`), the news newest first (`items[]`, 500 at most), and the server's last counts of the API (`stream
   { total, counted_at }`: listings not fetched yet; `changed { since, total, counted_at }`: fetched ones changed on the
   portals since `last_refresh`, the last 60 fetched), shown in « Suivi »'s bar. A news is `{ date, kind, … }`:
   - `dpe { … }`: a DPE of `dpe_recent` new since the last one, that no listing matches (any home type and criteria);
-  - `dpe { … }, outside: true`: a new DPE at the place of one of the user's alerts, outside the zone.
+  - `dpe { … }, outside: true`: a new DPE at the place of one of the user's alerts, outside the zone;
+  - `audit { … }`, `permit { … }`: a new energy audit or building permit of the zone (a row of `audit_recent`,
+    `permit_recent` area.json did not hold), or with `outside: true` at the place of one of the user's alerts.
 
   The listings' own `changes[]` (`new`, `price_drop`, `price_rise`, `status`, `expired`) are news too. A feed of 1.7
   may hold `listings` and `changed` news: no alert takes them any more.
@@ -163,27 +171,33 @@ history stay.
   `alerts:` line. A news shows when one alert that is on takes it: its event, its place, and every condition holds.
   - `off[]`: the default alerts turned off, by id: `dpe` (its condition: `criteria` is true), `new`, `price_drop`,
     `price_rise`, `status`, `expired` (its condition: `my_status` is not `none`: only a listing the user follows; one
-    still to sort leaves the map, the cards and the board quietly, the list keeps it). Each is on until turned off.
+    still to sort leaves the map, the cards and the board quietly, the list keeps it), `audit`, `permit` (every new one
+    of the zone). Each is on until turned off.
   - `custom[] { id (letters, digits, - and _), name, event, place, conditions[] { field, op, value }, enabled }`: the
-    user's own, 50 at most, 10 conditions each. `event` is `dpe`, `new`, `price_drop`, `price_rise`, `status` or
-    `expired`.
-  - `place`: `{ "how": "zone" }` (the search's zone; the listings' events take this one only), or, for `dpe`, `{ "how":
+    user's own, 50 at most, 10 conditions each. `event` is `dpe`, `audit`, `permit`, `new`, `price_drop`,
+    `price_rise`, `status` or `expired`.
+  - `place`: `{ "how": "zone" }` (the search's zone; the listings' events take this one only), or, for `dpe`, `audit`
+    and `permit`, `{ "how":
     "street", "ban": "69387_3030", "label", "point" }` (the street's BAN id, `geocode` gives it), `{ "how": "commune",
     "insee": "69123", "label", "point" }` (Paris, Lyon, Marseille: their arrondissements), `{ "how": "radius",
-    "radius_m": 300, "label", "point" }` (50 m to 3 km). The server reads the place's DPE of the last 12 months from
-    ADEME; what an alert saw stays in `.cache/alerts/<slug>/<id>.json`.
+    "radius_m": 300, "label", "point" }` (50 m to 3 km). The server reads the place's DPE or audits of the last 12
+    months from ADEME, its permits from its city's (a circle: the city at its center); what an alert saw stays in
+    `.cache/alerts/<slug>/<id>.json`.
 
   | `field` | Kind | `op` | Events |
   |---|---|---|---|
   | `street` | text | `contains`, `is` (no case, no accents) | all: the street of the address |
-  | `type` | type | `is` (`flat`, `house`, `land`, `parking`, `premises`) | all |
-  | `energy` | class | `lte` (A to it), `gte` (it to G) | all |
-  | `area` | number | `gte`, `lte` | all |
+  | `type` | type | `is` (`flat`, `house`, `land`, `parking`, `premises`) | all but `permit` (a whole building is `flat`) |
+  | `energy` | class | `lte` (A to it), `gte` (it to G) | all but `permit` |
+  | `area` | number | `gte`, `lte` | all but `permit` (a whole building's own) |
+  | `building` | bool | `is` | `audit`: a whole building |
+  | `permit_kind` | permit | `is` (`build`, `demolish`, `develop`) | `permit` |
+  | `homes` | number | `gte`, `lte` | `permit`: the homes it creates |
   | `price`, `price_per_m2`, `rooms` | number | `gte`, `lte` | the listings' |
   | `change_pct` | number | `gte`, `lte` | `price_drop`, `price_rise`: the move in % (5 = 5 %) |
   | `favorite` | bool | `is` | the listings': starred in the dashboard |
   | `my_status` | status | `is`, `not` (`none`, `to_visit`, `visited`, `offer`, `dropped`) | the listings' |
-  | `criteria` | bool | `is` | all: within the search's types and criteria |
+  | `criteria` | bool | `is` | all but `permit`: within the search's types and criteria |
 
   A value the news does not give (no address) fails the condition. Example: `{ "id": "a-garibaldi", "name": "Passoires
   rue Garibaldi", "event": "dpe", "place": { "how": "street", "ban": "69387_3030", "label": "Rue Garibaldi 69007 Lyon",
@@ -191,7 +205,8 @@ history stay.
 
 ## The files of the searches folder
 
-- `.settings.json` (« Réglages », every search): `watch_minutes` (0, 30, 60, 360, 720, 1440), `api` (false: no call
+- `.settings.json` (« Réglages », every search): `watch_minutes` (0, 30, 60, 360, 720, 1440), `watch_paused` (no watch
+  until resumed, its period kept), `api` (false: no call
   at all), `auto_fetch` and `auto_credits` (the automatic fetch and its credits a month), `notify`, `sound`, `quiet`
   (`["22:00", "08:00"]` or null), `read_on_open`, `keep_days` (0, 30, 90, 365; 0 keeps all).
 - `.profile.json` (private): the budget's numbers, `weights`, `places`, and the credits' settings of « Réglages »:

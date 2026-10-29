@@ -123,8 +123,9 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 
 The dashboard's odds map asks the server `GET /api/odds?bbox=<w,s,e,n>` each time it stops (zoom 14 or closer; a box
 wider than 0.3° by 0.2° is refused). The engine (`oddsOf` in `immo.mjs`, `lib/odds.js`) answers the box's IRIS with
-their census, DVF sales and odds, its communes, and its DPE of the last 12 months. Checked live on
-2026-10-28 around rue Paul Bert: 68 IRIS and 7 communes, 15 s the first time, 1.3 s once kept.
+their census, DVF sales, odds and prices, its communes, and its DPE, energy audits and building permits of the last 12
+months. Checked live on 2026-10-29 around rue Paul Bert: 86 IRIS, 10,058 DPE, 63 audits and 22 permits, 13 s the first
+time, about 1 s once kept.
 
 - **IRIS of a box** (IGN WFS): `BBOX` as lat lon. Each feature has `code_iris`, `nom_iris`, `code_insee` (the
   arrondissement's in Paris, Lyon, Marseille: 69383), `nom_commune` and `type_iris` (H homes, A activity, D other, Z a
@@ -136,12 +137,35 @@ their census, DVF sales and odds, its communes, and its DPE of the last 12 month
   - `DS_RP_MENAGES_PRINC_IRIS`: `RP_MEASURE=POP, AGE=Y_GE15` with `CIVIL_STATUS` 1 married, 2 PACS, 3 living together,
     4 widowed, 5 divorced, 6 single; `ONEPERS, NOC=P1, OCS=DW_MAIN` with `AGE=Y55T79` and `Y_GE80`: the people living
     alone. Danton-Bir Hakeim (Lyon 3e): 6,750 homes, 1,512 owners for 13 years, 206 people of 80 and more alone.
+  - `DS_RP_LOGEMENT_PRINC_IRIS` again: `OCS=DW_VAC` (vacant homes), `OCS=DW_SEC_DW_OCC` (second homes); with
+    `OCS=DW_MAIN`, `BUILD_END=Y_LT1919` and `Y1919T1945` (built before 1946), `NRG_SRC=OIL` (heated with oil),
+    `L_STAY=Y_GE10` (the household moved in 10 years ago or more). Danton-Bir Hakeim: 503 vacant of 6,750, 630 built
+    before 1946.
   - The values are the census's estimates (decimals): the engine rounds them.
 - **The odds** (`lib/odds.js`): an IRIS's flats and houses sold a year (DVF's sales of one home, the last three whole
   years) over its homes is the odds that one of them goes on sale within 12 months (1.2 % to 3.3 % around rue Paul
   Bert). Successions: people living alone of 55 to 79 × 1.3 % and of 80 and more × 9 % a year (France's death rates
   by age), × the owners' share of the main homes. Separations: couples × 1 % a year × the same share. Both are
   estimates, said so in the dashboard.
+- **The prices**: the median € per m² of an IRIS's flats and houses sold over the same three years, together then apart,
+  from 5 sales on. The map's five classes are Lyon's and Villeurbanne's quintiles (117 IRIS, 2026-10-29): 3,600, 4,200,
+  4,700, 5,100 €/m²; the vacant homes' 6, 7.5, 9 and 11 %.
+- **Energy audits** (ADEME dataset `ync2epx48x9azbdnggbygqp0`, « Audits énergétiques logement existants », daily, since
+  September 2023; checked on 2026-10-29): due before selling a house or a whole building (monopropriété) rated F or G
+  since April 2023, E since 2025, D from 2034; also made for a renovation grant, and no field says which. One audit has
+  a row per scenario of works: `categorie_scenario_eq=état initial` keeps one. `methode_application_dpe` says a house
+  (`dpe maison individuelle`), a whole building (`dpe immeuble collectif …`, its area `surface_habitable_immeuble`) or a
+  flat. `bbox`, `geo_distance`, `identifiant_ban_starts` and `code_insee_ban_in` work as on the DPE. Over 12 months: 56
+  in Lyon 3e (27 houses, 23 whole buildings), 10 in Louveciennes.
+- **Building permits** (data.gouv dataset `689c42fa521ccf80ce954f83`, Sitadel's « Liste des permis de construire et
+  autres autorisations d'urbanisme », monthly; checked on 2026-10-29): three CSV resources read through the tabular API
+  (`page_size` up to 200, `links.next`): the homes built (PC and DP, `NUM_DAU`, `NB_LGT_TOT_CREES`, `NB_LGT_DEMOLIS`),
+  the demolitions (PD) and the plots divided (PA). `COMM` is the city's code (69123 for Lyon's arrondissements),
+  `DATE_REELLE_AUTORISATION` the date, `ETAT_*` 4 a cancelled one (left out). About 6 months late for homes, 1 for a
+  demolition. No point: the address (in capitals, some accents garbled) goes to the BAN's CSV geocoding
+  (`POST data.geopf.fr/geocodage/search/csv`, one call for a city), a score under 0.5 is left out. The applicant
+  (`DENOM_DEM`, a company or an SCI that may bear a person's name) is never kept. Lyon over 12 months: 50 homes built, 43
+  demolitions, 6 plots.
 - **Not used, on purpose**: no source gives a death or a divorce with an address, and joining people to homes is not
   allowed.
   - INSEE's file of deaths (open, monthly) has the name, the birth and the place of death, not the home.

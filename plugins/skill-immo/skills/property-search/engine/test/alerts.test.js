@@ -6,6 +6,8 @@ const s = { types: ['flat'], criteria: { area_min: 40, dpe_max: 'E' } }
 const dpe = (o = {}, outside) => ({ date: '2026-10-28T10:00:00Z', kind: 'dpe', ...(outside && { outside }), dpe: { number: 'X', date: '2026-10-20', energy: 'F', type: 'flat', area: 70, address: '311 Rue Paul Bert 69003 Lyon', ban: '69383_5245_00311', point: [4.8719, 45.7563], ...o } })
 const drop = (l = {}) => ({ date: '2026-10-28T10:00:00Z', kind: 'price_drop', from: 300000, to: 282000, l: { id: 'a', price: 282000, area: 60, rooms: 3, dpe: { energy: 'D' }, location: { address: null }, favorite: true, ...l } })
 const garibaldi = { how: 'street', ban: '69383_3030', label: 'Rue Garibaldi 69003 Lyon', point: [4.853, 45.753] }
+const audit = (o = {}, outside) => ({ date: '2026-10-28T10:00:00Z', kind: 'audit', ...(outside && { outside }), audit: { number: 'A1', date: '2026-10-18', energy: 'G', type: 'flat', building: true, area: 530, address: '12 Rue Garibaldi 69003 Lyon', ban: '69383_3030_00012', point: [4.853, 45.753], ...o } })
+const permit = (o = {}, outside) => ({ date: '2026-10-28T10:00:00Z', kind: 'permit', ...(outside && { outside }), permit: { number: 'PD1', kind: 'demolish', form: 'PD', date: '2026-09-29', homes: null, address: '14 Rue Garibaldi 69003 Lyon', ban: '69383_3030_00014', point: [4.853, 45.753], ...o } })
 
 test('the street of an address, the key of a news', () => {
   assert.equal(streetOf('311 bis Rue Paul Bert 69003 Lyon'), 'Rue Paul Bert')
@@ -26,6 +28,27 @@ test('the default alerts: on, the DPE one keeps the search criteria, an expiry o
   assert.deepEqual(firing(on, { ...drop({ my_status: 'to_visit' }), kind: 'expired' }, s).map(a => a.id), ['expired'])
   assert.deepEqual(firing(on, { ...drop(), kind: 'expired' }, s), [])
   assert.deepEqual(firing(alertsOf({ off: ['price_drop'] }), drop(), s), [])
+  // every audit and permit of the zone, whatever the criteria (a whole building of 530 m²)
+  assert.deepEqual(firing(on, audit(), s).map(a => a.id), ['audit'])
+  assert.deepEqual(firing(on, permit(), s).map(a => a.id), ['permit'])
+  assert.deepEqual(firing(on, permit({}, true), s), [], 'a permit found outside the zone is none of the zone alerts')
+  assert.equal(newsKey(audit()), 'audit-2026-10-28T10:00:00Z-A1')
+})
+
+test("a user's alert on the audits and the permits: a whole building, a demolition or 10 homes in a street", () => {
+  const whole = { event: 'audit', place: garibaldi, conditions: [{ field: 'building', op: 'is', value: true }, { field: 'energy', op: 'gte', value: 'E' }] }
+  assert.ok(takes(whole, audit({}, true), s))
+  assert.ok(!takes(whole, audit({ building: false }, true), s))
+  assert.ok(!takes(whole, audit({ ban: '69383_5245_00012' }, true), s), 'another street')
+  assert.ok(!takes(whole, permit({}, true), s), 'not its event')
+  const down = { event: 'permit', place: garibaldi, conditions: [{ field: 'permit_kind', op: 'is', value: 'demolish' }] }
+  assert.ok(takes(down, permit({}, true), s))
+  assert.ok(!takes(down, permit({ kind: 'build', homes: 12 }, true), s))
+  const homes = { event: 'permit', conditions: [{ field: 'homes', op: 'gte', value: 10 }, { field: 'street', op: 'contains', value: 'garibaldi' }] }
+  assert.ok(takes(homes, permit({ kind: 'build', homes: 12 }), s))
+  assert.ok(!takes(homes, permit(), s), 'a demolition creates no home')
+  // a place's street by its BAN id alone: a permit the BAN placed on the street, not at a number
+  assert.ok(atPlace(garibaldi, { ban: '69383_3030' }))
 })
 
 test("a user's alert: a DPE in a street of the zone, a passoire elsewhere, a drop of 5 % on a favorite", () => {
@@ -65,6 +88,11 @@ test('alerts.json checked at the door', () => {
   bad(null, { event: 'new', place: garibaldi })
   bad(null, { place: { how: 'street', ban: '../x', label: 'x', point: [1, 2] } })
   bad(null, { place: { how: 'radius', radius_m: 10000, label: 'x', point: [1, 2] } })
+  bad({ field: 'permit_kind', op: 'is', value: 'renovate' }, { event: 'permit' })
+  bad({ field: 'energy', op: 'gte', value: 'F' }, { event: 'permit' })
+  bad({ field: 'building', op: 'is', value: true }, { event: 'dpe' })
+  assert.deepEqual(cleanAlerts({ custom: [{ id: 'p', name: 'Démolitions', event: 'permit', place: garibaldi, conditions: [{ field: 'permit_kind', op: 'is', value: 'demolish' }, { field: 'homes', op: 'gte', value: '2' }] }] }).custom[0].conditions,
+    [{ field: 'permit_kind', op: 'is', value: 'demolish' }, { field: 'homes', op: 'gte', value: 2 }])
   assert.throws(() => cleanAlerts({ custom: [{ id: '../x', name: 'x', event: 'dpe' }] }))
 })
 

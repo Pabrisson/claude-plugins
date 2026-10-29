@@ -1,6 +1,6 @@
 import { WEIGHTS } from "@engine/decide.js"
 import { matches } from "@engine/market.js"
-import { BellIcon, CheckCheckIcon, ClipboardCopyIcon, HomeIcon, ListPlusIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PencilIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { BellIcon, CheckCheckIcon, ClipboardCopyIcon, HomeIcon, ListPlusIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -34,7 +34,8 @@ export const promptText = (slug: string, items: Feedback[]) =>
 
 export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings: () => void }) {
   const { data, state, feedback, addFeedback } = useSearch()
-  const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate"
+  // the tests' fake API (test/demo.mjs) wears an amber « API test »
+  const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate", testApi = s.mode === "stream-estate" && !!state.test_api
   // new listings asked of Claude: at the API (its credits rule) and on the web, or on the web only
   function askListings() {
     if (feedback.some(f => f.kind === "annonces")) return toast("Déjà dans le prompt")
@@ -49,8 +50,8 @@ export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings:
         <span className="flex min-w-0 items-center gap-2">
           <h1 className="truncate text-sm font-bold md:text-base">{s.label}</h1>
           <Tooltip>
-            <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"} className="shrink-0">{s.mode === "stream-estate" ? "API" : "OpenData"}</Badge></TooltipTrigger>
-            <TooltipContent>{s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API (payant, avec votre accord)" : "Mode API, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
+            <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"} className={cn("shrink-0", testApi && "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300")}>{s.mode === "stream-estate" ? (testApi ? "API test" : "API") : "OpenData"}</Badge></TooltipTrigger>
+            <TooltipContent>{testApi ? `Fausse API Stream Estate des tests (${state.test_api}) : annonces fictives, aucun crédit réel` : s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API (payant, avec votre accord)" : "Mode API, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
           </Tooltip>
         </span>
         <span className="truncate text-xs text-muted-foreground">{s.zone.label}</span>
@@ -78,10 +79,10 @@ export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings:
 }
 
 // The time to the server's next watch, beside « Annonces »: every half minute, and the state again once it is due;
-// a click opens its settings
+// a click opens its settings. Beside it, pause or resume it (its period kept).
 const left = (ms: number) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 1 ? "imminente" : m < 60 ? `dans ${m} min` : `dans ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` }
 function WatchCountdown({ onSettings }: { onSettings: () => void }) {
-  const { state } = useSearch()
+  const { state, reload } = useSearch()
   const [w, setW] = useState(state.watch), [was, setWas] = useState(state.watch), [now, setNow] = useState(() => Date.now())
   if (state.watch !== was) { setWas(state.watch); setW(state.watch) }
   useEffect(() => {
@@ -91,14 +92,26 @@ function WatchCountdown({ onSettings }: { onSettings: () => void }) {
     }, 30000)
     return () => clearInterval(t)
   }, [w])
-  const text = w.running ? "Veille en cours…" : w.next ? `Veille ${left(Date.parse(w.next) - now)}` : "Veille coupée"
+  const paused = !!w.paused, pauseText = paused ? "Reprendre la veille" : "Mettre la veille en pause"
+  const text = w.running ? "Veille en cours…" : paused ? "Veille en pause" : w.next ? `Veille ${left(Date.parse(w.next) - now)}` : "Veille coupée"
+  async function pause() {
+    try { await api.saveSettings({ watch_paused: !paused }); await reload() } catch (e) { toast.error("Réglage non enregistré", { description: `Détail technique : ${(e as Error).message}` }) }
+  }
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" onClick={onSettings} className="hidden rounded-md px-1.5 py-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:block">{text}</button>
-      </TooltipTrigger>
-      <TooltipContent>{w.next ? `Prochaine vérification : ${new Intl.DateTimeFormat("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(w.next))}` : "La veille du serveur est coupée"}</TooltipContent>
-    </Tooltip>
+    <span className="hidden items-center lg:flex">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" onClick={onSettings} className={cn("rounded-md px-1.5 py-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none", paused && "text-amber-700 dark:text-amber-300")}>{text}</button>
+        </TooltipTrigger>
+        <TooltipContent>{paused ? "La veille du serveur est en pause : ▶ la reprend à sa fréquence" : w.next ? `Prochaine vérification : ${new Intl.DateTimeFormat("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(w.next))}` : "La veille du serveur est coupée"}</TooltipContent>
+      </Tooltip>
+      {state.settings.watch_minutes > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild><Button variant="ghost" size="icon-xs" onClick={pause} aria-label={pauseText}>{paused ? <PlayIcon /> : <PauseIcon />}</Button></TooltipTrigger>
+          <TooltipContent>{pauseText}</TooltipContent>
+        </Tooltip>
+      )}
+    </span>
   )
 }
 

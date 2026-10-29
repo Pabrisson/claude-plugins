@@ -2,7 +2,7 @@
 // Every source is public and keyless; Overpass asks for a User-Agent that names the client.
 import fs from 'node:fs'
 import path from 'node:path'
-import { cityCodes } from './alerts.js'
+import { atPlace, cityCodes } from './alerts.js'
 import { dvfSales, parseCsv } from './dvf.js'
 
 const UA = 'skill-immo/1.0 (+https://github.com/Pabrisson/claude-plugins)'
@@ -29,6 +29,10 @@ const TAX = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/fis
 const cityOf = insee => (/^751\d\d$/.test(insee) ? '75056' : /^6938\d$/.test(insee) ? '69123' : /^132\d\d$/.test(insee) ? '13055' : insee)
 // Sitadel (SDES, DiDo): the homes authorised and started per commune and year
 const SITADEL = { api: 'https://data.statistiques.developpement-durable.gouv.fr/dido/api/v1', dataset: '6513ee3a3b05e5cd969c270f', rid: '9c90a880-4ba0-49b4-b99d-d7dd6c810dd0' }
+// Sitadel's lists of the permits (data.gouv dataset 689c42fa521ccf80ce954f83, monthly), each kind's CSV resource
+const PERMITS = { build: '65a9e264-7a20-46a9-9d98-66becb817bc3', demolish: '8f73cf2d-7bc4-4b5a-b912-718d6991f0a0', develop: '9db13a09-72a9-4871-b430-13872b4890b3' }
+// ADEME's energy audits of existing homes (since September 2023)
+const AUDITS = 'ync2epx48x9azbdnggbygqp0'
 const sleep = t => new Promise(ok => setTimeout(ok, t))
 const MELODI = 'https://api.insee.fr/melodi/data'
 
@@ -88,8 +92,62 @@ export function openData(cacheDir) {
     }))
   })
 
+  // ADEME's energy audits of the last 12 months where `where` says (a box, a commune, a street, a circle), newest
+  // first, one per audit (its initial state, not its scenarios of works). An audit is due to sell a house or a whole
+  // building rated E, F or G; it is also made to get a renovation grant, and no field says which.
+  const lastYearAudits = (where, key, days) => cached(key, days, async () => {
+    const q = new URLSearchParams({
+      select: 'n_audit,date_etablissement_audit,classe_bilan_dpe,methode_application_dpe,surface_habitable_logement,surface_habitable_immeuble,periode_constuction,adresse_ban,identifiant_ban,_geopoint',
+      size: 10000, sort: '-date_etablissement_audit', categorie_scenario_eq: 'état initial', date_etablissement_audit_gte: new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10), ...where,
+    })
+    const d = await get(`https://data.ademe.fr/data-fair/api/v1/datasets/${AUDITS}/lines?${q}`)
+    return (d?.results ?? []).filter(r => r._geopoint && r.classe_bilan_dpe).map(r => {
+      const building = /immeuble/.test(r.methode_application_dpe ?? '')
+      return {
+        number: r.n_audit, date: r.date_etablissement_audit, energy: r.classe_bilan_dpe, type: /maison/.test(r.methode_application_dpe ?? '') ? 'house' : 'flat', building,
+        area: (building ? r.surface_habitable_immeuble : r.surface_habitable_logement) ?? null, period: r.periode_constuction ?? null,
+        address: r.adresse_ban ?? null, ban: r.identifiant_ban ?? null, point: r._geopoint.split(',').map(Number).reverse(),
+      }
+    })
+  })
+  // The building permits of a city (Paris, Lyon, Marseille: the whole city) authorised in the last 12 months, newest
+  // first, from Sitadel's lists (data.gouv's tabular API, about a month late for a demolition, 6 for homes): the homes
+  // built (a permit or a prior declaration), the demolitions, the plots divided. One call places them all (the BAN's
+  // CSV geocoding): a permit it cannot place is left out. The applicant is never kept (some SCI bear a person's name).
+  // Kept a week: Sitadel comes out monthly.
+  const cityPermits = insee => cached(`sitadel/permits-${cityOf(insee)}.json`, 7, async () => {
+    const since = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10), rows = []
+    for (const [kind, rid] of Object.entries(PERMITS)) {
+      for (let page = 1; page <= 10; page++) {
+        const d = await tabular(rid, { COMM__exact: cityOf(insee), DATE_REELLE_AUTORISATION__greater: since, page_size: 200, page })
+        rows.push(...(d?.data ?? []).map(r => ({ kind, r })))
+        if (!d?.links?.next) break
+      }
+    }
+    // 4: cancelled. Sitadel's addresses come in capitals, some with their accents garbled (« CHAÃ\x82Â\x82TEAU »): the
+    // BAN reads them without accents
+    const live = rows.filter(({ r }) => (r.ETAT_DAU ?? r.ETAT_PD ?? r.ETAT_PA) !== 4)
+    const text = r => [r.ADR_NUM_TER, r.ADR_LIBVOIE_TER || r.ADR_LIEUDIT_TER, r.ADR_CODPOST_TER, r.ADR_LOCALITE_TER].filter(Boolean).join(' ')
+      .replace(/[ÂÃ][\u0080-¿]/g, '').normalize('NFD').replace(/[^\x20-\x7E]/g, '').replace(/[",]/g, ' ')
+    if (!live.length) return []
+    const form = new FormData()
+    form.append('data', new Blob([`id,address\n${live.map(({ r }, i) => `${i},"${text(r)}"`).join('\n')}\n`], { type: 'text/csv' }), 'permits.csv')
+    form.append('columns', 'address')
+    const placed = new Map(parseCsv(await get(`${GEOPF}/geocodage/search/csv`, { text: true, init: { method: 'POST', body: form } })).map(g => [+g.id, g]))
+    return live.flatMap(({ kind, r }, i) => {
+      const g = placed.get(i)
+      if (!g?.longitude || !(+g.result_score >= 0.5)) return []
+      return [{
+        number: r.NUM_DAU ?? r.NUM_PD ?? r.NUM_PA, kind, form: r.TYPE_DAU ?? (kind === 'demolish' ? 'PD' : 'PA'), date: r.DATE_REELLE_AUTORISATION,
+        // the lists type their numbers apart (a land area may come as text)
+        homes: r.NB_LGT_TOT_CREES == null ? null : +r.NB_LGT_TOT_CREES, demolished: +r.NB_LGT_DEMOLIS || null, land: +r.SUPERFICIE_TERRAIN || null,
+        address: g.result_label, ban: g.result_id || null, point: [+g.longitude, +g.latitude],
+      }]
+    }).sort((a, b) => b.date.localeCompare(a.date))
+  })
+
   return {
-    cached,
+    cached, cityOf,
 
     // Géoplateforme (ex-API Adresse): features with label, type, citycode, id (BAN: <insee>_<voie>_<number>)
     geocode: (q, { type, limit = 5 } = {}) => cached(`geocode/${encodeURIComponent(`${q}|${type ?? ''}|${limit}`)}.json`, 30, async () =>
@@ -197,6 +255,21 @@ export function openData(cacheDir) {
     placeDpe: (p, days = 7) => lastYearDpe(
       p.how === 'street' ? { identifiant_ban_starts: `${p.ban}_` } : p.how === 'radius' ? { geo_distance: `${p.point[0]},${p.point[1]},${p.radius_m}` } : { code_insee_ban_in: cityCodes(p.insee).join(',') },
       `ademe/place-${p.how === 'radius' ? `${p.point.map(x => x.toFixed(4)).join(',')}-${p.radius_m}` : p.ban ?? p.insee}.json`, days),
+
+    // the energy audits of the last 12 months in a box, a commune and at an alert's place, as the DPE above
+    recentAudits: (bb, days = 7) => lastYearAudits({ bbox: bb.join(',') }, `ademe/audits-${bb.map(x => x.toFixed(4)).join(',')}.json`, days),
+    communeAudits: insee => lastYearAudits({ code_insee_ban_eq: insee }, `ademe/audits-${insee}.json`, 7),
+    placeAudits: (p, days = 7) => lastYearAudits(
+      p.how === 'street' ? { identifiant_ban_starts: `${p.ban}_` } : p.how === 'radius' ? { geo_distance: `${p.point[0]},${p.point[1]},${p.radius_m}` } : { code_insee_ban_in: cityCodes(p.insee).join(',') },
+      `ademe/audits-place-${p.how === 'radius' ? `${p.point.map(x => x.toFixed(4)).join(',')}-${p.radius_m}` : p.ban ?? p.insee}.json`, days),
+    // the building permits of the city of a commune (or arrondissement), and those at an alert's place: its street's or
+    // commune's city, the city at the center of a circle
+    // ponytail: a circle across two communes reads its center's only
+    cityPermits,
+    async placePermits(p) {
+      const insee = p.how === 'street' ? p.ban.slice(0, 5) : p.how === 'commune' ? p.insee : (await this.reverse(p.point))?.properties?.citycode
+      return insee ? (await cityPermits(insee)).filter(d => atPlace(p, d)) : []
+    },
 
     // The property tax rates (taxe foncière sur le bâti, %) of the latest year: the commune's, its intercommunality's,
     // their total with the small extras (syndicates, GEMAPI…), the waste tax apart, and France's total weighted by

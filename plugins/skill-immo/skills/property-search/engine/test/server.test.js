@@ -9,9 +9,10 @@ import { ENGINE, fakeStreamEstate, property, searchesFolder } from './helpers.js
 // the dashboard server on a free port, over a throwaway searches folder and the fake Stream Estate
 const api = await fakeStreamEstate()
 const { home, dir } = searchesFolder(), port = 41700 + Math.floor(Math.random() * 300)
-// the zone's DPE as the last refresh saw them: one, so that the watch at the server's start finds the other
+// the zone's DPE as the last refresh saw them: one, so that the watch at the server's start finds the other; no audit
+// nor permit yet, so that it finds the zone's
 const ademe = path.join(home, '.cache/ademe'), dpe = JSON.parse(fs.readFileSync(path.join(ademe, fs.readdirSync(ademe).find(f => f.startsWith('recent-'))), 'utf8'))
-fs.writeFileSync(path.join(dir, 'area.json'), JSON.stringify({ dpe_recent: dpe.filter(d => d.number === '2669E0000002B') }))
+fs.writeFileSync(path.join(dir, 'area.json'), JSON.stringify({ dpe_recent: dpe.filter(d => d.number === '2669E0000002B'), audit_recent: [], permit_recent: [] }))
 const server = spawn(process.execPath, [ENGINE, 'serve'], { env: { ...process.env, IMMO_DIR: home, IMMO_PORT: `${port}`, IMMO_NOTIFY: '0', STREAM_ESTATE_BASE: api.url, STREAM_ESTATE_API_KEY: 'test-key' } })
 const base = `http://127.0.0.1:${port}`
 test.after(() => { server.kill(); api.close() })
@@ -26,28 +27,31 @@ test('the searches, one search, the state without the key', async () => {
   assert.deepEqual([s.search.slug, s.listings.length], ['paul-bert', 0])
   const state = await (await fetch(base + '/api/state')).text()
   assert.equal(JSON.parse(state).stream_estate, true)
+  assert.equal(JSON.parse(state).test_api, api.url, "the dashboard says it is the tests' fake API")
   assert.ok(!state.includes('test-key'), 'the key never reaches the browser')
   assert.equal((await fetch(base + '/api/s/nope')).status, 404)
 })
 
-test("the server's watch at its start: a new DPE is news, the listings to fetch a count; read one by one or all; alerts and settings", async () => {
+test("the server's watch at its start: a new DPE, audit and permit are news, the listings to fetch a count; read one by one or all; alerts and settings", async () => {
   let s
   for (let i = 0; i < 50 && !(s = await (await fetch(base + '/api/s/paul-bert')).json()).feed.items.length; i++) await new Promise(ok => setTimeout(ok, 100))
-  // the flat's DPE in the zone (the house is already known, the third one is outside the 500 m); the API's count apart
-  assert.deepEqual(s.feed.items.map(n => n.dpe.number), ['2669E0000001A'])
+  // the flat's DPE in the zone (the house is already known, the third one is outside the 500 m), the zone's audit and
+  // permit (Lyon's other one is in the 9e); the API's count apart
+  assert.deepEqual(s.feed.items.map(n => [n.kind, n[n.kind].number]), [['dpe', '2669E0000001A'], ['audit', 'A26690000001A'], ['permit', 'PD06912326V0001']])
   assert.equal(s.feed.stream.total, 1)
   assert.deepEqual(s.area.dpe_recent.map(d => d.number), ['2669E0000001A', '2669E0000002B'])
-  assert.equal(s.unread, 1)
-  // an alert turned off: its news no longer count; a bad alert is refused
-  assert.equal((await post('/api/s/paul-bert/alerts', { off: ['dpe'] })).status, 200)
+  assert.deepEqual([s.area.audit_recent.length, s.area.permit_recent.length], [1, 1])
+  assert.equal(s.unread, 3)
+  // alerts turned off: their news no longer count; a bad alert is refused
+  assert.equal((await post('/api/s/paul-bert/alerts', { off: ['dpe', 'audit', 'permit'] })).status, 200)
   assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).unread, 0)
-  assert.deepEqual((await (await fetch(base + '/api/s/paul-bert')).json()).alerts, { off: ['dpe'], custom: [] })
+  assert.deepEqual((await (await fetch(base + '/api/s/paul-bert')).json()).alerts, { off: ['dpe', 'audit', 'permit'], custom: [] })
   assert.equal((await post('/api/s/paul-bert/alerts', { custom: [{ id: 'a', name: 'x', event: 'dpe', conditions: [{ field: 'energy', op: 'gte', value: 'Z' }] }] })).status, 400)
   assert.equal((await post('/api/s/paul-bert/alerts', {})).status, 200)
   // read one by one (its key), then all
   const key = `dpe-${s.feed.items[0].date}-2669E0000001A`
   assert.equal((await post('/api/s/paul-bert/feed/read', { keys: [key] })).status, 200)
-  assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).unread, 0)
+  assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).unread, 2, 'the audit and the permit')
   assert.equal((await post('/api/s/paul-bert/feed/read', {})).status, 200)
   assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).unread, 0)
   // the settings: checked, then the API off for every search
@@ -58,6 +62,14 @@ test("the server's watch at its start: a new DPE is news, the listings to fetch 
   const state = await (await fetch(base + '/api/state')).json()
   assert.deepEqual([state.stream_estate, state.has_key, !!state.watch.next], [false, true, true])
   assert.equal((await post('/api/settings', { watch_minutes: 360, api: true })).status, 200)
+  // paused: no next watch, its period kept; resumed: the next one is back
+  let w = (await (await post('/api/settings', { watch_paused: true })).json())
+  assert.deepEqual([w.watch_paused, w.watch_minutes], [true, 360])
+  w = (await (await fetch(base + '/api/state')).json()).watch
+  assert.deepEqual([w.paused, w.next], [true, null])
+  await post('/api/settings', { watch_paused: false })
+  w = (await (await fetch(base + '/api/state')).json()).watch
+  assert.ok(!w.paused && w.next, JSON.stringify(w))
   // the watch's free count is not logged
   assert.ok(!fs.existsSync(path.join(home, '.cache/api-usage.json')))
 })

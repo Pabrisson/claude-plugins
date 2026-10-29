@@ -231,6 +231,19 @@
         "On `the account is unknown`, says the console's two figures are needed (the € deposited, « API items returned ») and invents neither",
         "Spends no credit"
       ]
+    },
+    {
+      "id": 16,
+      "prompt": "Préviens-moi quand un immeuble entier passe en audit énergétique rue Garibaldi à Lyon, et des démolitions dans le 3e.",
+      "expected_output": "Two dashboard alerts written through `alerts --file`: an `audit` alert on the rue Garibaldi's BAN id with `building` true, a `permit` alert on the commune 69383 with `permit_kind` demolish; each said in one line with what it took.",
+      "files": [],
+      "expectations": [
+        "Runs `immo.mjs alerts -p <slug>` before writing, and keeps the other alerts in the file it sends",
+        "Finds the street's BAN id with `immo.mjs geocode \"rue Garibaldi, Lyon\" --type street`",
+        "Writes an alert with `event: audit`, a street place and the condition `building is true`",
+        "Writes an alert with `event: permit`, a commune place (69383) and the condition `permit_kind is demolish`",
+        "Uses no Stream Estate saved search and spends no credit"
+      ]
     }
   ]
 }

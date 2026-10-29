@@ -16,12 +16,12 @@ import { Slider } from "@/components/ui/slider"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api, type Alert, type AlertEvent, type AlertField, type Alerts, type Condition, type DpeRow, type Place } from "@/lib/api"
-import { date, num, STATUS_LABEL, TYPE_LABEL } from "@/lib/format"
+import { api, type Alert, type AlertEvent, type AlertField, type Alerts, type AuditRow, type Condition, type DpeRow, type PermitRow, type Place } from "@/lib/api"
+import { date, num, PERMIT_LABEL, permitLabel, STATUS_LABEL, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
-// the default alerts (engine lib/alerts.js DEFAULTS): the follow-up as it was, each on by default
+// the default alerts (engine lib/alerts.js DEFAULTS): the follow-up, each on by default
 const DEFAULT_LOOK: Record<string, { name: string; text: string; kind: keyof typeof LOOK }> = {
   dpe: { name: "Nouveaux DPE sans annonce", text: "Un DPE récent de la zone, d'un bien de vos types et critères, qu'aucune annonce n'explique : peut-être un bien bientôt en vente.", kind: "dpe" },
   new: { name: "Nouvelles annonces", text: "Chaque annonce qui entre dans la recherche.", kind: "new" },
@@ -29,31 +29,36 @@ const DEFAULT_LOOK: Record<string, { name: string; text: string; kind: keyof typ
   price_rise: { name: "Hausses de prix", text: "Une annonce suivie monte son prix.", kind: "price_rise" },
   status: { name: "Statuts", text: "Sous offre, vendue ou retirée.", kind: "status" },
   expired: { name: "Annonces suivies expirées", text: "Une annonce à laquelle vous avez donné un statut n'est plus en ligne. Celles à trier disparaissent sans bruit de la carte et des cartes (la Liste les garde).", kind: "expired" },
+  audit: { name: "Nouveaux audits énergétiques", text: "Un audit énergétique récent de la zone : obligatoire pour vendre une maison ou un immeuble entier classé E, F ou G, souvent une vente proche.", kind: "audit" },
+  permit: { name: "Nouveaux permis", text: "Un permis de construire, de démolir ou d'aménager autorisé dans la zone : un terrain, un programme neuf, des travaux à côté.", kind: "permit" },
 }
 // the events: those of a source, watched anywhere (« Où »), then those of the listings, in the search's zone only
 const EVENTS = Object.keys(ENGINE_EVENTS) as AlertEvent[]
 const anywhere = (e: AlertEvent) => !!(ENGINE_EVENTS[e] as { anywhere?: boolean }).anywhere
-const EVENT_LABEL: Record<AlertEvent, string> = { dpe: "Nouveau DPE", new: "Nouvelle annonce", price_drop: "Baisse de prix", price_rise: "Hausse de prix", status: "Changement de statut", expired: "Annonce expirée" }
+const EVENT_LABEL: Record<AlertEvent, string> = { dpe: "Nouveau DPE", audit: "Nouvel audit énergétique", permit: "Nouveau permis", new: "Nouvelle annonce", price_drop: "Baisse de prix", price_rise: "Hausse de prix", status: "Changement de statut", expired: "Annonce expirée" }
 const FIELD_LABEL: Record<AlertField, string> = {
   street: "Rue", type: "Type de bien", energy: "Classe DPE", area: "Surface (m²)", price: "Prix (€)", price_per_m2: "Prix au m² (€)", rooms: "Pièces",
   change_pct: "Variation de prix (%)", favorite: "En favori", my_status: "Mon statut", criteria: "Dans les critères de la recherche",
+  building: "Immeuble entier", permit_kind: "Nature du permis", homes: "Logements créés",
 }
-type Kind = "text" | "number" | "class" | "type" | "status" | "bool"
+type Kind = "text" | "number" | "class" | "type" | "status" | "bool" | "permit"
 const OP_LABEL: Record<Kind, Record<string, string>> = {
   text: { contains: "contient", is: "est" }, number: { gte: "au moins", lte: "au plus" }, class: { lte: "jusqu'à", gte: "à partir de" },
-  type: { is: "est" }, status: { is: "est", not: "n'est pas" }, bool: { is: "est" },
+  type: { is: "est" }, status: { is: "est", not: "n'est pas" }, bool: { is: "est" }, permit: { is: "est" },
 }
+// what a source's preview reads at a place
+const SOURCE_LABEL: Partial<Record<AlertEvent, string>> = { dpe: "DPE", audit: "audits énergétiques", permit: "permis" }
 const STATUS_VALUE: Record<string, string> = { none: "Aucun", ...STATUS_LABEL }
 const PLACE_LABEL = { zone: "Zone de la recherche", street: "Une rue", radius: "Autour d'une adresse", commune: "Une commune" } as const
 const kindOf = (f: AlertField) => FIELDS[f].kind as Kind
 const fresh = (field: AlertField): Condition => {
   const k = kindOf(field)
-  return { field, op: Object.keys(OP_LABEL[k])[0], value: { text: "", number: "", class: "E", type: "flat", status: "to_visit", bool: true }[k] }
+  return { field, op: Object.keys(OP_LABEL[k])[0], value: { text: "", number: "", class: "E", type: "flat", status: "to_visit", bool: true, permit: "demolish" }[k] }
 }
 const valueLabel = (c: Condition) => {
   const k = kindOf(c.field)
   return k === "text" ? `« ${c.value} »` : k === "number" ? num(+c.value) : k === "type" ? TYPE_LABEL[c.value as keyof typeof TYPE_LABEL]
-    : k === "status" ? STATUS_VALUE[String(c.value)] : k === "bool" ? (c.value ? "oui" : "non") : String(c.value)
+    : k === "status" ? STATUS_VALUE[String(c.value)] : k === "bool" ? (c.value ? "oui" : "non") : k === "permit" ? PERMIT_LABEL[c.value as keyof typeof PERMIT_LABEL] : String(c.value)
 }
 // « Nouveau DPE · Classe DPE à partir de F »
 export const summary = (a: Pick<Alert, "event" | "conditions">) => [EVENT_LABEL[a.event], ...a.conditions.map(c => `${FIELD_LABEL[c.field]} ${OP_LABEL[kindOf(c.field)][c.op]} ${valueLabel(c)}`)].join(" · ")
@@ -77,6 +82,8 @@ const TEMPLATES: Template[] = [
   { name: "Passoires thermiques", event: "dpe", conditions: [{ field: "energy", op: "gte", value: "F" }] },
   { name: "Grosse baisse de prix", event: "price_drop", conditions: [{ field: "change_pct", op: "gte", value: 5 }] },
   { name: "Baisse sur mes favoris", event: "price_drop", conditions: [{ field: "favorite", op: "is", value: true }] },
+  { name: "Audits dans une rue", event: "audit", place: "street", conditions: [] },
+  { name: "Démolitions", event: "permit", conditions: [{ field: "permit_kind", op: "is", value: "demolish" }] },
 ]
 
 // The search's alerts: the user's own, then the default ones, each one event at a place with conditions; what they
@@ -117,7 +124,7 @@ export function AlertsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Mes alertes</CardTitle>
-          <CardDescription>Ce que vous voulez voir passer : un nouveau DPE dans une rue, même hors de la zone, une passoire thermique, une baisse de plus de 5 %…</CardDescription>
+          <CardDescription>Ce que vous voulez voir passer : un nouveau DPE ou un audit énergétique dans une rue, même hors de la zone, une passoire thermique, une démolition, une baisse de plus de 5 %…</CardDescription>
           <CardAction><Button size="sm" onClick={() => start()}><PlusIcon data-icon="inline-start" />Nouvelle alerte</Button></CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -149,7 +156,7 @@ export function AlertsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Alertes par défaut</CardTitle>
-          <CardDescription>Le suivi de la zone tel qu'il était : chacune est active tant que vous ne la coupez pas. Une nouveauté qu'une de vos alertes retient arrive quand même.</CardDescription>
+          <CardDescription>Le suivi de la zone : chacune est active tant que vous ne la coupez pas. Une nouveauté qu'une de vos alertes retient arrive quand même.</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="flex flex-col gap-0.5">
@@ -216,9 +223,9 @@ function EditorForm({ alert, known, onClose, onSave }: { alert: Alert; known: bo
   }, [data])
   const set = (i: number, c: Partial<Condition>) => setConditions(cs => cs.map((x, k) => (k === i ? { ...x, ...c } : x)))
 
-  // what it would have taken: the news already in for the zone, the DPE of the last 12 months at a place (the server)
-  // (each answer kept with the draft it answers: another draft is loading)
-  const [answer, setAnswer] = useState<{ key: string; r: { count: number; items: DpeRow[] } | "error" } | null>(null)
+  // what it would have taken: the news already in for the zone, the DPE, audits or permits of the last 12 months at a
+  // place (the server) (each answer kept with the draft it answers: another draft is loading)
+  const [answer, setAnswer] = useState<{ key: string; r: { count: number; items: (DpeRow | AuditRow | PermitRow)[] } | "error" } | null>(null)
   const key = JSON.stringify(draft), asks = away && !!place && ready
   useEffect(() => {
     if (!asks) return
@@ -229,7 +236,8 @@ function EditorForm({ alert, known, onClose, onSave }: { alert: Alert; known: bo
   const hits = away ? [] : all.filter(n => takes(draft, n, data.search))
 
   return (
-    <form onSubmit={e => { e.preventDefault(); if (ready) onSave(draft) }} className="flex flex-col gap-5">
+    // min-w-0: the dialog's grid lets it shrink, so that a long preview line truncates instead of widening it
+    <form onSubmit={e => { e.preventDefault(); if (ready) onSave(draft) }} className="flex min-w-0 flex-col gap-5">
       <DialogHeader>
         <DialogTitle>{known ? `Alerte « ${alert.name} »` : "Nouvelle alerte"}</DialogTitle>
         <DialogDescription>Elle retient les nouveautés qui remplissent toutes ses conditions, et les envoie dans le suivi.</DialogDescription>
@@ -297,13 +305,13 @@ function EditorForm({ alert, known, onClose, onSave }: { alert: Alert; known: bo
       </FieldGroup>
       <section aria-label="Aperçu" aria-live="polite" className="flex flex-col gap-2 rounded-lg bg-muted/50 p-3">
         {away ? (
-          !place ? <p className="text-sm text-muted-foreground">Choisissez le lieu : l'aperçu montre ses DPE des 12 derniers mois.</p>
-            : remote === "loading" ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Lecture des DPE à cet endroit…</p>
-            : remote === "error" ? <p className="text-sm text-muted-foreground">L'ADEME ne répond pas pour l'instant : l'alerte marchera quand même.</p>
+          !place ? <p className="text-sm text-muted-foreground">Choisissez le lieu : l'aperçu montre ses {SOURCE_LABEL[event]} des 12 derniers mois.</p>
+            : remote === "loading" ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Lecture des {SOURCE_LABEL[event]} à cet endroit…</p>
+            : remote === "error" ? <p className="text-sm text-muted-foreground">{event === "permit" ? "Sitadel" : "L'ADEME"} ne répond pas pour l'instant : l'alerte marchera quand même.</p>
             : remote && (
               <>
                 <p className="text-sm font-medium">Sur les 12 derniers mois à cet endroit, elle en aurait retenu {num(remote.count)}. Seuls ceux publiés à partir d'aujourd'hui arriveront dans le suivi.</p>
-                {remote.items.slice(0, 3).map(d => <PreviewLine key={d.number} n={{ kind: "dpe", date: d.date, dpe: d }} />)}
+                {remote.items.slice(0, 3).map(d => <PreviewLine key={d.number} n={{ kind: event, date: d.date, [event]: d } as unknown as NewsBase} />)}
               </>
             )
         ) : (
@@ -323,7 +331,9 @@ function EditorForm({ alert, known, onClose, onSave }: { alert: Alert; known: bo
 
 // a news of the preview: its tile, its kind, what and where
 function PreviewLine({ n }: { n: NewsBase }) {
-  const where = n.kind === "dpe" ? `${n.dpe.address ?? "adresse inconnue"}, DPE du ${date(n.dpe.date)}` : "l" in n ? n.l.location.address : null
+  const where = n.kind === "dpe" ? `${n.dpe.address ?? "adresse inconnue"}, DPE du ${date(n.dpe.date)}`
+    : n.kind === "audit" ? `${n.audit.address ?? "adresse inconnue"}, audit du ${date(n.audit.date)}`
+    : n.kind === "permit" ? `${n.permit.address}, ${permitLabel(n.permit).toLowerCase()} du ${date(n.permit.date)}` : "l" in n ? n.l.location.address : null
   return (
     <div className="flex items-center gap-3">
       <NewsTile n={n} className="size-8" />
@@ -380,7 +390,7 @@ function ValueInput({ c, onChange }: { c: Condition; onChange: (v: Condition["va
   const k = kindOf(c.field)
   if (k === "text") return <Input className="h-8 min-w-36 flex-1" list="a-streets" value={String(c.value)} onChange={e => onChange(e.target.value)} placeholder="Rue Paul Bert" aria-label="Valeur" />
   if (k === "number") return <Input className="h-8 w-28" type="number" inputMode="decimal" value={String(c.value)} onChange={e => onChange(e.target.value === "" ? "" : +e.target.value)} aria-label="Valeur" />
-  const options: Record<string, string> = k === "class" ? Object.fromEntries([..."ABCDEFG"].map(x => [x, x])) : k === "type" ? TYPE_LABEL : k === "status" ? STATUS_VALUE : { true: "Oui", false: "Non" }
+  const options: Record<string, string> = k === "class" ? Object.fromEntries([..."ABCDEFG"].map(x => [x, x])) : k === "type" ? TYPE_LABEL : k === "status" ? STATUS_VALUE : k === "permit" ? PERMIT_LABEL : { true: "Oui", false: "Non" }
   return (
     <Select value={String(c.value)} onValueChange={v => onChange(k === "bool" ? v === "true" : v)}>
       <SelectTrigger size="sm" aria-label="Valeur"><SelectValue /></SelectTrigger>

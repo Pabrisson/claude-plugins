@@ -195,36 +195,48 @@ recheck the ones the user follows, one WebFetch each.
 Its DPE line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
 refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or
 a lease, so a recent one without a listing may be a home about to go on sale (ADEME does not say which). Say the new ones
-in one line; the dashboard's « Prospection » map rings them (layer « DPE récents »), and they go to its news. Its last
-line, `alerts: « DPE rue Paul Bert » 2`, names the user's own alerts that fired: say them.
+in one line; the dashboard's « Prospection » map rings them (layer « DPE récents »), and they go to its news. Two lines
+follow, `energy audits (12 months): 15, 1 new since the last refresh` and `building permits (12 months): 4, …`:
+- an energy audit is due to sell a house or a whole building rated E, F or G (it is also made for a renovation grant,
+  and ADEME does not say which): a new one is a strong sign of a sale, say it;
+- a permit is a demolition (a plot or a programme to come), homes built (a house divided, a new-build programme to buy
+  off-plan, or works next door) or a plot divided: say the new ones.
+
+Its last line, `alerts: « DPE rue Paul Bert » 2`, names the user's own alerts that fired: say them.
 
 The « Prospection » tab colors the IRIS of the map's box by the odds that a home goes on sale within 12 months (DVF
-sales over the census's homes), and estimates the sales a year after successions and separations from public figures
-per IRIS and commune (`references/data-sources.md`). It never names a person: if the user asks for the deaths or
-divorces of an address, say that no source gives them and that joining people to homes is not allowed.
+sales over the census's homes), by the sales a year after successions and separations, by their share of vacant homes
+or by their sold price per m², from public figures per IRIS and commune (`references/data-sources.md`). Its IRIS card
+adds the second homes, the homes built before 1946, heated with oil, and whose household moved in 10 years ago or more.
+Its map shows the box's recent DPE, energy audits and building permits (never the applicant). It never names a person:
+if the user asks for the deaths or divorces of an address, say that no source gives them and that joining people to
+homes is not allowed.
 
 ## The dashboard server's watch
 
 While the dashboard server runs (`dashboard` starts it, it stops once every Claude it worked for has quit), it watches
 every search, free: at its start, then every 6 hours (« Réglages »: off, 30 min, 1 h, 6 h, 12 h, 24 h; the header
-counts down to the next one). It reads the zone's new DPE that no listing matches, the new DPE at the places of the
-user's alerts (outside the zone too) and, in Stream Estate mode, counts (free, no item returned) the listings not
+counts down to the next one, and pauses or resumes it: a pause keeps the period). It reads the zone's new DPE that no listing matches, its new energy audits and building
+permits, the same at the places of the user's alerts (outside the zone too) and, in Stream Estate mode, counts (free,
+no item returned) the listings not
 fetched yet and the fetched ones that changed on the portals since the last refresh. The news go to
 `<slug>/feed.json`; those the search's alerts take get a desktop notification (« Réglages »: on or off, sound, quiet
 hours). The counts are no news: « Suivi » shows them in a bar with « Récupérer » and « Actualiser », through the
 credits dialog. In the dashboard, the bell counts what is not read and opens the latest, and « Suivi » lists the news
-day by day, those of one watch folded: « Chercher l'annonce » puts a `[chercher]` item in the prompt, « Carte » shows a
-DPE on « Prospection ». The watch spends no credit, but for the automatic fetch the user turned on.
+day by day, those of one watch folded: « Chercher l'annonce » puts a `[chercher]` item in the prompt (a DPE, an
+audit), « Carte » shows a DPE, an audit or a permit on « Prospection ». The watch spends no credit, but for the
+automatic fetch the user turned on.
 
 ## alert
 
 The alerts are the dashboard's (« Alertes » tab, `<slug>/alerts.json`, free): they pick the news that reach « Suivi »,
-the bell, the desktop notifications and refresh's `alerts:` line. The default ones keep the follow-up as it was (new DPE
-within the search's criteria, new listings, price drops and rises, statuses, and the expiry of a listing the user
-follows: one still to sort leaves the map and the cards quietly), each on until turned off. The user adds
-their own: one event, a place, and conditions all true (a DPE class, a surface, a price, a drop of 5 % or more, a
-favorite…). The listings' events happen in the search's zone only; a new DPE may be watched anywhere in France: a
-street, around an address, a commune (ADEME, free).
+the bell, the desktop notifications and refresh's `alerts:` line. The default ones keep the follow-up (new DPE within
+the search's criteria, every new energy audit and building permit of the zone, new listings, price drops and rises,
+statuses, and the expiry of a listing the user follows: one still to sort leaves the map and the cards quietly), each
+on until turned off. The user adds their own: one event, a place, and conditions all true (a DPE class, a surface, a
+whole building, a demolition, homes built, a price, a drop of 5 % or more, a favorite…). The listings' events happen in
+the search's zone only; a new DPE, energy audit or building permit may be watched anywhere in France: a street, around
+an address, a commune (ADEME and Sitadel, free).
 
 1. `immo.mjs alerts -p <slug>` prints alerts.json, then each alert with the news it took.
 2. To make, change or turn off one the user asks for (« préviens-moi d'un nouveau DPE rue Garibaldi »): read
@@ -348,7 +360,8 @@ Do every item in order:
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings.
 - `[message]`: the messages section above.
 - `[ajouter]`: the add mode.
-- `[chercher]`: a recent DPE of the map that no listing matches. Look for its listing the assisted way: WebSearch its
+- `[chercher]`: a recent DPE of the map that no listing matches, or an energy audit (`l'annonce de l'audit énergétique
+  <number> : maison 57 m², classe F…`; « immeuble entier » for a whole building). Look for its listing the assisted way: WebSearch its
   street and town with the type and surface (`maison 204 m² "rue de l'Etang" Louveciennes à vendre`), then one listing
   page at a time, 5 at most. Found: `add --file`; its DPE
   then matches it on the map. Not found: say so in one line (not online yet, sold off the portals, or let).

@@ -1,5 +1,5 @@
 // French formats: 289 000 €, 4 661 €/m², −13 %, 12 j, 27 oct.
-import type { Criteria, DpeRow, Listing } from "@/lib/api"
+import type { AuditRow, Criteria, DpeRow, Listing, PermitRow } from "@/lib/api"
 
 const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 })
 const df = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" })
@@ -55,3 +55,12 @@ export const titleCase = (s: string) => s.toLowerCase().split(" ").map((w, i) =>
 export const month = (d: string) => new Intl.DateTimeFormat("fr-FR", { month: "short", year: "numeric" }).format(new Date(d))
 // what the prompt asks Claude to look for: the listing of a recent DPE
 export const dpeAsk = (d: DpeRow) => `l'annonce du DPE ${d.number} : ${TYPE_LABEL[d.type].toLowerCase()}${d.area ? ` ${num(d.area)} m²` : ""}, DPE ${d.energy} du ${date(d.date)}, ${d.address ?? `près de ${d.point[1].toFixed(5)}, ${d.point[0].toFixed(5)}`}`
+// the same for an energy audit: a house or a whole building, maybe for sale
+export const auditAsk = (a: AuditRow) => `l'annonce de l'audit énergétique ${a.number} : ${a.building ? "immeuble entier" : TYPE_LABEL[a.type].toLowerCase()}${a.area ? ` ${num(a.area)} m²` : ""}, classe ${a.energy}, audit du ${date(a.date)}, ${a.address ?? `près de ${a.point[1].toFixed(5)}, ${a.point[0].toFixed(5)}`}`
+// a permit's kind as its form says it: « Permis de construire », « Déclaration préalable »…
+export const PERMIT_LABEL = { build: "Permis de construire", demolish: "Permis de démolir", develop: "Permis d'aménager" } as const
+export const permitLabel = (p: PermitRow) => (p.form === "DP" ? "Déclaration préalable" : PERMIT_LABEL[p.kind])
+// what it does: « 12 logements », « 3 logements démolis », « terrain de 4 300 m² »
+export const permitWhat = (p: PermitRow) => [
+  p.homes ? `${num(p.homes)} logement${p.homes > 1 ? "s" : ""}` : null, p.demolished ? `${num(p.demolished)} démoli${p.demolished > 1 ? "s" : ""}` : null, p.land ? `terrain de ${num(p.land)} m²` : null,
+].filter(Boolean).join(" · ")

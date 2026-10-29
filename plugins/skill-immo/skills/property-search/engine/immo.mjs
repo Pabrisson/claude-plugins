@@ -23,7 +23,7 @@ import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from './lib
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
 import { openData } from './lib/opendata.js'
-import { members, NoCredits, se } from './lib/stream.js'
+import { members, NoCredits, se, testApi } from './lib/stream.js'
 
 const SELF = fileURLToPath(import.meta.url)
 // the code this process runs: a dashboard server started from an older immo.mjs gets replaced
@@ -62,10 +62,10 @@ const LETTERS = 'ABCDEFG'
 // the profile's numbers, the only fields the dashboard may write
 const PROFILE_NUMBERS = ['down_payment', 'net_income_monthly', 'other_loans_monthly', 'rate', 'years', 'insurance_rate', 'notary_old', 'notary_new', 'eur_per_credit', 'monthly_credit_cap', 'max_fetch']
 // The dashboard's settings (« Réglages », .settings.json, the folder's): the watch's period in minutes (0: off;
-// IMMO_WATCH_HOURS sets its default), the API on or off, the automatic fetch and its credits a month, the desktop
+// IMMO_WATCH_HOURS sets its default) and its pause (the period kept until it resumes), the API on or off, the automatic fetch and its credits a month, the desktop
 // notifications (sound, quiet hours), a news read once opened, how many days of news the follow-up keeps (0: all)
 const SETTINGS = {
-  watch_minutes: process.env.IMMO_WATCH_HOURS != null ? +process.env.IMMO_WATCH_HOURS * 60 : 360, api: true, auto_fetch: false, auto_credits: 50,
+  watch_minutes: process.env.IMMO_WATCH_HOURS != null ? +process.env.IMMO_WATCH_HOURS * 60 : 360, watch_paused: false, api: true, auto_fetch: false, auto_credits: 50,
   notify: true, sound: true, quiet: null, read_on_open: true, keep_days: 0,
 }
 const WATCH_MINUTES = [0, 30, 60, 360, 720, 1440], KEEP_DAYS = [0, 30, 90, 365]
@@ -228,7 +228,7 @@ async function doctor() {
     ['dashboard built', fs.existsSync(path.join(DASHBOARD, 'index.html')), `npm run build in plugins-src/skill-immo/dashboard (${DASHBOARD})`],
   ]
   for (const [name, ok, fix] of checks) console.log(`${ok ? 'ok     ' : 'MISSING'} ${name}${ok ? '' : `: ${fix}`}`)
-  console.log(hasKey() ? `stream-estate: ${apiOn() ? 'on (API v1: listings, asking prices)' : "off: turned off in the dashboard's Réglages (assisted mode)"}` : "stream-estate: off (assisted mode: listings from WebSearch, WebFetch or pasted text); the plugin's secret: /plugin configure skill-immo@pabrisson")
+  console.log(hasKey() ? `stream-estate: ${apiOn() ? `on (API v1: listings, asking prices)${testApi() ? `, the tests' fake API at ${testApi()}: no real credit` : ''}` : "off: turned off in the dashboard's Réglages (assisted mode)"}` : "stream-estate: off (assisted mode: listings from WebSearch, WebFetch or pasted text); the plugin's secret: /plugin configure skill-immo@pabrisson")
   // a count returns no item, so it is free: it checks the key
   const key = hasKey() ? await se('GET', '/documents/properties', { query: { itemsPerPage: 0, transactionType: 0 } }).then(() => '; key accepted', e => `; the key fails: ${e.message}`) : ''
   console.log(`credits: ${u.last30} in the last 30 days (${euros(u.last30, p.eur_per_credit)}), ${u.month} this month of the ${p.monthly_credit_cap} cap${u.unknown ? `, ${u.unknown} calls of unknown cost` : ''}${key}`)
@@ -330,7 +330,30 @@ function dpeLine(rows, listings, before) {
   const open = recentDpe(rows, listings).flatMap(a => a.items).filter(d => !d.listing), fresh = before && open.filter(d => !before.has(d.number)).length
   return `recent DPE (12 months): ${rows.length}, ${open.length} without a listing${before ? `, ${fresh} new since the last refresh` : ''}`
 }
-const dpeNumbers = dir => { const r = readJson(path.join(dir, 'area.json'), {}).dpe_recent; return Array.isArray(r) ? new Set(r.map(d => d.number)) : null }
+// The sources the alerts watch anywhere (lib/alerts.js EVENTS): their rows of the last 12 months in the zone, kept in
+// area.json (`key`) for the map and the next look, and at an alert's place. The DPE and the energy audits are homes'
+// (a search of homes only); the building permits any search's (a plot, a programme, works next door).
+const SOURCES = {
+  dpe: { key: 'dpe_recent', homes: true, zone: (s, days) => od.recentDpe(bbox(s.zone), days), place: (p, days) => od.placeDpe(p, days) },
+  audit: { key: 'audit_recent', homes: true, zone: (s, days) => od.recentAudits(bbox(s.zone), days), place: (p, days) => od.placeAudits(p, days) },
+  // ponytail: the permits of the search's city only, a zone across two communes misses the other's
+  permit: { key: 'permit_recent', zone: s => od.cityPermits(s.insee), place: p => od.placePermits(p) },
+}
+const watched = s => Object.keys(SOURCES).filter(k => !SOURCES[k].homes || typesOf(s).some(isHome))
+// the numbers of a source's rows area.json holds (null before its first look)
+const numbersOf = (dir, kind) => { const r = readJson(path.join(dir, 'area.json'), {})[SOURCES[kind].key]; return Array.isArray(r) ? new Set(r.map(d => d.number)) : null }
+const dpeNumbers = dir => numbersOf(dir, 'dpe')
+// a source's rows of the zone new since `before`, as news: a DPE that no listing matches, every audit and permit
+// ponytail: an audit or a permit is not matched to the listings; its DPE number (numero_dpe) would match an audit's
+const zoneNews = (kind, rows, listings, before) => kind === 'dpe' ? dpeNews(rows, listings, before)
+  : rows.filter(d => !before.has(d.number)).map(row => ({ date: now(), kind, [kind]: row }))
+// the line a source gives Claude: how many in the zone over 12 months, how many new since the last refresh
+function sourceLine(kind, rows, listings, before) {
+  if (kind === 'dpe') return dpeLine(rows, listings, before)
+  const what = { audit: 'energy audits', permit: 'building permits' }[kind]
+  if (!Array.isArray(rows)) return rows?.error ? `${what}: failed (${rows.error})` : null
+  return `${what} (12 months): ${rows.length}${before ? `, ${rows.filter(d => !before.has(d.number)).length} new since the last refresh` : ''}`
+}
 
 // The news of a search (<slug>/feed.json), newest first: a recent DPE of the zone that no listing matches and the
 // area.json before did not hold (a home about to go on sale?), Stream Estate listings to fetch. The listings' own
@@ -358,17 +381,19 @@ const unread = dir => {
   const f = feedOf(dir), s = readJson(path.join(dir, 'search.json')), alerts = alertsAt(dir)
   return newsOf(dir).filter(n => !isRead(f, n) && firing(alerts, n, s).length).length
 }
-// The DPE at the places of the search's alerts, outside its zone (lib/alerts.js): an alert's first look notes what
-// is there; the next ones bring what is new, no listing of the zone, not already in the news, and that an alert takes.
-// What each alert saw stays in .cache/alerts/<slug>/ (cleared with the cache: the next look notes again).
+// The DPE, audits and permits at the places of the search's alerts, outside its zone (lib/alerts.js): an alert's first
+// look notes what is there; the next ones bring what is new, not of the zone, not already in the news, and that an
+// alert takes. What each alert saw stays in .cache/alerts/<slug>/ (cleared with the cache: the next look notes again).
 async function placeNews(dir, s, days) {
-  const alerts = alertsAt(dir).filter(a => a.enabled && a.event === 'dpe' && a.place && a.place.how !== 'zone'), news = []
-  const zone = dpeNumbers(dir) ?? new Set(), known = new Set(feedOf(dir).items.filter(n => n.outside).map(n => n.dpe.number))
+  const alerts = alertsAt(dir).filter(a => a.enabled && SOURCES[a.event] && a.place && a.place.how !== 'zone'), news = []
+  const outside = feedOf(dir).items.filter(n => n.outside)
   for (const a of alerts) {
-    const rows = await od.placeDpe(a.place, days), f = path.join(CACHE, 'alerts', s.slug, `${a.id}.json`), seen = readJson(f, null)
-    if (seen) for (const dpe of rows) {
-      const n = { date: now(), kind: 'dpe', dpe, outside: true }
-      if (!seen.includes(dpe.number) && !zone.has(dpe.number) && !known.has(dpe.number) && alertTakes(a, n, s)) { news.push(n); known.add(dpe.number) }
+    const k = a.event, zone = numbersOf(dir, k) ?? new Set(), known = new Set(outside.filter(n => n.kind === k).map(n => n[k].number))
+    const rows = await SOURCES[k].place(a.place, days).catch(e => console.log(`alert ${a.id}: ${e.message}`)), f = path.join(CACHE, 'alerts', s.slug, `${a.id}.json`), seen = readJson(f, null)
+    if (!rows) continue
+    if (seen) for (const row of rows) {
+      const n = { date: now(), kind: k, [k]: row, outside: true }
+      if (!seen.includes(row.number) && !zone.has(row.number) && !known.has(row.number) && alertTakes(a, n, s)) { news.push(n); known.add(row.number) }
     }
     writeJson(f, rows.map(d => d.number))
   }
@@ -383,7 +408,8 @@ function alertLine(dir, s, news) {
 const pool = async (items, n, fn) => { const out = [], it = items.entries(); await Promise.all(Array.from({ length: n }, async () => { for (const [i, x] of it) out[i] = await fn(x) })); return out }
 
 // the free market and neighborhood data of a search: DVF sales, shops and services, travel times to the user's
-// places, crime, income and risks at its center, the DPE of the last 12 months in the zone (for a search of homes)
+// places, crime, income and risks at its center, the DPE and energy audits of the last 12 months in the zone (for a
+// search of homes), its building permits
 async function freeData(dir, s) {
   const zoneOf = p => inZone(p, s.zone)
   const since = new Date(Date.now() - 2 * 365 * 86400000).toISOString().slice(0, 10)
@@ -399,7 +425,7 @@ async function freeData(dir, s) {
     settle(od.irisAt(c)),
     settle(pool(places.flatMap(pl => [['pedestrian', 15], ['pedestrian', 30], ['car', 20]].map(([pr, m]) => ({ pl, pr, m }))), 3,
       async ({ pl, pr, m }) => ({ place: pl.label, profile: pr, minutes: m, geometry: await od.isochrone(pl.point, pr, m) }))),
-    typesOf(s).some(isHome) ? settle(od.recentDpe(bbox(s.zone)).then(rows => rows.filter(d => zoneOf(d.point)))) : [],
+    ...Object.keys(SOURCES).map(k => (watched(s).includes(k) ? settle(SOURCES[k].zone(s).then(rows => rows.filter(d => zoneOf(d.point)))) : [])),
   ])
   const d = await dvf
   const byType = Object.fromEntries(typesOf(s).map(t => [t, summary(d.sales.filter(x => x.type === t), { inZone: zoneOf, code_voie: s.street?.code_voie, since, center: c })]))
@@ -409,23 +435,27 @@ async function freeData(dir, s) {
     context: { dpe: dpe.error ? dpe : { scope: dpeAt.insee ? 'commune' : 'zone', ...dpe }, tax, housing },
   }
   writeJson(path.join(dir, 'market.json'), market)
-  const [pois, risks, crime, local, department, france, iris, isochrones, dpe_recent] = await areaParts
-  const area = { updated: now(), center: c, pois, risks, crime, income: { local, department, france }, iris: iris && !iris.error ? { code: iris.code, name: iris.name } : null, isochrones, places, dpe_recent }
+  const [pois, risks, crime, local, department, france, iris, isochrones, dpe_recent, audit_recent, permit_recent] = await areaParts
+  const area = { updated: now(), center: c, pois, risks, crime, income: { local, department, france }, iris: iris && !iris.error ? { code: iris.code, name: iris.name } : null, isochrones, places, dpe_recent, audit_recent, permit_recent }
   writeJson(path.join(dir, 'area.json'), area)
   return { market, area }
 }
 
-// The odds of a box of the map [w, s, e, n] (the dashboard's « Prospection »): its IRIS with their census, DVF sales
-// and odds, its communes, its DPE of the last 12 months. Free open data, each source kept in .cache/ per IRIS or
-// commune: a map moved back comes at once. A source that fails leaves its part empty and is named.
+// The odds of a box of the map [w, s, e, n] (the dashboard's « Prospection »): its IRIS with their census, DVF sales,
+// odds and prices, its communes, its DPE, energy audits and building permits of the last 12 months. Free open data,
+// each source kept in .cache/ per IRIS, commune or city: a map moved back comes at once. A source that fails leaves its
+// part empty and is named.
 async function oddsOf(bb) {
   const iris = await od.irisIn(bb), failed = []
   const settle = (p, what) => p.catch(e => { failed.push(`${what} (${e.message.slice(0, 80)})`); return null })
+  // the permits come per city (Lyon's arrondissements share Lyon's): asked once each
+  const permits = new Map()
+  const permitsOf = (insee, name) => { const c = od.cityOf(insee); if (!permits.has(c)) permits.set(c, settle(od.cityPermits(insee), `permis ${name.replace(/ \d+e? Arrondissement$/, '')}`)); return permits.get(c) }
   const [censusOf, communes] = await Promise.all([
     settle(od.irisCensus(iris.map(i => i.code)), 'recensement INSEE'),
     Promise.all([...new Map(iris.map(i => [i.insee, i.commune]))].map(async ([insee, name]) => {
-      const [dvf, dpe] = await Promise.all([settle(od.dvf(insee, 3), `DVF ${name}`), settle(od.communeDpe(insee), `DPE ${name}`)])
-      return { insee, name, dvf, dpe }
+      const [dvf, dpe, audits, permits] = await Promise.all([settle(od.dvf(insee, 3), `DVF ${name}`), settle(od.communeDpe(insee), `DPE ${name}`), settle(od.communeAudits(insee), `audits ${name}`), permitsOf(insee, name)])
+      return { insee, name, dvf, dpe, audits, permits }
     })),
   ])
   // the last three whole years DVF has
@@ -436,6 +466,9 @@ async function oddsOf(bb) {
     iris: irisOdds(iris, censusOf ?? {}, Object.fromEntries(communes.map(c => [c.insee, c.dvf && !c.dvf.alsace_moselle ? c.dvf.sales : null])), years),
     communes: communes.map(c => ({ insee: c.insee, name: c.name, alsace_moselle: !!c.dvf?.alsace_moselle })),
     dpe: communes.flatMap(c => (c.dpe ?? []).filter(d => inBox(d.point))),
+    audits: communes.flatMap(c => (c.audits ?? []).filter(d => inBox(d.point))),
+    // a city's permits once, though several of its arrondissements are in the box
+    permits: [...new Map(communes.flatMap(c => c.permits ?? []).filter(d => inBox(d.point)).map(d => [d.number, d])).values()],
   }
 }
 
@@ -478,8 +511,7 @@ async function search(query) {
   if (tax && !tax.error) console.log(`property tax ${tax.year}: ${tax.total} % in ${tax.city} (France ${tax.france} %)${housing?.years?.length ? `; homes authorised ${housing.years.at(-1).year}: ${housing.years.at(-1).authorised}` : ''}`)
   const failed = Object.entries({ shops: area.pois, risks: area.risks, crime: area.crime, ...market.context }).filter(([, v]) => v?.error).map(([k, v]) => `${k} (${v.error})`)
   console.log(`neighborhood: ${Array.isArray(area.pois) ? area.pois.length : 0} places nearby, ${(area.isochrones?.length ?? 0)} travel areas${failed.length ? `; failed: ${failed.join(', ')}` : ''}`)
-  const dl = dpeLine(area.dpe_recent, listingsOf(dir))
-  if (dl) console.log(dl)
+  for (const k of watched(s)) { const l = sourceLine(k, area[SOURCES[k].key], listingsOf(dir)); if (l) console.log(l) }
   if (streamOn(s)) {
     const total = await withCredits(() => seCount(s.slug, seQueries(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) })))
     s.stream = { total, counted_at: now() }
@@ -634,14 +666,18 @@ async function enrich() {
 
 // refresh -p <slug> [--spend n]: what changed since the last refresh — new listings, price drops, offers, expiries
 async function refresh() {
-  const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), before = dpeNumbers(dir)
+  const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), before = Object.fromEntries(Object.keys(SOURCES).map(k => [k, numbersOf(dir, k)]))
   const { area } = await freeData(dir, s)
-  // the DPE line, the new DPE of the zone and of the alerts' places as news, then the user's alerts those and the
-  // listings' changes fired
+  // the lines of the DPE, audits and permits, their new ones in the zone and at the alerts' places as news, then the
+  // user's alerts those and the listings' changes fired
   const dpe = async (changes = []) => {
-    const l = dpeLine(area.dpe_recent, listingsOf(dir), before), ls = listingsOf(dir)
-    if (l) console.log(l)
-    const news = [...before && Array.isArray(area.dpe_recent) ? dpeNews(area.dpe_recent, ls, before) : [], ...await placeNews(dir, s, 1).catch(() => [])]
+    const ls = listingsOf(dir), news = []
+    for (const k of watched(s)) {
+      const rows = area[SOURCES[k].key], l = sourceLine(k, rows, ls, before[k])
+      if (l) console.log(l)
+      if (before[k] && Array.isArray(rows)) news.push(...zoneNews(k, rows, ls, before[k]))
+    }
+    news.push(...await placeNews(dir, s, 1).catch(() => []))
     addNews(dir, news)
     const a = alertLine(dir, s, [...news, ...changes.map(c => ({ ...c, l: ls.find(x => x.id === c.id) }))])
     if (a) console.log(a)
@@ -882,7 +918,7 @@ async function handle(req, res) {
       return { slug: x, label: s.label, on: streamOn(s), added: last?.total ?? 0, changed: f.changed?.since === s.last_refresh ? f.changed.total : 0 }
     })
     return reply(res, 200, {
-      home: HOME, stream_estate: apiOn(), has_key: hasKey(), settings: settings(), watch: { last: lastWatch, next: nextWatch, running: !!watching },
+      home: HOME, stream_estate: apiOn(), has_key: hasKey(), test_api: hasKey() ? testApi() : null, settings: settings(), watch: { last: lastWatch, next: nextWatch, running: !!watching, paused: settings().watch_paused },
       costs: table(readJson(MEASURED, {})), usage: { ...u, cap: pr.monthly_credit_cap, eur_per_credit: pr.eur_per_credit, max_fetch: pr.max_fetch, account: accountOf(), daily, daily_auto, monthly_auto, by_use }, pending, log: log.slice(-300),
     })
   }
@@ -961,14 +997,14 @@ async function handle(req, res) {
       placeNews(dir, readJson(path.join(dir, 'search.json')), 1).then(n => addNews(dir, n), e => console.log(`alerts ${m[1]}: ${e.message}`))
       return reply(res, 200, a)
     }
-    // what an alert at a place would have taken among the DPE of its last 12 months (free, kept a day)
+    // what an alert at a place would have taken among the DPE, audits or permits of its last 12 months (free, kept a day)
     if (sub === '/alerts/preview' && post) {
       let a
       try { [a] = cleanAlerts({ custom: [await readBody(req)] }).custom } catch (e) { return reply(res, 400, { error: e.message }) }
       if (a.place.how === 'zone') return reply(res, 400, { error: 'the zone is previewed from the news' })
-      const s = readJson(path.join(dir, 'search.json'))
+      const s = readJson(path.join(dir, 'search.json')), k = a.event
       try {
-        const hits = (await od.placeDpe(a.place, 1)).filter(dpe => alertTakes(a, { kind: 'dpe', dpe, outside: true }, s))
+        const hits = (await SOURCES[k].place(a.place, 1)).filter(row => alertTakes(a, { kind: k, [k]: row, outside: true }, s))
         return reply(res, 200, { count: hits.length, items: hits.slice(0, 5) })
       } catch (e) { return reply(res, 502, { error: e.message }) }
     }
@@ -1026,21 +1062,26 @@ function serve() {
   http.createServer((req, res) => handle(req, res).catch(e => reply(res, 500, { error: e.message })))
     .listen(PORT, '127.0.0.1', () => {
       console.log(`dashboard server on http://127.0.0.1:${PORT}/ for ${HOME}`)
-      if (settings().watch_minutes > 0) watchAll()
+      if (settings().watch_minutes > 0 && !settings().watch_paused) watchAll()
+      else schedule()
     })
 }
 
-// The watch of a search, free: the zone's recent DPE (downloaded again once 90 % of the watch's period has gone, so
-// that a server restarted meanwhile reads its cache) and, in Stream Estate mode, the counts of the listings not
-// fetched yet and of those fetched that changed since the last refresh. What is new goes to feed.json, and area.json
-// takes the DPE for the map.
+// The watch of a search, free: the zone's recent DPE, energy audits and building permits (downloaded again once 90 %
+// of the watch's period has gone, so that a server restarted meanwhile reads its cache) and, in Stream Estate mode,
+// the counts of the listings not fetched yet and of those fetched that changed since the last refresh. What is new
+// goes to feed.json, and area.json takes the rows for the map. A source area.json does not hold yet (a search made
+// before it) is noted at its first look: what comes after is news.
 async function watch(dir) {
-  const s = readJson(path.join(dir, 'search.json')), before = dpeNumbers(dir), news = [], extra = {}, api = {}, days = settings().watch_minutes / 1440 * 0.9
-  if (before && typesOf(s).some(isHome)) {
-    const rows = (await od.recentDpe(bbox(s.zone), days)).filter(d => inZone(d.point, s.zone))
-    news.push(...dpeNews(rows, listingsOf(dir), before))
+  const s = readJson(path.join(dir, 'search.json')), news = [], extra = {}, api = {}, days = settings().watch_minutes / 1440 * 0.9
+  // a search whose DPE never came (its first search failed there) waits for a refresh; a source that fails is skipped
+  if (dpeNumbers(dir)) for (const k of watched(s)) {
+    const before = numbersOf(dir, k), all = await SOURCES[k].zone(s, days).catch(e => console.log(`watch ${s.slug} ${k}: ${e.message}`))
+    if (!all) continue
+    const rows = all.filter(d => inZone(d.point, s.zone))
+    if (before) news.push(...zoneNews(k, rows, listingsOf(dir), before))
     const f = path.join(dir, 'area.json')
-    if (rows.length !== before.size || rows.some(d => !before.has(d.number))) writeJson(f, { ...readJson(f, {}), dpe_recent: rows })
+    if (!before || rows.length !== before.size || rows.some(d => !before.has(d.number))) writeJson(f, { ...readJson(f, {}), [SOURCES[k].key]: rows })
   }
   news.push(...await placeNews(dir, s, days))
   // the API's counts are no news: « Suivi » shows them in its bar, to fetch; they grow the notification
@@ -1091,9 +1132,11 @@ function watchAll() {
       try {
         const dir = path.join(HOME, x), { s, news: found, api } = await watch(dir), auto = await autoFetch(dir, s, api), alerts = alertsAt(dir)
         const fired = [...found, ...auto].map(n => firing(alerts, n, s)), news = [...found, ...auto].filter((_, i) => fired[i].length)
-        const d = news.filter(n => n.kind === 'dpe').length, l = news.length - d, mine = [...new Set(fired.flat().filter(a => !a.builtin).map(a => `« ${a.name} »`))]
+        const of = k => news.filter(n => n.kind === k).length, [d, au, pe] = ['dpe', 'audit', 'permit'].map(of), l = news.length - d - au - pe
+        const mine = [...new Set(fired.flat().filter(a => !a.builtin).map(a => `« ${a.name} »`))]
         const pl = (k, one, many = `${one}s`) => `${k} ${k > 1 ? many : one}`
-        const text = [d && `${pl(d, 'nouveau', 'nouveaux')} DPE sans annonce`, l && pl(l, "nouveauté d'annonce", "nouveautés d'annonces"),
+        const text = [d && `${pl(d, 'nouveau', 'nouveaux')} DPE sans annonce`, au && pl(au, 'audit énergétique', 'audits énergétiques'), pe && `${pl(pe, 'nouveau', 'nouveaux')} permis`,
+          l && pl(l, "nouveauté d'annonce", "nouveautés d'annonces"),
           !auto.length && api.added && `${pl(api.added, 'annonce')} à récupérer sur l'API`, !auto.length && api.changed && `${pl(api.changed, 'annonce suivie modifiée', 'annonces suivies modifiées')}`,
           mine.length && `${pl(mine.length, 'alerte')} ${mine.join(', ')}`].filter(Boolean).join(', ')
         if (!text) continue
@@ -1104,11 +1147,12 @@ function watchAll() {
   })().finally(() => { watching = null; lastWatch = now(); schedule() })
   return watching
 }
-// the next watch, from the last one (or now) and the settings' period; none when it is off
+// the next watch, from the last one (or now) and the settings' period; none when it is off or paused (resumed late,
+// it runs at once)
 function schedule() {
   clearTimeout(timer)
-  const m = settings().watch_minutes
-  nextWatch = m > 0 ? new Date(Date.parse(lastWatch ?? now()) + m * 60000).toISOString() : null
+  const { watch_minutes: m, watch_paused } = settings()
+  nextWatch = m > 0 && !watch_paused ? new Date(Date.parse(lastWatch ?? now()) + m * 60000).toISOString() : null
   if (nextWatch) timer = setTimeout(watchAll, Math.max(0, Date.parse(nextWatch) - Date.now()))
 }
 
@@ -1123,7 +1167,7 @@ function cleanSettings(b) {
     if (!ok) throw new Error('quiet is null or ["22:00", "08:00"]')
     st.quiet = b.quiet
   }
-  for (const k of ['api', 'auto_fetch', 'notify', 'sound', 'read_on_open']) bool(k)
+  for (const k of ['watch_paused', 'api', 'auto_fetch', 'notify', 'sound', 'read_on_open']) bool(k)
   return st
 }
 // within the quiet hours [from, to] of the settings, across midnight when from > to

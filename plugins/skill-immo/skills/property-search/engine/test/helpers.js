@@ -42,12 +42,21 @@ export function searchesFolder(mode = 'stream-estate') {
     { number: '2669E0000002B', date: ago(40), energy: 'G', type: 'house', area: 120, address: null, ban: null, point: [4.844, 45.7555] },
     { number: '2669E0000003C', date: ago(5), energy: 'C', type: 'flat', area: 70, address: null, ban: null, point: [4.8392, 45.7516] },
   ])
+  // its energy audits (one in the zone) and Lyon's building permits (one in the zone, one in the 9e)
+  cache(`ademe/audits-${bbox(zone).map(x => x.toFixed(4)).join(',')}.json`, [
+    { number: 'A26690000001A', date: ago(20), energy: 'F', type: 'house', building: false, area: 90, period: 'avant 1948', address: '12 Rue Paul Bert 69003 Lyon', ban: '69383_5245_00012', point: [4.8462, 45.7562] },
+  ])
+  cache('sitadel/permits-69123.json', [
+    { number: 'PD06912326V0001', kind: 'demolish', form: 'PD', date: ago(60), homes: null, demolished: null, land: 400, address: '14 Rue Paul Bert 69003 Lyon', ban: '69383_5245_00014', point: [4.8458, 45.7561] },
+    { number: 'PC06912325V0002', kind: 'build', form: 'PC', date: ago(200), homes: 21, demolished: null, land: 3000, address: '3 Avenue de Ménival 69005 Lyon', ban: '69385_4710_00003', point: [4.787, 45.751] },
+  ])
   return { home, dir }
 }
 
 // the fake API v1: state.price changes the property's price, state.total the number of matches, state.broke answers
-// 402. What it matches is online (an expired=true query matches none) and not excluded.
-export async function fakeStreamEstate(state = {}) {
+// 402. What it matches is online (an expired=true query matches none) and not excluded. On a free port, or `port`
+// (test/demo.mjs).
+export async function fakeStreamEstate(state = {}, port = 0) {
   const seen = []
   const server = http.createServer((req, res) => {
     let body = ''
@@ -68,6 +77,6 @@ export async function fakeStreamEstate(state = {}) {
       send(404, { title: 'Not found' })
     })
   })
-  await new Promise(ok => server.listen(0, '127.0.0.1', ok))
+  await new Promise(ok => server.listen(port, '127.0.0.1', ok))
   return { url: `http://127.0.0.1:${server.address().port}`, seen, state, close: () => server.close() }
 }

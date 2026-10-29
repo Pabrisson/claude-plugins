@@ -4,7 +4,10 @@
 // falls back to the assisted mode; a 429 waits for the delay the API gives, three times at most.
 import { routeOf } from './costs.js'
 
-export const base = () => process.env.STREAM_ESTATE_BASE || 'https://api.stream.estate'
+export const REAL = 'https://api.stream.estate'
+export const base = () => process.env.STREAM_ESTATE_BASE || REAL
+// the tests' fake API (test/demo.mjs) the engine talks to instead of the real one, null with the real one
+export const testApi = () => (base() !== REAL ? base() : null)
 
 export class NoCredits extends Error {
   code = 'NO_CREDITS'

@@ -1,4 +1,4 @@
-import { BellIcon, CoinsIcon, DatabaseIcon, GlobeIcon, PaletteIcon, RadarIcon, RefreshCwIcon, WalletIcon } from "lucide-react"
+import { BellIcon, CoinsIcon, DatabaseIcon, FlaskConicalIcon, GlobeIcon, PaletteIcon, RadarIcon, RefreshCwIcon, WalletIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -39,12 +39,14 @@ export function SettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><RadarIcon className="size-4" />Veille du serveur</CardTitle>
-          <CardDescription>Gratuite : les nouveaux DPE de la zone et de vos alertes, et le comptage des annonces de l'API, pour toutes les recherches.</CardDescription>
+          <CardDescription>Gratuite : les nouveaux DPE, audits énergétiques et permis de la zone et de vos alertes, et le comptage des annonces de l'API, pour toutes les recherches.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <ToggleGroup type="single" variant="outline" size="sm" spacing={1} value={String(st.watch_minutes)} onValueChange={v => v && save({ watch_minutes: +v })} className="flex-wrap justify-start" aria-label="Fréquence de la veille">
             {WATCH.map(([m, l]) => <ToggleGroupItem key={m} value={String(m)}>{l}</ToggleGroupItem>)}
           </ToggleGroup>
+          <Toggle id="s-pause" label="En pause" checked={st.watch_paused} disabled={st.watch_minutes === 0} onChange={v => save({ watch_paused: v })}
+            hint="La veille s'arrête (DPE, audits, permis, comptage et récupération automatique de l'API) et garde sa fréquence : elle repart, tout de suite si elle est en retard, dès que vous la reprenez. « Vérifier maintenant » marche toujours." />
           <WatchNow />
         </CardContent>
       </Card>
@@ -55,6 +57,11 @@ export function SettingsTab() {
           <CardDescription>{state.has_key ? "Les annonces de tous les portails, payées à l'annonce." : "Aucune clé : renseignez-la avec /plugin configure skill-immo@pabrisson, puis redémarrez Claude Code."}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          {state.test_api && (
+            <p className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+              <FlaskConicalIcon className="size-4 shrink-0" />API de test : {state.test_api}. Annonces fictives, aucun crédit réel.
+            </p>
+          )}
           <Toggle id="s-api" label="Utiliser l'API" checked={st.api && state.has_key} disabled={!state.has_key} onChange={v => save({ api: v })}
             hint="Coupée : ni comptage, ni récupération, ni facturation ; l'actualisation ne reprend que les données ouvertes et Claude cherche les annonces sur le web. Les recherches gardent leur mode." />
           <Toggle id="s-auto" label="Récupération automatique" checked={st.auto_fetch} disabled={!state.stream_estate} onChange={v => save({ auto_fetch: v })}

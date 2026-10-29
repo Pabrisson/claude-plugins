@@ -1,28 +1,32 @@
 import { alertsOf, firing, newsKey as keyOf } from "@engine/alerts.js"
-import { ArchiveIcon, DownloadIcon, FileClockIcon, HousePlusIcon, TagIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react"
+import { ArchiveIcon, ClipboardCheckIcon, DownloadIcon, FileClockIcon, HousePlusIcon, StampIcon, TagIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react"
 import { useMemo, useState } from "react"
 
+import { PERMIT_ICON } from "@/components/badges"
 import { DPE_HEX, dpeInk } from "@/components/dpe"
 import type { Alert, Listing, News } from "@/lib/api"
-import { num, titleOf, TYPE_LABEL } from "@/lib/format"
+import { num, permitLabel, permitWhat, titleOf, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 // What the follow-up and the bell list: the feed's news (the server's watch, Claude's refresh) and the listings' own
 // changes that an alert on takes (the « Alertes » tab), newest first, with the names of the user's alerts that took
 // them; an unread one has a dot and its tile in full color, the others are dimmed. Each kind has its color (index.css --news-*): the DPE's own class color for its tile, blue for a
-// drop and orange for a rise as the market badges, teal for a new listing, violet for the paid API's.
+// drop and orange for a rise as the market badges, teal for a new listing, violet for the paid API's, red for an
+// energy audit, amber for a building permit.
 export type Change = Listing["changes"][number] & { l: Listing }
 export type NewsBase = News | Change
 export type NewsItem = NewsBase & { alerts: Alert[] }
 
 export const LOOK = {
   dpe: { label: "Nouveau DPE", color: "var(--news-dpe)", Icon: null },
+  audit: { label: "Nouvel audit énergétique", color: "var(--news-audit)", Icon: ClipboardCheckIcon },
+  permit: { label: "Nouveau permis", color: "var(--news-permit)", Icon: StampIcon },
   new: { label: "Nouvelle annonce", color: "var(--news-new)", Icon: HousePlusIcon },
   price_drop: { label: "Baisse de prix", color: "var(--news-drop)", Icon: TrendingDownIcon },
   price_rise: { label: "Hausse de prix", color: "var(--news-rise)", Icon: TrendingUpIcon },
   status: { label: "Changement de statut", color: "var(--news-other)", Icon: TagIcon },
-  expired: { label: "Annonce expirée", color: "var(--news-other)", Icon: ArchiveIcon },
+  expired: { label: "Annonce expirée", color: "var(--news-expired)", Icon: ArchiveIcon },
   listings: { label: "Annonces disponibles", color: "var(--news-stream)", Icon: DownloadIcon },
   changed: { label: "Annonces modifiées", color: "var(--news-stream)", Icon: FileClockIcon },
 } as const
@@ -51,6 +55,8 @@ export function useNews() {
 export const newsKey = (n: NewsBase) => keyOf(n) as string
 export const newsTitle = (n: NewsBase) => "l" in n ? titleOf(n.l)
   : n.kind === "dpe" ? `${TYPE_LABEL[n.dpe.type]}${n.dpe.area ? ` ${num(n.dpe.area)} m²` : ""}`
+  : n.kind === "audit" ? `${n.audit.building ? "Immeuble entier" : TYPE_LABEL[n.audit.type]}${n.audit.area ? ` ${num(n.audit.area)} m²` : ""}, classe ${n.audit.energy}`
+  : n.kind === "permit" ? [permitLabel(n.permit), permitWhat(n.permit)].filter(Boolean).join(" · ")
   : n.kind === "changed" ? `${n.added} annonce${n.added > 1 ? "s" : ""} suivie${n.added > 1 ? "s" : ""} modifiée${n.added > 1 ? "s" : ""} sur l'API`
   : `${n.added} nouvelle${n.added > 1 ? "s" : ""} sur l'API`
 
@@ -61,7 +67,8 @@ export const UnreadDot = () => <i aria-hidden className="size-2 shrink-0 rounded
 export function NewsTile({ n, dim, className }: { n: NewsBase; dim?: boolean; className?: string }) {
   const box = cn("grid size-9 shrink-0 place-items-center rounded-lg transition-opacity", dim && "opacity-55", className)
   if (n.kind === "dpe") return <span aria-hidden className={cn(box, "text-sm font-bold")} style={{ background: DPE_HEX[n.dpe.energy] ?? "var(--muted)", color: dpeInk(n.dpe.energy) }}>{n.dpe.energy}</span>
-  const { color, Icon } = LOOK[n.kind]
+  // a permit's icon says its kind (components/badges)
+  const { color } = LOOK[n.kind], Icon = n.kind === "permit" ? PERMIT_ICON[n.permit.kind] : LOOK[n.kind].Icon
   return <span aria-hidden className={box} style={{ color, background: `color-mix(in oklab, ${color} 16%, transparent)` }}><Icon className="size-4.5" /></span>
 }
 

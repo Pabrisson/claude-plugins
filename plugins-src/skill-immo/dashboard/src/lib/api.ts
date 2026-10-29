@@ -95,11 +95,23 @@ export type Market = {
 export type Poi = { cat: string; kind: string; name: string | null; point: Point }
 // a DPE of the last 12 months in the zone (ADEME)
 export type DpeRow = { number: string; date: string; energy: string; type: "flat" | "house"; area: number | null; address: string | null; ban: string | null; point: Point }
-// a box of the map's odds (GET /api/odds, references/data-sources.md): its IRIS with their census, DVF sales and odds,
-// its communes, its DPE of the last 12 months, and the sources that failed
-export type Census = { year: number; homes: number | null; main: number | null; owners: number | null; owner_years: number | null; married: number | null; pacsed: number | null; cohabiting: number | null; widowed: number | null; divorced: number | null; alone_55_79: number | null; alone_80: number | null }
-export type IrisOdds = { code: string; name: string; insee: string; commune: string; kind: string; geometry: Geometry; census: Census | null; sold: number | null; odds: number | null; successions: number | null; separations: number | null }
-export type Odds = { bbox: number[]; years: string[]; failed: string[]; iris: IrisOdds[]; communes: { insee: string; name: string; alsace_moselle: boolean }[]; dpe: DpeRow[] }
+// an energy audit of the last 12 months (ADEME): due to sell a house or a whole building (`building`, its area the
+// building's) rated E, F or G, or made for a renovation grant
+export type AuditRow = { number: string; date: string; energy: string; type: "flat" | "house"; building: boolean; area: number | null; period: string | null; address: string | null; ban: string | null; point: Point }
+// a building permit authorised in the last 12 months (Sitadel): homes built (PC, or a prior declaration DP), a
+// demolition (PD), a plot divided (PA); placed by the BAN
+export type PermitKind = "build" | "demolish" | "develop"
+export type PermitRow = { number: string; kind: PermitKind; form: "PC" | "DP" | "PD" | "PA"; date: string; homes: number | null; demolished: number | null; land: number | null; address: string; ban: string | null; point: Point }
+// a source's row the « Prospection » map shows, and the follow-up sends it
+export type MapRow = { kind: "dpe"; row: DpeRow } | { kind: "audit"; row: AuditRow } | { kind: "permit"; row: PermitRow }
+// a box of the map's odds (GET /api/odds, references/data-sources.md): its IRIS with their census, DVF sales, odds and
+// prices, its communes, its DPE, energy audits and building permits of the last 12 months, and the sources that failed
+export type Census = {
+  year: number; homes: number | null; main: number | null; owners: number | null; owner_years: number | null; married: number | null; pacsed: number | null; cohabiting: number | null; widowed: number | null; divorced: number | null; alone_55_79: number | null; alone_80: number | null
+  vacant?: number | null; secondary?: number | null; before_1946?: number | null; oil?: number | null; settled_10?: number | null
+}
+export type IrisOdds = { code: string; name: string; insee: string; commune: string; kind: string; geometry: Geometry; census: Census | null; sold: number | null; odds: number | null; successions: number | null; separations: number | null; ppm2?: number | null; ppm2_flat?: number | null; ppm2_house?: number | null }
+export type Odds = { bbox: number[]; years: string[]; failed: string[]; iris: IrisOdds[]; communes: { insee: string; name: string; alsace_moselle: boolean }[]; dpe: DpeRow[]; audits: AuditRow[]; permits: PermitRow[] }
 export type Area = {
   center?: Point
   pois?: Poi[] | { error: string }
@@ -110,6 +122,8 @@ export type Area = {
   isochrones?: { place: string; profile: "pedestrian" | "car"; minutes: number; geometry: Geometry | null }[]
   places?: { label: string; address: string; point: Point }[]
   dpe_recent?: DpeRow[] | { error: string }
+  audit_recent?: AuditRow[] | { error: string }
+  permit_recent?: PermitRow[] | { error: string }
 }
 export type Search = {
   slug: string
@@ -137,12 +151,13 @@ export type Search = {
 export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" | "area_max" | "rooms_min" | "rooms_max" | "floor_min" | "land_min", number>> & { dpe_max?: string; elevator?: boolean; outdoor?: boolean }
 // the search's news (feed.json), newest first: a recent DPE no listing matches, Stream Estate listings to fetch, fetched
 // ones that changed on the portals since the last refresh (the server's free counts)
-// (`outside`: found at an alert's place, outside the zone; « listings » and « changed » were the API's counts in 1.7)
-export type News = { date: string } & ({ kind: "dpe"; dpe: DpeRow; outside?: boolean } | { kind: "listings" | "changed"; count: number; added: number })
+// (`outside`: found at an alert's place, outside the zone; « listings » and « changed » were the API's counts in 1.7);
+// a new energy audit or building permit of the zone or of an alert's place
+export type News = { date: string } & ({ kind: "dpe"; dpe: DpeRow; outside?: boolean } | { kind: "audit"; audit: AuditRow; outside?: boolean } | { kind: "permit"; permit: PermitRow; outside?: boolean } | { kind: "listings" | "changed"; count: number; added: number })
 export type Feed = { read_at: string | null; read?: string[]; stream: { total: number; counted_at: string } | null; changed?: { since: string; total: number; counted_at: string }; items: News[] }
 // the search's alerts (alerts.json, engine lib/alerts.js): the default ones turned off, the user's own
-export type AlertEvent = "dpe" | "new" | "price_drop" | "price_rise" | "status" | "expired"
-export type AlertField = "street" | "type" | "energy" | "area" | "price" | "price_per_m2" | "rooms" | "change_pct" | "favorite" | "my_status" | "criteria"
+export type AlertEvent = "dpe" | "audit" | "permit" | "new" | "price_drop" | "price_rise" | "status" | "expired"
+export type AlertField = "street" | "type" | "energy" | "area" | "price" | "price_per_m2" | "rooms" | "change_pct" | "favorite" | "my_status" | "criteria" | "building" | "permit_kind" | "homes"
 export type Condition = { field: AlertField; op: string; value: string | number | boolean }
 // where an alert watches: the search's zone, or (a source's event) a street, a commune, a circle
 export type Place = { how: "zone" } | { how: "street"; ban: string; label: string; point: Point } | { how: "commune"; insee: string; label: string; point: Point } | { how: "radius"; radius_m: number; label: string; point: Point }
@@ -154,16 +169,19 @@ export type Account = { deposited: number; items: number; at: string; topups: { 
 export type Profile = { max_fetch: number; account?: Account; down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
 export type ScoreKey = "price" | "budget" | "energy" | "transport" | "travel" | "outdoor"
 export type UsageEntry = { date: string; route: string; credits: number | null; results: number; search: string | null; by?: "auto" }
-// the dashboard's settings (« Réglages », .settings.json): the watch every so many minutes (0: off), the API, the
+// the dashboard's settings (« Réglages », .settings.json): the watch every so many minutes (0: off) and its pause, the API, the
 // automatic fetch and its credits a month, the notifications, the reading
-export type Settings = { watch_minutes: number; api: boolean; auto_fetch: boolean; auto_credits: number; notify: boolean; sound: boolean; quiet: [string, string] | null; read_on_open: boolean; keep_days: number }
+export type Settings = { watch_minutes: number; watch_paused: boolean; api: boolean; auto_fetch: boolean; auto_credits: number; notify: boolean; sound: boolean; quiet: [string, string] | null; read_on_open: boolean; keep_days: number }
 export type State = {
   home: string
   // the API may be called: the key is there and it is on in the settings
   stream_estate: boolean
   has_key: boolean
+  // the tests' fake API the server talks to (test/demo.mjs), null with the real one
+  test_api: string | null
   settings: Settings
-  watch: { last: string | null; next: string | null; running: boolean }
+  // paused: no next watch, its period kept
+  watch: { last: string | null; next: string | null; running: boolean; paused?: boolean }
   costs: Record<string, { credits: number | null; per?: string; note?: string }>
   usage: {
     month: number; last30: number; unknown: number; cap: number; eur_per_credit: number; max_fetch: number; by_search: Record<string, { calls: number; credits: number }>; by_route: Record<string, { calls: number; credits: number }>; by_month: Record<string, number>
@@ -202,7 +220,8 @@ export const api = {
   // all of them, or those keys
   readFeed: (slug: string, keys?: string[]) => post<object>(`/api/s/${slug}/feed/read`, keys ? { keys } : {}),
   saveAlerts: (slug: string, a: Alerts) => post<Alerts>(`/api/s/${slug}/alerts`, a),
-  previewAlert: (slug: string, a: Alert) => post<{ count: number; items: DpeRow[] }>(`/api/s/${slug}/alerts/preview`, a),
+  // the DPE, audits or permits of the alert's event at its place
+  previewAlert: (slug: string, a: Alert) => post<{ count: number; items: (DpeRow | AuditRow | PermitRow)[] }>(`/api/s/${slug}/alerts/preview`, a),
   place: (how: "street" | "commune" | "radius", q: string, radius?: number) => json<Place>(`/api/place?${new URLSearchParams({ how, q, ...(radius ? { radius: `${radius}` } : {}) })}`),
   saveSettings: (s: Partial<Settings>) => post<Settings>("/api/settings", s),
   watchNow: () => post<{ last: string; next: string | null }>("/api/watch", {}),
