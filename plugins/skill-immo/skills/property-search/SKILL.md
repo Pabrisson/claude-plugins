@@ -1,6 +1,6 @@
 ---
 name: property-search
-description: Helps the user buy property in France (a flat, a house, a plot, a parking, a shop or office). Finds what is for sale around an address, a street or a neighborhood, weighs each against the real sales of its type (DVF), its building, neighborhood, rent and the user's budget, writes offer letters, and opens a local dashboard. Listings come from the Stream Estate API (paid, the user's yes on every credit) or from WebSearch, one WebFetch per listing page, or pasted text. Use it whenever the user looks for property to buy, gives an address or a listing to assess, or wants an offer or a message to a seller ("trouve-moi un appartement", "cherche une maison à …", "un terrain", "une place de parking", "analyse cette annonce", "ça vaut combien", "marge de négociation", "rédige une offre", "achat immobilier"), or pastes "apply this feedback" from the dashboard.
+description: Helps the user buy property in France (a flat, a house, a plot, a parking, a shop or office). Finds what is for sale around an address, a street or a neighborhood, weighs each against the real sales of its type (DVF), its building, neighborhood, rent and the user's budget, writes offer letters, and opens a local dashboard. Listings come from the Stream Estate API (paid, the user's yes on every credit) or from WebSearch, one WebFetch per listing page, or pasted text. Use it whenever the user looks for property to buy, gives an address or a listing to assess, wants an offer or a message to a seller, or wants to be told of what comes up ("trouve-moi un appartement", "cherche une maison à …", "un terrain", "une place de parking", "analyse cette annonce", "ça vaut combien", "marge de négociation", "rédige une offre", "préviens-moi d'un nouveau DPE rue …", "crée une alerte", "j'ai rajouté 30 € sur Stream Estate", "achat immobilier"), or pastes "apply this feedback" from the dashboard.
 argument-hint: "[setup | <adresse | rue | quartier> [type] [critères] | add <url | texte> | refresh [<slug>] | alerte … | dashboard [<slug>] | apply this feedback …]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/immo.mjs *)
 ---
@@ -52,7 +52,7 @@ Run `immo.mjs doctor` once per conversation.
   API: the euros deposited (pay as you go) and « API items returned », the items billed since the account opened
   (0.01 € each). `account: about 4,96 € left (496 items)` is the deposit less those items and the ones the log counted
   since; say it with the estimate before a fetch. When the user gives the console's figures, `immo.mjs costs account
-  <€ deposited> <items>`; when they say they added money, `immo.mjs costs topup <€>`. The dashboard's « Réglages »
+  <€ deposited> <items>`; when they say they added money, `immo.mjs costs topup <€>` (it needs the account first). The dashboard's « Réglages »
   does the same.
 - `profile: none yet`: the budget needs `setup`. Offer it, but do not block a search on it.
 
@@ -220,7 +220,8 @@ DPE on « Prospection ». The watch spends no credit, but for the automatic fetc
 
 The alerts are the dashboard's (« Alertes » tab, `<slug>/alerts.json`, free): they pick the news that reach « Suivi »,
 the bell, the desktop notifications and refresh's `alerts:` line. The default ones keep the follow-up as it was (new DPE
-within the search's criteria, new listings, price drops and rises, statuses), each on until turned off. The user adds
+within the search's criteria, new listings, price drops and rises, statuses, and the expiry of a listing the user
+follows: one still to sort leaves the map and the cards quietly), each on until turned off. The user adds
 their own: one event, a place, and conditions all true (a DPE class, a surface, a price, a drop of 5 % or more, a
 favorite…). The listings' events happen in the search's zone only; a new DPE may be watched anywhere in France: a
 street, around an address, a commune (ADEME, free).
@@ -230,8 +231,9 @@ street, around an address, a commune (ADEME, free).
    `alerts.json` in `references/listing-format.md`, write the whole file again (with the other alerts) in the
    scratchpad, then `immo.mjs alerts -p <slug> --file <file>`. It is checked as the dashboard's. Say in one line what it
    takes, and how many past news it took (`alerts` again); the open dashboard shows « Recharger ».
-3. A place outside the zone needs its BAN id (a street: `immo.mjs geocode "<street, town>"` gives `<insee>_<voie>`), its
-   commune code or its point; the server notes what is there at once, so only the DPE published later are news.
+3. A place outside the zone needs its BAN id (a street: `immo.mjs geocode "<street, town>" --type street` prints `ban
+   <insee>_<voie>` and its point), its commune code or its point; the server notes what is there at once, so only the
+   DPE published later are news.
 4. A search of skill-immo 1.6 or before may hold a Stream Estate alert (`alert` in `search.json`, pushed to ntfy.sh):
    offer to delete it, `immo.mjs alert delete -p <slug>` (unknown cost: the credits rule). Until then the dashboard
    cannot delete that search.
@@ -339,9 +341,9 @@ Do every item in order:
     (immobilier.notaires.fr) and the local agencies' sites, then one listing page at a time, as in the assisted mode.
   Then look for the new listings: in Stream Estate mode the count is free and a fetch goes through the credits rule; in
   OpenData mode, the assisted mode. Say what the wider search brings.
-- `[annonces]`: the header's « Annonces ». « sur l'API … et sur le web »: in Stream Estate mode, `search -p <slug>` (free)
-  gives the count and the estimate, then the credits rule and `fetch`; then the assisted mode, 5 to 10 listing pages at
-  most. « sur le web » (no key, an OpenData search or the API off): the assisted mode only. Say what each brought.
+- `[annonces]`: the header's « Annonces ». « sur l'API … et sur le web »: in Stream Estate mode, `fetch -p <slug>` without
+  `--spend` counts for free and stops on the estimate (exit 2): the credits rule, then `fetch --spend`; then the assisted
+  mode, 5 to 10 listing pages at most. « sur le web » (no key, an OpenData search or the API off): the assisted mode only. Say what each brought.
 - `[analyser]`: `show --id`, and `enrich --id` if it has no building data.
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings.
 - `[message]`: the messages section above.
@@ -368,3 +370,6 @@ no need to tell the user to reload it.
 | Weighing a house or a parking against the flats' prices | Each type has its own reference in `show`; say which |
 | An offer above the asking price, or with an argument the data does not hold | The negotiation range and `review` only |
 | Telling the user the message was sent, or marking it sent | You write it; the user sends it and marks it in the dossier |
+| Writing `alerts.json` by hand, or dropping the other alerts | `alerts -p` first, then the whole file through `alerts --file` (it checks it) |
+| A Stream Estate saved search (ntfy) for « préviens-moi » | A dashboard alert: free, local, and it can watch a street outside the zone |
+| Setting the account from a guess | Only the console's figures the user gives: `costs account`, `costs topup` |

@@ -87,7 +87,7 @@ listings created in the period, expired ones included. Rue Paul Bert, flats, 202
 A v1 saved search (`POST /searches`, a `budgetMax` required) pushes each match and each price event as a POST to an
 HTTPS URL (`endpointRecipient`, `eventEndpoint`). It keeps no history of its pushes and has no route to read them back,
 and the dashboard server listens on 127.0.0.1 only: a push would need a relay on the internet. skill-immo 1.6 and before
-pushed them to a random ntfy.sh topic; since 1.7 the alerts are the dashboard's (`alerts.json`), fed by the server's
+pushed them to a random ntfy.sh topic; since 1.8 the alerts are the dashboard's (`alerts.json`), fed by the server's
 free counts instead:
 - the listings of the zone not fetched yet: `expired=false`, `fromUpdatedAt` 90 days back, the fetched ones excluded;
 - the fetched ones that changed since the last refresh: the refresh's two queries (`fromUpdatedAt`, then

@@ -79,6 +79,7 @@ test("the account: unknown to the API; the console's € deposited and items, mo
   let r = await run(home, ['doctor'])
   assert.match(r.out, /^account: unknown \(the API does not give it/m)
   assert.equal((await run(home, ['costs', 'account', '5', 'lots'])).status, 1)
+  assert.match((await run(home, ['costs', 'topup', '30'])).err, /the account is unknown/)
   // 5 € deposited, 4 items returned: 4,96 € left, 496 items
   r = await run(home, ['costs', 'account', '5', '4'])
   assert.equal(r.status, 0, r.err)

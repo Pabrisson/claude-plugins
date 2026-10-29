@@ -2,7 +2,7 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { CheckIcon, ChevronDownIcon, CircleQuestionMarkIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api, type Channel, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
@@ -102,7 +102,8 @@ function Row({ label, children, hint }: { label: string; children: ReactNode; hi
 // the dossier's « Voir »: the listing on the map, on the board or in the list, the dossier closed
 function ShowIn({ l, onView }: { l: Listing; onView: (v: string) => void }) {
   const { select, spotListing } = useSearch()
-  const go = (view: string) => { select(null); spotListing(l.id); onView(view) }
+  // the tab first (it lets the last one pointed at go), then this one
+  const go = (view: string) => { select(null); onView(view); spotListing(l.id) }
   const off = shelved(l)
   return (
     <DropdownMenu>
@@ -126,7 +127,7 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
     return (
       <Drawer open={!!l} onOpenChange={o => !o && select(null)}>
         <DrawerContent className="max-h-[92vh]">
-          <DrawerHeader className="flex-row items-start justify-between gap-3 text-left"><span className="min-w-0"><DrawerTitle>{title}</DrawerTitle><DrawerDescription>{l && eur(l.price)}</DrawerDescription></span>{l && <ShowIn l={l} onView={onView} />}</DrawerHeader>
+          <DrawerHeader className="flex-row items-center justify-between gap-3 text-left"><span className="min-w-0"><DrawerTitle>{title}</DrawerTitle><DrawerDescription>{l && eur(l.price)}</DrawerDescription></span>{l && <ShowIn l={l} onView={onView} />}</DrawerHeader>
           <StaleBar />
           <div className="overflow-y-auto px-4 pb-6">{body}</div>
         </DrawerContent>
@@ -134,8 +135,15 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
     )
   return (
     <Sheet open={!!l} onOpenChange={o => !o && select(null)}>
-      <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
-        <SheetHeader className="flex-row items-start justify-between gap-3 border-b pr-12"><span className="min-w-0"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)}`}</SheetDescription></span>{l && <ShowIn l={l} onView={onView} />}</SheetHeader>
+      <SheetContent showCloseButton={false} className="gap-0 overflow-y-auto data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
+        {/* « Voir » and the close button side by side, both centered on the title */}
+        <SheetHeader className="flex-row items-center justify-between gap-3 border-b">
+          <span className="min-w-0"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)}`}</SheetDescription></span>
+          <span className="flex shrink-0 items-center gap-1">
+            {l && <ShowIn l={l} onView={onView} />}
+            <SheetClose asChild><Button variant="ghost" size="icon-sm" aria-label="Fermer"><XIcon /></Button></SheetClose>
+          </span>
+        </SheetHeader>
         <StaleBar />
         <div className="p-4">{body}</div>
       </SheetContent>

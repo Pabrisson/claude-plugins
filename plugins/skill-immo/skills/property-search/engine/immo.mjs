@@ -54,7 +54,7 @@ const GITIGNORE = `# skill-immo: what the engine makes again, and the buyer's pr
 .DS_Store
 `
 // what git must keep, to check against the .gitignore
-const KEPT = ['s/search.json', 's/listings.json', '.costs.json', '.cache/api-usage.json']
+const KEPT = ['s/search.json', 's/listings.json', 's/alerts.json', '.costs.json', '.cache/api-usage.json']
 const CRITERIA = ['budget_min', 'budget_max', 'area_min', 'area_max', 'rooms_min', 'rooms_max', 'floor_min', 'land_min', 'dpe_max', 'elevator', 'outdoor']
 const MESSAGE_KINDS = ['offer', 'question', 'visit', 'reply', 'follow_up', 'documents', 'other']
 const CHANNELS = ['email', 'sms', 'phone', 'visit']
@@ -728,6 +728,8 @@ async function costs(sub, ...rest) {
   if (sub === 'topup' || sub === 'account') {
     const x = sub === 'topup' ? { topup: rest[0] } : { deposited: rest[0], items: rest[1] }
     if (Object.values(x).some(v => !(v !== undefined && Number.isFinite(+v) && +v >= 0))) die('usage: costs topup <€ added> | costs account <€ deposited> <API items returned>')
+    // a top-up on an account never set would read as the whole balance
+    if (sub === 'topup' && !accountOf()) die("the account is unknown: costs account <€ deposited> <API items returned> first, the figures of Stream Estate's console")
     const a = setAccount(x)
     return console.log(`account: about ${euros(a.left, 1)} left (${fmt(a.left_items)} items), ${euros(a.deposited, 1)} deposited; the dashboard's « Coûts API » follows it`)
   }

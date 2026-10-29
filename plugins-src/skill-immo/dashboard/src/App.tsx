@@ -83,9 +83,11 @@ const BAR = ["listings", "list", "kanban", "follow"]
 // sale beside its figures, the kanban and the list of every listing, each listing's dossier on top; market, comparison,
 // follow-up as tabs, the alerts, the settings and the API costs apart on the right
 function Workspace() {
-  const { slug, reload, compare, data } = useSearch()
+  const { slug, reload, compare, data, spotListing } = useSearch()
   const mobile = useIsMobile()
-  const [view, setView] = useTabState(`immo:${slug}:view`, "listings"), [showMap, setShowMap] = useState("list")
+  const [view, setTab] = useTabState(`immo:${slug}:view`, "listings"), [showMap, setShowMap] = useState("list")
+  // another tab: the listing a dossier pointed at (« Voir ») is let go, so it is lit in the view it was sent to only
+  const setView = (v: string) => { spotListing(null); setTab(v) }
   const more = VIEWS.filter(v => !BAR.includes(v.id))
   return (
     <RunProvider onDone={reload}>

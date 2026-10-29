@@ -116,7 +116,7 @@ history stay.
   - `criteria { budget_min, budget_max, area_min, area_max, rooms_min, rooms_max, floor_min, land_min, dpe_max,
     elevator, outdoor }`, each applied to the types that have it;
   - `stream { total, counted_at }`, `last_fetch`, `last_refresh`, `last_visit` (a fetch takes the profile's
-    `max_fetch` at most, « Coûts API »; a search of 1.7 or before also has `max`, no longer read);
+    `max_fetch` at most, « Réglages »; a search of 1.7 or before also has `max`, no longer read);
   - `alert { searches[] { id, type }, topic, … }` in a search of skill-immo 1.6 or before: a Stream Estate saved search
     per type, pushed to ntfy.sh. `alert delete` deletes it; nothing makes one any more.
 - `market.json`:
@@ -194,6 +194,6 @@ history stay.
 - `.settings.json` (« Réglages », every search): `watch_minutes` (0, 30, 60, 360, 720, 1440), `api` (false: no call
   at all), `auto_fetch` and `auto_credits` (the automatic fetch and its credits a month), `notify`, `sound`, `quiet`
   (`["22:00", "08:00"]` or null), `read_on_open`, `keep_days` (0, 30, 90, 365; 0 keeps all).
-- `.profile.json` (private): the budget's numbers, `weights`, `places`, and the credits' settings of « Coûts API »:
+- `.profile.json` (private): the budget's numbers, `weights`, `places`, and the credits' settings of « Réglages »:
   `monthly_credit_cap`, `eur_per_credit`, `max_fetch` (100), `account { deposited, items, at, topups[] { date, eur } }`
   (Stream Estate's console: the € deposited and « API items returned » as of `at`; `costs account`, `costs topup`).

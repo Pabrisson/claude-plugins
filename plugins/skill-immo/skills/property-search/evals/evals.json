@@ -84,12 +84,12 @@
     {
       "id": 6,
       "prompt": "Sur ma recherche paul-bert, préviens-moi dès qu'il y a un nouveau DPE rue Paul Bert, et seulement les passoires (F ou G).",
-      "expected_output": "A custom alert in alerts.json (events dpe, street contains Paul Bert, energy from F), made through `alerts --file`, free, the other alerts kept.",
+      "expected_output": "A custom alert in alerts.json (event dpe, rue Paul Bert as a street place or a street condition, energy from F), made through `alerts --file`, free, the other alerts kept.",
       "files": [],
       "env": {},
       "expectations": [
         "Runs `immo.mjs alerts -p paul-bert` first and keeps the existing alerts in the file it writes",
-        "Writes one custom alert with events [\"dpe\"], a `street` condition `contains` « Paul Bert » and an `energy` condition `gte` « F »",
+        "Writes one custom alert with `event: \"dpe\"`, the rue Paul Bert as a `street` place (its BAN id) or a `street` condition, and an `energy` condition `gte` « F »",
         "Applies it with `immo.mjs alerts -p paul-bert --file <file>`, with no credit and no question about a cost",
         "Does not create a Stream Estate alert nor mention ntfy",
         "Says it shows in the dashboard's « Alertes » tab and its news in « Suivi »"
@@ -201,6 +201,35 @@
         "Found: runs `immo.mjs add -p louveciennes --file <file>` with only what the page states",
         "Not found: says so in one line (not online yet, sold off the portals, or let), without inventing a listing",
         "Ends with one line for the item"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Sur paul-bert, préviens-moi aussi des nouveaux DPE rue Garibaldi dans le 7e, même si c'est hors de ma zone.",
+      "expected_output": "A custom alert at a street place outside the zone: the street's BAN id from geocode, event dpe, through `alerts --file`.",
+      "files": [],
+      "env": {},
+      "expectations": [
+        "Runs `immo.mjs geocode` for the rue Garibaldi of Lyon 7e (with `--type street`) and reads its `ban` id (69387_…) and point",
+        "Writes an alert with `event: \"dpe\"` and `place: { how: \"street\", ban, label, point }`, keeping the other alerts",
+        "Applies it with `immo.mjs alerts -p paul-bert --file <file>`, free",
+        "Says that only the DPE published from now on will be news (the place's current ones are noted)",
+        "Does not widen the search's zone for it"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "J'ai rajouté 30 € sur mon compte Stream Estate.",
+      "expected_output": "`costs topup 30`, then the account's balance in one line.",
+      "files": [],
+      "env": {
+        "STREAM_ESTATE_API_KEY": "<test key>"
+      },
+      "expectations": [
+        "Runs `immo.mjs costs topup 30`",
+        "Says the balance it prints, in € and items",
+        "On `the account is unknown`, says the console's two figures are needed (the € deposited, « API items returned ») and invents neither",
+        "Spends no credit"
       ]
     }
   ]
