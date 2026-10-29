@@ -1,8 +1,9 @@
-import { BarChart3Icon, EllipsisIcon, ListIcon, MapIcon, PlusIcon, RadarIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
+import { BarChart3Icon, BellRingIcon, EllipsisIcon, ListIcon, MapIcon, PlusIcon, RadarIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SettingsIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
 import { ThemeProvider } from "next-themes"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
+import { AlertsTab } from "@/components/alerts-tab"
 import { CompareTab } from "@/components/compare-tab"
 import { CostsTab } from "@/components/costs-tab"
 import { Dossier } from "@/components/dossier"
@@ -14,6 +15,7 @@ import { MapView } from "@/components/map-view"
 import { MarketTab } from "@/components/market-tab"
 import { OddsTab } from "@/components/odds-tab"
 import { RunProvider } from "@/components/run-dialog"
+import { AccountDialog, SettingsTab } from "@/components/settings-tab"
 import { NewSearch, StaleBar, ThemeButton, TopBar } from "@/components/top-bar"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -37,7 +39,7 @@ import { cn } from "@/lib/utils"
 
 export default function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
       <TooltipProvider>
         {slugOfUrl() ? <SearchPage slug={slugOfUrl()!} /> : <Home />}
         <Toaster position="bottom-center" />
@@ -70,6 +72,8 @@ const VIEWS = [
   { id: "market", label: "Marché", icon: BarChart3Icon },
   { id: "compare", label: "Comparer", icon: ScaleIcon },
   { id: "follow", label: "Suivi", icon: RouteIcon },
+  { id: "alerts", label: "Alertes", icon: BellRingIcon },
+  { id: "settings", label: "Réglages", icon: SettingsIcon },
   { id: "costs", label: "Coûts API", icon: ReceiptEuroIcon },
 ] as const
 // a phone's bar holds five: the rest goes under "Plus"
@@ -77,21 +81,21 @@ const BAR = ["listings", "list", "kanban", "follow"]
 
 // The map and the listings' cards side by side (one or the other on a phone), the map of the odds that a home goes on
 // sale beside its figures, the kanban and the list of every listing, each listing's dossier on top; market, comparison,
-// follow-up as tabs, the API costs apart on the right
+// follow-up as tabs, the alerts, the settings and the API costs apart on the right
 function Workspace() {
-  const { slug, reload, compare } = useSearch()
+  const { slug, reload, compare, data } = useSearch()
   const mobile = useIsMobile()
   const [view, setView] = useTabState(`immo:${slug}:view`, "listings"), [showMap, setShowMap] = useState("list")
   const more = VIEWS.filter(v => !BAR.includes(v.id))
   return (
     <RunProvider onDone={reload}>
       <div className="flex h-dvh flex-col">
-        <TopBar onNews={() => setView("follow")} />
+        <TopBar onNews={() => setView("follow")} onSettings={() => setView("settings")} />
         <StaleBar />
         <Tabs value={view} onValueChange={setView} className="min-h-0 flex-1 gap-0">
           <TabsList variant="line" className="hidden w-full justify-start rounded-none border-b bg-card px-3 md:flex">
             {VIEWS.map(v => (
-              <TabsTrigger key={v.id} value={v.id} className={cn("flex-none", v.id === "costs" && "ml-auto")}><v.icon />{v.label}{v.id === "compare" && compare.length > 0 && <Badge variant="secondary">{compare.length}</Badge>}</TabsTrigger>
+              <TabsTrigger key={v.id} value={v.id} className={cn("flex-none", v.id === "alerts" && "ml-auto")}><v.icon />{v.label}{v.id === "compare" && compare.length > 0 && <Badge variant="secondary">{compare.length}</Badge>}</TabsTrigger>
             ))}
           </TabsList>
           <TabsContent value="listings" className="min-h-0">
@@ -116,8 +120,10 @@ function Workspace() {
           <TabsContent value="list" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><ListTab /></TabsContent>
           <TabsContent value="market" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><MarketTab /></TabsContent>
           <TabsContent value="compare" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><CompareTab /></TabsContent>
-          <TabsContent value="follow" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><FollowTab /></TabsContent>
-          <TabsContent value="costs" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><CostsTab /></TabsContent>
+          <TabsContent value="follow" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><FollowTab onView={setView} /></TabsContent>
+          <TabsContent value="alerts" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><AlertsTab /></TabsContent>
+          <TabsContent value="settings" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><SettingsTab /></TabsContent>
+          <TabsContent value="costs" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><CostsTab onView={setView} /></TabsContent>
         </Tabs>
         {mobile && (
           <nav className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t bg-card pb-[env(safe-area-inset-bottom)]" aria-label="Vues">
@@ -140,7 +146,8 @@ function Workspace() {
             </DropdownMenu>
           </nav>
         )}
-        <Dossier />
+        <Dossier onView={setView} />
+        <AccountDialog key={data.search.slug} onSaved={reload} />
       </div>
     </RunProvider>
   )
@@ -177,6 +184,7 @@ function Home({ error }: { error?: string }) {
         </div>
         <span className="flex gap-1.5"><NewSearch streamEstate={stream} trigger={trigger} /><ThemeButton /></span>
       </div>
+      <AccountDialog />
       {error && <p className="text-sm text-destructive">{error}</p>}
       {list === null ? <Skeleton className="h-24" /> : list.length ? (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -200,7 +208,7 @@ function SearchCard({ s, onDeleted }: { s: SearchSummary; onDeleted: () => void 
       toast.success(`Recherche « ${s.label} » supprimée`)
       onDeleted()
     } catch (e) {
-      toast.error("La recherche n'a pas été supprimée", { description: (e as Error).message === "alert" ? "Elle a une alerte de l'API : supprimez d'abord l'alerte, dans son onglet Suivi." : `Détail technique : ${(e as Error).message}` })
+      toast.error("La recherche n'a pas été supprimée", { description: (e as Error).message === "alert" ? "Elle a une alerte de l'API : demandez à Claude de la supprimer d'abord." : `Détail technique : ${(e as Error).message}` })
     }
   }
   return (

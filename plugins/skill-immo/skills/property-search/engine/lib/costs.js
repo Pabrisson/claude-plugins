@@ -8,9 +8,7 @@
 export const COSTS = {
   'GET /documents/properties': { credits: 1, per: 'result', note: '1 per item returned, 0 when none (itemsPerPage=0 counts only)' },
   'GET /indicators/price_per_meter': { credits: null },
-  'GET /searches': { credits: null },
-  'POST /searches': { credits: null },
-  'PUT /searches/{id}': { credits: null },
+  // the deletion of a Stream Estate alert skill-immo 1.6 and before made
   'DELETE /searches/{id}': { credits: null },
 }
 

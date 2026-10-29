@@ -64,8 +64,6 @@ export async function fakeStreamEstate(state = {}) {
         return send(200, { '@type': 'hydra:Collection', 'hydra:member': member, 'hydra:totalItems': total })
       }
       if (req.method === 'GET' && url.pathname === '/indicators/price_per_meter') return send(200, [{ average: 4900, median: 4800, series: { '2026-09': 4750, '2026-10': 4820 } }])
-      if (req.method === 'POST' && url.pathname === '/searches') return send(201, { '@id': `/searches/s-${seen.length}`, ...json })
-      if (req.method === 'PUT' && url.pathname.startsWith('/searches/')) return send(200, { '@id': url.pathname, ...json })
       if (req.method === 'DELETE' && url.pathname.startsWith('/searches/')) return send(204, null)
       send(404, { title: 'Not found' })
     })

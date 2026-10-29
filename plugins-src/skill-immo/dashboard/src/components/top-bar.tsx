@@ -1,14 +1,12 @@
 import { WEIGHTS } from "@engine/decide.js"
 import { matches } from "@engine/market.js"
-import { BellIcon, CheckCheckIcon, ClipboardCopyIcon, DownloadIcon, HomeIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PencilIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { BellIcon, CheckCheckIcon, ClipboardCopyIcon, HomeIcon, ListPlusIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PencilIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
-import { CreditBadge, lastCount } from "@/components/credit-badge"
 import { ManualListing } from "@/components/manual-listing"
 import { LOOK, newsKey, NewsTile, newsTitle, UnreadDot, useNews, whenOf } from "@/components/news"
-import { useRun } from "@/components/run-dialog"
 import { CriteriaFields, criteriaArg, NewSearch, TypesField } from "@/components/search-form"
 import { TypeIcon } from "@/components/type-icon"
 import { Badge } from "@/components/ui/badge"
@@ -25,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Criteria, type Profile, type PropertyType, type ScoreKey } from "@/lib/api"
-import { criteriaLabels, eur, num, SCORE_LABEL, TYPE_PLURAL } from "@/lib/format"
+import { criteriaLabels, eur, SCORE_LABEL, TYPE_PLURAL } from "@/lib/format"
 import { useSearch, type Feedback } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -34,10 +32,15 @@ import { cn } from "@/lib/utils"
 export const promptText = (slug: string, items: Feedback[]) =>
   `/skill-immo:property-search apply this feedback (recherche ${slug})\n${items.map((f, i) => `${i + 1}. [${f.kind}] ${f.text}`).join("\n")}`
 
-export function TopBar({ onNews }: { onNews: () => void }) {
-  const { slug, data, state } = useSearch()
-  const run = useRun()
-  const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate", last = lastCount(data)
+export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings: () => void }) {
+  const { data, state, feedback, addFeedback } = useSearch()
+  const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate"
+  // new listings asked of Claude: at the API (its credits rule) and on the web, or on the web only
+  function askListings() {
+    if (feedback.some(f => f.kind === "annonces")) return toast("Déjà dans le prompt")
+    addFeedback({ kind: "annonces", text: streamOn ? "cherche de nouvelles annonces sur l'API (crédits avec mon accord) et sur le web" : "cherche de nouvelles annonces sur le web" })
+    toast.success("Ajouté au prompt", { description: streamOn ? "Claude cherchera sur l'API, après votre accord sur le coût, et sur le web." : "Claude cherchera sur le web, gratuitement." })
+  }
   const chips = criteriaLabels(s.criteria)
   return (
     <header className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2 md:flex-nowrap md:px-4">
@@ -57,15 +60,12 @@ export function TopBar({ onNews }: { onNews: () => void }) {
       <CriteriaPopover chips={chips} />
       <span className="flex-1" />
       <span className="flex flex-wrap items-center gap-1.5">
+        <WatchCountdown onSettings={onSettings} />
         <Tooltip>
           <TooltipTrigger asChild>
-            <span>
-              <Button size="sm" disabled={!streamOn} onClick={() => run({ cmd: "fetch", slug, label: "Annonces de l'API" })}>
-                <DownloadIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span><CreditBadge cost="fetch" />
-              </Button>
-            </span>
+            <Button size="sm" onClick={askListings}><ListPlusIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span></Button>
           </TooltipTrigger>
-          <TooltipContent>{streamOn ? `Récupérer les annonces de la zone${last ? ` : ${num(last.total)} trouvées au dernier comptage, ${num(s.max)} au plus par récupération` : ""}. Le coût est annoncé avant.` : state.stream_estate ? "Recherche en mode OpenData : demandez à Claude de chercher des annonces" : "Nécessite une clé de l'API. Sans clé, Claude cherche les annonces pour vous"}</TooltipContent>
+          <TooltipContent>{streamOn ? "Ajoute au prompt une recherche de nouvelles annonces, sur l'API (le coût vous est demandé avant) et sur le web" : "Ajoute au prompt une recherche de nouvelles annonces sur le web, par Claude (gratuit)"}</TooltipContent>
         </Tooltip>
         <NewsBell onOpen={onNews} />
         <AddListing />
@@ -77,10 +77,35 @@ export function TopBar({ onNews }: { onNews: () => void }) {
   )
 }
 
+// The time to the server's next watch, beside « Annonces »: every half minute, and the state again once it is due;
+// a click opens its settings
+const left = (ms: number) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 1 ? "imminente" : m < 60 ? `dans ${m} min` : `dans ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` }
+function WatchCountdown({ onSettings }: { onSettings: () => void }) {
+  const { state } = useSearch()
+  const [w, setW] = useState(state.watch), [was, setWas] = useState(state.watch), [now, setNow] = useState(() => Date.now())
+  if (state.watch !== was) { setWas(state.watch); setW(state.watch) }
+  useEffect(() => {
+    const t = setInterval(() => {
+      setNow(Date.now())
+      if (w.running || (w.next && Date.parse(w.next) < Date.now() - 5000)) api.state().then(s => setW(s.watch), () => {})
+    }, 30000)
+    return () => clearInterval(t)
+  }, [w])
+  const text = w.running ? "Veille en cours…" : w.next ? `Veille ${left(Date.parse(w.next) - now)}` : "Veille coupée"
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" onClick={onSettings} className="hidden rounded-md px-1.5 py-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:block">{text}</button>
+      </TooltipTrigger>
+      <TooltipContent>{w.next ? `Prochaine vérification : ${new Intl.DateTimeFormat("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(w.next))}` : "La veille du serveur est coupée"}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 // The bell: the count of the news not read yet (the server's watch, Claude's refresh), a toast when more come in, and
 // on a click the latest ones. A listing's opens its dossier, the others the follow-up on them.
 function NewsBell({ onOpen }: { onOpen: () => void }) {
-  const { slug, unread, stale, state, select, focusNews, reload } = useSearch()
+  const { slug, unread, stale, select, focusNews, reload } = useSearch()
   const { items, fresh } = useNews()
   const [open, setOpen] = useState(false)
   const before = useRef(unread), away = useRef(false)
@@ -103,7 +128,7 @@ function NewsBell({ onOpen }: { onOpen: () => void }) {
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Nouveaux DPE et annonces{state.watch_hours ? ` : le serveur vérifie à son démarrage, puis toutes les ${num(state.watch_hours)} h` : ""}</TooltipContent>
+        <TooltipContent>Nouveautés de vos alertes : le serveur vérifie à son démarrage, puis régulièrement (Réglages)</TooltipContent>
       </Tooltip>
       <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] gap-0 p-0" onCloseAutoFocus={e => { if (away.current) e.preventDefault(); away.current = false }}>
         <div className="flex items-baseline justify-between gap-3 px-4 pt-3 pb-2">
@@ -371,7 +396,8 @@ function PromptButton() {
   )
 }
 
-// the buyer's profile: the numbers of the budget and the credits cap (the places go through Claude: setup)
+// the buyer's profile: the numbers of the budget and the score's priorities (the places go through Claude: setup; the
+// credits are in « Coûts API »)
 export function ProfileDialog() {
   const { profile, setProfile } = useSearch()
   const [p, setP] = useState<Profile>(profile)
@@ -381,7 +407,6 @@ export function ProfileDialog() {
     ["down_payment", "Apport (€)"], ["net_income_monthly", "Revenus nets du foyer (€/mois)"], ["other_loans_monthly", "Autres crédits (€/mois)"],
     ["rate", "Taux du crédit (%)"], ["years", "Durée (ans)"], ["insurance_rate", "Assurance (% par an)"],
     ["notary_old", "Frais de notaire, ancien", "0,075 = 7,5 %"], ["notary_new", "Frais de notaire, neuf", "0,025 = 2,5 %"],
-    ["monthly_credit_cap", "Plafond de crédits de l'API par mois"], ["eur_per_credit", "Prix d'un crédit (€)"],
   ]
   return (
     <Dialog onOpenChange={o => o && setP(profile)}>

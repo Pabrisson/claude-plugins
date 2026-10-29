@@ -83,18 +83,16 @@
     },
     {
       "id": 6,
-      "prompt": "Crée une alerte sur ma recherche paul-bert pour les nouveautés et les baisses de prix.",
-      "expected_output": "The user's yes on the unknown cost, then the alert on a random ntfy topic whose name the user gets.",
+      "prompt": "Sur ma recherche paul-bert, préviens-moi dès qu'il y a un nouveau DPE rue Paul Bert, et seulement les passoires (F ou G).",
+      "expected_output": "A custom alert in alerts.json (events dpe, street contains Paul Bert, energy from F), made through `alerts --file`, free, the other alerts kept.",
       "files": [],
-      "env": {
-        "STREAM_ESTATE_API_KEY": "<test key>"
-      },
+      "env": {},
       "expectations": [
-        "Does not create anything before the user agreed",
-        "Says « coût inconnu » and asks before `alert create`",
-        "Runs `immo.mjs alert create -p paul-bert --accept-unknown` only after the user agreed",
-        "Gives the ntfy topic and says that whoever knows it can read it",
-        "Says that every price change is pushed, rises included (the API has no threshold)"
+        "Runs `immo.mjs alerts -p paul-bert` first and keeps the existing alerts in the file it writes",
+        "Writes one custom alert with events [\"dpe\"], a `street` condition `contains` « Paul Bert » and an `energy` condition `gte` « F »",
+        "Applies it with `immo.mjs alerts -p paul-bert --file <file>`, with no credit and no question about a cost",
+        "Does not create a Stream Estate alert nor mention ntfy",
+        "Says it shows in the dashboard's « Alertes » tab and its news in « Suivi »"
       ]
     },
     {

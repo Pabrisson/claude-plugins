@@ -1,6 +1,7 @@
+import { inZone } from "@engine/geo.js"
 import { isHome } from "@engine/market.js"
 import { CalculatorIcon, ChevronDownIcon, GaugeIcon, InfoIcon, ListIcon, ListOrderedIcon, MapIcon, MapPinnedIcon, RefreshCwIcon, XIcon, type LucideIcon } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { DPE_HEX, dpeInk } from "@/components/dpe"
 import { DPE_HELP, Hint, IRIS_HELP, MapView, METRICS, MIN_ZOOM, type DpeGroup, type Metric, type OddsMap } from "@/components/map-view"
@@ -29,6 +30,11 @@ export function OddsTab() {
   const [metric, setMetric] = useState<Metric>("odds"), [iris, setIris] = useState<string | null>(null)
   const [groups, setGroups] = useState<DpeGroup[]>([]), [focus, setFocus] = useState<DpeGroup | null>(null), [show, setShow] = useState("map")
   const [hover, setHover] = useState<OddsMap["hover"]>(null)
+  // a DPE the follow-up asks to show: once the map is up, it goes there and pins its card, until another is picked
+  const { data: search, dpeFocus, focusDpe } = useSearch()
+  const followed = useMemo<DpeGroup | null>(() => dpeFocus && { key: dpeFocus.ban ?? dpeFocus.point.join(","), point: dpeFocus.point, address: dpeFocus.address, out: !inZone(dpeFocus.point, search.search.zone as Parameters<typeof inZone>[1]), items: [{ ...dpeFocus, listing: null }] }, [dpeFocus, search.search.zone])
+  useEffect(() => () => focusDpe(null), [focusDpe])
+  const shown = (view && followed) || focus
   // before the map says its box (it is loading), as loading
   const near = !view || view.zoom >= MIN_ZOOM - 0.01, busy = near && (loading || !view)
 
@@ -46,9 +52,9 @@ export function OddsTab() {
     return () => { clearTimeout(t); ctl.abort() }
   }, [view, near, tries])
 
-  const odds = { data, metric, setMetric, onView: setView, iris, onIris: setIris, onDpe: setGroups, focus, hover }
+  const odds = { data, metric, setMetric, onView: setView, iris, onIris: setIris, onDpe: setGroups, focus: shown, hover }
   const status = <MapStatus near={near} loading={busy} error={error} retry={() => setTries(tries + 1)} />
-  const panel = <OddsPanel data={data} near={near} loading={busy} metric={metric} iris={iris} onIris={setIris} groups={groups} onFocus={g => { setFocus({ ...g }); if (mobile) setShow("map") }} onHover={setHover} />
+  const panel = <OddsPanel data={data} near={near} loading={busy} metric={metric} iris={iris} onIris={setIris} groups={groups} onFocus={g => { focusDpe(null); setFocus({ ...g }); if (mobile) setShow("map") }} onHover={setHover} />
   return mobile ? (
     <div className="relative flex h-full flex-col">
       <ToggleGroup type="single" variant="outline" size="sm" value={show} onValueChange={v => v && setShow(v)} className="m-3 mb-0 self-start" aria-label="Affichage">

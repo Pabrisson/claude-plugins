@@ -2,7 +2,7 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { CheckIcon, ChevronDownIcon, CircleQuestionMarkIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, CircleQuestionMarkIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api, type Channel, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
 import { ACCURACY_LABEL, CHANNEL_LABEL, date, dateTime, eur, keur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
+import { shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -98,7 +99,24 @@ function Row({ label, children, hint }: { label: string; children: ReactNode; hi
   )
 }
 
-export function Dossier() {
+// the dossier's « Voir »: the listing on the map, on the board or in the list, the dossier closed
+function ShowIn({ l, onView }: { l: Listing; onView: (v: string) => void }) {
+  const { select, spotListing } = useSearch()
+  const go = (view: string) => { select(null); spotListing(l.id); onView(view) }
+  const off = shelved(l)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="shrink-0"><LocateFixedIcon data-icon="inline-start" />Voir<ChevronDownIcon data-icon="inline-end" /></Button></DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-max whitespace-nowrap">
+        <DropdownMenuItem disabled={!l.location.point || off} onSelect={() => go("listings")}><MapIcon />Sur la carte{!l.location.point ? " (sans position)" : off ? " (expirée, à trier)" : ""}</DropdownMenuItem>
+        <DropdownMenuItem disabled={off} onSelect={() => go("kanban")}><SquareKanbanIcon />Dans le Kanban{off ? " (expirée, à trier)" : ""}</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => go("list")}><ListIcon />Dans la Liste</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export function Dossier({ onView }: { onView: (v: string) => void }) {
   const { data, selected, select } = useSearch()
   const mobile = useIsMobile()
   const l = data.listings.find(x => x.id === selected)
@@ -108,7 +126,7 @@ export function Dossier() {
     return (
       <Drawer open={!!l} onOpenChange={o => !o && select(null)}>
         <DrawerContent className="max-h-[92vh]">
-          <DrawerHeader><DrawerTitle>{title}</DrawerTitle><DrawerDescription>{l && eur(l.price)}</DrawerDescription></DrawerHeader>
+          <DrawerHeader className="flex-row items-start justify-between gap-3 text-left"><span className="min-w-0"><DrawerTitle>{title}</DrawerTitle><DrawerDescription>{l && eur(l.price)}</DrawerDescription></span>{l && <ShowIn l={l} onView={onView} />}</DrawerHeader>
           <StaleBar />
           <div className="overflow-y-auto px-4 pb-6">{body}</div>
         </DrawerContent>
@@ -117,7 +135,7 @@ export function Dossier() {
   return (
     <Sheet open={!!l} onOpenChange={o => !o && select(null)}>
       <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
-        <SheetHeader className="border-b"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)}`}</SheetDescription></SheetHeader>
+        <SheetHeader className="flex-row items-start justify-between gap-3 border-b pr-12"><span className="min-w-0"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)}`}</SheetDescription></span>{l && <ShowIn l={l} onView={onView} />}</SheetHeader>
         <StaleBar />
         <div className="p-4">{body}</div>
       </SheetContent>

@@ -1,7 +1,7 @@
 {
   "name": "skill-immo",
-  "version": "1.6.0",
-  "description": "Skill property-search: find property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, enriched with open data (DVF sales per type, rents, DPE, risks, condominiums, shops, travel times, crime, income) and the Stream Estate API v1, with a review and a score per listing, offer letters, and a local dashboard (listings map, odds map, kanban, list, dossier, market, follow-up)",
+  "version": "1.8.0",
+  "description": "Skill property-search: find property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, enriched with open data (DVF sales per type, rents, DPE, risks, condominiums, shops, travel times, crime, income) and the Stream Estate API v1, with a review and a score per listing, offer letters, and a local dashboard (listings map, odds map, kanban, list, dossier, market, follow-up, alerts, settings, API costs)",
   "author": {
     "name": "Pierre Alain BRISSON"
   },
@@ -9,7 +9,7 @@
     "stream_estate_api_key": {
       "type": "string",
       "title": "Stream Estate API key",
-      "description": "Optional, a key of the API v1 (api.stream.estate): listings from every portal, asking prices and alerts by Stream Estate (paid per item, 0.01 € each). Empty: open data and assisted listings (WebSearch, WebFetch, pasted text)",
+      "description": "Optional, a key of the API v1 (api.stream.estate): listings from every portal and asking prices by Stream Estate (paid per item, 0.01 € each; the dashboard's counts are free). Empty: open data and assisted listings (WebSearch, WebFetch, pasted text)",
       "sensitive": true
     }
   }

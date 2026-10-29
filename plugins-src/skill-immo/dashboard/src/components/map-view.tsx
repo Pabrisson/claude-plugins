@@ -7,7 +7,7 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url"
 import { useTheme } from "next-themes"
 import { ChevronDownIcon, CrossIcon, LayersIcon, MapPinIcon, SchoolIcon, ShoppingBasketIcon, TrainFrontIcon, TreesIcon } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { DPE_HEX, dpeInk } from "@/components/dpe"
@@ -20,6 +20,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type DpeRow, type Hit, type IrisOdds, type Listing, type Odds, type Poi, type Point, type PropertyType } from "@/lib/api"
 import { date, dpeAsk, eur, keur, LEVEL_LABEL, month, num, pct, perUnit, POI_LABEL, share, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
+import { shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -174,7 +175,10 @@ function showLayers(m: MapLibre, layers: string[]) {
 // `right`: the width of what covers the map on its right (the listings' column), which its camera and controls keep clear of.
 // With `odds`, the odds tab's map: the IRIS colored by their odds, the recent DPE of the box shown, the listings neutral.
 export function MapView({ className, right = 0, odds }: { className?: string; right?: number; odds?: OddsMap }) {
-  const { data, types, marketOf, selected, select, addFeedback } = useSearch()
+  const { data, types, marketOf, selected, select, addFeedback, spot } = useSearch()
+  // the listing the map shows larger and goes to: the dossier's, or the one it sent here (« Voir »), where the map opens
+  const pointed = selected ?? spot, spotAt = useRef<[number, number] | null>(null)
+  useEffect(() => { spotAt.current = (spot && data.listings.find(l => l.id === spot)?.location.point) || null })
   const { resolvedTheme } = useTheme()
   const mobile = useIsMobile()
   const box = useRef<HTMLDivElement>(null), map = useRef<MapLibre | null>(null)
@@ -183,6 +187,9 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
   // a computer's map keeps the layers' column clear (a phone's floats, folded)
   const left = mobile ? 0 : PANEL
   const [scope, setScope] = useState("all"), [shownTypes, setShownTypes] = useState<string[]>(types)
+  // the legend's keys the user clicked off: a price level, a status (« Écarté »…), their listings off the map
+  const [hidden, setHidden] = useState<string[]>([])
+  const flip = (k: string) => setHidden(h => (h.includes(k) ? h.filter(x => x !== k) : [...h, k]))
   const [dpeDays, setDpeDays] = useState("180"), [dpeScope, setDpeScope] = useState("all")
   // the DPE groups and listings the click on a DPE reads, the odds tab's callbacks (the map's handlers are made once),
   // and how a DPE's card is pinned (made with the map)
@@ -214,11 +221,12 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
         type: "Feature" as const, geometry: { type: "Point" as const, coordinates: p.point },
         properties: { level: levelOf(p.ppm2, marketOf(t).ref?.ppm2) ?? "at", tip: `<b>Vendu ${eur(p.price)}</b><br>${TYPE_LABEL[t]}${p.area ? ` · ${p.area} m²` : ""} · ${perUnit(p.ppm2, t)}${gapTip(p.ppm2, marketOf(t).ref?.ppm2)}<br>${titleCase(p.address)} · ${month(p.date)}` },
       })))),
-      listings: fc(data.listings.filter(l => l.location.point && l.status !== "EXPIRED" && on(typeOf(l)) && (scope === "all" || matches(l, data.search.criteria, types))).map(l => {
-        const t = typeOf(l) as PropertyType
+      listings: fc(data.listings.filter(l => l.location.point && !shelved(l) && on(typeOf(l)) && (scope === "all" || matches(l, data.search.criteria, types))).flatMap(l => {
+        const t = typeOf(l) as PropertyType, level = odds ? "at" : (levelOf(unitPrice(l), marketOf(t).ref?.ppm2) ?? "at")
+        if (hidden.includes(level) || (l.my_status && hidden.includes(l.my_status))) return []
         return {
-          type: "Feature", geometry: { type: "Point", coordinates: l.location.point! },
-          properties: { id: l.id, level: odds ? "at" : (levelOf(unitPrice(l), marketOf(t).ref?.ppm2) ?? "at"), status: l.my_status ?? "", label: keur(l.price), tip: `<b>${eur(l.price)}</b><br>${TYPE_LABEL[t]}${l.area ? ` · ${l.area} m²` : ""}${l.rooms ? ` · ${l.rooms} p.` : ""} · ${perUnit(unitPrice(l), t)}${gapTip(unitPrice(l), marketOf(t).ref?.ppm2)}${l.my_status ? `<br><span>${STATUS_LABEL[l.my_status]}</span>` : ""}` },
+          type: "Feature" as const, geometry: { type: "Point" as const, coordinates: l.location.point! },
+          properties: { id: l.id, level, status: l.my_status ?? "", label: keur(l.price), tip: `<b>${eur(l.price)}</b><br>${TYPE_LABEL[t]}${l.area ? ` · ${l.area} m²` : ""}${l.rooms ? ` · ${l.rooms} p.` : ""} · ${perUnit(unitPrice(l), t)}${gapTip(unitPrice(l), marketOf(t).ref?.ppm2)}${l.my_status ? `<br><span>${STATUS_LABEL[l.my_status]}${l.status === "EXPIRED" ? " · annonce expirée" : ""}</span>` : ""}` },
         }
       })),
       pois: fc(pois.filter(p => cats.includes(p.cat)).map((p: Poi) => ({ type: "Feature", geometry: { type: "Point", coordinates: p.point }, properties: { cat: p.cat, tip: `${p.name ?? p.kind}<br><span>${POI_LABEL[p.cat] ?? p.cat}</span>` } }))),
@@ -229,7 +237,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
       isochrones: fc((data.area.isochrones ?? []).filter(i => i.geometry && layers.includes(`place:${i.place}`) && i.profile === "pedestrian").map(i => ({ type: "Feature", geometry: i.geometry as Geometry, properties: { place: places.indexOf(i.place), minutes: i.minutes } }))),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, dpe, odds?.data, odds?.metric])
+  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, hidden, dpe, odds?.data, odds?.metric])
 
   // the map, made again when the theme changes (its style is not the same)
   useEffect(() => {
@@ -284,6 +292,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
             else if (g.type === "MultiPolygon") for (const p of g.coordinates.flat(2)) b.extend(p as [number, number])
           }
           m.fitBounds(b, { padding: 40, maxZoom: 16, duration: 0 })
+          if (spotAt.current) m.jumpTo({ center: spotAt.current, zoom: 16 })
         }
         // the odds map opens where it loads: its zoom at least
         if (oddsRef.current && m.getZoom() < MIN_ZOOM) m.setZoom(MIN_ZOOM)
@@ -337,15 +346,15 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
     const m = map.current
     if (!m?.getLayer("labels")) return
     for (const [id, s] of Object.entries(sources)) (m.getSource(id) as GeoJSONSource | undefined)?.setData(s)
-    if (m.getLayer("listings")) m.setPaintProperty("listings", "circle-radius", ["case", ["==", ["get", "id"], selected ?? ""], 12, 8])
+    if (m.getLayer("listings")) m.setPaintProperty("listings", "circle-radius", ["case", ["==", ["get", "id"], pointed ?? ""], 12, 8])
     m.setPaintProperty("iris-fill", "fill-color", irisColor(metric))
     m.setFilter("iris-selected", ["==", ["get", "code"], irisCode ?? ""])
     for (const id of ["iris-hover", "iris-hover-line"]) m.setFilter(id, ["==", ["get", "code"], hover?.iris ?? ""])
     m.setFilter("dpe-hover", ["==", ["get", "key"], hover?.dpe ?? ""])
     showLayers(m, layers)
-    const l = data.listings.find(x => x.id === selected)
-    if (l?.location.point) m.easeTo({ center: l.location.point, duration: 400 })
-  }, [sources, selected, layers, data.listings, dpe.groups, metric, irisCode, hover])
+    const l = data.listings.find(x => x.id === pointed)
+    if (l?.location.point) m.easeTo({ center: l.location.point, zoom: spot === l.id ? Math.max(m.getZoom(), 16) : m.getZoom(), duration: 400 })
+  }, [sources, pointed, spot, layers, data.listings, dpe.groups, metric, irisCode, hover])
 
   // a DPE picked in the odds tab's column: the map goes to it and pins its card
   const focus = odds?.focus
@@ -360,7 +369,7 @@ export function MapView({ className, right = 0, odds }: { className?: string; ri
     <div className={cn("immo-map", className)} style={{ "--map-right": `${right}px` } as React.CSSProperties}>
       {/* maplibre-gl.css, outside the layers, makes it position: relative: it takes the whole box by its size */}
       <div ref={box} className="h-full w-full" />
-      <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, pois, places, sales }}
+      <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales }}
         dpe={{ days: dpeDays, setDays: setDpeDays, scope: dpeScope, setScope: setDpeScope, count: dpe.count, open: dpe.open }}
         odds={odds && { metric, setMetric: odds.setMetric, listings: sources.listings.features.length, onPlace: h => map.current?.flyTo({ center: [h.x, h.y], zoom: zoomOf(h), duration: 1200 }) }} />
     </div>
@@ -408,8 +417,9 @@ function PlaceSearch({ onPlace }: { onPlace: (h: Hit) => void }) {
 // color and its count. On the odds map: a search to move it, the IRIS's figure, the recent DPE, the search's listings,
 // the zone. On a computer a column docked on the left, its whole height, always open (the listings' column on the
 // right); on a phone it floats, folded until tapped.
-function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, pois, places, sales, dpe, odds }: {
+function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales, dpe, odds }: {
   docked: boolean; cats: string[]; setCats: (v: string[]) => void; layers: string[]; setLayers: (v: string[]) => void; scope: string; setScope: (v: string) => void
+  hidden: string[]; flip: (k: string) => void
   shownTypes: string[]; setShownTypes: (v: string[]) => void; pois: Poi[]; places: string[]; sales: number
   dpe: { days: string; setDays: (v: string) => void; scope: string; setScope: (v: string) => void; count: number; open: number }
   odds?: { metric: Metric; setMetric: (m: Metric) => void; listings: number; onPlace: (h: Hit) => void }
@@ -418,6 +428,13 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
   const [unfolded, setUnfolded] = useState(false), open = docked || unfolded
   const toggle = (k: string, v: boolean) => setLayers(v ? [...layers, k] : layers.filter(x => x !== k))
   const count = (c: string) => pois.filter(p => p.cat === c).length
+  // a key of the legend: a click takes its listings off the map, or back
+  const legendKey = (k: string, dot: React.ReactNode, label: string) => (
+    <button type="button" aria-pressed={!hidden.includes(k)} onClick={() => flip(k)} title={hidden.includes(k) ? "Réafficher sur la carte" : "Masquer de la carte"}
+      className={cn("flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none", hidden.includes(k) && "line-through opacity-45")}>
+      {dot}{label}
+    </button>
+  )
   const zone = (
     <Group title="Zone">
       <div className="flex items-center gap-2"><Switch id="veil" checked={layers.includes("veil")} onCheckedChange={v => toggle("veil", v)} /><Label htmlFor="veil" className="text-xs">Assombrir l'extérieur de la zone</Label></div>
@@ -504,15 +521,16 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
           ) : (
             <>
               <Group title="Annonces">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-                  <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-below" />Sous le marché</span>
-                  <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-at" />Au prix</span>
-                  <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-above" />Au-dessus</span>
+                <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-muted-foreground">
+                  {legendKey("below", <i className="size-2.5 rounded-full bg-below" />, "Sous le marché")}
+                  {legendKey("at", <i className="size-2.5 rounded-full bg-at" />, "Au prix")}
+                  {legendKey("above", <i className="size-2.5 rounded-full bg-above" />, "Au-dessus")}
                 </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-                  <span className="text-foreground">Contour :</span>
-                  {Object.entries(STATUS_LABEL).map(([k, v]) => <span key={k} className="flex items-center gap-1.5"><i className="size-2.5 rounded-full border-2 bg-transparent" style={{ borderColor: `var(--status-${k})` }} />{v}</span>)}
+                <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-muted-foreground">
+                  <span className="mr-1 text-foreground">Contour :</span>
+                  {Object.entries(STATUS_LABEL).map(([k, v]) => <Fragment key={k}>{legendKey(k, <i className="size-2.5 rounded-full border-2 bg-transparent" style={{ borderColor: `var(--status-${k})` }} />, v)}</Fragment>)}
                 </div>
+                <p className="text-muted-foreground">{hidden.length ? `${hidden.length} masqué${hidden.length > 1 ? "s" : ""} : cliquez pour les réafficher.` : "Cliquez une pastille pour masquer ces annonces."}</p>
                 <ToggleGroup type="single" size="sm" variant="outline" value={scope} onValueChange={v => v && setScope(v)} className="justify-start">
                   <ToggleGroupItem className={CHIP} value="all">Toutes</ToggleGroupItem>
                   <ToggleGroupItem className={CHIP} value="criteria">Dans mes critères</ToggleGroupItem>

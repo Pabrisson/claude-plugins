@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // property-search CLI and local dashboard server. The searches live in the folder Claude Code runs in ($IMMO_DIR
-// overrides it): one folder per search (<slug>/: search.json, listings.json, market.json, area.json, feed.json), the buyer's
+// overrides it): one folder per search (<slug>/: search.json, listings.json, market.json, area.json, feed.json, alerts.json), the buyer's
 // profile (.profile.json), the measured API prices (.costs.json), the open data cache and the credits log (.cache/).
-// Each search has a mode: stream-estate (listings, asking prices, alerts from the API v1) or classic (open data and
+// Each search has a mode: stream-estate (listings, asking prices, free counts from the API v1) or classic (open data and
 // assisted listings only, never a credit). Search commands take -p <slug>. Exit codes: 2 the user must agree first
 // (cost), 3 no credits left (402, assisted mode), 4 a listing URL to read with WebFetch (the API has no lookup by URL).
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
@@ -12,6 +12,7 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { alertsOf, cleanAlerts, firing, newsKey, takes as alertTakes } from './lib/alerts.js'
 import { PROFILE, budget, rentOf, rentVsBuy } from './lib/budget.js'
 import { estimate, gate, table, usage } from './lib/costs.js'
 import { review, score, WEIGHTS } from './lib/decide.js'
@@ -34,12 +35,10 @@ const HOME = (() => {
   return fs.existsSync(path.join(process.cwd(), 'search.json')) ? path.dirname(process.cwd()) : process.cwd()
 })()
 const PORT = +(process.env.IMMO_PORT || 41287)
-// the dashboard server's watch of the searches: at its start, then every so many hours (0 turns it off)
-const WATCH_HOURS = +(process.env.IMMO_WATCH_HOURS ?? 6)
 // the dashboard, built from plugins-src/skill-immo/dashboard and served as is
 const DASHBOARD = path.join(ENGINE, 'dashboard/dist')
 const CACHE = path.join(HOME, '.cache'), USAGE = path.join(CACHE, 'api-usage.json')
-const PROFILE_FILE = path.join(HOME, '.profile.json'), MEASURED = path.join(HOME, '.costs.json')
+const PROFILE_FILE = path.join(HOME, '.profile.json'), MEASURED = path.join(HOME, '.costs.json'), SETTINGS_FILE = path.join(HOME, '.settings.json')
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }
 // the searches folder's .gitignore, written with its first search: git keeps each search, its listings (the user's
 // statuses, notes and price history), the measured prices and the credits log; it leaves out what the engine makes
@@ -61,7 +60,15 @@ const MESSAGE_KINDS = ['offer', 'question', 'visit', 'reply', 'follow_up', 'docu
 const CHANNELS = ['email', 'sms', 'phone', 'visit']
 const LETTERS = 'ABCDEFG'
 // the profile's numbers, the only fields the dashboard may write
-const PROFILE_NUMBERS = ['down_payment', 'net_income_monthly', 'other_loans_monthly', 'rate', 'years', 'insurance_rate', 'notary_old', 'notary_new', 'eur_per_credit', 'monthly_credit_cap']
+const PROFILE_NUMBERS = ['down_payment', 'net_income_monthly', 'other_loans_monthly', 'rate', 'years', 'insurance_rate', 'notary_old', 'notary_new', 'eur_per_credit', 'monthly_credit_cap', 'max_fetch']
+// The dashboard's settings (« Réglages », .settings.json, the folder's): the watch's period in minutes (0: off;
+// IMMO_WATCH_HOURS sets its default), the API on or off, the automatic fetch and its credits a month, the desktop
+// notifications (sound, quiet hours), a news read once opened, how many days of news the follow-up keeps (0: all)
+const SETTINGS = {
+  watch_minutes: process.env.IMMO_WATCH_HOURS != null ? +process.env.IMMO_WATCH_HOURS * 60 : 360, api: true, auto_fetch: false, auto_credits: 50,
+  notify: true, sound: true, quiet: null, read_on_open: true, keep_days: 0,
+}
+const WATCH_MINUTES = [0, 30, 60, 360, 720, 1440], KEEP_DAYS = [0, 30, 90, 365]
 
 const { values: opt, positionals: [cmd, ...args] } = parseArgs({
   allowPositionals: true,
@@ -71,7 +78,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     mode: { type: 'string' }, zone: { type: 'string' }, radius: { type: 'string' }, type: { type: 'string' }, types: { type: 'string' }, criteria: { type: 'string' }, max: { type: 'string' },
     kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' }, from: { type: 'string' }, channel: { type: 'string' }, date: { type: 'string' }, sent: { type: 'boolean' },
     url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' },
-    webhook: { type: 'string' }, open: { type: 'boolean' },
+    open: { type: 'boolean' },
   },
 })
 
@@ -85,11 +92,14 @@ const slugify = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().re
 const od = openData(CACHE)
 const profile = () => ({ ...PROFILE, ...readJson(PROFILE_FILE, {}) })
 const hasKey = () => !!process.env.STREAM_ESTATE_API_KEY
+const settings = () => ({ ...SETTINGS, ...readJson(SETTINGS_FILE, {}) })
+// the API may be called: the key is there and the user did not turn it off (« Réglages »)
+const apiOn = () => hasKey() && settings().api !== false
 const MODES = ['stream-estate', 'classic']
 // the types of property of a search (flats, for one made before the types)
 const typesOf = s => s.types ?? ['flat']
-// a search may call Stream Estate: its mode allows it and the key is there
-const streamOn = s => s.mode !== 'classic' && hasKey()
+// a search may call Stream Estate: its mode allows it, the key is there and the API is on
+const streamOn = s => s.mode !== 'classic' && apiOn()
 
 // the searches of the folder, by slug
 const searches = () => fs.readdirSync(HOME).filter(x => /^[a-z0-9][a-z0-9-]*$/.test(x) && fs.existsSync(path.join(HOME, x, 'search.json'))).sort()
@@ -100,7 +110,7 @@ function searchDir(required = true) {
   if (!fs.existsSync(path.join(dir, 'search.json'))) die(`no search ${p} in ${HOME}`)
   return dir
 }
-const version = dir => Math.max(...['search.json', 'listings.json', 'market.json', 'area.json', 'feed.json'].map(f => fs.statSync(path.join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0))
+const version = dir => Math.max(...['search.json', 'listings.json', 'market.json', 'area.json', 'feed.json', 'alerts.json'].map(f => fs.statSync(path.join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0))
 const load = dir => ({
   search: readJson(path.join(dir, 'search.json')), listings: readJson(path.join(dir, 'listings.json'), []),
   market: readJson(path.join(dir, 'market.json'), {}), area: readJson(path.join(dir, 'area.json'), {}),
@@ -111,7 +121,7 @@ const load = dir => ({
 const usageLog = () => readJson(USAGE, [])
 // what a Stream Estate call cost, in the log: the route's price for the items it returned (the v1 gives no figure)
 const charged = slug => ({ route, results }) =>
-  writeJson(USAGE, [...usageLog(), { date: now(), route, credits: estimate(route, { results }, readJson(MEASURED, {})), results, search: slug ?? null }])
+  writeJson(USAGE, [...usageLog(), { date: now(), route, credits: estimate(route, { results }, readJson(MEASURED, {})), results, search: slug ?? null, ...(process.env.IMMO_BY ? { by: process.env.IMMO_BY } : {}) }])
 const api = (slug, method, p, init) => se(method, p, { ...init, charged: charged(slug) })
 
 // Before a call that may cost: --estimate prints the estimate (JSON) and stops; otherwise the call goes only with the
@@ -131,6 +141,7 @@ const assisted = why => die(`${why}. Assisted mode: find listings with WebSearch
 const requireStream = s => {
   if (s.mode === 'classic') die(`${s.slug} is an OpenData search (classic: open data and assisted listings, no credit): switch it with search -p ${s.slug} --mode stream-estate`, 2)
   if (!hasKey()) assisted('Stream Estate is off (no key)')
+  if (!apiOn()) assisted("the API is turned off in the dashboard's Réglages")
 }
 const withCredits = async fn => { try { return await fn() } catch (e) { if (e instanceof NoCredits) assisted(e.message); throw e } }
 
@@ -150,7 +161,7 @@ function seWhere(s) {
   return { geoShapes: polygons.map(p => outline(p[0], Math.floor(60 / polygons.length))) }
 }
 
-// the criteria of the type t as v1 filters, the same for a listing query and a saved search (an alert)
+// the criteria of the type t as v1 filters
 function seFilters(s, t) {
   const c = s.criteria ?? {}, on = k => takes(t, k)
   return {
@@ -217,10 +228,11 @@ async function doctor() {
     ['dashboard built', fs.existsSync(path.join(DASHBOARD, 'index.html')), `npm run build in plugins-src/skill-immo/dashboard (${DASHBOARD})`],
   ]
   for (const [name, ok, fix] of checks) console.log(`${ok ? 'ok     ' : 'MISSING'} ${name}${ok ? '' : `: ${fix}`}`)
-  console.log(hasKey() ? 'stream-estate: on (API v1: listings, asking prices, alerts)' : "stream-estate: off (assisted mode: listings from WebSearch, WebFetch or pasted text); the plugin's secret: /plugin configure skill-immo@pabrisson")
+  console.log(hasKey() ? `stream-estate: ${apiOn() ? 'on (API v1: listings, asking prices)' : "off: turned off in the dashboard's Réglages (assisted mode)"}` : "stream-estate: off (assisted mode: listings from WebSearch, WebFetch or pasted text); the plugin's secret: /plugin configure skill-immo@pabrisson")
   // a count returns no item, so it is free: it checks the key
   const key = hasKey() ? await se('GET', '/documents/properties', { query: { itemsPerPage: 0, transactionType: 0 } }).then(() => '; key accepted', e => `; the key fails: ${e.message}`) : ''
   console.log(`credits: ${u.last30} in the last 30 days (${euros(u.last30, p.eur_per_credit)}), ${u.month} this month of the ${p.monthly_credit_cap} cap${u.unknown ? `, ${u.unknown} calls of unknown cost` : ''}${key}`)
+  if (hasKey()) { const a = accountOf(); console.log(a ? `account: about ${euros(a.left, 1)} left (${fmt(a.left_items)} items): ${euros(a.deposited, 1)} deposited, ${fmt(a.items)} items on the console on ${a.at.slice(0, 10)}, ${fmt(a.since)} since in the log` : "account: unknown (the API does not give it; Stream Estate's console shows the € deposited and « API items returned »)") }
   console.log(fs.existsSync(PROFILE_FILE) ? `profile: ${PROFILE_FILE}` : 'profile: none yet, run setup (the budget tab needs it)')
   console.log(`searches: ${HOME} (${searches().length})`)
   // in a git repository: none of what the user made ignored, the cache and the profile left out
@@ -320,9 +332,10 @@ function dpeLine(rows, listings, before) {
 }
 const dpeNumbers = dir => { const r = readJson(path.join(dir, 'area.json'), {}).dpe_recent; return Array.isArray(r) ? new Set(r.map(d => d.number)) : null }
 
-// The news of a search (<slug>/feed.json), newest first: a recent DPE of its types and criteria that no listing
-// matches and the area.json before did not hold (a home about to go on sale?), Stream Estate listings to fetch. The
-// listings' own changes (new, drops, expiries) stay in listings.json; both are unread until `read_at`.
+// The news of a search (<slug>/feed.json), newest first: a recent DPE of the zone that no listing matches and the
+// area.json before did not hold (a home about to go on sale?), Stream Estate listings to fetch. The listings' own
+// changes (new, drops, expiries) stay in listings.json; both are unread until `read_at`. The search's alerts
+// (lib/alerts.js) pick those that show: the default one on DPE keeps those of its types and criteria.
 const feedOf = dir => readJson(path.join(dir, 'feed.json'), { read_at: null, stream: null, items: [] })
 function addNews(dir, items, extra) {
   if (!items.length && !extra) return
@@ -330,11 +343,42 @@ function addNews(dir, items, extra) {
   // ponytail: the last 500 news kept, older ones dropped; an archive if anyone scrolls that far
   writeJson(path.join(dir, 'feed.json'), { ...f, ...extra, items: [...items, ...f.items].slice(0, 500) })
 }
-const dpeNews = (s, rows, listings, before) => recentDpe(rows, listings, { types: typesOf(s), criteria: s.criteria }).flatMap(a => a.items)
+const dpeNews = (rows, listings, before) => recentDpe(rows, listings).flatMap(a => a.items)
   .filter(d => !d.listing && !before.has(d.number)).map(({ listing, ...dpe }) => ({ date: now(), kind: 'dpe', dpe }))
+const alertsAt = dir => alertsOf(readJson(path.join(dir, 'alerts.json'), {}))
+// every news of a search: the feed's, and the listings' changes with their listing, those of the last `keep_days`
+const newsOf = dir => {
+  const k = settings().keep_days, since = k ? new Date(Date.now() - k * 86400000).toISOString() : ''
+  return [...feedOf(dir).items, ...listingsOf(dir).flatMap(l => (l.changes ?? []).map(c => ({ ...c, l })))].filter(n => n.date >= since)
+}
+// a news is read once marked so, all of them up to `read_at` or one by one (`read`, their keys)
+const isRead = (f, n) => n.date <= (f.read_at ?? '') || !!f.read?.includes(newsKey(n))
+// the news an alert that is on takes, not read yet
 const unread = dir => {
-  const f = feedOf(dir)
-  return [...f.items, ...listingsOf(dir).flatMap(l => l.changes ?? [])].filter(n => n.date > (f.read_at ?? '')).length
+  const f = feedOf(dir), s = readJson(path.join(dir, 'search.json')), alerts = alertsAt(dir)
+  return newsOf(dir).filter(n => !isRead(f, n) && firing(alerts, n, s).length).length
+}
+// The DPE at the places of the search's alerts, outside its zone (lib/alerts.js): an alert's first look notes what
+// is there; the next ones bring what is new, no listing of the zone, not already in the news, and that an alert takes.
+// What each alert saw stays in .cache/alerts/<slug>/ (cleared with the cache: the next look notes again).
+async function placeNews(dir, s, days) {
+  const alerts = alertsAt(dir).filter(a => a.enabled && a.event === 'dpe' && a.place && a.place.how !== 'zone'), news = []
+  const zone = dpeNumbers(dir) ?? new Set(), known = new Set(feedOf(dir).items.filter(n => n.outside).map(n => n.dpe.number))
+  for (const a of alerts) {
+    const rows = await od.placeDpe(a.place, days), f = path.join(CACHE, 'alerts', s.slug, `${a.id}.json`), seen = readJson(f, null)
+    if (seen) for (const dpe of rows) {
+      const n = { date: now(), kind: 'dpe', dpe, outside: true }
+      if (!seen.includes(dpe.number) && !zone.has(dpe.number) && !known.has(dpe.number) && alertTakes(a, n, s)) { news.push(n); known.add(dpe.number) }
+    }
+    writeJson(f, rows.map(d => d.number))
+  }
+  return news
+}
+// the user's own alerts that news fired, for Claude to say: alerts: « DPE rue Paul Bert » 2
+function alertLine(dir, s, news) {
+  const n = {}, mine = alertsAt(dir).filter(a => !a.builtin)
+  for (const x of news) for (const a of firing(mine, x, s)) n[a.name] = (n[a.name] ?? 0) + 1
+  return Object.keys(n).length ? `alerts: ${Object.entries(n).map(([k, v]) => `« ${k} » ${v}`).join(', ')}` : null
 }
 const pool = async (items, n, fn) => { const out = [], it = items.entries(); await Promise.all(Array.from({ length: n }, async () => { for (const [i, x] of it) out[i] = await fn(x) })); return out }
 
@@ -395,12 +439,12 @@ async function oddsOf(bb) {
   }
 }
 
-// search "<address | street | neighborhood>" [--zone …] [--radius m] [--criteria …] [--max n]: a new search, or -p
+// search "<address | street | neighborhood>" [--zone …] [--radius m] [--criteria …]: a new search, or -p
 // <slug> to change one (zone, criteria) and refresh its free data
 async function search(query) {
   let dir = opt.project ? searchDir() : null, s = dir ? readJson(path.join(dir, 'search.json')) : null
   if (!s) {
-    if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris] [--radius m] [--criteria "k=v …"] [--max n]')
+    if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris] [--radius m] [--criteria "k=v …"]')
     const [f] = await od.geocode(query, { type: opt.type, limit: 1 })
     if (!f) die(`no place found for "${query}": try geocode "${query}" and a more precise query`)
     const x = f.properties, slug = (() => { const b = slugify(opt.slug ?? x.label); let sl = b; for (let i = 2; fs.existsSync(path.join(HOME, sl)); i++) sl = `${b}-${i}`; return sl })()
@@ -408,7 +452,7 @@ async function search(query) {
     s = {
       slug, query, label: x.label, created: now(), type: x.type, point: f.geometry.coordinates, insee: x.citycode, city: x.city, district: x.district ?? null,
       postcode: x.postcode, dep: x.depcode ?? x.citycode.slice(0, 2), street: x.street && voie ? { name: x.street, code_voie: voie } : null, ban: x.id,
-      types: ['flat'], criteria: {}, max: 100, stream: null, last_fetch: null, last_refresh: null, last_visit: null, alert: null,
+      types: ['flat'], criteria: {}, stream: null, last_fetch: null, last_refresh: null, last_visit: null,
     }
     dir = path.join(HOME, slug)
   }
@@ -418,7 +462,6 @@ async function search(query) {
   s.mode = opt.mode ?? s.mode ?? (hasKey() ? 'stream-estate' : 'classic')
   if (opt.types) s.types = parseTypes(opt.types)
   if (opt.criteria) parseCriteria(opt.criteria, s.criteria)
-  if (opt.max) s.max = +opt.max
   if (!s.zone || opt.zone || opt.radius) s.zone = await makeZone(s)
   writeJson(path.join(dir, 'search.json'), s)
   writeGitignore()
@@ -441,9 +484,9 @@ async function search(query) {
     const total = await withCredits(() => seCount(s.slug, seQueries(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) })))
     s.stream = { total, counted_at: now() }
     writeJson(path.join(dir, 'search.json'), s)
-    const n = Math.min(total, s.max), p = profile(), local = localOnly(s)
+    const p = profile(), n = Math.min(total, p.max_fetch), local = localOnly(s)
     console.log(`Stream Estate: ${total} new listings match, ${n} would be fetched for ${n} credits (${euros(n, p.eur_per_credit)}); ${Math.max(0, p.monthly_credit_cap - usage(usageLog()).month)} left of the monthly cap.${local.length ? ` The API does not filter on ${local.join(', ')}: the count includes listings they rule out.` : ''} Ask the user, then fetch -p ${s.slug} --spend ${n}`)
-  } else console.log(`${s.mode === 'classic' ? 'OpenData search' : 'Stream Estate: off (no key)'}: assisted listings (WebSearch, WebFetch, pasted text, then add)`)
+  } else console.log(`${s.mode === 'classic' ? 'OpenData search' : hasKey() ? "Stream Estate: turned off in the dashboard's Réglages" : 'Stream Estate: off (no key)'}: assisted listings (WebSearch, WebFetch, pasted text, then add)`)
   console.log(`then: dashboard -p ${s.slug} --open`)
 }
 const listingsOf = dir => readJson(path.join(dir, 'listings.json'), [])
@@ -513,7 +556,7 @@ async function fetchListings() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
   requireStream(s)
   const known = listingsOf(dir).map(l => l.se_id).filter(Boolean), queries = seQueries(s, { exclude: known })
-  const total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? s.max))
+  const total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? profile().max_fetch))
   if (!n) return console.log('Stream Estate: no new listing matches')
   approve('GET /documents/properties', n, `fetch ${n} of ${total} listings`)
   const raw = await withCredits(() => seFetch(s.slug, queries, Math.min(n, +opt.spend || n)))
@@ -593,18 +636,23 @@ async function enrich() {
 async function refresh() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), before = dpeNumbers(dir)
   const { area } = await freeData(dir, s)
-  const dpe = () => {
-    const l = dpeLine(area.dpe_recent, listingsOf(dir), before)
+  // the DPE line, the new DPE of the zone and of the alerts' places as news, then the user's alerts those and the
+  // listings' changes fired
+  const dpe = async (changes = []) => {
+    const l = dpeLine(area.dpe_recent, listingsOf(dir), before), ls = listingsOf(dir)
     if (l) console.log(l)
-    if (before && Array.isArray(area.dpe_recent)) addNews(dir, dpeNews(s, area.dpe_recent, listingsOf(dir), before))
+    const news = [...before && Array.isArray(area.dpe_recent) ? dpeNews(area.dpe_recent, ls, before) : [], ...await placeNews(dir, s, 1).catch(() => [])]
+    addNews(dir, news)
+    const a = alertLine(dir, s, [...news, ...changes.map(c => ({ ...c, l: ls.find(x => x.id === c.id) }))])
+    if (a) console.log(a)
   }
   // a listing typed or pasted without a link has no page to check
   const assistedCount = listingsOf(dir).filter(l => l.source !== 'stream-estate' && l.urls.length && l.status !== 'EXPIRED').length
   if (!streamOn(s) || !s.last_refresh) {
     console.log(`free data refreshed. ${streamOn(s) ? `No Stream Estate fetch yet: fetch -p ${s.slug}` : s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}${assistedCount ? `; ${assistedCount} assisted listings: check each with WebFetch (one page), then add --file to update price or status` : ''}`)
-    return dpe()
+    return await dpe()
   }
-  const queries = seQueries(s, { since: s.last_refresh }), total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? s.max))
+  const queries = seQueries(s, { since: s.last_refresh }), total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? profile().max_fetch))
   if (n) approve('GET /documents/properties', n, `refresh ${n} changed listings`)
   const raw = n ? await withCredits(() => seFetch(s.slug, queries, n)) : []
   const changes = saveMerged(dir, raw.map(fromStreamEstate))
@@ -613,64 +661,31 @@ async function refresh() {
   await autoEnrich(dir, s, changes)
   console.log(`refresh: ${raw.length} changed since the last one: ${describe(changes)}`)
   for (const c of changes.filter(c => c.kind !== 'new')) console.log(`  ${c.id} ${c.kind}: ${c.from} → ${c.to}`)
-  dpe()
+  await dpe(changes)
 }
 
-// A v1 saved search (POST or PUT /searches) for the type t of the search: its zone, its criteria (the DPE, the floor,
-// the elevator and the outdoor space have no filter there), and its pushes: new listings, and price changes
-function searchBody(s, t, enabled) {
-  const w = seWhere(s)
-  return {
-    title: `immo ${s.label}${typesOf(s).length > 1 ? ` (${t})` : ''}`, ...seFilters(s, t), ...(w.includedInseeCodes ? { includedZipcodesInsee: w.includedInseeCodes } : w),
-    notificationEnabled: enabled, endpointRecipient: s.alert.hooks.match, eventEndpoint: s.alert.hooks.event, subscribedEvents: ['ad.update.price'],
-  }
+// alerts -p <slug> [--file <alerts.json>]: the search's alerts (lib/alerts.js), each with how many news it took;
+// --file replaces them, checked as the dashboard's are
+function alertsCmd() {
+  const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
+  if (opt.file) try { writeJson(path.join(dir, 'alerts.json'), cleanAlerts(readJson(opt.file === '-' ? 0 : opt.file))) } catch (e) { die(e.message) }
+  const news = newsOf(dir)
+  console.log(JSON.stringify(readJson(path.join(dir, 'alerts.json'), {})))
+  for (const a of alertsAt(dir)) console.log(`${a.enabled ? 'on ' : 'off'} ${a.builtin ? 'default' : 'custom'} ${a.id}${a.name ? ` « ${a.name} »` : ''}: ${a.event}${a.place && a.place.how !== 'zone' ? ` at ${a.place.label}` : ''}, ${news.filter(n => alertTakes(a, n, s)).length} news`)
 }
 
-// alert create [--webhook <https url>] | list | on | off | delete, -p <slug>: one saved search per type of the search
+// alert delete -p <slug>: deletes the Stream Estate saved searches skill-immo 1.6 and before made (they pushed to
+// ntfy.sh). The alerts are the dashboard's now, fed by the server's free counts.
 async function alert(sub) {
-  if (!hasKey()) die('alerts need Stream Estate (no key)')
-  const m = readJson(MEASURED, {}), cost = (r, calls = 1) => estimate(r, { calls }, m)
-  if (sub === 'list') {
-    approve('GET /searches', cost('GET /searches'), 'list alerts')
-    for (const a of members((await api(null, 'GET', '/searches')).data)) console.log(`${a['@id']?.split('/').pop()} ${a.notificationEnabled ? 'on ' : 'off'} ${a.title ?? ''}`)
-    return
-  }
-  const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), types = typesOf(s)
-  requireStream(s)
-  if (sub === 'create') {
-    if (s.alert?.searches?.length) die(`the search already has an alert: alert delete -p ${s.slug} first`)
-    // the v1 refuses a saved search without a maximum budget (or price per m²)
-    if (!s.criteria?.budget_max) die(`an alert needs a maximum budget: ask the user, then search -p ${s.slug} --criteria "budget_max=…"`)
-    approve('POST /searches', cost('POST /searches', types.length), 'create the alert')
-    // ntfy.sh by default: a random topic (whoever knows it can read it), the JSON turned into a readable push
-    const topic = `immo-${s.slug.slice(0, 20)}-${randomBytes(8).toString('hex')}`, ntfy = (t, msg) => `https://ntfy.sh/${topic}?${new URLSearchParams({ tpl: 'yes', t, m: msg })}`
-    const hooks = opt.webhook ? { match: opt.webhook, event: opt.webhook } : {
-      match: ntfy('Nouvelle annonce · {{.propertyDocument.city.name}}', '{{.propertyDocument.room}} p. · {{.propertyDocument.surface}} m² · {{.propertyDocument.price}} € — {{.propertyDocument.title}}'),
-      event: ntfy('Prix modifié · {{.match.propertyDocument.city.name}}', '{{.adEvent.fieldOldValue}} → {{.adEvent.fieldNewValue}} € ({{.adEvent.percentVariation}} %) — {{.match.propertyDocument.title}}'),
-    }
-    if (!/^https:\/\//.test(hooks.match)) die('the webhook must be HTTPS')
-    s.alert = { searches: [], created: now(), webhook: opt.webhook ? 'custom' : 'ntfy', topic: opt.webhook ? null : topic, hooks, enabled: true }
-    for (const t of types) {
-      const a = (await api(s.slug, 'POST', '/searches', { body: searchBody(s, t, true) })).data
-      s.alert.searches.push({ id: a['@id'].split('/').pop(), type: t })
-      writeJson(path.join(dir, 'search.json'), s)
-    }
-    return console.log(`alert on ${types.join(', ')}: new listings and price changes${opt.webhook ? '' : ` pushed to ntfy: subscribe to the topic ${topic} in the ntfy app (https://ntfy.sh/${topic})`}`)
-  }
-  if (!s.alert?.searches?.length) die(`no alert on ${s.slug}: alert create -p ${s.slug}`)
-  const n = s.alert.searches.length
-  if (['on', 'off'].includes(sub)) {
-    approve('PUT /searches/{id}', cost('PUT /searches/{id}', n), `turn the alert ${sub}`)
-    // a PUT replaces the saved search: the whole body again, with the search's criteria of today
-    for (const a of s.alert.searches) await api(s.slug, 'PUT', `/searches/${a.id}`, { body: searchBody(s, a.type, sub === 'on') })
-    s.alert.enabled = sub === 'on'
-  } else if (sub === 'delete') {
-    approve('DELETE /searches/{id}', cost('DELETE /searches/{id}', n), 'delete the alert')
-    for (const a of s.alert.searches) await api(s.slug, 'DELETE', `/searches/${a.id}`)
-    s.alert = null
-  } else die('usage: alert create [--webhook <https url>] | list | on | off | delete -p <slug>')
+  const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
+  if (sub !== 'delete') die(`the alerts are the dashboard's now: alerts -p ${s.slug}. alert delete -p ${s.slug} deletes an old Stream Estate alert`)
+  if (!s.alert?.searches?.length) return console.log(`no Stream Estate alert on ${s.slug}`)
+  if (!hasKey()) die('deleting the Stream Estate alert needs the key')
+  approve('DELETE /searches/{id}', estimate('DELETE /searches/{id}', { calls: s.alert.searches.length }, readJson(MEASURED, {})), 'delete the alert')
+  for (const a of s.alert.searches) await api(s.slug, 'DELETE', `/searches/${a.id}`)
+  s.alert = null
   writeJson(path.join(dir, 'search.json'), s)
-  console.log(`alert ${sub}: done`)
+  console.log('the Stream Estate alert is deleted: its pushes stop')
 }
 
 // usage: the credits spent, per month, search and route
@@ -682,10 +697,40 @@ async function usageCmd() {
   for (const [k, v] of Object.entries(u.by_route)) console.log(`  ${k}: ${v.credits} credits, ${v.calls} calls`)
 }
 
-// costs | costs set "<route>=<credits>": the price of each route; one of unknown cost is read off Stream Estate's
-// console after a first call, then set here
+// The account, as Stream Estate's console shows it: the euros deposited (pay as you go) and « API items returned », the
+// items billed since the account opened (0.01 € each). The API v1 gives neither (checked 2026-10-29: /me, /users/me,
+// /account answer 404, no header). The items the log counted since the console was read come on top. (A `balance` in
+// credits, of the first 1.8 builds, reads as that many credits deposited.)
+function accountOf() {
+  const p = profile(), a = p.account ?? (p.balance && { deposited: p.balance.credits * p.eur_per_credit, items: 0, at: p.balance.at })
+  if (!a) return null
+  const since = usageLog().filter(e => e.date >= a.at).reduce((n, e) => n + (e.credits ?? 0), 0), used = a.items + since
+  const left = Math.round((a.deposited - used * p.eur_per_credit) * 100) / 100
+  return { deposited: a.deposited, items: a.items, at: a.at, topups: a.topups ?? [], since, used, left, left_items: Math.max(0, Math.floor(left / p.eur_per_credit + 1e-9)) }
+}
+// the account changed: money added (`topup` €), or the console's figures (`deposited` €, `items`: then as of now)
+function setAccount(x) {
+  const pr = readJson(PROFILE_FILE, {}), a = accountOf() ?? { deposited: 0, items: 0, at: now(), topups: [] }, ok = k => x[k] != null && x[k] !== '' && Number.isFinite(+x[k]) && +x[k] >= 0
+  const next = { deposited: a.deposited, items: a.items, at: a.at, topups: a.topups }
+  if (ok('topup') && +x.topup > 0) Object.assign(next, { deposited: Math.round((next.deposited + +x.topup) * 100) / 100, topups: [...next.topups, { date: now(), eur: +x.topup }].slice(-50) })
+  if (ok('deposited')) next.deposited = +x.deposited
+  if (ok('items')) Object.assign(next, { items: Math.round(+x.items), at: now() })
+  delete pr.balance
+  writeJson(PROFILE_FILE, { ...pr, account: next })
+  return accountOf()
+}
+
+// costs | costs set "<route>=<credits>" | costs topup <€> | costs account <€ deposited> <items>: the price of each route
+// (one of unknown cost is read off Stream Estate's console after a first call, then set here), money the user added
+// to the account, the console's figures
 async function costs(sub, ...rest) {
   const m = readJson(MEASURED, {})
+  if (sub === 'topup' || sub === 'account') {
+    const x = sub === 'topup' ? { topup: rest[0] } : { deposited: rest[0], items: rest[1] }
+    if (Object.values(x).some(v => !(v !== undefined && Number.isFinite(+v) && +v >= 0))) die('usage: costs topup <€ added> | costs account <€ deposited> <API items returned>')
+    const a = setAccount(x)
+    return console.log(`account: about ${euros(a.left, 1)} left (${fmt(a.left_items)} items), ${euros(a.deposited, 1)} deposited; the dashboard's « Coûts API » follows it`)
+  }
   if (sub === 'set') {
     for (const x of rest) { const i = x.lastIndexOf('='); if (!(x.slice(0, i) in table())) die(`unknown route ${x.slice(0, i)}`); m[x.slice(0, i)] = +x.slice(i + 1) }
     writeJson(MEASURED, m)
@@ -779,22 +824,21 @@ function sendFile(res, file) {
 // approval as Claude's (estimate: true first, then spend / accept_unknown once the user confirmed in the dialog).
 const RUN = {
   search: ['query', 'mode', 'types', 'criteria', 'zone', 'radius', 'max'], fetch: ['spend', 'max'], market: [], refresh: ['spend'], enrich: ['id', 'all'],
-  alert: ['sub', 'webhook'], usage: [],
+  usage: [],
 }
 function runArgs(body) {
   const keys = RUN[body.cmd]
   if (!keys) throw new Error(`cannot run ${body.cmd}`)
   const a = body.args ?? {}, argv = [SELF, body.cmd]
-  if (body.cmd === 'alert') { if (!['create', 'on', 'off', 'delete'].includes(a.sub)) throw new Error('bad alert'); argv.push(a.sub) }
   if (body.cmd === 'search' && a.query && !body.slug) argv.push(String(a.query))
   if (body.slug) { if (!/^[a-z0-9][a-z0-9-]*$/.test(body.slug)) throw new Error('bad slug'); argv.push('-p', body.slug) }
-  for (const k of keys) if (!['query', 'sub'].includes(k) && a[k] != null && a[k] !== false) argv.push(`--${k}`, ...(a[k] === true ? [] : [String(a[k])]))
+  for (const k of keys) if (k !== 'query' && a[k] != null && a[k] !== false) argv.push(`--${k}`, ...(a[k] === true ? [] : [String(a[k])]))
   if (body.estimate) argv.push('--estimate')
   if (body.accept_unknown) argv.push('--accept-unknown')
   return argv
 }
-const runEngine = argv => new Promise(ok => {
-  const p = spawn(process.execPath, argv, { cwd: HOME, env: { ...process.env, IMMO_DIR: HOME } })
+const runEngine = (argv, env = {}) => new Promise(ok => {
+  const p = spawn(process.execPath, argv, { cwd: HOME, env: { ...process.env, IMMO_DIR: HOME, ...env } })
   let out = '', err = ''
   p.stdout.on('data', d => (out += d))
   p.stderr.on('data', d => (err += d))
@@ -815,17 +859,66 @@ async function handle(req, res) {
     return reply(res, 200, {})
   }
   if (p === '/api/state') {
-    const pr = profile(), u = usage(usageLog())
-    return reply(res, 200, { home: HOME, stream_estate: hasKey(), watch_hours: WATCH_HOURS, costs: table(readJson(MEASURED, {})), usage: { ...u, cap: pr.monthly_credit_cap, eur_per_credit: pr.eur_per_credit }, log: usageLog().slice(-300) })
+    const pr = profile(), log = usageLog(), u = usage(log)
+    // the credits a day over the last 60 days (all, and the automatic fetch's), a month (the automatic fetch's), and
+    // per use: listings fetched, free counts, asking prices, an old alert deleted
+    const since = new Date(Date.now() - 60 * 86400000).toISOString(), daily = {}, daily_auto = {}, monthly_auto = {}, by_use = {}
+    const useOf = e => (e.route === 'GET /documents/properties' ? (e.results ? 'fetched' : 'counts') : e.route === 'GET /indicators/price_per_meter' ? 'asking' : e.route.startsWith('DELETE /searches') ? 'alert' : 'other')
+    for (const e of log) {
+      const d = e.date.slice(0, 10), c = e.credits ?? 0, add = (o, k) => { o[k] = (o[k] ?? 0) + c }
+      if (e.date >= since) { add(daily, d); if (e.by === 'auto') add(daily_auto, d) }
+      if (e.by === 'auto') add(monthly_auto, d.slice(0, 7))
+      const x = by_use[useOf(e)] ??= { calls: 0, credits: 0, unknown: 0 }
+      x.calls++
+      x.credits += c
+      if (e.credits == null) x.unknown++
+    }
+    // what each search has to fetch, from the latest counts: the new listings, the fetched ones changed since its refresh
+    const pending = searches().map(x => {
+      const d = path.join(HOME, x), s = readJson(path.join(d, 'search.json')), f = feedOf(d)
+      const last = [s.stream, f.stream].filter(Boolean).sort((a, b) => b.counted_at.localeCompare(a.counted_at))[0]
+      return { slug: x, label: s.label, on: streamOn(s), added: last?.total ?? 0, changed: f.changed?.since === s.last_refresh ? f.changed.total : 0 }
+    })
+    return reply(res, 200, {
+      home: HOME, stream_estate: apiOn(), has_key: hasKey(), settings: settings(), watch: { last: lastWatch, next: nextWatch, running: !!watching },
+      costs: table(readJson(MEASURED, {})), usage: { ...u, cap: pr.monthly_credit_cap, eur_per_credit: pr.eur_per_credit, max_fetch: pr.max_fetch, account: accountOf(), daily, daily_auto, monthly_auto, by_use }, pending, log: log.slice(-300),
+    })
+  }
+  if (p === '/api/settings' && post) {
+    let st
+    try { st = cleanSettings(await readBody(req)) } catch (e) { return reply(res, 400, { error: e.message }) }
+    writeJson(SETTINGS_FILE, st)
+    schedule()
+    return reply(res, 200, settings())
+  }
+  // the watch now, free: back once it is done
+  if (p === '/api/watch' && post) { await watchAll(); return reply(res, 200, { last: lastWatch, next: nextWatch }) }
+  // the open data cache: its size, and emptied (the credits log stays)
+  if (p === '/api/cache') {
+    if (req.method === 'DELETE') { for (const f of fs.readdirSync(CACHE)) if (f !== 'api-usage.json') fs.rmSync(path.join(CACHE, f), { recursive: true, force: true }) }
+    const files = fs.existsSync(CACHE) ? fs.readdirSync(CACHE, { recursive: true, withFileTypes: true }).filter(e => e.isFile() && e.name !== 'api-usage.json') : []
+    return reply(res, 200, { files: files.length, bytes: files.reduce((a, e) => a + fs.statSync(path.join(e.parentPath, e.name)).size, 0) })
+  }
+  // an alert's place from the address autocomplete: a street (its BAN id), a commune (its code), an address (a circle)
+  if (p === '/api/place') {
+    const how = url.searchParams.get('how'), q = url.searchParams.get('q') ?? ''
+    if (!['street', 'commune', 'radius'].includes(how) || q.length < 3) return reply(res, 400, { error: 'expects ?how=street|commune|radius&q=' })
+    const [f] = await od.geocode(q, { type: { street: 'street', commune: 'municipality' }[how], limit: 1 }).catch(() => [])
+    if (!f) return reply(res, 404, { error: 'not found' })
+    const x = f.properties, base = { how, label: how === 'commune' ? `${x.city ?? x.label} (${x.citycode})` : x.label, point: f.geometry.coordinates }
+    return reply(res, 200, how === 'street' ? { ...base, ban: x.id } : how === 'commune' ? { ...base, insee: x.citycode } : { ...base, radius_m: +(url.searchParams.get('radius') ?? 300) })
   }
   if (p === '/api/searches') return reply(res, 200, searches().map(x => { const { search: s, listings: ls } = load(path.join(HOME, x)); return { slug: x, label: s.label, mode: s.mode ?? 'classic', types: typesOf(s), zone: s.zone?.label, created: s.created, listings: ls.length, online: ls.filter(l => l.status !== 'EXPIRED').length } }))
   if (p === '/api/profile') {
     if (!post) return reply(res, 200, profile())
     const body = await readBody(req), pr = readJson(PROFILE_FILE, {})
     for (const k of PROFILE_NUMBERS) if (body[k] != null && Number.isFinite(+body[k])) pr[k] = +body[k]
+    // the account changed (`account_set`: money added, the console's figures), apart from the profile the pages send back
+    const change = body.account_set && typeof body.account_set === 'object' ? body.account_set : null
     // the score's priorities: 0 to 3 for each of its parts
     if (body.weights) pr.weights = Object.fromEntries(Object.keys(WEIGHTS).map(k => [k, Math.max(0, Math.min(3, Math.round(+body.weights[k])))]).filter(([, v]) => Number.isFinite(v)))
     writeJson(PROFILE_FILE, pr)
+    if (change) setAccount(change)
     return reply(res, 200, profile())
   }
   if (p === '/api/autocomplete') return reply(res, 200, await od.completion(url.searchParams.get('q') ?? '').catch(() => []))
@@ -851,15 +944,37 @@ async function handle(req, res) {
     // meanwhile still shows as new to the page (it asks /version every few seconds)
     if (sub === '/version') return reply(res, 200, { version: version(dir), unread: unread(dir) })
     if (!sub && req.method === 'DELETE') {
-      // a search with an alert keeps it: Stream Estate would go on notifying, with no search left to show it
+      // a search with an old Stream Estate alert keeps it: it would go on pushing, with no search left to delete it
       if (readJson(path.join(dir, 'search.json')).alert?.searches?.length) return reply(res, 409, { error: 'alert' })
       fs.rmSync(dir, { recursive: true, force: true })
       return reply(res, 200, {})
     }
-    if (!sub) { const v = version(dir); return reply(res, 200, { ...load(dir), feed: feedOf(dir), unread: unread(dir), version: v }) }
+    if (!sub) { const v = version(dir); return reply(res, 200, { ...load(dir), alerts: readJson(path.join(dir, 'alerts.json'), {}), feed: feedOf(dir), unread: unread(dir), version: v }) }
+    // the search's alerts: the default ones turned off, the user's own (lib/alerts.js)
+    if (sub === '/alerts' && post) {
+      let a
+      try { a = cleanAlerts(await readBody(req)) } catch (e) { return reply(res, 400, { error: e.message }) }
+      writeJson(path.join(dir, 'alerts.json'), a)
+      // a new place: its first look now, so that what comes after is news
+      placeNews(dir, readJson(path.join(dir, 'search.json')), 1).then(n => addNews(dir, n), e => console.log(`alerts ${m[1]}: ${e.message}`))
+      return reply(res, 200, a)
+    }
+    // what an alert at a place would have taken among the DPE of its last 12 months (free, kept a day)
+    if (sub === '/alerts/preview' && post) {
+      let a
+      try { [a] = cleanAlerts({ custom: [await readBody(req)] }).custom } catch (e) { return reply(res, 400, { error: e.message }) }
+      if (a.place.how === 'zone') return reply(res, 400, { error: 'the zone is previewed from the news' })
+      const s = readJson(path.join(dir, 'search.json'))
+      try {
+        const hits = (await od.placeDpe(a.place, 1)).filter(dpe => alertTakes(a, { kind: 'dpe', dpe, outside: true }, s))
+        return reply(res, 200, { count: hits.length, items: hits.slice(0, 5) })
+      } catch (e) { return reply(res, 502, { error: e.message }) }
+    }
+    // read: all of them, or some (their keys, 2 000 kept)
     if (sub === '/feed/read' && post) {
-      const f = feedOf(dir)
-      writeJson(path.join(dir, 'feed.json'), { ...f, read_at: now() })
+      const f = feedOf(dir), body = await readBody(req)
+      const next = Array.isArray(body.keys) ? { ...f, read: [...new Set([...(f.read ?? []), ...body.keys.map(String)])].slice(-2000) } : { ...f, read_at: now(), read: [] }
+      writeJson(path.join(dir, 'feed.json'), next)
       return reply(res, 200, {})
     }
     if (sub === '/visit' && post) {
@@ -909,44 +1024,110 @@ function serve() {
   http.createServer((req, res) => handle(req, res).catch(e => reply(res, 500, { error: e.message })))
     .listen(PORT, '127.0.0.1', () => {
       console.log(`dashboard server on http://127.0.0.1:${PORT}/ for ${HOME}`)
-      if (WATCH_HOURS > 0) { watchAll(); setInterval(watchAll, WATCH_HOURS * 3600000) }
+      if (settings().watch_minutes > 0) watchAll()
     })
 }
 
 // The watch of a search, free: the zone's recent DPE (downloaded again once 90 % of the watch's period has gone, so
-// that a server restarted meanwhile reads its cache) and, in Stream Estate mode, the count of the listings not
-// fetched yet. What is new goes to feed.json, and area.json takes the DPE for the map.
+// that a server restarted meanwhile reads its cache) and, in Stream Estate mode, the counts of the listings not
+// fetched yet and of those fetched that changed since the last refresh. What is new goes to feed.json, and area.json
+// takes the DPE for the map.
 async function watch(dir) {
-  const s = readJson(path.join(dir, 'search.json')), before = dpeNumbers(dir), news = []
-  let stream
+  const s = readJson(path.join(dir, 'search.json')), before = dpeNumbers(dir), news = [], extra = {}, api = {}, days = settings().watch_minutes / 1440 * 0.9
   if (before && typesOf(s).some(isHome)) {
-    const rows = (await od.recentDpe(bbox(s.zone), WATCH_HOURS / 24 * 0.9)).filter(d => inZone(d.point, s.zone))
-    news.push(...dpeNews(s, rows, listingsOf(dir), before))
+    const rows = (await od.recentDpe(bbox(s.zone), days)).filter(d => inZone(d.point, s.zone))
+    news.push(...dpeNews(rows, listingsOf(dir), before))
     const f = path.join(dir, 'area.json')
     if (rows.length !== before.size || rows.some(d => !before.has(d.number))) writeJson(f, { ...readJson(f, {}), dpe_recent: rows })
   }
+  news.push(...await placeNews(dir, s, days))
+  // the API's counts are no news: « Suivi » shows them in its bar, to fetch; they grow the notification
   if (streamOn(s)) {
-    const total = await seCount(s.slug, seQueries(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) }), { quiet: true })
+    const known = listingsOf(dir).map(l => l.se_id).filter(Boolean), count = q => seCount(s.slug, q, { quiet: true })
+    const total = await count(seQueries(s, { exclude: known }))
     // the latest count: the search's (search, fetch) or the watch's
     const last = [s.stream, feedOf(dir).stream].filter(Boolean).sort((a, b) => b.counted_at.localeCompare(a.counted_at))[0]
-    if (total > (last?.total ?? 0)) news.push({ date: now(), kind: 'listings', count: total, added: total - (last?.total ?? 0) })
-    if (total !== last?.total) stream = { total, counted_at: now() }
+    if (total > (last?.total ?? 0)) api.added = total - (last?.total ?? 0)
+    if (total !== last?.total) extra.stream = { total, counted_at: now() }
+    // the fetched ones that changed on the portals since the last refresh (price, status, expiry, text): what the
+    // refresh's queries match, less the same without them. Counted again from 0 after each refresh.
+    // ponytail: the last 60 fetched only (the URL's length), a search with more undercounts
+    const since = s.last_refresh
+    if (since && known.length) {
+      const changed = await count(seQueries(s, { since })) - await count(seQueries(s, { since, exclude: known }))
+      const was = feedOf(dir).changed, prev = was?.since === since ? was.total : 0
+      if (changed > prev) api.changed = changed - prev
+      if (changed !== prev || was?.since !== since) extra.changed = { since, total: changed, counted_at: now() }
+    }
   }
-  addNews(dir, news, stream && { stream })
-  return { s, news }
+  addNews(dir, news, Object.keys(extra).length ? extra : undefined)
+  return { s, news, api }
 }
 
-// every search's watch, one desktop notification per search with news
-async function watchAll() {
-  for (const x of searches()) {
-    try {
-      const { s, news } = await watch(path.join(HOME, x)), d = news.filter(n => n.kind === 'dpe').length, l = news.find(n => n.kind === 'listings')
-      if (!news.length) continue
-      const text = [d && `${d} nouveau${d > 1 ? 'x' : ''} DPE sans annonce`, l && `${l.added} nouvelle${l.added > 1 ? 's' : ''} annonce${l.added > 1 ? 's' : ''} à récupérer`].filter(Boolean).join(', ')
-      console.log(`watch ${x}: ${text}`)
-      notify(`Immo · ${s.label}`, text, `http://127.0.0.1:${PORT}/${x}/`)
-    } catch (e) { console.log(`watch ${x}: ${e.message}`) }
+// The automatic fetch (« Réglages », off by default: the user's standing yes): when the counts grew, the refresh (or
+// the first fetch) of what they found, within what is left of its credits this month, of the monthly cap and of the
+// most a fetch takes. Its news come back for the notification.
+// ponytail: one refresh a watch, so a listing past the fetch's most waits for « Récupérer »
+async function autoFetch(dir, s, api) {
+  const st = settings(), f = feedOf(dir)
+  if (!st.auto_fetch || !streamOn(s) || !(api.added || api.changed)) return []
+  const month = now().slice(0, 7), spent = usageLog().filter(e => e.by === 'auto' && e.date.startsWith(month)).reduce((a, e) => a + (e.credits ?? 0), 0)
+  const n = Math.min((f.stream?.total ?? 0) + (f.changed?.total ?? 0), st.auto_credits - spent, profile().max_fetch)
+  if (n <= 0) return []
+  const before = new Set(newsOf(dir).map(newsKey))
+  const r = await runEngine([SELF, s.last_refresh ? 'refresh' : 'fetch', '-p', s.slug, '--spend', `${n}`, '--max', `${n}`], { IMMO_BY: 'auto' })
+  console.log(`auto ${s.slug}: ${r.code ? r.err.split('\n').at(-1) : r.out.split('\n').filter(l => /^(refresh|fetched)/.test(l)).join('; ')}`)
+  return newsOf(dir).filter(x => !before.has(newsKey(x)))
+}
+
+// Every search's watch, then the next one after the settings' period; one desktop notification per search with news
+// its alerts take (naming the user's own) or listings the API has. A watch asked while one runs waits for it.
+let watching = null, timer = null, lastWatch = null, nextWatch = null
+function watchAll() {
+  watching ??= (async () => {
+    for (const x of searches()) {
+      try {
+        const dir = path.join(HOME, x), { s, news: found, api } = await watch(dir), auto = await autoFetch(dir, s, api), alerts = alertsAt(dir)
+        const fired = [...found, ...auto].map(n => firing(alerts, n, s)), news = [...found, ...auto].filter((_, i) => fired[i].length)
+        const d = news.filter(n => n.kind === 'dpe').length, l = news.length - d, mine = [...new Set(fired.flat().filter(a => !a.builtin).map(a => `« ${a.name} »`))]
+        const pl = (k, one, many = `${one}s`) => `${k} ${k > 1 ? many : one}`
+        const text = [d && `${pl(d, 'nouveau', 'nouveaux')} DPE sans annonce`, l && pl(l, "nouveauté d'annonce", "nouveautés d'annonces"),
+          !auto.length && api.added && `${pl(api.added, 'annonce')} à récupérer sur l'API`, !auto.length && api.changed && `${pl(api.changed, 'annonce suivie modifiée', 'annonces suivies modifiées')}`,
+          mine.length && `${pl(mine.length, 'alerte')} ${mine.join(', ')}`].filter(Boolean).join(', ')
+        if (!text) continue
+        console.log(`watch ${x}: ${text}`)
+        notify(`Immo · ${s.label}`, text, `http://127.0.0.1:${PORT}/${x}/`)
+      } catch (e) { console.log(`watch ${x}: ${e.message}`) }
+    }
+  })().finally(() => { watching = null; lastWatch = now(); schedule() })
+  return watching
+}
+// the next watch, from the last one (or now) and the settings' period; none when it is off
+function schedule() {
+  clearTimeout(timer)
+  const m = settings().watch_minutes
+  nextWatch = m > 0 ? new Date(Date.parse(lastWatch ?? now()) + m * 60000).toISOString() : null
+  if (nextWatch) timer = setTimeout(watchAll, Math.max(0, Date.parse(nextWatch) - Date.now()))
+}
+
+// the settings the dashboard sends, checked at the door
+function cleanSettings(b) {
+  const st = settings(), bool = k => { if (b[k] != null) st[k] = b[k] === true }
+  if (b.watch_minutes != null) { if (!WATCH_MINUTES.includes(+b.watch_minutes)) throw new Error('bad watch_minutes'); st.watch_minutes = +b.watch_minutes }
+  if (b.keep_days != null) { if (!KEEP_DAYS.includes(+b.keep_days)) throw new Error('bad keep_days'); st.keep_days = +b.keep_days }
+  if (b.auto_credits != null) { if (!(Number.isInteger(+b.auto_credits) && +b.auto_credits >= 0)) throw new Error('bad auto_credits'); st.auto_credits = +b.auto_credits }
+  if (b.quiet !== undefined) {
+    const ok = b.quiet === null || (Array.isArray(b.quiet) && b.quiet.length === 2 && b.quiet.every(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)))
+    if (!ok) throw new Error('quiet is null or ["22:00", "08:00"]')
+    st.quiet = b.quiet
   }
+  for (const k of ['api', 'auto_fetch', 'notify', 'sound', 'read_on_open']) bool(k)
+  return st
+}
+// within the quiet hours [from, to] of the settings, across midnight when from > to
+const quietNow = ([from, to], d = new Date()) => {
+  const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return from <= to ? t >= from && t < to : t >= from || t < to
 }
 
 // Windows PowerShell 5.1 toast (as hook-notify): the XML comes from an env var so nothing needs quoting
@@ -957,12 +1138,13 @@ const PS_TOAST = '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI
 // A desktop notification, never fatal: on macOS terminal-notifier (a click opens the dashboard) else osascript, on
 // Linux notify-send, on Windows a toast. IMMO_NOTIFY=0 turns them off (the tests).
 function notify(title, message, url) {
-  if (process.env.IMMO_NOTIFY === '0') return
+  const st = settings()
+  if (process.env.IMMO_NOTIFY === '0' || !st.notify || (st.quiet && quietNow(st.quiet))) return
   const xml = t => t.replace(/[<>&"]/g, c => `&#${c.charCodeAt(0)};`)
   const env = { ...process.env, IMMO_TOAST: `<toast><visual><binding template="ToastGeneric"><text>${xml(title)}</text><text>${xml(message)}</text></binding></visual></toast>` }
   const tries = {
-    darwin: [['terminal-notifier', '-title', title, '-message', message, '-open', url, '-sound', 'default'],
-      ['osascript', '-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv) sound name "default"', '-e', 'end run', title, message]],
+    darwin: [['terminal-notifier', '-title', title, '-message', message, '-open', url, ...(st.sound ? ['-sound', 'default'] : [])],
+      ['osascript', '-e', 'on run argv', '-e', `display notification (item 2 of argv) with title (item 1 of argv)${st.sound ? ' sound name "default"' : ''}`, '-e', 'end run', title, message]],
     win32: [['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', PS_TOAST]],
   }[process.platform] ?? [['notify-send', title, message]]
   const next = ([[bin, ...argv] = [], ...rest]) => bin && spawn(bin, argv, { env, stdio: 'ignore', windowsHide: true }).on('error', () => next(rest)).unref()
@@ -1036,7 +1218,7 @@ async function dashboard() {
 
 const commands = {
   doctor, setup: () => setup(...args), geocode: () => geocode(args.join(' ')), search: () => search(args.join(' ')), fetch: fetchListings, market, add, enrich, refresh,
-  alert: () => alert(args[0]), usage: usageCmd, costs: () => costs(...args), show, message, list, dashboard, serve,
+  alert: () => alert(args[0]), alerts: alertsCmd, usage: usageCmd, costs: () => costs(...args), show, message, list, dashboard, serve,
 }
 if (!commands[cmd]) die(`usage: immo.mjs <${Object.keys(commands).join(' | ')}> [-p <slug>]`)
 await commands[cmd]()

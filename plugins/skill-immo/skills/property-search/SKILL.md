@@ -1,7 +1,7 @@
 ---
 name: property-search
 description: Helps the user buy property in France (a flat, a house, a plot, a parking, a shop or office). Finds what is for sale around an address, a street or a neighborhood, weighs each against the real sales of its type (DVF), its building, neighborhood, rent and the user's budget, writes offer letters, and opens a local dashboard. Listings come from the Stream Estate API (paid, the user's yes on every credit) or from WebSearch, one WebFetch per listing page, or pasted text. Use it whenever the user looks for property to buy, gives an address or a listing to assess, or wants an offer or a message to a seller ("trouve-moi un appartement", "cherche une maison à …", "un terrain", "une place de parking", "analyse cette annonce", "ça vaut combien", "marge de négociation", "rédige une offre", "achat immobilier"), or pastes "apply this feedback" from the dashboard.
-argument-hint: "[setup | <adresse | rue | quartier> [type] [critères] | add <url | texte> | refresh [<slug>] | alert … | dashboard [<slug>] | apply this feedback …]"
+argument-hint: "[setup | <adresse | rue | quartier> [type] [critères] | add <url | texte> | refresh [<slug>] | alerte … | dashboard [<slug>] | apply this feedback …]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/immo.mjs *)
 ---
 
@@ -45,8 +45,15 @@ Talk to the user in French. Write code and files in English. The dashboard is in
 
 Run `immo.mjs doctor` once per conversation.
 - `MISSING`: show the user the fix it prints, and stop.
-- `stream-estate: on|off`: whether the key is set. Off means every search is in OpenData mode.
+- `stream-estate: on|off`: whether the key is set and the API is on (the dashboard's « Réglages » can turn it off).
+  Off means no search calls the API: the assisted mode.
 - `credits: …`: what was spent. Say it when the user is about to spend more.
+- `account: …`: Stream Estate shows the account in its console only (https://stream.estate/console/billing), never through the
+  API: the euros deposited (pay as you go) and « API items returned », the items billed since the account opened
+  (0.01 € each). `account: about 4,96 € left (496 items)` is the deposit less those items and the ones the log counted
+  since; say it with the estimate before a fetch. When the user gives the console's figures, `immo.mjs costs account
+  <€ deposited> <items>`; when they say they added money, `immo.mjs costs topup <€>`. The dashboard's « Réglages »
+  does the same.
 - `profile: none yet`: the budget needs `setup`. Offer it, but do not block a search on it.
 
 ## Credits: the user's yes before every one
@@ -62,8 +69,12 @@ profile's `eur_per_credit`). A count returns no item, so it is free. Every comma
    useful option, for example `--max 30` before 100.
 3. Only after a yes, run it again with `--spend <credits>` (and `--max` if they chose fewer).
 
+One spending needs no yes from you: the dashboard's **automatic fetch** (« Réglages », off by default), which the user
+turns on with a monthly budget of credits. The server's watch then refreshes the searches in Stream Estate mode within
+that budget and the monthly cap; its calls are logged `by: auto`. Never turn it on or raise its budget yourself.
+
 Three cases need the user's own words before you add the flag:
-- **Unknown cost**: a route whose price is not known yet (`market`, the alerts) says `unknown cost`. Say « coût
+- **Unknown cost**: a route whose price is not known yet (`market`, `alert delete`) says `unknown cost`. Say « coût
   inconnu » and ask. Pass `--accept-unknown` only after a yes. Its real price shows in Stream Estate's console; the
   user may set it with `immo.mjs costs set "<route>=<credits>"`.
 - **Monthly cap**: never pass `--force` unless the user explicitly agrees to go over it, in this conversation, for
@@ -74,7 +85,7 @@ The other exit codes:
 
 | Exit code | Meaning | What you do |
 |---|---|---|
-| 3 | No credits left (402), or no key | Say so, then go on in the assisted mode |
+| 3 | No credits left (402), no key, or the API turned off in « Réglages » | Say so, then go on in the assisted mode |
 | 4 | A listing URL (the API has no lookup by URL) | Read the page with WebFetch, then `add --file` |
 
 ## Listings without Stream Estate: the assisted mode
@@ -102,7 +113,7 @@ The first word of `$ARGUMENTS` picks the mode. Anything else is a new search.
 | `setup` | The buyer's profile |
 | `add <url \| texte>` | Add one listing |
 | `refresh [<slug>]` | What changed: new listings, price drops, offers, expiries |
-| `alert …` | Create, list or turn off a Stream Estate alert |
+| `alert …`, `alerte …` | The search's alerts: list, make, change or turn off one |
 | `dashboard [<slug>]` | Reopen the dashboard |
 | `apply this feedback …` | Apply the prompt copied from the dashboard |
 | anything else | A new search: `<adresse \| rue \| quartier> [critères]` |
@@ -181,11 +192,11 @@ last refresh (the credits rule; it pays only for what changed).
 Report the new listings, the price drops (old → new), the offers and the expiries. For assisted listings, offer to
 recheck the ones the user follows, one WebFetch each.
 
-Its last line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
+Its DPE line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
 refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or
 a lease, so a recent one without a listing may be a home about to go on sale (ADEME does not say which). Say the new ones
-in one line; the dashboard's « Prospection » map rings them (layer « DPE récents »), and those of the search's types and
-criteria go to its news.
+in one line; the dashboard's « Prospection » map rings them (layer « DPE récents »), and they go to its news. Its last
+line, `alerts: « DPE rue Paul Bert » 2`, names the user's own alerts that fired: say them.
 
 The « Prospection » tab colors the IRIS of the map's box by the odds that a home goes on sale within 12 months (DVF
 sales over the census's homes), and estimates the sales a year after successions and separations from public figures
@@ -195,22 +206,35 @@ divorces of an address, say that no source gives them and that joining people to
 ## The dashboard server's watch
 
 While the dashboard server runs (`dashboard` starts it, it stops once every Claude it worked for has quit), it watches
-every search, free: at its start, then every 6 hours. It reads the zone's new DPE that no listing matches and, in Stream
-Estate mode, counts the new listings (free). The news go to `<slug>/feed.json`, with a desktop notification. In the
-dashboard, the bell counts what is not read and opens the latest, and « Suivi » lists it with the listings' changes: « Chercher l'annonce »
-puts a `[chercher]` item in the prompt, « Récupérer » goes through the credits dialog. The watch never spends a credit.
+every search, free: at its start, then every 6 hours (« Réglages »: off, 30 min, 1 h, 6 h, 12 h, 24 h; the header
+counts down to the next one). It reads the zone's new DPE that no listing matches, the new DPE at the places of the
+user's alerts (outside the zone too) and, in Stream Estate mode, counts (free, no item returned) the listings not
+fetched yet and the fetched ones that changed on the portals since the last refresh. The news go to
+`<slug>/feed.json`; those the search's alerts take get a desktop notification (« Réglages »: on or off, sound, quiet
+hours). The counts are no news: « Suivi » shows them in a bar with « Récupérer » and « Actualiser », through the
+credits dialog. In the dashboard, the bell counts what is not read and opens the latest, and « Suivi » lists the news
+day by day, those of one watch folded: « Chercher l'annonce » puts a `[chercher]` item in the prompt, « Carte » shows a
+DPE on « Prospection ». The watch spends no credit, but for the automatic fetch the user turned on.
 
 ## alert
 
-An alert is a Stream Estate saved search per type of the search, with its zone and criteria (the DPE, the floor, the
-elevator and the outdoor space have no filter there): it pushes every new listing and every price change (up or down).
-1. The API refuses an alert without a maximum budget: when the search has no `budget_max`, ask for one and set it
-   with `search -p <slug> --criteria "budget_max=…"`. Ask whether to create the alert (unknown cost). Then run
-   `alert create -p <slug> --accept-unknown`.
-2. By default the alert pushes to a random **ntfy.sh** topic. Give the user its name: they subscribe in the ntfy app,
-   and whoever knows the topic can read it. `--webhook <https url>` sends the raw JSON to their own endpoint instead.
-3. `on`, `off` and `delete` work on the search's alert (`on` and `off` also take the search's criteria of today).
-   `alert list` lists the account's saved searches. There is no history of the pushes: they are on the phone.
+The alerts are the dashboard's (« Alertes » tab, `<slug>/alerts.json`, free): they pick the news that reach « Suivi »,
+the bell, the desktop notifications and refresh's `alerts:` line. The default ones keep the follow-up as it was (new DPE
+within the search's criteria, new listings, price drops and rises, statuses), each on until turned off. The user adds
+their own: one event, a place, and conditions all true (a DPE class, a surface, a price, a drop of 5 % or more, a
+favorite…). The listings' events happen in the search's zone only; a new DPE may be watched anywhere in France: a
+street, around an address, a commune (ADEME, free).
+
+1. `immo.mjs alerts -p <slug>` prints alerts.json, then each alert with the news it took.
+2. To make, change or turn off one the user asks for (« préviens-moi d'un nouveau DPE rue Garibaldi »): read
+   `alerts.json` in `references/listing-format.md`, write the whole file again (with the other alerts) in the
+   scratchpad, then `immo.mjs alerts -p <slug> --file <file>`. It is checked as the dashboard's. Say in one line what it
+   takes, and how many past news it took (`alerts` again); the open dashboard shows « Recharger ».
+3. A place outside the zone needs its BAN id (a street: `immo.mjs geocode "<street, town>"` gives `<insee>_<voie>`), its
+   commune code or its point; the server notes what is there at once, so only the DPE published later are news.
+4. A search of skill-immo 1.6 or before may hold a Stream Estate alert (`alert` in `search.json`, pushed to ntfy.sh):
+   offer to delete it, `immo.mjs alert delete -p <slug>` (unknown cost: the credits rule). Until then the dashboard
+   cannot delete that search.
 
 ## Analyse and compare
 
@@ -292,12 +316,13 @@ The dashboard's « Copier le prompt » gives:
 apply this feedback (recherche <slug>)
 1. [affiner] rooms_min=3 dpe_max=D elevator= types=flat,house mode=classic — <the same in words>
 2. [élargir] zone : tout le quartier (IRIS Moncey)
-3. [analyser] <id> — <a short description>
-4. [comparer] <id>, <id>
-5. [message] offre pour <id> — <a short description> : rédige une offre d'achat (…)
-6. [ajouter] <url or text>
-7. [chercher] l'annonce du DPE <number> : maison 204 m², DPE D du 19 oct. 2026, <address>
-8. [question] <free text>
+3. [annonces] cherche de nouvelles annonces sur l'API (crédits avec mon accord) et sur le web
+4. [analyser] <id> — <a short description>
+5. [comparer] <id>, <id>
+6. [message] offre pour <id> — <a short description> : rédige une offre d'achat (…)
+7. [ajouter] <url or text>
+8. [chercher] l'annonce du DPE <number> : maison 204 m², DPE D du 19 oct. 2026, <address>
+9. [question] <free text>
 ```
 
 Do every item in order:
@@ -314,6 +339,9 @@ Do every item in order:
     (immobilier.notaires.fr) and the local agencies' sites, then one listing page at a time, as in the assisted mode.
   Then look for the new listings: in Stream Estate mode the count is free and a fetch goes through the credits rule; in
   OpenData mode, the assisted mode. Say what the wider search brings.
+- `[annonces]`: the header's « Annonces ». « sur l'API … et sur le web »: in Stream Estate mode, `search -p <slug>` (free)
+  gives the count and the estimate, then the credits rule and `fetch`; then the assisted mode, 5 to 10 listing pages at
+  most. « sur le web » (no key, an OpenData search or the API off): the assisted mode only. Say what each brought.
 - `[analyser]`: `show --id`, and `enrich --id` if it has no building data.
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings.
 - `[message]`: the messages section above.

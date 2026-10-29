@@ -1,6 +1,6 @@
 import { daysOnline, isHome, matches, typeOf, unitPrice } from "@engine/market.js"
 import { ChevronLeftIcon, ChevronRightIcon, EllipsisIcon, MailIcon } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Dpe } from "@/components/dpe"
 import { Gap } from "@/components/ruler"
@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { api, type Listing, type PropertyType, type Status } from "@/lib/api"
 import { eur, SALE_STATUS, titleOf, TYPE_PLURAL } from "@/lib/format"
-import { isNew, SORTS, useRanked, type Sort } from "@/lib/rank"
+import { isNew, shelved, SORTS, useRanked, type Sort } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -27,12 +27,19 @@ const COLUMNS: { status: Status; label: string }[] = [
 // The listings as a board, one column per status of the user: a card moves by drag and drop, or by its menu (keyboard,
 // touch). "Écarté" stays folded until opened, so the columns that matter keep the room.
 export function KanbanTab() {
-  const { slug, data, types, lastVisit, reload, select } = useSearch()
+  const { slug, data, types, lastVisit, reload, select, spot } = useSearch()
   const [type, setType] = useState<"all" | PropertyType>("all"), [onlyMatching, setOnlyMatching] = useState(false), [onlyNew, setOnlyNew] = useState(false)
   const [sort, setSort] = useState<Sort>("score"), [dropOpen, setDropOpen] = useState(false), [over, setOver] = useState<string | null>(null)
   // an expired listing stays on the board only once the user has given it a status
-  const shown = data.listings.filter(l => (l.status !== "EXPIRED" || l.my_status) && (type === "all" || typeOf(l) === type)
-    && (!onlyMatching || matches(l, data.search.criteria, types)) && (!onlyNew || isNew(l, lastVisit)))
+  const shown = data.listings.filter(l => l.id === spot || (!shelved(l) && (type === "all" || typeOf(l) === type)
+    && (!onlyMatching || matches(l, data.search.criteria, types)) && (!onlyNew || isNew(l, lastVisit))))
+  // the card the dossier sent here (« Voir »): « Écarté » unfolds for it, then it comes in view
+  const [seen, setSeen] = useState<string | null>(null)
+  if (spot !== seen) {
+    setSeen(spot)
+    if (data.listings.find(l => l.id === spot)?.my_status === "dropped") setDropOpen(true)
+  }
+  useEffect(() => { if (spot) document.getElementById(`card-${spot}`)?.scrollIntoView({ block: "center", inline: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }) }, [spot, dropOpen])
   const ranked = useRanked(shown, sort)
 
   async function move(id: string, status: Status) {
@@ -83,7 +90,7 @@ export function KanbanTab() {
               </header>
               <div className="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
                 {items.map(({ l, score: sc }) => (
-                  <KanbanCard key={l.id} l={l} score={sc} fresh={isNew(l, lastVisit)} onOpen={() => select(l.id)} onMove={s => move(l.id, s)} />
+                  <KanbanCard key={l.id} l={l} score={sc} fresh={isNew(l, lastVisit)} spotted={spot === l.id} onOpen={() => select(l.id)} onMove={s => move(l.id, s)} />
                 ))}
                 {!items.length && <p className="px-1 py-4 text-center text-xs text-muted-foreground">Glissez un bien ici</p>}
               </div>
@@ -95,12 +102,12 @@ export function KanbanTab() {
   )
 }
 
-function KanbanCard({ l, score, fresh, onOpen, onMove }: { l: Listing; score: number | null; fresh: boolean; onOpen: () => void; onMove: (s: Status) => void }) {
+function KanbanCard({ l, score, fresh, spotted, onOpen, onMove }: { l: Listing; score: number | null; fresh: boolean; spotted: boolean; onOpen: () => void; onMove: (s: Status) => void }) {
   const { marketFor } = useSearch()
   const days = daysOnline(l), messages = l.messages?.length ?? 0, offer = l.messages?.findLast(m => m.kind === "offer" && m.amount)
   return (
-    <div draggable style={statusTint(l.my_status)} onDragStart={e => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move" }}
-      className={cn("group relative flex cursor-grab flex-col gap-1.5 rounded-lg border p-2.5 text-sm shadow-xs hover:border-ring hover:shadow-md active:cursor-grabbing", tint(l.my_status))}>
+    <div id={`card-${l.id}`} draggable style={statusTint(l.my_status)} onDragStart={e => { e.dataTransfer.setData("text/plain", l.id); e.dataTransfer.effectAllowed = "move" }}
+      className={cn("group relative flex cursor-grab flex-col gap-1.5 rounded-lg border p-2.5 text-sm shadow-xs hover:border-ring hover:shadow-md active:cursor-grabbing", tint(l.my_status), spotted && "spot border-ring")}>
       <button type="button" onClick={onOpen} className="flex flex-col gap-1 text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-3 focus-visible:after:ring-ring/50">
         <span className="flex items-center gap-1.5 pr-14">
           <TypeIcon type={l.property_type} className="size-4 shrink-0 text-muted-foreground" />

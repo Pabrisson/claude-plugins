@@ -230,3 +230,8 @@
 .immo-popup button { display: block; margin-top: 3px; padding: 1px 8px; border: 1px solid var(--border); border-radius: calc(var(--radius) * 0.6); font-size: 11px; cursor: pointer; }
 .immo-popup button:hover { background: var(--accent); }
 .immo-popup button:disabled { opacity: 0.5; cursor: default; }
+
+/* a listing pointed at from its dossier (« Voir »): a ring that fades */
+@keyframes spot { 0%, 50% { box-shadow: 0 0 0 3px var(--ring); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.spot { animation: spot 2.5s ease-out; }
+@media (prefers-reduced-motion: reduce) { .spot { animation: none; outline: 2px solid var(--ring); } }

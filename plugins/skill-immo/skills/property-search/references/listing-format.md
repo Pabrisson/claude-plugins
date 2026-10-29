@@ -115,9 +115,10 @@ history stay.
     its ends taken from the street's DVF sales and address numbers;
   - `criteria { budget_min, budget_max, area_min, area_max, rooms_min, rooms_max, floor_min, land_min, dpe_max,
     elevator, outdoor }`, each applied to the types that have it;
-  - `max`, `stream { total, counted_at }`, `last_fetch`, `last_refresh`, `last_visit`, and
-    `alert { searches[] { id, type }, topic, hooks { match, event }, webhook, enabled, created }` (one Stream Estate
-    saved search per type).
+  - `stream { total, counted_at }`, `last_fetch`, `last_refresh`, `last_visit` (a fetch takes the profile's
+    `max_fetch` at most, « Coûts API »; a search of 1.7 or before also has `max`, no longer read);
+  - `alert { searches[] { id, type }, topic, … }` in a search of skill-immo 1.6 or before: a Stream Estate saved search
+    per type, pushed to ntfy.sh. `alert delete` deletes it; nothing makes one any more.
 - `market.json`:
   - `dvf.<type>` for each type of the search: `{ commune, zone, street, recent, years, trend, by_rooms, streets,
     points[] }`. Each of the four first is a stats object: `count`, `median_ppm2` (the unit price: € per m², of land
@@ -149,3 +150,50 @@ history stay.
     `dpe.reference`; a listing whose number is known takes no other), else the one of
     its `building.ban` with the closest surface (within 8 %), else the nearest of the same type and surface within
     300 m, with its class and DPE date when the listing gives them. A DPE taken goes to no other listing.
+- `feed.json`: `read_at` (all read up to then) and `read[]` (the keys of news read one by one: `<kind>-<date>-<listing
+  id | DPE number>`), the news newest first (`items[]`, 500 at most), and the server's last counts of the API (`stream
+  { total, counted_at }`: listings not fetched yet; `changed { since, total, counted_at }`: fetched ones changed on the
+  portals since `last_refresh`, the last 60 fetched), shown in « Suivi »'s bar. A news is `{ date, kind, … }`:
+  - `dpe { … }`: a DPE of `dpe_recent` new since the last one, that no listing matches (any home type and criteria);
+  - `dpe { … }, outside: true`: a new DPE at the place of one of the user's alerts, outside the zone.
+
+  The listings' own `changes[]` (`new`, `price_drop`, `price_rise`, `status`, `expired`) are news too. A feed of 1.7
+  may hold `listings` and `changed` news: no alert takes them any more.
+- `alerts.json` (`lib/alerts.js`): which news reach « Suivi », the bell, the desktop notifications and refresh's
+  `alerts:` line. A news shows when one alert that is on takes it: its event, its place, and every condition holds.
+  - `off[]`: the default alerts turned off, by id: `dpe` (its condition: `criteria` is true), `new`, `price_drop`,
+    `price_rise`, `status`, `expired` (its condition: `my_status` is not `none`: only a listing the user follows; one
+    still to sort leaves the map, the cards and the board quietly, the list keeps it). Each is on until turned off.
+  - `custom[] { id (letters, digits, - and _), name, event, place, conditions[] { field, op, value }, enabled }`: the
+    user's own, 50 at most, 10 conditions each. `event` is `dpe`, `new`, `price_drop`, `price_rise`, `status` or
+    `expired`.
+  - `place`: `{ "how": "zone" }` (the search's zone; the listings' events take this one only), or, for `dpe`, `{ "how":
+    "street", "ban": "69387_3030", "label", "point" }` (the street's BAN id, `geocode` gives it), `{ "how": "commune",
+    "insee": "69123", "label", "point" }` (Paris, Lyon, Marseille: their arrondissements), `{ "how": "radius",
+    "radius_m": 300, "label", "point" }` (50 m to 3 km). The server reads the place's DPE of the last 12 months from
+    ADEME; what an alert saw stays in `.cache/alerts/<slug>/<id>.json`.
+
+  | `field` | Kind | `op` | Events |
+  |---|---|---|---|
+  | `street` | text | `contains`, `is` (no case, no accents) | all: the street of the address |
+  | `type` | type | `is` (`flat`, `house`, `land`, `parking`, `premises`) | all |
+  | `energy` | class | `lte` (A to it), `gte` (it to G) | all |
+  | `area` | number | `gte`, `lte` | all |
+  | `price`, `price_per_m2`, `rooms` | number | `gte`, `lte` | the listings' |
+  | `change_pct` | number | `gte`, `lte` | `price_drop`, `price_rise`: the move in % (5 = 5 %) |
+  | `favorite` | bool | `is` | the listings': starred in the dashboard |
+  | `my_status` | status | `is`, `not` (`none`, `to_visit`, `visited`, `offer`, `dropped`) | the listings' |
+  | `criteria` | bool | `is` | all: within the search's types and criteria |
+
+  A value the news does not give (no address) fails the condition. Example: `{ "id": "a-garibaldi", "name": "Passoires
+  rue Garibaldi", "event": "dpe", "place": { "how": "street", "ban": "69387_3030", "label": "Rue Garibaldi 69007 Lyon",
+  "point": [4.8518, 45.748] }, "conditions": [{ "field": "energy", "op": "gte", "value": "F" }], "enabled": true }`.
+
+## The files of the searches folder
+
+- `.settings.json` (« Réglages », every search): `watch_minutes` (0, 30, 60, 360, 720, 1440), `api` (false: no call
+  at all), `auto_fetch` and `auto_credits` (the automatic fetch and its credits a month), `notify`, `sound`, `quiet`
+  (`["22:00", "08:00"]` or null), `read_on_open`, `keep_days` (0, 30, 90, 365; 0 keeps all).
+- `.profile.json` (private): the budget's numbers, `weights`, `places`, and the credits' settings of « Coûts API »:
+  `monthly_credit_cap`, `eur_per_credit`, `max_fetch` (100), `account { deposited, items, at, topups[] { date, eur } }`
+  (Stream Estate's console: the € deposited and « API items returned » as of `at`; `costs account`, `costs topup`).

@@ -19,17 +19,22 @@ the v2 is not used.
 ## Costs
 
 The v1 answers carry no cost header and there is no usage route: the engine logs each call at its route's price, from
-this table or the searches folder's `.costs.json` (`costs set "<route>=<credits>"`, read off the console).
+this table or the searches folder's `.costs.json` (`costs set "<route>=<credits>"`, read off the console). Nor does it
+give the account's balance: on 2026-10-29 with the key, `/me`, `/users/me` and `/account` answered `404`, the Hydra
+documentation its answers link to (`docs.jsonld`) a `500`, and no header carries a quota. Stream Estate shows the account
+in its console only (a web app with its own login; its billing page, https://stream.estate/console/billing): the euros deposited, pay as you go, and « API items returned », the
+items billed since the account opened. `costs account <€ deposited> <items>` keeps the console's figures, `costs topup
+<€>` money added; the balance is the deposit less those items and the ones the log counted since, at `eur_per_credit`.
 
 | Route | Use | Cost |
 |---|---|---|
 | `GET /documents/properties` | Listings of the zone, counts, refresh | 1 credit per item returned; `itemsPerPage=0` (a count) returns none |
 | `GET /indicators/price_per_meter` | The zone's asking €/m² (`market`) | Unknown |
-| `GET`, `POST /searches`, `PUT`, `DELETE /searches/{id}` | Alerts | Unknown |
+| `DELETE /searches/{id}` | Deleting an alert of skill-immo 1.6 or before | Unknown |
 
 Not used: `GET /documents/properties/{id}` (the collection returns the same document), `similar-properties`,
 `/indicators/points_of_interest` (Overpass does it), `/public/location-autocomplete` and `/cities` (the zones are the
-engine's own), `/webhook-tester` (used once to check the pushes, below).
+engine's own), `GET`, `POST`, `PUT /searches` and `/webhook-tester` (the saved searches, below).
 
 ## GET /documents/properties
 
@@ -77,41 +82,19 @@ The same filters (the engine sends the type, the zone and `fromDate`, two years 
 Returns `[{ average, average_min, average_max, median, series: { "2026-10": 5063.61, … } }]`: the asking €/m² of the
 listings created in the period, expired ones included. Rue Paul Bert, flats, 2026-10-28: median 4,805, average 5,054.
 
-## Searches (alerts)
+## Searches (alerts): no longer made
 
-`POST /searches` takes the same filters as a body (`propertyTypes`, `lat`/`lon`/`radius`, `geoShapes`,
-`includedZipcodesInsee` for INSEE codes, `budgetMin`…, `roomMin`…, `landSurfaceMin`; no energy filter), a `title`,
-`notificationEnabled`, `endpointRecipient` (HTTPS, receives the matches), `eventEndpoint` (HTTPS, receives the events)
-and `subscribedEvents` (`ad.update.price`, `ad.update.surface`, `ad.update.pictures`, `ad.update.expired`,
-`property.ad.create`, `property.ad.update`). Its id is the end of its `@id` (`/searches/<uuid>`). A `PUT` replaces the
-search: the engine sends the whole body again. A failed push is retried five times, an hour apart. There is no history
-of the pushes.
+A v1 saved search (`POST /searches`, a `budgetMax` required) pushes each match and each price event as a POST to an
+HTTPS URL (`endpointRecipient`, `eventEndpoint`). It keeps no history of its pushes and has no route to read them back,
+and the dashboard server listens on 127.0.0.1 only: a push would need a relay on the internet. skill-immo 1.6 and before
+pushed them to a random ntfy.sh topic; since 1.7 the alerts are the dashboard's (`alerts.json`), fed by the server's
+free counts instead:
+- the listings of the zone not fetched yet: `expired=false`, `fromUpdatedAt` 90 days back, the fetched ones excluded;
+- the fetched ones that changed since the last refresh: the refresh's two queries (`fromUpdatedAt`, then
+  `expired=true&fromExpiredAt=`), less the same with the fetched ones excluded (60 at most, the URL's length).
 
-- A **match** POSTs `{ "@type": "Match", property, search, createdAt, propertyDocument: <the PropertyDocument> }`.
-- An **event** POSTs `{ event: "ad.update.price", adEvent: { fieldName, fieldOldValue, fieldNewValue, percentVariation,
-  createdAt }, match: <the match> }`.
+Each is a count (`itemsPerPage=0`): no item, no credit. They say how many, not which: the refresh (paid per item) does,
+by hand (« Suivi »'s bar) or by the automatic fetch the user turns on in « Réglages », within its monthly credits.
 
-Checked with the key on 2026-10-28 (a search on the rue Paul Bert band, created, turned off, deleted):
-- `budgetMax` (or `pricePerMeterMax`) is required: without it, a `400` « Veuillez saisir au moins un de ces 2
-  critères : Budget maximum ou Prix au m2 ». The engine asks for a `budget_max` first;
-- `geoShapes` as `[[[lon, lat], …]]` is kept as sent, with the endpoints, `subscribedEvents` and `budgetMax`; the API
-  adds `withCoherentPrice: true` and a `token`;
-- a `PUT` with the whole body turns `notificationEnabled` off and keeps the rest; a `DELETE`, then the search answers
-  `404`;
-- `includedZipcodesInsee: ["69383"]` (a commune zone, created and deleted the same day) is kept as `includedCities`,
-  the city « Lyon 3e » (`/cities/28676`): an arrondissement's code gives the arrondissement.
-
-## ntfy.sh
-
-By default an alert pushes to a random ntfy.sh topic (`immo-<slug>-<16 hex>`): whoever knows it can read it, and the
-pushes carry only what the listing shows publicly. ntfy's templating turns the JSON into a readable push, one URL per
-endpoint:
-
-```
-https://ntfy.sh/<topic>?tpl=yes&t=Nouvelle annonce · {{.propertyDocument.city.name}}&m={{.propertyDocument.room}} p. · …
-https://ntfy.sh/<topic>?tpl=yes&t=Prix modifié · {{.match.propertyDocument.city.name}}&m={{.adEvent.fieldOldValue}} → …
-```
-
-Checked on 2026-10-28 with `GET /webhook-tester?endpoint=<url>[&eventType=ad.update.price]`: « Nouvelle annonce · Paris
-8e » / « 3 p. · 100 m² · 900000 € — … », and « Prix modifié · … » / « 900000 → 875000 € (-2.78 %) — … ». The payload
-(about 6 kB) is templated, not turned into an attachment.
+`alert delete -p <slug>` deletes the saved searches an old search holds (`DELETE /searches/{id}`, then a `404`), checked
+with the key on 2026-10-28.

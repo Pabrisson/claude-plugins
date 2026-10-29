@@ -74,6 +74,21 @@ test('the recent DPE of the zone: kept in area.json, those without a listing, th
   assert.deepEqual(read(dir, 'feed.json').items.map(n => n.dpe.number), ['2669E0000004D'])
 })
 
+test("the account: unknown to the API; the console's € deposited and items, money added, less what the log spent since", async () => {
+  const { home } = searchesFolder()
+  let r = await run(home, ['doctor'])
+  assert.match(r.out, /^account: unknown \(the API does not give it/m)
+  assert.equal((await run(home, ['costs', 'account', '5', 'lots'])).status, 1)
+  // 5 € deposited, 4 items returned: 4,96 € left, 496 items
+  r = await run(home, ['costs', 'account', '5', '4'])
+  assert.equal(r.status, 0, r.err)
+  assert.match(r.out, /about 4,96 € left \(496 items\)/)
+  // 30 € added, then one item fetched
+  assert.match((await run(home, ['costs', 'topup', '30'])).out, /about 34,96 € left \(3\u202f496 items\), 35,00 € deposited/)
+  await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])
+  assert.match((await run(home, ['doctor'])).out, /^account: about 34,95 € left \(3\u202f495 items\): 35,00 € deposited, 4 items on the console on \d{4}-\d\d-\d\d, 1 since in the log$/m)
+})
+
 test('the monthly cap stops a call, --force passes it', async () => {
   const { home } = searchesFolder()
   fs.writeFileSync(path.join(home, '.profile.json'), JSON.stringify({ monthly_credit_cap: 0 }))
@@ -127,38 +142,30 @@ test('add: a URL goes to WebFetch (the API has no lookup by URL), one already fe
   assert.equal(r.status, 4)
 })
 
-test('an alert: a saved search pushing to a random ntfy topic, turned off, then deleted; usage sums the log', async () => {
+test("the alerts: the dashboard's, listed and replaced by Claude; an old Stream Estate alert only deleted; usage sums the log", async () => {
   const { home, dir } = searchesFolder()
-  // the v1 refuses a saved search without a maximum budget: asked before any call
-  const before = api.seen.length
-  let r = await run(home, ['alert', 'create', '-p', 'paul-bert', '--accept-unknown'])
-  assert.equal(r.status, 1)
-  assert.match(r.err, /needs a maximum budget/)
-  assert.equal(api.seen.length, before)
+  const file = path.join(home, 'alerts-in.json')
+  fs.writeFileSync(file, JSON.stringify({ off: ['status'], custom: [{ id: 'a-1', name: 'DPE rue Paul Bert', event: 'dpe', conditions: [{ field: 'street', op: 'contains', value: 'Paul Bert' }] }] }))
+  let r = await run(home, ['alerts', '-p', 'paul-bert', '--file', file], { key: null })
+  assert.equal(r.status, 0, r.err)
+  assert.match(r.out, /^off default status: status, 0 news$/m)
+  assert.match(r.out, /^on  custom a-1 « DPE rue Paul Bert »: dpe, 0 news$/m)
+  fs.writeFileSync(file, JSON.stringify({ custom: [{ id: 'a-1', name: 'x', event: 'dpe', conditions: [{ field: 'energy', op: 'gte', value: 'Z' }] }] }))
+  assert.equal((await run(home, ['alerts', '-p', 'paul-bert', '--file', file], { key: null })).status, 1)
+  assert.equal((await run(home, ['alert', 'create', '-p', 'paul-bert'])).status, 1)
+  // a search with an alert of skill-immo 1.6: its deletion, of unknown cost
   const f = path.join(dir, 'search.json')
-  fs.writeFileSync(f, JSON.stringify({ ...read(dir, 'search.json'), criteria: { rooms_min: 3, budget_max: 300000 } }))
-  r = await run(home, ['alert', 'create', '-p', 'paul-bert'])
+  fs.writeFileSync(f, JSON.stringify({ ...read(dir, 'search.json'), alert: { searches: [{ id: 's-9', type: 'flat' }], topic: 'immo-x' } }))
+  r = await run(home, ['alert', 'delete', '-p', 'paul-bert'])
   assert.equal(r.status, 2)
   assert.match(r.err, /unknown cost/)
-  r = await run(home, ['alert', 'create', '-p', 'paul-bert', '--accept-unknown'])
-  assert.equal(r.status, 0, r.err)
-  const body = api.seen.findLast(x => x.method === 'POST').body, a = read(dir, 'search.json').alert
-  assert.deepEqual([body.propertyTypes, body.lat, body.radius, body.roomMin, body.budgetMax, body.notificationEnabled, body.subscribedEvents], [[0], 45.756, 0.5, 3, 300000, true, ['ad.update.price']])
-  assert.match(body.endpointRecipient, new RegExp(`^https://ntfy\\.sh/${a.topic}\\?tpl=yes&t=`))
-  assert.match(decodeURIComponent(body.eventEndpoint.replace(/\+/g, ' ')), /\{\{\.adEvent\.fieldOldValue\}\} → \{\{\.adEvent\.fieldNewValue\}\}/)
-  assert.equal(a.searches.length, 1)
-  // a PUT replaces the saved search: the whole body again
-  r = await run(home, ['alert', 'off', '-p', 'paul-bert', '--accept-unknown'])
-  assert.equal(r.status, 0, r.err)
-  const put = api.seen.findLast(x => x.method === 'PUT')
-  assert.deepEqual([put.path, put.body.notificationEnabled, put.body.endpointRecipient, put.body.roomMin], [`/searches/${a.searches[0].id}`, false, body.endpointRecipient, 3])
   r = await run(home, ['alert', 'delete', '-p', 'paul-bert', '--accept-unknown'])
   assert.equal(r.status, 0, r.err)
-  assert.deepEqual([api.seen.findLast(x => x.method === 'DELETE').path, read(dir, 'search.json').alert], [`/searches/${a.searches[0].id}`, null])
+  assert.deepEqual([api.seen.findLast(x => x.method === 'DELETE').path, read(dir, 'search.json').alert], ['/searches/s-9', null])
   await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])
   r = await run(home, ['usage', '--json'])
   const u = JSON.parse(r.out)
-  assert.deepEqual([u.month, u.cap, u.by_search['paul-bert'].credits, u.unknown], [1, 500, 1, 3])
+  assert.deepEqual([u.month, u.cap, u.by_search['paul-bert'].credits, u.unknown], [1, 500, 1, 1])
 })
 
 test('market: the asking price per m² of the zone, its last month shown to Claude', async () => {

@@ -14,7 +14,7 @@ const WORKS = { E: [100, 200], F: [200, 350], G: [300, 500] }
 
 export const PROFILE = {
   down_payment: 0, net_income_monthly: 0, other_loans_monthly: 0, rate: 3.4, years: 25, insurance_rate: 0.3,
-  notary_old: 0.075, notary_new: 0.025, places: [], eur_per_credit: 0.01, monthly_credit_cap: 500,
+  notary_old: 0.075, notary_new: 0.025, places: [], eur_per_credit: 0.01, monthly_credit_cap: 500, max_fetch: 100,
 }
 
 // the monthly payment of a loan (annual rate in %)

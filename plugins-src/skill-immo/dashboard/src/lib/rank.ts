@@ -5,6 +5,10 @@ import { useMemo } from "react"
 import type { Listing } from "@/lib/api"
 import { useSearch } from "@/lib/store"
 
+// an expired listing the user has not sorted (no status of theirs): off the map, the cards and the board, the list shows
+// it on demand. One they follow stays, and its expiry is news (the default alert « Annonces suivies expirées »).
+export const shelved = (l: Listing) => l.status === "EXPIRED" && !l.my_status
+
 // what is new since the user's last visit: a listing first seen, or a change logged, after it
 export const isNew = (l: Listing, since: string | null) => !!since && (l.first_seen > since || (l.changes ?? []).some(c => c.date > since && c.kind !== "new"))
 

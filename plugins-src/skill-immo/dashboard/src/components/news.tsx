@@ -1,17 +1,20 @@
-import { ArchiveIcon, DownloadIcon, HousePlusIcon, TagIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react"
-import { useMemo } from "react"
+import { alertsOf, firing, newsKey as keyOf } from "@engine/alerts.js"
+import { ArchiveIcon, DownloadIcon, FileClockIcon, HousePlusIcon, TagIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react"
+import { useMemo, useState } from "react"
 
 import { DPE_HEX, dpeInk } from "@/components/dpe"
-import type { Listing, News } from "@/lib/api"
+import type { Alert, Listing, News } from "@/lib/api"
 import { num, titleOf, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 // What the follow-up and the bell list: the feed's news (the server's watch, Claude's refresh) and the listings' own
-// changes, newest first; an unread one has a dot and its tile in full color, the others are dimmed. Each kind has its color (index.css --news-*): the DPE's own class color for its tile, blue for a
+// changes that an alert on takes (the « Alertes » tab), newest first, with the names of the user's alerts that took
+// them; an unread one has a dot and its tile in full color, the others are dimmed. Each kind has its color (index.css --news-*): the DPE's own class color for its tile, blue for a
 // drop and orange for a rise as the market badges, teal for a new listing, violet for the paid API's.
 export type Change = Listing["changes"][number] & { l: Listing }
-export type NewsItem = News | Change
+export type NewsBase = News | Change
+export type NewsItem = NewsBase & { alerts: Alert[] }
 
 export const LOOK = {
   dpe: { label: "Nouveau DPE", color: "var(--news-dpe)", Icon: null },
@@ -21,26 +24,41 @@ export const LOOK = {
   status: { label: "Changement de statut", color: "var(--news-other)", Icon: TagIcon },
   expired: { label: "Annonce expirée", color: "var(--news-other)", Icon: ArchiveIcon },
   listings: { label: "Annonces disponibles", color: "var(--news-stream)", Icon: DownloadIcon },
+  changed: { label: "Annonces modifiées", color: "var(--news-stream)", Icon: FileClockIcon },
 } as const
 
 export function useNews() {
-  const { data } = useSearch()
-  const items = useMemo<NewsItem[]>(() => [...data.feed.items, ...data.listings.flatMap(l => (l.changes ?? []).map(c => ({ ...c, l })))]
-    .sort((a, b) => b.date.localeCompare(a.date)), [data.feed.items, data.listings])
-  return { items, fresh: (n: NewsItem) => n.date > (data.feed.read_at ?? "") }
+  const { data, state } = useSearch(), keep = state.settings.keep_days
+  const [now] = useState(() => Date.now())
+  // every news of the days kept (« Réglages »), whatever the alerts (the « Alertes » tab counts them), and those the
+  // alerts on take
+  const all = useMemo<NewsBase[]>(() => {
+    const since = keep ? new Date(now - keep * 86400000).toISOString() : ""
+    return [...data.feed.items, ...data.listings.flatMap(l => (l.changes ?? []).map(c => ({ ...c, l })))].filter(n => n.date >= since).sort((a, b) => b.date.localeCompare(a.date))
+  }, [data.feed.items, data.listings, keep, now])
+  const items = useMemo<NewsItem[]>(() => {
+    const alerts = alertsOf(data.alerts)
+    return all.flatMap(n => {
+      const on = firing(alerts, n, data.search) as Alert[]
+      return on.length ? [{ ...n, alerts: on.filter(a => !a.builtin) }] : []
+    })
+  }, [all, data.alerts, data.search])
+  // unread: after the last « Tout marquer comme lu », and not opened one by one
+  return { all, items, fresh: (n: NewsBase) => n.date > (data.feed.read_at ?? "") && !data.feed.read?.includes(newsKey(n)) }
 }
 
-// the id the follow-up scrolls to
-export const newsKey = (n: NewsItem) => `${n.kind}-${n.date}-${"l" in n ? n.l.id : n.kind === "dpe" ? n.dpe.number : n.count}`
-export const newsTitle = (n: NewsItem) => "l" in n ? titleOf(n.l)
+// the id the follow-up scrolls to, and the server's read mark (engine lib/alerts.js)
+export const newsKey = (n: NewsBase) => keyOf(n) as string
+export const newsTitle = (n: NewsBase) => "l" in n ? titleOf(n.l)
   : n.kind === "dpe" ? `${TYPE_LABEL[n.dpe.type]}${n.dpe.area ? ` ${num(n.dpe.area)} m²` : ""}`
+  : n.kind === "changed" ? `${n.added} annonce${n.added > 1 ? "s" : ""} suivie${n.added > 1 ? "s" : ""} modifiée${n.added > 1 ? "s" : ""} sur l'API`
   : `${n.added} nouvelle${n.added > 1 ? "s" : ""} sur l'API`
 
 // the dot of an unread one, next to its time
 export const UnreadDot = () => <i aria-hidden className="size-2 shrink-0 rounded-full bg-primary" />
 
 // its tile: a DPE's class on its official color, else the kind's icon on a wash of its color
-export function NewsTile({ n, dim, className }: { n: NewsItem; dim?: boolean; className?: string }) {
+export function NewsTile({ n, dim, className }: { n: NewsBase; dim?: boolean; className?: string }) {
   const box = cn("grid size-9 shrink-0 place-items-center rounded-lg transition-opacity", dim && "opacity-55", className)
   if (n.kind === "dpe") return <span aria-hidden className={cn(box, "text-sm font-bold")} style={{ background: DPE_HEX[n.dpe.energy] ?? "var(--muted)", color: dpeInk(n.dpe.energy) }}>{n.dpe.energy}</span>
   const { color, Icon } = LOOK[n.kind]

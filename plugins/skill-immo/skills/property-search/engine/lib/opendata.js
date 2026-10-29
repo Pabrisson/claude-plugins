@@ -2,6 +2,7 @@
 // Every source is public and keyless; Overpass asks for a User-Agent that names the client.
 import fs from 'node:fs'
 import path from 'node:path'
+import { cityCodes } from './alerts.js'
 import { dvfSales, parseCsv } from './dvf.js'
 
 const UA = 'skill-immo/1.0 (+https://github.com/Pabrisson/claude-plugins)'
@@ -191,6 +192,11 @@ export function openData(cacheDir) {
     recentDpe: (bb, days = 7) => lastYearDpe({ bbox: bb.join(',') }, `ademe/recent-${bb.map(x => x.toFixed(4)).join(',')}.json`, days),
     // the same in a commune (or an arrondissement): the prospection map asks each commune it shows once a week
     communeDpe: insee => lastYearDpe({ code_insee_ban_eq: insee }, `ademe/recent-${insee}.json`, 7),
+    // the same at an alert's place (lib/alerts.js): a street by its BAN id, a circle, a commune (its arrondissements for
+    // Paris, Lyon and Marseille), kept `days`
+    placeDpe: (p, days = 7) => lastYearDpe(
+      p.how === 'street' ? { identifiant_ban_starts: `${p.ban}_` } : p.how === 'radius' ? { geo_distance: `${p.point[0]},${p.point[1]},${p.radius_m}` } : { code_insee_ban_in: cityCodes(p.insee).join(',') },
+      `ademe/place-${p.how === 'radius' ? `${p.point.map(x => x.toFixed(4)).join(',')}-${p.radius_m}` : p.ban ?? p.insee}.json`, days),
 
     // The property tax rates (taxe foncière sur le bâti, %) of the latest year: the commune's, its intercommunality's,
     // their total with the small extras (syndicates, GEMAPI…), the waste tax apart, and France's total weighted by

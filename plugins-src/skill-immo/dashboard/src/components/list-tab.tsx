@@ -1,7 +1,7 @@
 import { score } from "@engine/decide.js"
 import { badge, daysOnline, isHome, matches, typeOf, unitPrice } from "@engine/market.js"
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, SearchIcon } from "lucide-react"
-import { useMemo, useState } from "react"
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Dpe } from "@/components/dpe"
 import { Star } from "@/components/favorite"
@@ -9,6 +9,7 @@ import { Origin } from "@/components/origin"
 import { Gap } from "@/components/ruler"
 import { StatusBadge, statusBand } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -16,7 +17,7 @@ import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Listing, PropertyType } from "@/lib/api"
 import { eur, num, pct, SALE_STATUS, STATUS_LABEL, titleOf, TYPE_PLURAL } from "@/lib/format"
-import { isNew } from "@/lib/rank"
+import { isNew, shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -52,11 +53,15 @@ function GapCell({ l }: { l: Listing }) {
   return <Gap ppm2={unitPrice(l)} refPpm2={marketFor(l).ref?.ppm2} />
 }
 
+// my statuses, « À trier » first: the list shows those ticked, every one but « Écarté » at first
+const MINE = { none: "À trier", ...STATUS_LABEL } as Record<string, string>
+const NOT_DROPPED = Object.keys(MINE).filter(k => k !== "dropped")
+
 // Every listing of the search in one table: filters above, a sort on each column, a row opens the dossier
 export function ListTab() {
-  const { data, types, lastVisit, marketFor, aidsFor, select } = useSearch()
-  const [q, setQ] = useState(""), [type, setType] = useState<"all" | PropertyType>("all"), [mine, setMine] = useState("all"), [status, setStatus] = useState("all")
-  const [onlyMatching, setOnlyMatching] = useState(false), [onlyNew, setOnlyNew] = useState(false), [onlyFavorites, setOnlyFavorites] = useState(false)
+  const { data, types, lastVisit, marketFor, aidsFor, select, spot } = useSearch()
+  const [q, setQ] = useState(""), [type, setType] = useState<"all" | PropertyType>("all"), [mine, setMine] = useState<string[]>(NOT_DROPPED), [status, setStatus] = useState("all")
+  const [onlyMatching, setOnlyMatching] = useState(false), [onlyNew, setOnlyNew] = useState(false), [onlyFavorites, setOnlyFavorites] = useState(false), [hideExpired, setHideExpired] = useState(true)
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: "score", dir: -1 })
   const rows = useMemo(() => data.listings.map(l => ({
     l, score: score(l, aidsFor(l)).value as number | null, gap: badge(unitPrice(l), marketFor(l).ref?.ppm2)?.gap ?? null, days: daysOnline(l),
@@ -64,16 +69,19 @@ export function ListTab() {
   })), [data.listings, aidsFor, marketFor])
   const needle = q.trim().toLowerCase()
   const shown = rows
-    .filter(({ l }) => (!needle || [titleOf(l), l.location.address, l.location.city, ...l.urls.map(u => u.source)].some(x => x?.toLowerCase().includes(needle)))
-      && (type === "all" || typeOf(l) === type) && (mine === "all" || (l.my_status ?? "none") === mine)
+    .filter(({ l }) => l.id === spot || (!needle || [titleOf(l), l.location.address, l.location.city, ...l.urls.map(u => u.source)].some(x => x?.toLowerCase().includes(needle)))
+      && (type === "all" || typeOf(l) === type) && mine.includes(l.my_status ?? "none")
       && (status === "all" || (status === "online" ? l.status === "AVAILABLE" : l.status === status))
-      && (!onlyMatching || matches(l, data.search.criteria, types)) && (!onlyNew || isNew(l, lastVisit)) && (!onlyFavorites || !!l.favorite))
+      && (!onlyMatching || matches(l, data.search.criteria, types)) && (!onlyNew || isNew(l, lastVisit)) && (!onlyFavorites || !!l.favorite)
+      && (!hideExpired || status === "EXPIRED" || !shelved(l)))
     .toSorted((a, b) => {
       const col = COLUMNS.find(c => c.key === sort.key)!, x = col.sort(a), y = col.sort(b)
       // what is unknown goes last, whatever the direction
       if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1
       return (typeof x === "string" ? x.localeCompare(String(y)) : x - (y as number)) * sort.dir
     })
+
+  useEffect(() => { if (spot) document.getElementById(`row-${spot}`)?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }) }, [spot])
 
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -88,16 +96,28 @@ export function ListTab() {
             <SelectContent><SelectGroup><SelectItem value="all">Tous les types</SelectItem>{types.map(t => <SelectItem key={t} value={t}><TypeIcon type={t} />{TYPE_PLURAL[t]}</SelectItem>)}</SelectGroup></SelectContent>
           </Select>
         )}
-        <Select value={mine} onValueChange={setMine}>
-          <SelectTrigger size="sm" aria-label="Mon statut"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectGroup><SelectItem value="all">Tous mes statuts</SelectItem><SelectItem value="none">À trier</SelectItem>{Object.entries(STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectGroup></SelectContent>
-        </Select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label="Mon statut" className="flex h-8 w-fit items-center justify-between gap-1.5 rounded-md border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50">
+              {mine.length === Object.keys(MINE).length ? "Tous mes statuts" : mine.length === NOT_DROPPED.length && !mine.includes("dropped") ? "Sans les écartés" : mine.length ? mine.map(k => MINE[k]).join(", ") : "Aucun statut"}
+              <ChevronDownIcon className="size-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {Object.entries(MINE).map(([k, v]) => (
+              <DropdownMenuCheckboxItem key={k} checked={mine.includes(k)} onSelect={e => e.preventDefault()} onCheckedChange={on => setMine(m => (on ? [...m, k] : m.filter(x => x !== k)))}>{v}</DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={mine.length === Object.keys(MINE).length} onSelect={e => e.preventDefault()} onCheckedChange={on => setMine(on ? Object.keys(MINE) : [])}>Tous</DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Select value={status} onValueChange={setStatus}>
           <SelectTrigger size="sm" aria-label="Statut de l'annonce"><SelectValue /></SelectTrigger>
           <SelectContent><SelectGroup><SelectItem value="all">Toutes les annonces</SelectItem><SelectItem value="online">En ligne</SelectItem><SelectItem value="UNDER_OFFER">Sous offre</SelectItem><SelectItem value="EXPIRED">Expirées</SelectItem></SelectGroup></SelectContent>
         </Select>
         <div className="flex items-center gap-2"><Switch id="l-crit" checked={onlyMatching} onCheckedChange={setOnlyMatching} /><Label htmlFor="l-crit">Dans mes critères</Label></div>
         <div className="flex items-center gap-2"><Switch id="l-new" checked={onlyNew} onCheckedChange={setOnlyNew} /><Label htmlFor="l-new">Nouveautés</Label></div>
+        <div className="flex items-center gap-2"><Switch id="l-exp" checked={hideExpired && status !== "EXPIRED"} disabled={status === "EXPIRED"} onCheckedChange={setHideExpired} /><Label htmlFor="l-exp" title="Sauf celles que vous suivez (un statut autre que « À trier »)">Masquer les expirées</Label></div>
         <div className="flex items-center gap-2"><Switch id="l-fav" checked={onlyFavorites} onCheckedChange={setOnlyFavorites} /><Label htmlFor="l-fav"><Star on className="size-3.5" />Favoris</Label></div>
         <span className="ml-auto text-sm text-muted-foreground">{shown.length} bien{shown.length > 1 ? "s" : ""}</span>
       </div>
@@ -122,7 +142,7 @@ export function ListTab() {
           </TableHeader>
           <TableBody>
             {shown.map(r => (
-              <TableRow key={r.l.id} onClick={() => select(r.l.id)} style={statusBand(r.l.my_status)} className="cursor-pointer">
+              <TableRow key={r.l.id} id={`row-${r.l.id}`} onClick={() => select(r.l.id)} style={statusBand(r.l.my_status)} className={cn("cursor-pointer scroll-mt-16", spot === r.l.id && "spot bg-accent/60")}>
                 {COLUMNS.map(c => (
                   <TableCell key={c.key} className={cn(c.right && "text-right", c.center && "text-center", c.wide && "hidden md:table-cell")}>
                     {c.key === "title" ? (

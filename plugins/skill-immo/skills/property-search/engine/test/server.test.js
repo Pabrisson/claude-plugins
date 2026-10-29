@@ -30,15 +30,34 @@ test('the searches, one search, the state without the key', async () => {
   assert.equal((await fetch(base + '/api/s/nope')).status, 404)
 })
 
-test("the server's watch at its start: a new DPE and the listings to fetch are news, unread until marked read", async () => {
+test("the server's watch at its start: a new DPE is news, the listings to fetch a count; read one by one or all; alerts and settings", async () => {
   let s
   for (let i = 0; i < 50 && !(s = await (await fetch(base + '/api/s/paul-bert')).json()).feed.items.length; i++) await new Promise(ok => setTimeout(ok, 100))
-  // the flat's DPE in the zone (the house is not of the search's types, the third one is outside the 500 m)
-  assert.deepEqual(s.feed.items.map(n => n.dpe?.number ?? `${n.kind} ${n.count}`), ['2669E0000001A', 'listings 1'])
+  // the flat's DPE in the zone (the house is already known, the third one is outside the 500 m); the API's count apart
+  assert.deepEqual(s.feed.items.map(n => n.dpe.number), ['2669E0000001A'])
+  assert.equal(s.feed.stream.total, 1)
   assert.deepEqual(s.area.dpe_recent.map(d => d.number), ['2669E0000001A', '2669E0000002B'])
-  assert.equal(s.unread, 2)
+  assert.equal(s.unread, 1)
+  // an alert turned off: its news no longer count; a bad alert is refused
+  assert.equal((await post('/api/s/paul-bert/alerts', { off: ['dpe'] })).status, 200)
+  assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).unread, 0)
+  assert.deepEqual((await (await fetch(base + '/api/s/paul-bert')).json()).alerts, { off: ['dpe'], custom: [] })
+  assert.equal((await post('/api/s/paul-bert/alerts', { custom: [{ id: 'a', name: 'x', event: 'dpe', conditions: [{ field: 'energy', op: 'gte', value: 'Z' }] }] })).status, 400)
+  assert.equal((await post('/api/s/paul-bert/alerts', {})).status, 200)
+  // read one by one (its key), then all
+  const key = `dpe-${s.feed.items[0].date}-2669E0000001A`
+  assert.equal((await post('/api/s/paul-bert/feed/read', { keys: [key] })).status, 200)
+  assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).unread, 0)
   assert.equal((await post('/api/s/paul-bert/feed/read', {})).status, 200)
   assert.equal((await (await fetch(base + '/api/s/paul-bert/version')).json()).unread, 0)
+  // the settings: checked, then the API off for every search
+  assert.equal((await post('/api/settings', { watch_minutes: 17 })).status, 400)
+  assert.equal((await post('/api/settings', { quiet: ['22:00', '8h'] })).status, 400)
+  const st = await (await post('/api/settings', { watch_minutes: 30, api: false, quiet: ['22:00', '08:00'] })).json()
+  assert.deepEqual([st.watch_minutes, st.api, st.quiet, st.auto_fetch], [30, false, ['22:00', '08:00'], false])
+  const state = await (await fetch(base + '/api/state')).json()
+  assert.deepEqual([state.stream_estate, state.has_key, !!state.watch.next], [false, true, true])
+  assert.equal((await post('/api/settings', { watch_minutes: 360, api: true })).status, 200)
   // the watch's free count is not logged
   assert.ok(!fs.existsSync(path.join(home, '.cache/api-usage.json')))
 })

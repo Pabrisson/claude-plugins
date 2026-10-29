@@ -1,6 +1,6 @@
 import { daysOnline, isHome, matches, typeOf, unitPrice } from "@engine/market.js"
 import { MailIcon, TrendingDownIcon } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Dpe } from "@/components/dpe"
 import { FavoriteButton } from "@/components/favorite"
@@ -14,7 +14,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Listing, PropertyType } from "@/lib/api"
 import { date, eur, num, perUnit, SALE_STATUS, TYPE_PLURAL, UNIT } from "@/lib/format"
-import { isNew, SORTS, useRanked, type Sort } from "@/lib/rank"
+import { isNew, shelved, SORTS, useRanked, type Sort } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -69,12 +69,14 @@ function MarketsCard({ listings }: { listings: Listing[] }) {
 }
 
 export function ListingList({ className }: { className?: string }) {
-  const { data, types, lastVisit, selected, select } = useSearch()
+  const { data, types, lastVisit, selected, select, spot } = useSearch()
   const [sort, setSort] = useState<Sort>("score")
   const [filter, setFilter] = useState<keyof typeof FILTERS>("online")
-  const kept = data.listings.filter(l => filter === "all" || (filter === "online" ? l.status !== "EXPIRED" && l.my_status !== "dropped" && matches(l, data.search.criteria, types)
-    : filter === "new" ? isNew(l, lastVisit) : filter === "followed" ? !!l.my_status && l.my_status !== "dropped" : filter === "favorites" ? !!l.favorite : l.my_status === "dropped"))
+  // an expired listing waiting to be sorted never shows here; one the user follows does, with its « Expiré » badge
+  const kept = data.listings.filter(l => l.id === spot || !shelved(l) && (filter === "all" || (filter === "online" ? l.my_status !== "dropped" && matches(l, data.search.criteria, types)
+    : filter === "new" ? isNew(l, lastVisit) : filter === "followed" ? !!l.my_status && l.my_status !== "dropped" : filter === "favorites" ? !!l.favorite : l.my_status === "dropped")))
   const shown = useRanked(kept, sort)
+  useEffect(() => { if (spot) document.getElementById(`listing-${spot}`)?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }) }, [spot])
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
@@ -100,7 +102,7 @@ export function ListingList({ className }: { className?: string }) {
           </EmptyHeader>
         </Empty>
       )}
-      {shown.map(({ l, score }) => <ListingCard key={l.id} l={l} score={score} active={selected === l.id} fresh={isNew(l, lastVisit)} onOpen={() => select(l.id)} />)}
+      {shown.map(({ l, score }) => <ListingCard key={l.id} l={l} score={score} active={selected === l.id || spot === l.id} fresh={isNew(l, lastVisit)} onOpen={() => select(l.id)} />)}
     </div>
   )
 }
@@ -112,8 +114,8 @@ function ListingCard({ l, score, active, fresh, onOpen }: { l: Listing; score: n
   const seen = (l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, from: c.from as number, to: c.to as number }))
   const days = daysOnline(l), drop = [...l.price_changes, ...seen].toSorted((a, b) => a.date.localeCompare(b.date)).at(-1), messages = l.messages?.length ?? 0
   return (
-    <div className="group relative">
-    <button type="button" onClick={onOpen} style={statusTint(l.my_status)} className={cn("grid w-full grid-cols-[88px_1fr] gap-3 rounded-xl border p-2.5 text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", tint(l.my_status), active && "border-ring ring-1 ring-ring")}>
+    <div id={`listing-${l.id}`} className="group relative scroll-mt-4">
+    <button type="button" onClick={onOpen} style={statusTint(l.my_status)} className={cn("grid w-full grid-cols-[88px_1fr] gap-3 rounded-xl border p-2.5 text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", tint(l.my_status), active && "spot border-ring ring-1 ring-ring")}>
       <div className="relative grid h-20 place-items-center overflow-hidden rounded-lg bg-muted">
         {l.pictures[0] ? <img src={l.pictures[0]} alt="" loading="lazy" className="size-full object-cover" onError={e => e.currentTarget.remove()} /> : <TypeIcon type={t} className="size-6 text-muted-foreground" />}
         {/* the last drop on the photo, as the portals tag it: the text lines keep their room */}

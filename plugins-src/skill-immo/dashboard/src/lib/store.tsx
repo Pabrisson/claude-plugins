@@ -1,10 +1,10 @@
 import { reference, typeOf } from "@engine/market.js"
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
-import { api, type Listing, type Poi, type Profile, type PropertyType, type SearchData, type State, type Stats } from "@/lib/api"
+import { api, type DpeRow, type Listing, type Poi, type Profile, type PropertyType, type SearchData, type State, type Stats } from "@/lib/api"
 
 // what the user asks Claude, collected across the dashboard and copied as one prompt
-export type FeedbackKind = "affiner" | "élargir" | "analyser" | "comparer" | "ajouter" | "chercher" | "message" | "question"
+export type FeedbackKind = "affiner" | "élargir" | "annonces" | "analyser" | "comparer" | "ajouter" | "chercher" | "message" | "question"
 export type Feedback = { kind: FeedbackKind; text: string }
 // the sold unit price a type is weighed against, and the stats of its scope
 export type Ref = { ppm2: number; scope: string; count: number; type: PropertyType }
@@ -32,6 +32,13 @@ type Ctx = {
   // the news the follow-up scrolls to and lights up (components/news newsKey), "all" for the list's top
   newsFocus: string | null
   focusNews: (key: string | null) => void
+  // a DPE of the follow-up to show on the « Prospection » map, taken once it is shown
+  dpeFocus: DpeRow | null
+  focusDpe: (d: DpeRow | null) => void
+  // a listing its dossier sends to the map, the board or the list (« Voir »): shown there, lit up, kept by the list's
+  // filters until another one
+  spot: string | null
+  spotListing: (id: string | null) => void
   selected: string | null
   select: (id: string | null) => void
   compare: string[]
@@ -69,6 +76,8 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
   const [stale, setStale] = useState(false)
   const [unread, setUnread] = useState(initial.unread)
   const [newsFocus, focusNews] = useState<string | null>(null)
+  const [dpeFocus, focusDpe] = useState<DpeRow | null>(null)
+  const [spot, spotListing] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     const [d, s] = await Promise.all([api.search(slug), api.state()])
@@ -101,7 +110,7 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
     marketOf: t => markets[t],
     marketFor: l => markets[typeOf(l) as PropertyType],
     aidsFor: l => ({ ref: markets[typeOf(l) as PropertyType].ref, pois, isochrones: data.area.isochrones ?? [], profile, criteria: data.search.criteria }),
-    lastVisit, stale, unread, newsFocus, focusNews, selected, select, compare,
+    lastVisit, stale, unread, newsFocus, focusNews, dpeFocus, focusDpe, spot, spotListing, selected, select, compare,
     toggleCompare: id => setCompare(c => (c.includes(id) ? c.filter(x => x !== id) : [...c, id].slice(-4))),
     clearCompare: () => setCompare([]),
     feedback,

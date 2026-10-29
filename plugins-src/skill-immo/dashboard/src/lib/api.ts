@@ -123,30 +123,61 @@ export type Search = {
   city: string
   district: string | null
   street: { name: string; code_voie: string } | null
+  // the place's BAN id: a street's for a search along a street
+  ban: string
   zone: { how: string; kind: "radius" | "polygon"; center?: Point; radius_m?: number; geometry: Geometry; label: string }
   criteria: Criteria
-  max: number
   stream: { total: number; counted_at: string } | null
   last_fetch: string | null
   last_refresh: string | null
   last_visit: string | null
-  alert: { searches: { id: string; type: PropertyType }[]; topic: string | null; enabled?: boolean } | null
+  // a Stream Estate alert skill-immo 1.6 and before made: only Claude deletes it (alert delete)
+  alert?: { searches: { id: string; type: PropertyType }[] } | null
 }
 export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" | "area_max" | "rooms_min" | "rooms_max" | "floor_min" | "land_min", number>> & { dpe_max?: string; elevator?: boolean; outdoor?: boolean }
-// the search's news (feed.json), newest first: a recent DPE no listing matches, Stream Estate listings to fetch
-export type News = { date: string } & ({ kind: "dpe"; dpe: DpeRow } | { kind: "listings"; count: number; added: number })
-export type Feed = { read_at: string | null; stream: { total: number; counted_at: string } | null; items: News[] }
-export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; feed: Feed; unread: number; version: number }
-export type Profile = { down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
+// the search's news (feed.json), newest first: a recent DPE no listing matches, Stream Estate listings to fetch, fetched
+// ones that changed on the portals since the last refresh (the server's free counts)
+// (`outside`: found at an alert's place, outside the zone; « listings » and « changed » were the API's counts in 1.7)
+export type News = { date: string } & ({ kind: "dpe"; dpe: DpeRow; outside?: boolean } | { kind: "listings" | "changed"; count: number; added: number })
+export type Feed = { read_at: string | null; read?: string[]; stream: { total: number; counted_at: string } | null; changed?: { since: string; total: number; counted_at: string }; items: News[] }
+// the search's alerts (alerts.json, engine lib/alerts.js): the default ones turned off, the user's own
+export type AlertEvent = "dpe" | "new" | "price_drop" | "price_rise" | "status" | "expired"
+export type AlertField = "street" | "type" | "energy" | "area" | "price" | "price_per_m2" | "rooms" | "change_pct" | "favorite" | "my_status" | "criteria"
+export type Condition = { field: AlertField; op: string; value: string | number | boolean }
+// where an alert watches: the search's zone, or (a source's event) a street, a commune, a circle
+export type Place = { how: "zone" } | { how: "street"; ban: string; label: string; point: Point } | { how: "commune"; insee: string; label: string; point: Point } | { how: "radius"; radius_m: number; label: string; point: Point }
+export type Alert = { id: string; name: string; event: AlertEvent; place?: Place; conditions: Condition[]; enabled: boolean; builtin?: boolean }
+export type Alerts = { off?: string[]; custom?: Alert[] }
+export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; alerts: Alerts; feed: Feed; unread: number; version: number }
+// the account as Stream Estate's console shows it: the euros deposited, « API items returned » as of `at`, the top-ups
+export type Account = { deposited: number; items: number; at: string; topups: { date: string; eur: number }[] }
+export type Profile = { max_fetch: number; account?: Account; down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
 export type ScoreKey = "price" | "budget" | "energy" | "transport" | "travel" | "outdoor"
-export type UsageEntry = { date: string; route: string; credits: number | null; results: number; search: string | null }
+export type UsageEntry = { date: string; route: string; credits: number | null; results: number; search: string | null; by?: "auto" }
+// the dashboard's settings (« Réglages », .settings.json): the watch every so many minutes (0: off), the API, the
+// automatic fetch and its credits a month, the notifications, the reading
+export type Settings = { watch_minutes: number; api: boolean; auto_fetch: boolean; auto_credits: number; notify: boolean; sound: boolean; quiet: [string, string] | null; read_on_open: boolean; keep_days: number }
 export type State = {
   home: string
+  // the API may be called: the key is there and it is on in the settings
   stream_estate: boolean
-  // the dashboard server's watch: every so many hours, 0 when off
-  watch_hours: number
+  has_key: boolean
+  settings: Settings
+  watch: { last: string | null; next: string | null; running: boolean }
   costs: Record<string, { credits: number | null; per?: string; note?: string }>
-  usage: { month: number; last30: number; unknown: number; cap: number; eur_per_credit: number; by_search: Record<string, { calls: number; credits: number }>; by_route: Record<string, { calls: number; credits: number }>; by_month: Record<string, number> }
+  usage: {
+    month: number; last30: number; unknown: number; cap: number; eur_per_credit: number; max_fetch: number; by_search: Record<string, { calls: number; credits: number }>; by_route: Record<string, { calls: number; credits: number }>; by_month: Record<string, number>
+    // the account, with the items the log counted since the console was read (`since`), the euros and items left;
+    // the credits a day (60 days)
+    account: (Account & { since: number; used: number; left: number; left_items: number }) | null
+    daily: Record<string, number>
+    // the automatic fetch's credits a day (60 days) and a month; all the credits per use, since the start
+    daily_auto: Record<string, number>
+    monthly_auto: Record<string, number>
+    by_use: Partial<Record<"fetched" | "counts" | "asking" | "alert" | "other", { calls: number; credits: number; unknown: number }>>
+  }
+  // what each search has to fetch, from the latest free counts
+  pending: { slug: string; label: string; on: boolean; added: number; changed: number }[]
   log: UsageEntry[]
 }
 export type SearchSummary = { slug: string; label: string; mode: "stream-estate" | "classic"; types?: PropertyType[]; zone: string; created: string; listings: number; online: number }
@@ -168,12 +199,20 @@ export const api = {
   searches: () => json<SearchSummary[]>("/api/searches"),
   search: (slug: string) => json<SearchData>(`/api/s/${slug}`),
   version: (slug: string) => json<{ version: number; unread: number }>(`/api/s/${slug}/version`),
-  readFeed: (slug: string) => post<object>(`/api/s/${slug}/feed/read`, {}),
+  // all of them, or those keys
+  readFeed: (slug: string, keys?: string[]) => post<object>(`/api/s/${slug}/feed/read`, keys ? { keys } : {}),
+  saveAlerts: (slug: string, a: Alerts) => post<Alerts>(`/api/s/${slug}/alerts`, a),
+  previewAlert: (slug: string, a: Alert) => post<{ count: number; items: DpeRow[] }>(`/api/s/${slug}/alerts/preview`, a),
+  place: (how: "street" | "commune" | "radius", q: string, radius?: number) => json<Place>(`/api/place?${new URLSearchParams({ how, q, ...(radius ? { radius: `${radius}` } : {}) })}`),
+  saveSettings: (s: Partial<Settings>) => post<Settings>("/api/settings", s),
+  watchNow: () => post<{ last: string; next: string | null }>("/api/watch", {}),
+  cache: (clear = false) => json<{ files: number; bytes: number }>("/api/cache", clear ? { method: "DELETE" } : undefined),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
   listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
-  saveProfile: (p: Partial<Profile>) => post<Profile>("/api/profile", p),
+  // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
+  saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),
   addListing: (slug: string, body: Record<string, unknown>) => post<Listing>(`/api/s/${slug}/listings`, body),
   autocomplete: (q: string) => json<Hit[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),
   odds: (bbox: number[], signal?: AbortSignal) => json<Odds>(`/api/odds?bbox=${bbox.join(",")}`, { signal }),

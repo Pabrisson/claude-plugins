@@ -14,7 +14,7 @@ test('estimates: per item returned, unknown until measured', () => {
   assert.equal(estimate('GET /documents/properties', { results: 37 }), 37)
   assert.equal(estimate('GET /documents/properties', { results: 0 }), 0)
   assert.equal(estimate('GET /indicators/price_per_meter'), null)
-  assert.equal(estimate('POST /searches', { calls: 2 }, { 'POST /searches': 0 }), 0)
+  assert.equal(estimate('DELETE /searches/{id}', { calls: 2 }, { 'DELETE /searches/{id}': 0 }), 0)
   assert.equal(estimate('GET /indicators/price_per_meter', { calls: 1 }, { 'GET /indicators/price_per_meter': 1 }), 1)
 })
 

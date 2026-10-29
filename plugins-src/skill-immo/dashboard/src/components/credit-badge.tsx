@@ -11,17 +11,17 @@ export const lastCount = (d: SearchData) => [d.search.stream, d.feed.stream].fil
 type Cost = "fetch" | "refresh" | { route: string; calls?: number }
 
 // The credits a paid button may spend, as a badge inside it, in Stream Estate mode only (nothing in OpenData):
-// - fetch: what the last free count found, up to the search's max;
-// - refresh: what changed is only counted when it runs, so the search's max at most (nothing before a first fetch);
+// - fetch: what the last free count found, up to the most a fetch takes (« Coûts API »);
+// - refresh: what changed is only fetched when it runs, so that most at most (nothing before a first fetch);
 // - a route: its price (the engine's table, `costs set`) times the calls, « ? » while unknown.
 // The run dialog still gives the exact amount and asks first.
 export function CreditBadge({ cost }: { cost: Cost }) {
   const { data, state } = useSearch()
   if (!state.stream_estate || data.search.mode !== "stream-estate") return null
-  const s = data.search, last = lastCount(data), upTo = cost === "refresh" && !!s.last_refresh
+  const s = data.search, last = lastCount(data), upTo = cost === "refresh" && !!s.last_refresh, max = state.usage.max_fetch
   const price = typeof cost === "object" ? state.costs[cost.route]?.credits : null
-  const n = cost === "fetch" ? (last ? Math.min(last.total, s.max) : null)
-    : cost === "refresh" ? (s.last_refresh ? s.max : 0)
+  const n = cost === "fetch" ? (last ? Math.min(last.total, max) : null)
+    : cost === "refresh" ? (s.last_refresh ? max : 0)
     : price == null ? null : price * (cost.calls ?? 1)
   const title = n == null ? "Coût inconnu, annoncé avant de lancer" : `${upTo ? "Au plus " : ""}${credits(n, state.usage.eur_per_credit)}`
   return (
