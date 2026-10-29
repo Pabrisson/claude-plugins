@@ -1,0 +1,237 @@
+[
+  {
+    "id": "free", "label": "Free", "group": "Free", "mode": "create", "icon": "sparkles",
+    "description": "Your own prompt, with optional first and last frames or references.",
+    "inputs": [
+      { "key": "first_frame", "kind": "image", "label": "First frame", "optional": true },
+      { "key": "last_frame", "kind": "image", "label": "Last frame", "optional": true },
+      { "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }
+    ],
+    "fields": [],
+    "template": "{prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "animate", "label": "Animate", "group": "Frames", "mode": "create", "icon": "play",
+    "description": "Brings an image to life: it becomes the first frame.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
+    "fields": [{ "key": "motion", "label": "What moves", "type": "text", "placeholder": "her hair in the wind, the camera slowly pushes in" }],
+    "template": "{motion}. Keep the image's subject, style and lighting. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "first-last-frame", "label": "First & last frame", "group": "Frames", "mode": "create", "icon": "between-horizontal-start",
+    "description": "Starts on one image and ends on another.",
+    "inputs": [
+      { "key": "first_frame", "kind": "image", "label": "First frame" },
+      { "key": "last_frame", "kind": "image", "label": "Last frame" }
+    ],
+    "fields": [{ "key": "transition", "label": "How it goes from one to the other", "type": "text", "placeholder": "a smooth camera move, the light shifts to dusk" }],
+    "template": "A continuous shot from the first frame to the last frame: {transition}. {prompt}",
+    "models": ["google/veo-3.1-fast", "kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "dolly-zoom-in", "label": "Dolly zoom in", "group": "Camera", "mode": "create", "icon": "zoom-in",
+    "description": "Pushes in while zooming out: the background stretches, the subject holds.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
+    "fields": [
+      { "key": "subject", "label": "Subject", "type": "text", "placeholder": "the dancer in the red coat" },
+      { "key": "speed", "label": "Speed", "type": "choice", "options": ["slow", "steady", "fast"], "default": "steady" }
+    ],
+    "template": "Dolly zoom (vertigo effect) on {subject}: the camera dollies in at a {speed} pace while the lens zooms out, the background stretches away and the subject stays the same size in frame. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5", "google/veo-3.1-fast"]
+  },
+  {
+    "id": "crash-zoom-in", "label": "Crash zoom in", "group": "Camera", "mode": "create", "icon": "scan-face",
+    "description": "A sudden, fast zoom onto the subject's face.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
+    "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "the man's eyes" }],
+    "template": "Crash zoom: the camera snaps in very fast onto {subject}, with motion blur, then holds on the close-up. {prompt}",
+    "models": ["bytedance/seedance-2.5", "kwaivgi/kling-v3.0-pro"]
+  },
+  {
+    "id": "earth-zoom-out", "label": "Earth zoom out", "group": "Camera", "mode": "create", "icon": "earth",
+    "description": "Pulls back from the subject up to orbit.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
+    "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "a woman on a rooftop in Paris" }],
+    "template": "Continuous zoom out starting close on {subject}, rising through the city, the clouds and the atmosphere until the whole Earth is seen from orbit. One unbroken move. {prompt}",
+    "models": ["google/veo-3.1-fast", "kwaivgi/kling-v3.0-pro"]
+  },
+  {
+    "id": "fpv-drone", "label": "FPV drone", "group": "Camera", "mode": "create", "icon": "plane",
+    "description": "A fast first-person drone flight through the scene.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
+    "fields": [{ "key": "path", "label": "Flight path", "type": "text", "placeholder": "dives off the cliff, skims the waves, rises over the boat" }],
+    "template": "FPV drone shot, fast and fluid, wide lens with slight fisheye: {path}. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5"]
+  },
+  {
+    "id": "orbit", "label": "Orbit", "group": "Camera", "mode": "create", "icon": "rotate-3d",
+    "description": "Arcs around the subject, left or right, part way or all around.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
+    "fields": [
+      { "key": "subject", "label": "Subject", "type": "text", "placeholder": "the sneaker on the pedestal" },
+      { "key": "direction", "label": "Direction", "type": "choice", "options": ["left", "right"], "default": "right" },
+      { "key": "arc", "label": "Arc", "type": "choice", "options": ["a quarter turn", "a half turn", "a full 360°"], "default": "a half turn" }
+    ],
+    "template": "The camera orbits {direction} around {subject}, {arc}, at a steady distance, the subject kept centered. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5"]
+  },
+  {
+    "id": "handheld", "label": "Handheld", "group": "Camera", "mode": "create", "icon": "hand",
+    "description": "Documentary feel: a slightly shaky camera following the action.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
+    "fields": [{ "key": "action", "label": "Action", "type": "text", "placeholder": "she walks through the market, looks back" }],
+    "template": "Handheld camera, natural micro-shake, documentary style, following the action: {action}. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "static", "label": "Static shot", "group": "Camera", "mode": "create", "icon": "square",
+    "description": "A locked-off camera: only the scene moves.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
+    "fields": [{ "key": "action", "label": "What happens", "type": "text", "placeholder": "steam rises from the coffee cup" }],
+    "template": "Static locked-off camera on a tripod, no camera movement at all. {action}. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "set-on-fire", "label": "Set on fire", "group": "VFX", "mode": "create", "icon": "flame",
+    "description": "Flames spread over the subject, realistic fire and smoke.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
+    "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "the car" }],
+    "template": "{subject} catches fire: realistic flames spread across it, embers and smoke rise, the light of the fire flickers on the surroundings. {prompt}",
+    "models": ["black-forest-labs/flux-3-video", "kwaivgi/kling-v3.0-pro"]
+  },
+  {
+    "id": "disintegration", "label": "Disintegration", "group": "VFX", "mode": "create", "icon": "wind",
+    "description": "The subject crumbles into dust carried by the wind.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
+    "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "the man in the suit" }],
+    "template": "{subject} disintegrates into fine dust particles that drift away on the wind, starting from the edges, until nothing is left. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "freeze", "label": "Freeze", "group": "VFX", "mode": "create", "icon": "snowflake",
+    "description": "Frost spreads and the subject turns to ice.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
+    "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "the woman's face" }],
+    "template": "Frost crystals spread over {subject} until it is frozen solid in clear ice, cold mist around it. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "turn-to-metal", "label": "Turn to metal", "group": "VFX", "mode": "create", "icon": "gem",
+    "description": "The subject turns into polished chrome, then melts or holds.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
+    "fields": [
+      { "key": "subject", "label": "Subject", "type": "text", "placeholder": "the statue" },
+      { "key": "end", "label": "Then", "type": "choice", "options": ["holds", "melts"], "default": "holds" }
+    ],
+    "template": "{subject} turns into liquid-polished chrome metal from head to toe, reflections sliding over it, then it {end}. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "explosion", "label": "Explosion", "group": "VFX", "mode": "create", "icon": "bomb",
+    "description": "A cinematic explosion behind or at the subject.",
+    "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
+    "fields": [{ "key": "where", "label": "Where", "type": "text", "placeholder": "the building behind him" }],
+    "template": "A cinematic explosion bursts from {where}: fireball, shockwave, debris, the subject stays in frame. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
+    "id": "talking-avatar", "label": "Talking avatar", "group": "Characters", "mode": "create", "icon": "message-circle",
+    "description": "A photo of a person speaks a voice: lip-synced talking head (it needs a human-like face).",
+    "inputs": [
+      { "key": "first_frame", "kind": "image", "label": "Photo" },
+      { "key": "audio", "kind": "audio", "label": "Voice" }
+    ],
+    "fields": [{ "key": "motion", "label": "Attitude", "type": "text", "placeholder": "calm, nods now and then" }],
+    "template": "The person speaks the audio, natural lip-sync and facial expressions, {motion}. {prompt}",
+    "models": ["heygen/avatar-iv"]
+  },
+  {
+    "id": "free-edit", "label": "Free edit", "group": "Free", "mode": "edit", "icon": "wand",
+    "description": "Changes what you describe in a video, the rest stays. Draw on a frame to point at it.",
+    "inputs": [
+      { "key": "video", "kind": "video", "label": "Video" },
+      { "key": "sketch", "kind": "sketch", "label": "Sketch on a frame", "optional": true },
+      { "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }
+    ],
+    "fields": [],
+    "template": "{prompt}. Change only that, keep everything else of the video identical.",
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.5"]
+  },
+  {
+    "id": "extend", "label": "Extend", "group": "Free", "mode": "edit", "icon": "fast-forward",
+    "description": "Continues a video after its end (sequel) or builds what came before (prequel).",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [
+      { "key": "direction", "label": "Direction", "type": "choice", "options": ["sequel", "prequel"], "default": "sequel" },
+      { "key": "next", "label": "What happens", "type": "text", "placeholder": "she turns and walks away" }
+    ],
+    "template": "{next}. Same characters, place, light and camera style as the video. {prompt}",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5"],
+    "local": "extend"
+  },
+  {
+    "id": "upscale", "label": "Upscale", "group": "Retouch", "mode": "edit", "icon": "maximize",
+    "description": "Sharper and larger: precise keeps the original, creative adds detail.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [
+      { "key": "creativity", "label": "Creativity", "type": "choice", "options": ["precise", "creative"], "default": "precise" },
+      { "key": "factor", "label": "Factor", "type": "choice", "options": ["1.5", "2", "3"], "default": "2" }
+    ],
+    "template": "{prompt}",
+    "models": ["black-forest-labs/flux-video-upscale"]
+  },
+  {
+    "id": "relight-atmosphere", "label": "Relight & atmosphere", "group": "Light & color", "mode": "edit", "icon": "sun",
+    "description": "Changes the time of day or the lighting, shadows follow.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [{ "key": "light", "label": "New light", "type": "text", "placeholder": "golden hour, low sun from the left" }],
+    "template": "Relight the video: {light}. Light and shadows follow the 3D scene, nothing else changes. {prompt}",
+    "models": ["runway/aleph-2", "black-forest-labs/flux-video-edit"]
+  },
+  {
+    "id": "recolor", "label": "Recolor & restyle", "group": "Light & color", "mode": "edit", "icon": "palette",
+    "description": "A new grade, new colors for an item, or an artistic style, motion kept.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [{ "key": "look", "label": "New look", "type": "text", "placeholder": "teal and orange grade, the jacket becomes yellow" }],
+    "template": "Restyle the video: {look}. Keep the motion, framing and timing identical. {prompt}",
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2"]
+  },
+  {
+    "id": "object-swap", "label": "Object swap", "group": "Characters", "mode": "edit", "icon": "replace",
+    "description": "Replaces a subject or object, the action stays.",
+    "inputs": [
+      { "key": "video", "kind": "video", "label": "Video" },
+      { "key": "references", "kind": "image", "label": "New object", "optional": true }
+    ],
+    "fields": [
+      { "key": "old", "label": "Replace", "type": "text", "placeholder": "the red mug" },
+      { "key": "new", "label": "With", "type": "text", "placeholder": "a glass of orange juice" }
+    ],
+    "template": "Replace {old} with {new} (the reference image if given), keeping its position, motion and the lighting. Everything else stays identical. {prompt}",
+    "models": ["runway/aleph-2", "black-forest-labs/flux-video-edit", "bytedance/seedance-2.5"]
+  },
+  {
+    "id": "clean-up", "label": "Clean up", "group": "Retouch", "mode": "edit", "icon": "eraser",
+    "description": "Removes objects, wires or people you name.",
+    "inputs": [
+      { "key": "video", "kind": "video", "label": "Video" },
+      { "key": "sketch", "kind": "sketch", "label": "Mark what goes", "optional": true }
+    ],
+    "fields": [{ "key": "what", "label": "Remove", "type": "text", "placeholder": "the boom mic at the top and the man in the background" }],
+    "template": "Remove {what} from the whole video and fill the background naturally. Nothing else changes. {prompt}",
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2"]
+  },
+  {
+    "id": "reframe", "label": "Reframe", "group": "Retouch", "mode": "edit", "icon": "crop",
+    "description": "Another aspect ratio, cropped around the point you pick. Local and free.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [
+      { "key": "ratio", "label": "Ratio", "type": "choice", "options": ["9:16", "1:1", "4:5", "16:9"], "default": "9:16" },
+      { "key": "focus", "label": "Keep around (0 left, 1 right)", "type": "number", "min": 0, "max": 1, "step": 0.05, "default": 0.5 }
+    ],
+    "template": "",
+    "local": "reframe"
+  }
+]

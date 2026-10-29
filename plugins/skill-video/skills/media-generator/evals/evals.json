@@ -1,0 +1,55 @@
+{
+  "skill_name": "media-generator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Génère une image d'un phare breton au coucher du soleil, style photo argentique.",
+      "expected_output": "The skill checks the machine, picks an image tool and model, gets the estimate (exit 2) and asks the user before spending, then generates with --spend and gives the path and the real cost.",
+      "files": [],
+      "expectations": [
+        "Runs `media.mjs doctor` before any other command of the skill",
+        "Runs the image command without --spend first and reads the estimate",
+        "Asks the user with AskUserQuestion, giving the price in USD and the model, before any --spend",
+        "Runs again with --spend set to the estimate only after the user's yes",
+        "Gives the output path and the cost printed by the command",
+        "Talks to the user in French"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Anime cette photo avec un dolly zoom sur le sujet : ../video-editor/engine/test/assets/photo.png",
+      "expected_output": "The video tool dolly-zoom-in with the photo as first frame, the estimate asked first, then the job run and waited for.",
+      "files": ["../video-editor/engine/test/assets/photo.png"],
+      "expectations": [
+        "Finds the tool with `media.mjs tools video --search` (dolly)",
+        "Passes the photo as `--in first_frame=<path>`",
+        "Asks before spending, with the price in USD",
+        "Waits for the video job (background or long timeout) and reports the file"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Traduis cette vidéo en anglais et en espagnol : ../video-editor/engine/test/speech.mp4",
+      "expected_output": "The audio translate tool through ElevenLabs, the estimate in credits, the user's yes, and no lip-sync said.",
+      "files": ["../video-editor/engine/test/speech.mp4"],
+      "expectations": [
+        "Uses `audio --tool translate --in clip=<file> --field to=en,es`",
+        "Gives the price in ElevenLabs credits",
+        "Offers dubbing_v1 as the cheaper choice against dubbing_v2",
+        "Says there is no lip-sync",
+        "Never runs with --spend before the user's yes"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "media-generator — Copy prompt\nSpace: video · Tool: orbit (Orbit) · Model: openrouter:kwaivgi/kling-v3.0-pro\nFields: subject=a perfume bottle on black marble, direction=right, arc=a half turn\nInputs: first_frame=/tmp/bottle.png\nWhat I want: a luxurious slow product reveal\nWrite the best prompt for this model, then run: media.mjs draft --space video --tool orbit --model openrouter:kwaivgi/kling-v3.0-pro --prompt \"…\" — do not generate.",
+      "expected_output": "A model-specific prompt written into the dashboard's draft, nothing generated and nothing spent.",
+      "files": [],
+      "expectations": [
+        "Runs `media.mjs draft` with --space video, --tool orbit and the model",
+        "Never runs `media.mjs video` and never passes --spend",
+        "Tells the user to use the Reload bar in the dashboard"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,144 @@
+[
+  {
+    "id": "free", "label": "Free", "group": "Free", "mode": "create", "icon": "sparkles",
+    "description": "Your own prompt, with optional reference images.",
+    "inputs": [{ "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }],
+    "fields": [],
+    "template": "{prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image"]
+  },
+  {
+    "id": "cinematic-camera", "label": "Cinematic camera", "group": "Camera", "mode": "create", "icon": "camera",
+    "description": "A still shot as if on a real camera body, lens and aperture.",
+    "inputs": [{ "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }],
+    "fields": [
+      { "key": "body", "label": "Camera", "type": "choice", "options": ["ARRI Alexa 35", "RED V-Raptor", "Sony Venice 2", "Kodak Portra 400 film", "iPhone"], "default": "ARRI Alexa 35" },
+      { "key": "lens", "label": "Lens", "type": "choice", "options": ["anamorphic", "spherical prime", "vintage Cooke", "macro"], "default": "spherical prime" },
+      { "key": "focal", "label": "Focal length", "type": "choice", "options": ["14mm", "24mm", "35mm", "50mm", "85mm", "135mm"], "default": "35mm" },
+      { "key": "aperture", "label": "Aperture", "type": "choice", "options": ["f/1.4", "f/2.8", "f/5.6", "f/11"], "default": "f/2.8" }
+    ],
+    "template": "{prompt}. Shot on {body} with a {focal} {lens} lens at {aperture}: matching depth of field, perspective and rendering, cinematic color.",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+  },
+  {
+    "id": "character", "label": "Character", "group": "Characters", "mode": "create", "icon": "user",
+    "description": "Puts one of your Elements in a new scene, same face and look.",
+    "inputs": [{ "key": "references", "kind": "image", "label": "Character", "multiple": true }],
+    "fields": [{ "key": "scene", "label": "Scene", "type": "text", "placeholder": "sitting in a Tokyo café at night, neon outside" }],
+    "template": "The same person as in the reference images, same face, hair and features: {scene}. {prompt}",
+    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro", "openai/gpt-image-2.5-sunburst"]
+  },
+  {
+    "id": "product-shot", "label": "Product shot", "group": "Characters", "mode": "create", "icon": "package",
+    "description": "Your product on a clean studio set or in a styled scene.",
+    "inputs": [{ "key": "references", "kind": "image", "label": "Product", "multiple": true }],
+    "fields": [
+      { "key": "set", "label": "Set", "type": "text", "placeholder": "on wet black stone, soft rim light" },
+      { "key": "angle", "label": "Angle", "type": "choice", "options": ["front", "three-quarter", "top-down", "close-up"], "default": "three-quarter" }
+    ],
+    "template": "Professional product photo of the product in the reference images, exact shape, colors and labels kept: {set}, {angle} view. {prompt}",
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-3-pro-image"]
+  },
+  {
+    "id": "free-edit", "label": "Free edit", "group": "Free", "mode": "edit", "icon": "wand",
+    "description": "Changes what you describe, the rest of the image stays.",
+    "inputs": [
+      { "key": "image", "kind": "image", "label": "Image" },
+      { "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }
+    ],
+    "fields": [],
+    "template": "Edit the first image: {prompt}. Keep everything else identical.",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image"]
+  },
+  {
+    "id": "relight", "label": "Relight", "group": "Light & color", "mode": "edit", "icon": "sun",
+    "description": "Moves the light: direction, softness, brightness and color.",
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "fields": [
+      { "key": "direction", "label": "Light from", "type": "choice", "options": ["top", "front", "right", "left", "back", "bottom"], "default": "left" },
+      { "key": "softness", "label": "Light", "type": "choice", "options": ["soft", "hard"], "default": "soft" },
+      { "key": "brightness", "label": "Brightness", "type": "number", "min": 0, "max": 100, "step": 5, "default": 50, "unit": "%" },
+      { "key": "color", "label": "Color", "type": "color", "default": "#ffffff" }
+    ],
+    "template": "Relight the image with a {softness} light coming from the {direction}, brightness {brightness}%, light color {color}. Shadows and highlights follow the new light; subject, pose and background stay identical. {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"]
+  },
+  {
+    "id": "inpaint", "label": "Inpaint", "group": "Retouch", "mode": "edit", "icon": "brush",
+    "description": "Draw over an area, say what goes there.",
+    "inputs": [
+      { "key": "image", "kind": "image", "label": "Image" },
+      { "key": "sketch", "kind": "sketch", "label": "Mark the area" }
+    ],
+    "fields": [{ "key": "change", "label": "Put there", "type": "text", "placeholder": "a vase of white tulips" }],
+    "template": "The second image is the first with an area marked in color. Change only the marked area: {change}. The marks themselves must not appear; everything outside the area stays identical. {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"]
+  },
+  {
+    "id": "upscale", "label": "Upscale", "group": "Retouch", "mode": "edit", "icon": "maximize",
+    "description": "Redraws the image in 4K with sharper detail.",
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "fields": [],
+    "template": "Upscale this image to high resolution: same content, composition and colors, sharper detail and texture, no new elements. {prompt}",
+    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"],
+    "params": { "resolution": "4K" }
+  },
+  {
+    "id": "face-swap", "label": "Face swap", "group": "Characters", "mode": "edit", "icon": "scan-face",
+    "description": "Puts a face from one photo onto the person of another.",
+    "inputs": [
+      { "key": "image", "kind": "image", "label": "Target" },
+      { "key": "face", "kind": "image", "label": "Face" }
+    ],
+    "fields": [],
+    "template": "Replace the face of the person in the first image with the face of the person in the second image. Keep the first image's pose, expression, lighting, skin tone match, hair and background. {prompt}",
+    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro", "openai/gpt-image-2.5-sunburst"]
+  },
+  {
+    "id": "character-swap", "label": "Character swap", "group": "Characters", "mode": "edit", "icon": "users",
+    "description": "Replaces the whole person with one of your characters.",
+    "inputs": [
+      { "key": "image", "kind": "image", "label": "Target" },
+      { "key": "references", "kind": "image", "label": "Character", "multiple": true }
+    ],
+    "fields": [],
+    "template": "Replace the person in the first image with the character of the other images (face, hair, body, outfit), in the same pose, place and lighting. {prompt}",
+    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"]
+  },
+  {
+    "id": "expand", "label": "Expand", "group": "Retouch", "mode": "edit", "icon": "expand",
+    "description": "Extends the image beyond its edges to a new ratio.",
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "fields": [{ "key": "beyond", "label": "What's beyond", "type": "text", "placeholder": "more of the beach and the sky" }],
+    "template": "Outpaint: extend this image beyond its edges to fill the new frame, continuing the scene naturally ({beyond}). The original image stays untouched in the center. {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"]
+  },
+  {
+    "id": "new-angle", "label": "New angle", "group": "Camera", "mode": "edit", "icon": "rotate-3d",
+    "description": "The same scene seen from another camera angle.",
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "fields": [{ "key": "angle", "label": "Angle", "type": "choice", "options": ["from the left", "from the right", "from above", "low angle", "close-up", "wide shot", "from behind"], "default": "from the left" }],
+    "template": "The same scene, same subject and moment, seen {angle}. Consistent identity, outfit, lighting and place. {prompt}",
+    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"]
+  },
+  {
+    "id": "edit-text", "label": "Edit text", "group": "Retouch", "mode": "edit", "icon": "type",
+    "description": "Changes a text in the image, same font and place.",
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "fields": [
+      { "key": "old", "label": "Text now", "type": "text", "placeholder": "SUMMER SALE" },
+      { "key": "new", "label": "New text", "type": "text", "placeholder": "WINTER SALE" }
+    ],
+    "template": "Replace the text \"{old}\" with \"{new}\" in the same font, size, color, perspective and place. Nothing else changes. {prompt}",
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-3-pro-image"]
+  },
+  {
+    "id": "remove-background", "label": "Remove background", "group": "Retouch", "mode": "edit", "icon": "scissors",
+    "description": "Cuts the subject out on a transparent background.",
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "fields": [],
+    "template": "Cut out the main subject of the image on a fully transparent background, clean edges, the subject unchanged. {prompt}",
+    "models": ["openai/gpt-image-2.5-sunburst", "openai/gpt-image-2"],
+    "params": { "background": "transparent" }
+  }
+]

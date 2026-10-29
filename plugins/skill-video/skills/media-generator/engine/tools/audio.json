@@ -1,0 +1,29 @@
+[
+  {
+    "id": "voice", "label": "Voice", "group": "Voice", "mode": "create", "icon": "audio-lines",
+    "description": "Text to speech: a preset voice, a voice cloned from up to 3 clips, or a dialogue.",
+    "inputs": [{ "key": "voice_clips", "kind": "audio", "label": "Voice to clone", "optional": true, "multiple": true }],
+    "fields": [{ "key": "instructions", "label": "How it sounds", "type": "text", "placeholder": "warm, slow, a smile in the voice" }],
+    "template": "{prompt}",
+    "models": ["elevenlabs/eleven-v4", "google/gemini-3.8-flash-tts", "bytedance-seed/seed-audio-1-0", "minimax/speech-2.8-hd"]
+  },
+  {
+    "id": "change-voice", "label": "Change voice", "group": "Voice", "mode": "edit", "icon": "repeat",
+    "description": "Another voice on a clip, same delivery: pauses, emotion and rhythm are kept. ElevenLabs.",
+    "inputs": [{ "key": "clip", "kind": "media", "label": "Clip (audio or video)" }],
+    "fields": [{ "key": "denoise", "label": "Background noise", "type": "choice", "options": ["keep", "remove"], "default": "keep" }],
+    "template": "",
+    "provider": "elevenlabs"
+  },
+  {
+    "id": "translate", "label": "Translate", "group": "Voice", "mode": "edit", "icon": "languages",
+    "description": "Dubs a clip into other languages in its own voices, with subtitles. No lip-sync. ElevenLabs.",
+    "inputs": [{ "key": "clip", "kind": "media", "label": "Clip (audio or video)" }],
+    "fields": [
+      { "key": "to", "label": "Into", "type": "text", "placeholder": "en, es" },
+      { "key": "quality", "label": "Model", "type": "choice", "options": ["dubbing_v1", "dubbing_v2"], "default": "dubbing_v1" }
+    ],
+    "template": "",
+    "provider": "elevenlabs"
+  }
+]

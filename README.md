@@ -84,6 +84,7 @@ A skill triggers on its own when the request matches its description, or is call
 |---|---|---|---|
 | `/skill-laravel:laravel-upgrade` | [`skill-laravel`](#skill-laravel) | `<target version>` | Upgrades Laravel one major version at a time, with a test pause between each |
 | `/skill-video:video-editor` | [`skill-video`](#skill-video) | `setup \| <videos or URLs> \| apply this feedback … \| variations \| preview \| rules …` | Edits a video of any genre (short, YouTube, interview, tutorial, montage, brand film, motion design), rendered locally with captions, sound and a review studio |
+| `/skill-video:media-generator` | [`skill-video`](#skill-video) | `studio \| setup \| credits \| <what to generate, with files> \| <a prompt copied from the dashboard>` | Generates and edits images, videos and voices through model routers (OpenRouter), changes voices and dubs through ElevenLabs, in a local dashboard or from prompts, every cost shown first |
 | `/skill-immo:property-search` | [`skill-immo`](#skill-immo) | `setup \| <adresse, rue ou quartier> [type] [critères] \| add <url \| texte> \| refresh \| alerte … \| dashboard \| apply this feedback …` | Finds property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, weighs each against the real sales of its type, its building, its neighborhood, the rent and the buyer's budget, writes offer letters, in a local dashboard |
 | `/skill-security:security-audit` | [`skill-security`](#skill-security) | `<question \| path \| audit request> [output folder]` | Answers security questions and reviews code, or runs a full six-phase audit whose findings are each checked by a separate agent |
 
@@ -245,8 +246,32 @@ The ElevenLabs key needs these permissions (as ElevenLabs names them in its API 
 | `music_generation` | `music`: the music, on a paid plan only (the Music API refuses free accounts) |
 | `sound_generation` | `sfx`: the sound effects |
 | `user_read` | `credits`: the credits left on the account, given with each estimate |
+| `speech_to_speech` | `voice-change`: media-generator's voice change |
+| `voices_write` | `voice-clone`: a voice cloned from recordings |
+| `dubbing_write`, `dubbing_read` | `dub`: media-generator's translation |
 
 A request the key may not make is refused at no cost: the music and the effects then fall back to the synthesized kit, and for the transcript and the voice-over Claude relays ElevenLabs' message.
+
+#### media-generator
+
+The plugin's second skill: a local, Higgsfield-like workshop to generate and edit images, videos and voices with AI models, from its dashboard or from a prompt to Claude. The models sit behind a router: OpenRouter for now (one key for Google, OpenAI, ByteDance, Kling, Black Forest Labs, Runway, ElevenLabs…), another router being one more file in the engine. Voice change and dubbing go through ElevenLabs, by video-editor's engine.
+
+| Arguments | Mode |
+|---|---|
+| `studio` | Opens the dashboard (Image, Video, Audio, Library, Credits, Settings) |
+| `setup` | The confirmation thresholds, monthly caps, ElevenLabs plan and default models |
+| `credits` | The balances (OpenRouter in USD, ElevenLabs in credits) and this month's spending |
+| `<what to generate, with files>` | A generation: the tool and model, the price, the user's yes, then the file |
+| `<a prompt copied from the dashboard>` | « Copy prompt »: Claude writes the best prompt for the chosen model into the composer, without generating; « Send to edit »: the file goes to video-editor |
+
+- **Tools, not pages**: Image and Video have a Create / Edit mode and a searchable tool picker. Image: free, cinematic camera, character, product shot, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background. Video: free, animate, first & last frame, camera moves (dolly zoom, crash zoom, earth zoom out, FPV drone, orbit, handheld, static), VFX (fire, disintegration, freeze, metal, explosion), talking avatar, free edit with a sketch, extend (sequel or prequel), upscale, relight, recolor, object swap, clean up, reframe (local, free). Audio: speech with a preset or cloned voice, change voice, translate (no lip-sync). Each tool is an entry in `engine/tools/<kind>.json`: a template filled from its fields, its inputs, its recommended models.
+- **The form follows the model**: durations, resolutions, ratios, frames, sound and references come from the router's live catalog (cached a day).
+- **Costs**: every paying button shows its estimate; OpenRouter in USD as reported, ElevenLabs in credits, plus their USD once the plan is chosen in Settings (Starter, Creator, Pro, Scale, Business). Claude asks before every spend (`--spend`, exit code 2 otherwise). Confirmation thresholds and monthly caps per provider, unset by default. The real cost of each action goes to `ledger.jsonl`, shown in the Credits page.
+- **Elements**: people, products and places saved once, cited with `@name` in a prompt.
+- **Folder**: the current folder (or `$MEDIA_GENERATOR_DIR`) holds `media/` (one folder per generation, inputs copied in for a remix), `elements/`, `ledger.jsonl` and `settings.json`, kept by git; `.cache/` and `.trash/` are ignored (the engine writes the `.gitignore`).
+- **Dashboard**: on `127.0.0.1` from port 41287, one per folder; it stops once every Claude Code session that opened it has quit. A generation started there runs in its own process and survives a closed page.
+- **Keys**: `OpenRouter API key` and the optional `OpenRouter management key` (the account's balance), asked when the plugin is enabled or with `/plugin configure skill-video@pabrisson`, then a session restart; the ElevenLabs key above.
+- **Videos and voices sent to OpenRouter** (video edits, upscale, talking avatar): OpenRouter takes them by HTTPS only, never inlined. The engine serves the file from the machine at a random address through a Cloudflare quick tunnel (`brew install cloudflared`, no account), opened when the job is submitted (about 20 s, until its name answers on the public DNS) and closed when it ends. `doctor` says when cloudflared is missing; everything else works without it. Images are inlined.
 
 Everything stays on the machine, except what the video's `source/elevenlabs.json` turns on: the source's sound for Scribe v2, the narration's text for a voice-over, the prompts of the music and the effects.
 
@@ -367,7 +392,7 @@ For a future theme, output style, monitor or executable: `theme-*` (`themes/*.js
 
 **Marketplace entry**: `{"name": "<plugin>", "source": "./plugins/<plugin>", "description": "…"}` in `.claude-plugin/marketplace.json`.
 
-**Settings**: `userConfig` in `plugin.json` declares the settings asked at install time and editable in `/config`. A `"sensitive": true` setting goes to the Keychain. They are read through `${user_config.<key>}`. The commands a skill runs don't see them: a `SessionStart` hook gets each one as `$CLAUDE_PLUGIN_OPTION_<KEY>` and writes it to `$CLAUDE_ENV_FILE`, which every later Bash command of the session loads (`skill-video`'s ElevenLabs key, `skill-immo`'s Stream Estate key).
+**Settings**: `userConfig` in `plugin.json` declares the settings asked at install time and editable in `/config`. A `"sensitive": true` setting goes to the Keychain. They are read through `${user_config.<key>}`. The commands a skill runs don't see them: a `SessionStart` hook gets each one as `$CLAUDE_PLUGIN_OPTION_<KEY>` and writes it to `$CLAUDE_ENV_FILE`, which every later Bash command of the session loads (`skill-video`'s ElevenLabs and OpenRouter keys, `skill-immo`'s Stream Estate key).
 
 **Paths**: `${CLAUDE_PLUGIN_ROOT}` is the plugin's folder (replaced on every update), `$CLAUDE_PLUGIN_DATA` its data folder (kept), `${CLAUDE_SKILL_DIR}` a skill's folder.
 
@@ -377,7 +402,7 @@ For a future theme, output style, monitor or executable: `theme-*` (`themes/*.js
 - Try a change without publishing it: `claude --plugin-dir plugins/<plugin>` (current session only, replaces the installed version of the same name).
 - Validate: `claude plugin validate .` (marketplace) or `claude plugin validate plugins/<plugin>`.
 - Test a mod: `claude plugin test plugins/mod-hud`.
-- `skill-video` studio: after changing the studio, run `npm run build` in `plugins-src/skill-video/studio/` before bumping the version (only the build, `engine/studio/dist/`, ships in the plugin).
+- `skill-video` studio: after changing the studio, run `npm run build` in `plugins-src/skill-video/studio/` before bumping the version (only the build, `engine/studio/dist/`, ships in the plugin). The same for media-generator's dashboard in `plugins-src/skill-video/media-studio/`.
 - `skill-immo` dashboard: after changing it, run `npm run typecheck && npm run lint && npm run build` in `plugins-src/skill-immo/dashboard/` before bumping the version (only the build, `engine/dashboard/dist/`, ships in the plugin). `npm run dev` proxies `/api/` to a running `immo.mjs dashboard`.
 - `skill-immo` engine: `node --test test/*.test.js` in `plugins/skill-immo/skills/property-search/engine/` runs offline, against recorded fixtures and a fake Stream Estate API v1. `node test/demo.mjs <searches folder>` runs the dashboard (port 41890) against that fake API (port 41899): no real call nor credit, an amber « API test » in its header. `IMMO_LIVE=1` adds the network smoke test on rue Paul Bert (Lyon 3e): the open data, and with `STREAM_ESTATE_API_KEY` (a v1 key) a free count and one listing (1 credit).
 - Add a plugin: create `plugins/<type>-<domain>/.claude-plugin/plugin.json`, add its entry to `.claude-plugin/marketplace.json`, then add it to the [Catalog](#catalog) and the [Plugin documentation](#plugin-documentation).

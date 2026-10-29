@@ -1,0 +1,730 @@
+import { useEffect, useMemo, useRef, useState } from "react"
+import { CopyIcon, MicIcon, PlayIcon, RefreshCwIcon, SquareIcon, UploadIcon } from "lucide-react"
+import { toast } from "sonner"
+import { cn } from "cn"
+
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  api,
+  fill,
+  plain,
+  priceLabel,
+  type EstimateAnswer,
+  type Kind,
+  type Model,
+  type Spec,
+  type State,
+  type Tool,
+  type Voice,
+} from "@/lib/api"
+import { Chips, Label, Price } from "@/components/chips"
+import { InputSlots, upload } from "@/components/inputs"
+import { ToolPicker } from "@/components/tool-picker"
+
+// what the composer of one space holds: kept per space, so switching spaces loses nothing
+export type Compose = {
+  tool: string
+  model?: string
+  intent: string
+  raw: boolean
+  rawText: string
+  fields: Record<string, string>
+  inputs: Record<string, string[]>
+  params: Record<string, unknown>
+}
+export const blank = (kind: Kind, tool = kind === "audio" ? "voice" : "free"): Compose => ({
+  tool,
+  intent: "",
+  raw: false,
+  rawText: "",
+  fields: {},
+  inputs: {},
+  params: {},
+})
+
+const pick = <T,>(list: T[] | null | undefined, ...want: (T | undefined)[]) =>
+  list?.length ? (want.find((w) => w !== undefined && list.includes(w)) ?? list[0]) : undefined
+
+// the models a tool can run on: its recommended ones first, then the rest of the kind that fits
+export function modelsFor(tool: Tool, kind: Kind, models: Model[]) {
+  if (tool.local === "reframe" || tool.provider === "elevenlabs") return { recommended: [], others: [] }
+  const recommended = (tool.models ?? []).map((id) => models.find((m) => m.model === id)).filter((m): m is Model => !!m)
+  // edits, upscales and avatars run only on the models made for them
+  if (kind === "video" && (tool.mode === "edit" ? tool.id !== "extend" : recommended.length > 0 && recommended.every((m) => m.role !== "generate")))
+    return { recommended, others: [] }
+  const ok = (m: Model) =>
+    kind === "video"
+      ? m.role === "generate" && (tool.id !== "extend" || (m.params.frames?.length ?? 0) > 0)
+      : kind === "image"
+        ? tool.mode === "create" || m.role === "both"
+        : true
+  return { recommended, others: models.filter((m) => ok(m) && !recommended.includes(m)) }
+}
+
+const COMMON_LANGS = ["en", "fr", "es", "de", "it", "pt", "ja", "zh"]
+
+// the tool list's prices for the session, per space, tool and model (a probe estimate, before any input)
+const PRICES = new Map<string, string>()
+
+export function Composer({
+  kind,
+  tools,
+  models,
+  state,
+  engine,
+  value,
+  onChange,
+  draftSeen,
+  onDraftSeen,
+}: {
+  kind: Kind
+  tools: Tool[]
+  models: Model[]
+  state: State
+  engine: string
+  value: Compose
+  onChange: (c: Compose) => void
+  draftSeen: string
+  onDraftSeen: (at: string) => void
+}) {
+  const tool = tools.find((t) => t.id === value.tool) ?? tools[0]
+  const mode = tool.mode
+  const set = (patch: Partial<Compose>) => onChange({ ...value, ...patch })
+  const eleven = tool.provider === "elevenlabs", local = tool.local === "reframe"
+
+  // the model: the user's pick, else the folder's default when it fits, else the tool's first
+  const { recommended, others } = useMemo(() => modelsFor(tool, kind, models), [tool, kind, models])
+  const fitting = [...recommended, ...others]
+  const def = state.settings.defaults[kind]
+  const modelId = eleven || local ? undefined : (value.model && fitting.some((m) => m.id === value.model) ? value.model : def && fitting.some((m) => m.id === def) ? def : fitting[0]?.id)
+  const model = models.find((m) => m.id === modelId)
+
+  const prompt = value.raw ? value.rawText : fill(tool, value.fields, value.intent)
+  const hasIntent = tool.template.includes("{prompt}") && tool.template !== "{prompt}"
+  const missing = tool.inputs.find((i) => !i.optional && !value.inputs[i.key]?.length)
+
+  const spec: Spec = useMemo(
+    () => ({
+      kind,
+      tool: tool.id,
+      model: modelId,
+      prompt: value.raw ? value.rawText : value.intent,
+      ...(value.raw ? { raw: true } : {}),
+      fields: value.fields,
+      inputs: value.inputs,
+      params: value.params,
+    }),
+    [kind, tool.id, modelId, value]
+  )
+
+  // the estimate, again after every change (debounced)
+  const blocker = missing
+    ? `Add ${missing.label.toLowerCase()} to see the price`
+    : !eleven && !local && !prompt && tool.id !== "upscale"
+      ? "Write a prompt to see the price"
+      : tool.id === "translate" && !value.fields.to?.trim()
+        ? "Pick the languages to see the price"
+        : tool.id === "change-voice" && !value.params.voice
+          ? "Pick the new voice to see the price"
+          : null
+  const [est, setEst] = useState<{ answer?: EstimateAnswer; error?: string }>({})
+  const specKey = JSON.stringify(spec)
+  useEffect(() => {
+    if (blocker) return
+    const t = setTimeout(() => {
+      api.estimate(spec).then(
+        (answer) => setEst({ answer }),
+        (e) => setEst({ error: plain(e.message) })
+      )
+    }, 400)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specKey, blocker])
+
+  // prices in the tool list: a probe estimate per tool on its recommended model, once a session
+  const listed = tools.filter((t) => t.mode === mode)
+  const priceKey = (t: Tool) => `${kind}:${t.id}:${t.models?.[0] ?? ""}`
+  const [, setPriced] = useState(0)
+  const prices = Object.fromEntries(listed.flatMap((t) => (PRICES.has(priceKey(t)) ? [[t.id, PRICES.get(priceKey(t))!]] : [])))
+  function priceTools() {
+    for (const t of listed.filter((t) => !PRICES.has(priceKey(t)))) {
+      PRICES.set(priceKey(t), "")
+      api.estimate({ kind, tool: t.id, prompt: "", fields: {}, inputs: {}, params: {}, probe: true }).then(
+        (a) => (PRICES.set(priceKey(t), priceLabel(a)), setPriced((n) => n + 1)),
+        () => PRICES.delete(priceKey(t))
+      )
+    }
+  }
+
+  // Generate: the click is the yes, unless a threshold, the cap or an unknown price asks again
+  const [busy, setBusy] = useState(false)
+  const [ask, setAsk] = useState<{ needs: string; shown: string } | null>(null)
+  async function go(confirm = false) {
+    setBusy(true)
+    try {
+      await api.generate(spec, confirm)
+      setAsk(null)
+      toast.success(`${tool.label} started`, { description: "It keeps running if you close this page." })
+    } catch (e) {
+      const err = e as Error & { status?: number; body?: { needs: string; shown: string } }
+      if (err.status === 409 && err.body) setAsk(err.body)
+      else toast.error(plain(err.message))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Copy prompt: Claude writes the prompt that suits this model into the composer; nothing is generated
+  function copyPrompt() {
+    const files = Object.entries(value.inputs).filter(([, f]) => f.length).map(([k, f]) => `${k}: ${f.join(", ")}`)
+    const fields = tool.fields.map((f) => `${f.key} = ${value.fields[f.key] ?? f.default ?? ""}`)
+    const text = [
+      "media-generator: write the best prompt for this generation. Do not generate anything.",
+      `Space: ${kind} (${mode}). Tool: ${tool.label} (${tool.id}). Model: ${modelId ?? "the tool's default"}${model ? ` (${model.name})` : ""}.`,
+      fields.length ? `Fields: ${fields.join("; ")}.` : "",
+      files.length ? `Inputs: ${files.join("; ")}.` : "",
+      `What I want: ${prompt || "(nothing written yet, infer it from the tool and the inputs)"}`,
+      "",
+      "Write the prompt this model handles best (its syntax, strengths and ideal length), then put it in the dashboard's composer with:",
+      `node "${engine}/media.mjs" draft --space ${kind} --tool ${tool.id}${modelId ? ` --model ${modelId}` : ""} --prompt "<the prompt>"`,
+      "I will read it and click Generate myself.",
+    ].filter((l) => l !== "").join("\n")
+    navigator.clipboard.writeText(text).then(
+      () => toast.success("Prompt copied", { description: "Paste it in Claude Code: it writes the prompt here, without generating." }),
+      () => toast.error("The clipboard refused the copy")
+    )
+  }
+
+  // a prompt Claude wrote with `media.mjs draft`
+  const draft = state.drafts[kind]
+  const newDraft = draft && draft.at > draftSeen
+  function applyDraft() {
+    if (!draft) return
+    const t = tools.find((x) => x.id === draft.tool) ?? tool
+    onChange({ ...value, tool: t.id, model: draft.model ?? value.model, fields: { ...value.fields, ...draft.fields }, raw: !!draft.prompt, rawText: draft.prompt ?? value.rawText })
+    onDraftSeen(draft.at)
+  }
+
+  const label = tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? "Reframe" : "Generate"
+  const a = blocker ? undefined : est.answer
+  const note = blocker ?? est.error
+  const price = a ? priceLabel(a) : null
+
+  return (
+    <aside className="flex min-h-0 flex-col border-r bg-card/40">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+        {newDraft && (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
+            <span className="size-2 shrink-0 rounded-full bg-highlight" aria-hidden />
+            <span className="flex-1">Claude wrote a prompt for this space.</span>
+            <Button size="sm" onClick={applyDraft}>
+              <RefreshCwIcon /> Reload
+            </Button>
+          </div>
+        )}
+
+        {kind === "audio" ? (
+          <Chips
+            className="grid grid-cols-3 [&>button]:px-1"
+            options={tools.map((t) => t.id)}
+            value={tool.id}
+            label={(id) => tools.find((t) => t.id === id)!.label}
+            onChange={(id) => onChange({ ...blank(kind, id), inputs: value.inputs.clip ? { clip: value.inputs.clip } : {} })}
+          />
+        ) : (
+          <>
+            <Chips
+              className="grid grid-cols-2"
+              options={["create", "edit"] as const}
+              value={mode}
+              label={(m) => (m === "create" ? "Create" : "Edit")}
+              onChange={(m) => onChange(blank(kind, m === "create" ? "free" : "free-edit"))}
+            />
+            <ToolPicker
+              kind={kind}
+              tools={tools.filter((t) => t.mode === mode)}
+              value={tool}
+              media={state.media}
+              home={state.home}
+              models={models}
+              prices={prices}
+              onOpen={priceTools}
+              onPick={(t) => onChange({ ...blank(kind, t.id), inputs: Object.fromEntries(Object.entries(value.inputs).filter(([k]) => t.inputs.some((i) => i.key === k))) })}
+            />
+          </>
+        )}
+
+        <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} />
+
+        {tool.fields.map((f) =>
+          tool.id === "translate" && f.key === "to" ? (
+            <div key={f.key}>
+              <Label>{f.label}</Label>
+              <Input value={value.fields.to ?? ""} placeholder={f.placeholder} onChange={(e) => set({ fields: { ...value.fields, to: e.target.value } })} />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {COMMON_LANGS.map((l) => {
+                  const list = (value.fields.to ?? "").split(/[,\s]+/).filter(Boolean), on = list.includes(l)
+                  return (
+                    <button
+                      key={l}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => set({ fields: { ...value.fields, to: (on ? list.filter((x) => x !== l) : [...list, l]).join(", ") } })}
+                      className={cn("rounded-full border px-2.5 py-0.5 text-xs", on ? "border-foreground bg-foreground text-background" : "hover:bg-muted")}
+                    >
+                      {l}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : tool.id === "translate" && f.key === "quality" ? (
+            <DubModels key={f.key} spec={spec} value={value.fields.quality ?? "dubbing_v1"} ready={!missing && !!value.fields.to} onChange={(q) => set({ fields: { ...value.fields, quality: q } })} />
+          ) : (
+            <FieldInput key={f.key} field={f} value={value.fields[f.key]} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
+          )
+        )}
+
+        {tool.id === "change-voice" && (
+          <ElevenVoices enabled={state.keys.elevenlabs} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} />
+        )}
+
+        {tool.template && (
+          <div className="flex flex-col gap-2">
+            {hasIntent && !value.raw && (
+              <div>
+                <Label hint="optional">Your words</Label>
+                <Input value={value.intent} placeholder="anything to add" onChange={(e) => set({ intent: e.target.value })} />
+              </div>
+            )}
+            <div>
+              <Label hint={value.raw ? "edited by hand" : tool.template !== "{prompt}" ? "from the tool, edit freely" : undefined}>
+                {kind === "audio" ? "Text to speak" : "Prompt"}
+              </Label>
+              <Textarea
+                value={prompt}
+                rows={5}
+                placeholder={kind === "audio" ? "What the voice says" : tool.description}
+                onChange={(e) => (tool.template === "{prompt}" ? set({ intent: e.target.value, raw: false }) : set({ raw: true, rawText: e.target.value }))}
+              />
+              {value.raw && (
+                <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => set({ raw: false })}>
+                  Back to the tool's template
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {model && (
+          <ModelBlock
+            kind={kind}
+            tool={tool}
+            recommended={recommended}
+            others={others}
+            model={model}
+            params={value.params}
+            onModel={(id) => set({ model: id })}
+            onParams={(params) => set({ params })}
+            // the image a result can take its ratio from: any for an image, a first or last frame (an avatar's photo) for a video
+            hasImageInput={kind === "video" ? ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0) : tool.inputs.some((i) => i.kind === "image" && (value.inputs[i.key]?.length ?? 0) > 0)}
+            hasVideoInput={tool.inputs.some((i) => i.kind === "video")}
+            cloning={(value.inputs.voice_clips?.length ?? 0) > 0}
+          />
+        )}
+
+        {tool.id === "change-voice" && (
+          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
+            Keeps the delivery: pauses, emotion and rhythm stay, only the timbre changes. Up to 5 min goes in one call; a longer clip is sent in pieces.
+          </p>
+        )}
+        {tool.id === "translate" && (
+          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
+            No lip-sync: the voices are dubbed in their own timbre, the lips keep the original language. Subtitles come with each language.
+          </p>
+        )}
+        {eleven && !state.keys.elevenlabs && (
+          <p className="rounded-lg border p-3 text-xs text-destructive">No ElevenLabs key: set it with /plugin configure skill-video@pabrisson, then restart Claude Code.</p>
+        )}
+        {!eleven && !local && !state.keys.openrouter && (
+          <p className="rounded-lg border p-3 text-xs text-destructive">No OpenRouter key: prices show, nothing can be generated. Set it with /plugin configure skill-video@pabrisson.</p>
+        )}
+      </div>
+
+      <div className="border-t p-3">
+        {note && <p className="mb-2 text-xs text-muted-foreground">{note}</p>}
+        <div className="flex gap-2">
+          {!eleven && !local && (
+            <Button variant="outline" size="lg" onClick={copyPrompt} title="Claude writes the best prompt for this model here. Nothing is generated.">
+              <CopyIcon /> Copy prompt
+            </Button>
+          )}
+          <Button size="lg" className="flex-1" disabled={busy || !a || (eleven ? !state.keys.elevenlabs : !local && !state.keys.openrouter)} onClick={() => go()}>
+            {label}
+            {price && <Price className="bg-cost text-background">{price}</Price>}
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={!!ask} onOpenChange={(o) => !o && setAsk(null)}>
+        <DialogContent>
+          <DialogTitle>{ask?.needs === "cap" ? "Over this month's cap" : ask?.needs === "unknown" ? "Unknown cost" : "Over your confirmation threshold"}</DialogTitle>
+          <DialogDescription>
+            {ask?.needs === "unknown"
+              ? "This model lists no price for these settings: the actual cost shows in Credits once it is done."
+              : ask?.needs === "cap"
+                ? `This would take this month's spend over the cap you set in Settings: ${ask?.shown}.`
+                : `This costs ${ask?.shown}, above the threshold you set in Settings.`}
+          </DialogDescription>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setAsk(null)}>Cancel</Button>
+            <Button disabled={busy} onClick={() => go(true)}>{label} anyway</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </aside>
+  )
+}
+
+function FieldInput({ field: f, value, onChange }: { field: Tool["fields"][number]; value?: string; onChange: (v: string) => void }) {
+  const v = value ?? (f.default != null ? String(f.default) : "")
+  return (
+    <div>
+      <Label>{f.label}</Label>
+      {f.type === "choice" ? (
+        <Chips options={f.options ?? []} value={v} onChange={onChange} label={(o) => (/^[a-z ]+$/.test(o) ? o[0].toUpperCase() + o.slice(1) : o)} />
+      ) : f.type === "number" ? (
+        <div className="flex items-center gap-3">
+          <Slider min={f.min ?? 0} max={f.max ?? 100} step={f.step ?? 1} value={[Number(v)]} onValueChange={([n]) => onChange(String(n))} aria-label={f.label} />
+          <span className="w-12 text-right text-sm tabular-nums">
+            {v}
+            {f.unit ?? ""}
+          </span>
+        </div>
+      ) : f.type === "color" ? (
+        <div className="flex items-center gap-2">
+          <input type="color" value={v || "#ffffff"} onChange={(e) => onChange(e.target.value)} aria-label={f.label} className="h-9 w-14 cursor-pointer rounded-md border bg-transparent" />
+          <span className="text-sm text-muted-foreground tabular-nums">{v}</span>
+        </div>
+      ) : (
+        <Input value={value ?? ""} placeholder={f.placeholder} onChange={(e) => onChange(e.target.value)} />
+      )}
+    </div>
+  )
+}
+
+// the model and the settings it accepts: only what this model lists
+function ModelBlock({
+  kind,
+  tool,
+  recommended,
+  others,
+  model,
+  params,
+  onModel,
+  onParams,
+  hasImageInput,
+  hasVideoInput,
+  cloning,
+}: {
+  kind: Kind
+  tool: Tool
+  recommended: Model[]
+  others: Model[]
+  model: Model
+  params: Record<string, unknown>
+  onModel: (id: string) => void
+  onParams: (p: Record<string, unknown>) => void
+  hasImageInput: boolean
+  hasVideoInput: boolean
+  cloning: boolean
+}) {
+  const p = model.params, put = (k: string, v: unknown) => onParams({ ...params, [k]: v })
+  const caps = [
+    p.frames?.length ? p.frames.map((f) => f.replace("_frame", "")).join(" + ") + " frame" : null,
+    p.audio ? "audio" : null,
+    p.duration?.length ? `up to ${p.duration.at(-1)} s` : null,
+    p.resolution?.length ? p.resolution.join(" · ") : null,
+    p.references ? `${p.references} references` : null,
+    p.n && p.n.max > 1 ? `up to ${p.n.max} at once` : null,
+    p.voices?.length ? `${p.voices.length} voices` : null,
+  ].filter(Boolean)
+  const durations = p.duration ?? []
+  const ns = p.n && p.n.max > 1 ? Array.from({ length: Math.min(p.n.max, 4) - (p.n.min ?? 1) + 1 }, (_, i) => (p.n!.min ?? 1) + i) : []
+  const edit = kind === "video" && hasVideoInput
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <Label>Model</Label>
+        <Select value={model.id} onValueChange={onModel}>
+          <SelectTrigger className="w-full" aria-label="Model">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {recommended.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>Recommended for {tool.label.toLowerCase()}</SelectLabel>
+                {recommended.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+              </SelectGroup>
+            )}
+            {others.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>Other models</SelectLabel>
+                {others.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+              </SelectGroup>
+            )}
+          </SelectContent>
+        </Select>
+        {caps.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {caps.map((c) => <span key={c} className="rounded border px-1.5 text-[11px] text-muted-foreground">{c}</span>)}
+          </div>
+        )}
+      </div>
+
+      {kind === "video" && !edit && durations.length > 0 && (
+        <div>
+          <Label>Duration</Label>
+          {durations.length > 6 ? (
+            <div className="flex items-center gap-3">
+              <Slider min={durations[0]} max={durations.at(-1)} step={1} value={[pick(durations, params.duration as number, 5)!]} onValueChange={([d]) => put("duration", d)} aria-label="Duration" />
+              <span className="w-10 text-right text-sm tabular-nums">{pick(durations, params.duration as number, 5)} s</span>
+            </div>
+          ) : (
+            <Chips options={durations} value={pick(durations, params.duration as number, 5)} label={(d) => `${d} s`} onChange={(d) => put("duration", d)} />
+          )}
+        </div>
+      )}
+      {kind === "image" && ns.length > 1 && (
+        <div>
+          <Label>Images</Label>
+          <Chips options={ns} value={(params.n as number) ?? 1} onChange={(n) => put("n", n)} />
+        </div>
+      )}
+      {!edit && p.aspect_ratio?.length ? (
+        <div>
+          <Label>Ratio</Label>
+          {hasImageInput ? (
+            <Chips
+              options={["same", ...p.aspect_ratio]}
+              value={(params.aspect_ratio as string) ?? "same"}
+              label={(r) => (r === "same" ? "Same as the image" : r)}
+              onChange={(r) => put("aspect_ratio", r === "same" ? undefined : r)}
+            />
+          ) : (
+            <Chips options={p.aspect_ratio} value={pick(p.aspect_ratio, params.aspect_ratio as string, kind === "video" ? "16:9" : "1:1")} onChange={(r) => put("aspect_ratio", r)} />
+          )}
+        </div>
+      ) : null}
+      {p.resolution?.length && model.role !== "upscale" ? (
+        <div>
+          <Label>Resolution</Label>
+          <Chips options={p.resolution} value={pick(p.resolution, params.resolution as string, kind === "image" ? "2K" : "1080p", kind === "image" ? "1K" : "720p")} onChange={(r) => put("resolution", r)} />
+        </div>
+      ) : null}
+      {p.quality?.length ? (
+        <div>
+          <Label>Quality</Label>
+          <Chips options={p.quality} value={pick(p.quality, params.quality as string, "high")} onChange={(q) => put("quality", q)} />
+        </div>
+      ) : null}
+      {kind === "video" && p.audio ? (
+        <div>
+          <Label>Sound</Label>
+          <Chips options={["on", "off"] as const} value={params.sound === false ? "off" : "on"} label={(s) => (s === "on" ? "On" : "Off")} onChange={(s) => put("sound", s === "on")} />
+        </div>
+      ) : null}
+      {kind === "audio" && p.voices?.length && !cloning ? (
+        <div>
+          <Label>Voice</Label>
+          <Select value={(params.voice as string) ?? p.voices[0]} onValueChange={(v) => put("voice", v)}>
+            <SelectTrigger className="w-full" aria-label="Voice">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {p.voices.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+      {p.seed && (
+        <div>
+          <Label hint="the same seed gives the same result">Seed</Label>
+          <Input
+            inputMode="numeric"
+            placeholder="random"
+            value={(params.seed as number | undefined) ?? ""}
+            onChange={(e) => put("seed", e.target.value === "" ? undefined : Number(e.target.value.replace(/\D/g, "")))}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// the ElevenLabs account's voices, and the two ways to add one: record it, or clone it from a file
+function ElevenVoices({ enabled, value, onChange }: { enabled: boolean; value?: string; onChange: (id: string) => void }) {
+  const [voices, setVoices] = useState<Voice[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [name, setName] = useState("My voice")
+  const [rec, setRec] = useState<MediaRecorder | null>(null)
+  const [busy, setBusy] = useState(false)
+  const file = useRef<HTMLInputElement>(null)
+  const playing = useRef<HTMLAudioElement | null>(null)
+
+  const load = () =>
+    api.voices().then(
+      (v) => setVoices(Array.isArray(v) ? v : v.voices),
+      (e) => setError(plain(e.message))
+    )
+  useEffect(() => {
+    if (enabled) load()
+  }, [enabled])
+
+  async function clone(paths: string[]) {
+    setBusy(true)
+    try {
+      await api.clone(name.trim() || "My voice", paths)
+      toast.success(`Voice "${name}" cloned`)
+      await load()
+    } catch (e) {
+      toast.error(plain((e as Error).message))
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function record() {
+    if (rec) return rec.stop()
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const r = new MediaRecorder(stream), chunks: Blob[] = []
+      r.ondataavailable = (e) => chunks.push(e.data)
+      r.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        setRec(null)
+        const { path } = await api.upload(new Blob(chunks, { type: "audio/webm" }), "voice.webm")
+        await clone([path])
+      }
+      r.start()
+      setRec(r)
+    } catch {
+      toast.error("The microphone is not available")
+    }
+  }
+
+  if (!enabled) return null
+  const tags = (v: Voice) => [...(Array.isArray(v.labels) ? v.labels : Object.values(v.labels ?? {})).slice(0, 3), ...(v.languages ?? []).slice(0, 3)].join(" · ")
+  return (
+    <div>
+      <Label>New voice</Label>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      {!voices && !error && <p className="text-xs text-muted-foreground">Loading the account's voices…</p>}
+      <div className="flex max-h-64 flex-col gap-1.5 overflow-auto">
+        {voices?.map((v) => (
+          <div
+            key={v.voice_id}
+            role="radio"
+            aria-checked={v.voice_id === value}
+            tabIndex={0}
+            onClick={() => onChange(v.voice_id)}
+            onKeyDown={(e) => e.key === "Enter" && onChange(v.voice_id)}
+            className={cn("flex cursor-pointer items-center gap-2.5 rounded-lg border bg-background px-2.5 py-2", v.voice_id === value && "border-foreground")}
+          >
+            {v.preview_url ? (
+              <button
+                type="button"
+                aria-label={`Listen to ${v.name}`}
+                className="grid size-7 shrink-0 place-items-center rounded-full border hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  playing.current?.pause()
+                  playing.current = new Audio(v.preview_url!)
+                  playing.current.play()
+                }}
+              >
+                <PlayIcon className="size-3" />
+              </button>
+            ) : (
+              <span className="size-7 shrink-0" />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{v.name}</span>
+              {tags(v) && <span className="block truncate text-xs text-muted-foreground">{tags(v)}</span>}
+            </span>
+            {v.category && <span className="rounded border px-1.5 text-[11px] text-muted-foreground">{v.category === "cloned" ? "cloned" : "account"}</span>}
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-col gap-2 rounded-lg border p-2.5">
+        <Input value={name} onChange={(e) => setName(e.target.value)} aria-label="Name of a new voice" />
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" disabled={busy} onClick={record}>
+            {rec ? <SquareIcon /> : <MicIcon />} {rec ? "Stop and clone" : "Record a voice"}
+          </Button>
+          <Button variant="outline" disabled={busy || !!rec} onClick={() => file.current?.click()}>
+            <UploadIcon /> Clone from a file
+          </Button>
+        </div>
+        <input
+          ref={file}
+          type="file"
+          hidden
+          multiple
+          accept="audio/*"
+          onChange={async (e) => {
+            if (!e.target.files?.length) return
+            const paths = await Promise.all([...e.target.files].map(upload))
+            await clone(paths)
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// the two dubbing models, each with its price for this clip
+function DubModels({ spec, value, ready, onChange }: { spec: Spec; value: string; ready: boolean; onChange: (q: string) => void }) {
+  const [prices, setPrices] = useState<Record<string, string>>({})
+  const key = JSON.stringify([spec.inputs.clip, spec.fields.to])
+  useEffect(() => {
+    if (!ready) return
+    for (const q of ["dubbing_v1", "dubbing_v2"])
+      api.estimate({ ...spec, fields: { ...spec.fields, quality: q } }).then(
+        (a) => setPrices((p) => ({ ...p, [q]: `≈ ${a.shown}` })),
+        () => {}
+      )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, ready])
+  return (
+    <div>
+      <Label>Model</Label>
+      <div className="grid gap-1.5">
+        {[
+          ["dubbing_v1", "Dubbing v1", "automatic speaker detection, the cheaper one"],
+          ["dubbing_v2", "Dubbing v2", "keeps the voices' emotion, much dearer"],
+        ].map(([id, name, note]) => (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={value === id}
+            onClick={() => onChange(id)}
+            className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-left", value === id ? "border-foreground" : "hover:bg-muted")}
+          >
+            <span className="flex-1">
+              <span className="block text-sm font-medium">{name}</span>
+              <span className="block text-xs text-muted-foreground">{note}</span>
+            </span>
+            {prices[id] && <Price>{prices[id]}</Price>}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
