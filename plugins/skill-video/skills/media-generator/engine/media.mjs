@@ -4,7 +4,7 @@
 // runs in ($MEDIA_GENERATOR_DIR overrides it): media/ (one folder per generation), elements/ (the @ references),
 // ledger.jsonl (what was spent), settings.json (thresholds, caps, defaults), .cache/ (catalogs, uploads, drafts)
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
@@ -28,7 +28,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
   options: {
     tool: { type: 'string', short: 't' }, model: { type: 'string', short: 'm' }, prompt: { type: 'string' }, raw: { type: 'boolean' },
     in: { type: 'string', multiple: true }, field: { type: 'string', multiple: true },
-    n: { type: 'string' }, duration: { type: 'string' }, ratio: { type: 'string' }, resolution: { type: 'string' },
+    n: { type: 'string' }, batch: { type: 'string' }, duration: { type: 'string' }, ratio: { type: 'string' }, resolution: { type: 'string' },
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' },
@@ -147,14 +147,21 @@ async function modelOf(kind, id) {
 
 // ---------- a request: the tool's prompt, its inputs, the model's settings ----------
 
-// the tool's template with its fields and the user's words; raw takes the prompt as written (edited in the dashboard)
+// the tool's template with its fields and the user's words; raw takes the prompt as written (edited in the dashboard).
+// A field's phrase wraps a value ("shot on {}"), so an empty one (Auto) leaves nothing; the punctuation left by empty
+// fields folds into one mark (the dashboard's fill does the same)
 function fill(tool, spec) {
   if (spec.raw) return String(spec.prompt ?? '').trim()
   let text = tool.template || '{prompt}'
-  for (const f of tool.fields) text = text.replaceAll(`{${f.key}}`, String(spec.fields?.[f.key] ?? f.default ?? ''))
-  return text.replaceAll('{prompt}', spec.prompt ?? '').replace(/\s+/g, ' ').replace(/\s+([.,:;)])/g, '$1').replace(/,\./g, '.').replace(/([.:])\s*\./g, '$1')
-    .replace(/\(\s*\)/g, '').replace(/^[\s.,:;]+|[\s,:;]+$/g, '').trim()
+  for (const f of tool.fields) {
+    const v = String(spec.fields?.[f.key] ?? f.default ?? '')
+    text = text.replaceAll(`{${f.key}}`, v && f.phrase ? f.phrase.replace('{}', v) : v)
+  }
+  return text.replaceAll('{prompt}', spec.prompt ?? '').replace(/\s+/g, ' ').replace(/\(\s*\)/g, '').replace(/\s+([.,:;)])/g, '$1')
+    .replace(/[.,:;]{2,}/g, m => (m.includes('.') ? '.' : m[0])).replace(/^[\s.,:;]+|[\s,:;]+$/g, '').trim()
 }
+// an option is a value, or { value, label, group, note }; a label given for a value stands for it (light=Silhouette)
+const optionValue = (f, v) => f.options?.find(o => typeof o === 'object' && o.label?.toLowerCase() === String(v).toLowerCase())?.value ?? v
 
 // the Elements an @name of the prompt cites: their images join the references, the name stays in the words
 function mentions(text) {
@@ -175,6 +182,22 @@ const pick = (list, ...wanted) => (list?.length ? wanted.find(w => w !== undefin
 function ratioOf(list, file) {
   const s = probe(file), gap = x => { const [a, b] = x.split(':'); return Math.abs(Math.log(a / b / (s.width / s.height))) }
   return (list ?? []).filter(x => /^\d+:\d+$/.test(x)).sort((x, y) => gap(x) - gap(y))[0]
+}
+
+// expand's canvas: the image with margins (top, right, bottom, left: a share of its height or width, the frame up to 3
+// times the image each way) in flat gray, at most 2048 px on its long side
+function expandCanvas(file, fields) {
+  const [t, r, b, l] = ['top', 'right', 'bottom', 'left'].map(k => Math.min(2, Math.max(0, +fields?.[k] || 0)))
+  if (!(t + r + b + l)) throw userError('drag the frame wider or taller first (--field left=0.25 --field right=0.25: a share of the image on each side)')
+  const s = probe(file), even = x => Math.ceil(x / 2) * 2
+  const w = even(s.width * Math.min(3, 1 + l + r)), h = even(s.height * Math.min(3, 1 + t + b))
+  const x = Math.min(Math.round(s.width * l), w - s.width), y = Math.min(Math.round(s.height * t), h - s.height)
+  // the same frame of the same file is made once: the dashboard asks an estimate at every change
+  const out = at('.cache', `expand-${createHash('sha1').update(JSON.stringify([file, fs.statSync(file).mtimeMs, w, h, x, y])).digest('hex').slice(0, 12)}.png`)
+  if (fs.existsSync(out)) return out
+  fs.mkdirSync(path.dirname(out), { recursive: true })
+  ffmpeg(['-i', file, '-vf', `pad=${w}:${h}:${x}:${y}:color=0x808080,scale='if(gte(iw,ih),min(2048,iw),-2)':'if(gte(iw,ih),-2,min(2048,ih))'`, '-frames:v', '1', '-update', '1', out])
+  return out
 }
 
 // what to send and what to estimate, for a router model
@@ -259,7 +282,9 @@ function elevenEstimate(argv) {
 async function plan(spec) {
   const tool = toolOf(spec.kind, spec.tool), probing = !!spec.probe
   // the fields left out take their defaults (upscale's creativity, extend's direction…)
-  spec = { ...spec, fields: { ...Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)])), ...spec.fields } }
+  const fields = { ...Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)])), ...spec.fields }
+  for (const f of tool.fields) if (fields[f.key] != null) fields[f.key] = optionValue(f, fields[f.key])
+  spec = { ...spec, fields }
   if (!probing) for (const i of tool.inputs) if (!i.optional && !spec.inputs?.[i.key]?.length) throw userError(`${tool.label} needs ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
   for (const f of Object.values(spec.inputs ?? {}).flat()) if (!fs.existsSync(f)) throw userError(`no such file: ${f}`)
   const { text: prompt, refs } = mentions(fill(tool, spec))
@@ -280,6 +305,10 @@ async function plan(spec) {
     const key = prequel ? 'last_frame' : 'first_frame'
     if (!m.params.frames.includes(key)) throw userError(`${m.name} cannot ${prequel ? 'end on' : 'start from'} a frame: pick another model`)
     request = routerRequest('video', { ...tool, inputs: [] }, { ...spec, inputs: { [key]: [frame] } }, m, prompt, refs)
+  } else if (tool.local === 'expand' && spec.inputs?.image?.length) {
+    // expand: the image on its larger frame, the margins flat gray for the model to fill, at its closest ratio
+    const canvas = expandCanvas(spec.inputs.image[0], spec.fields)
+    request = routerRequest('image', tool, { ...spec, inputs: { image: [canvas] }, params: { ...spec.params, aspect_ratio: spec.params?.aspect_ratio ?? ratioOf(m.params.aspect_ratio, canvas) } }, m, prompt, refs)
   } else request = routerRequest(spec.kind, tool.local === 'extend' ? { ...tool, inputs: [] } : tool, spec, m, prompt, refs)
   const { provider } = routerOf(m.id)
   return { tool, prompt, provider: m.provider, model: m.model, name: m.name, request, estimate: provider.estimate(routerKind(spec.kind), m, request.estimate) }
@@ -306,25 +335,34 @@ const saveJob = job => writeJson(path.join(mediaDir(job.id), 'job.json'), job)
 const alive = pid => { try { return !!pid && (process.kill(pid, 0), true) } catch (e) { return e.code === 'EPERM' } }
 const newId = tool => `${new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)}-${tool}-${randomBytes(2).toString('hex')}`
 
+// a batch: the same generation 1 to 4 times, each a job of its own; its yes, threshold and cap go by the total
+const batchOf = spec => (spec.batch == null ? 1 : Math.min(4, Math.max(1, Math.round(+spec.batch) || 1)))
+const times = (p, n) => (n === 1 ? p : { ...p, estimate: { ...p.estimate, amount: p.estimate.amount == null ? null : +(p.estimate.amount * n).toFixed(6), detail: `${n} × ${p.estimate.detail}` } })
+
 async function create(spec, gateOpts) {
   ensureHome()
-  const p = await plan(spec)
-  gate(p, gateOpts)
-  const id = newId(p.tool.id), dir = mediaDir(id)
-  fs.mkdirSync(dir, { recursive: true })
-  // the inputs are copied in: a remix works after the originals moved
-  const inputs = {}
-  for (const [key, list] of Object.entries(spec.inputs ?? {})) inputs[key] = list.map((f, i) => {
-    const name = `in-${key}-${i + 1}${path.extname(f).toLowerCase()}`
-    fs.copyFileSync(f, path.join(dir, name))
-    return name
+  const p = await plan(spec), n = batchOf(spec)
+  gate(times(p, n), gateOpts)
+  const { batch, ...kept } = spec
+  return Array.from({ length: n }, (_, k) => {
+    const id = newId(p.tool.id), dir = mediaDir(id)
+    fs.mkdirSync(dir, { recursive: true })
+    // the inputs are copied in: a remix works after the originals moved
+    const inputs = {}
+    for (const [key, list] of Object.entries(kept.inputs ?? {})) inputs[key] = list.map((f, i) => {
+      const name = `in-${key}-${i + 1}${path.extname(f).toLowerCase()}`
+      fs.copyFileSync(f, path.join(dir, name))
+      return name
+    })
+    const job = { id, kind: kept.kind, tool: p.tool.id, label: p.tool.label, provider: p.provider, model: p.model, name: p.name ?? p.model, prompt: p.prompt, spec: { ...kept, inputs },
+      estimate: p.estimate, actual: null, status: 'queued', by: gateOpts.by, created: new Date().toISOString(), outputs: [] }
+    saveJob(job)
+    // what run needs and the folder does not keep: the request (data: URLs) and video.mjs's arguments; a batch's
+    // seed goes up by one a job, or its takes would all be the same
+    const send = p.request?.send && typeof p.request.send.seed === 'number' ? { ...p.request.send, seed: p.request.send.seed + k } : p.request?.send
+    writeJson(at('.cache', 'requests', `${id}.json`), { request: send ?? null, argv: p.argv ?? null })
+    return job
   })
-  const job = { id, kind: spec.kind, tool: p.tool.id, label: p.tool.label, provider: p.provider, model: p.model, name: p.name ?? p.model, prompt: p.prompt, spec: { ...spec, inputs },
-    estimate: p.estimate, actual: null, status: 'queued', by: gateOpts.by, created: new Date().toISOString(), outputs: [] }
-  saveJob(job)
-  // what run needs and the folder does not keep: the request (data: URLs) and video.mjs's arguments
-  writeJson(at('.cache', 'requests', `${id}.json`), { request: p.request?.send ?? null, argv: p.argv ?? null })
-  return job
 }
 
 const progress = (job, note) => { job.note = note; saveJob(job); if (!process.env.MEDIA_GENERATOR_QUIET) console.log(note) }
@@ -467,7 +505,7 @@ function specFromArgs(kind) {
   const fields = Object.fromEntries((opt.field ?? []).map(x => { const i = x.indexOf('='); return [x.slice(0, i), x.slice(i + 1)] }))
   const params = clean({ n: num(opt.n), duration: num(opt.duration), aspect_ratio: opt.ratio, resolution: opt.resolution, quality: opt.quality,
     sound: opt.sound === undefined ? undefined : opt.sound !== 'off', seed: num(opt.seed), voice: opt.voice })
-  return { kind, tool: opt.tool ?? (kind === 'audio' ? 'voice' : 'free'), model: opt.model, prompt: opt.prompt ?? args.join(' '), raw: opt.raw, fields, inputs, params }
+  return { kind, tool: opt.tool ?? (kind === 'audio' ? 'voice' : 'free'), model: opt.model, prompt: opt.prompt ?? args.join(' '), raw: opt.raw, fields, inputs, params, batch: num(opt.batch) }
 }
 
 // image | video | audio: plan, ask (exit 2 without --spend), then run to the end
@@ -475,15 +513,19 @@ async function generate(kind) {
   const spec = specFromArgs(kind)
   try {
     if (opt.estimate) {
-      const p = await plan(spec)
+      const p = times(await plan(spec), batchOf(spec))
       return console.log(JSON.stringify({ tool: p.tool.id, provider: p.provider, model: p.model, prompt: p.prompt, estimate: p.estimate, shown: money(p.estimate.amount, p.estimate.unit, per1000()) }))
     }
-    const job = await create(spec, { spend: num(opt.spend), acceptUnknown: opt['accept-unknown'], force: opt.force, by: 'claude' })
-    console.log(`${job.label} · ${job.name} · ${money(job.estimate.amount, job.estimate.unit, per1000())} → media/${job.id}`)
-    const done = await run(job.id)
-    if (done.status === 'failed') die(`${done.error} (media/${done.id}, ${money(done.actual, done.estimate.unit)} spent)`, /402|no credits|key/i.test(done.error) ? 3 : 1)
-    console.log(`done: ${done.outputs.map(f => path.join(mediaDir(done.id), f)).join(', ')}`)
-    console.log(`cost: ${money(done.actual, done.estimate.unit, per1000())}${done.actual_known ? '' : ' (estimated)'}`)
+    const jobs = await create(spec, { spend: num(opt.spend), acceptUnknown: opt['accept-unknown'], force: opt.force, by: 'claude' })
+    for (const job of jobs) console.log(`${job.label} · ${job.name} · ${money(job.estimate.amount, job.estimate.unit, per1000())} → media/${job.id}`)
+    // a batch's jobs run side by side
+    const all = await Promise.all(jobs.map(j => run(j.id)))
+    for (const done of all.filter(j => j.status === 'done')) {
+      console.log(`done: ${done.outputs.map(f => path.join(mediaDir(done.id), f)).join(', ')}`)
+      console.log(`cost: ${money(done.actual, done.estimate.unit, per1000())}${done.actual_known ? '' : ' (estimated)'}`)
+    }
+    const failed = all.filter(j => j.status === 'failed')
+    if (failed.length) die(failed.map(f => `${f.error} (media/${f.id}, ${money(f.actual, f.estimate.unit)} spent)`).join('\n'), failed.some(f => /402|no credits|key/i.test(f.error)) ? 3 : 1)
   } catch (e) {
     if (e.code === 2) { console.log(JSON.stringify({ estimate: e.estimate, shown: e.shown, reason: e.reason })); die(e.message, 2) }
     die(e.message, e.status === 401 || e.status === 402 ? 3 : e.code ?? 1)
@@ -501,12 +543,21 @@ async function cmdModels(kind = 'video') {
   console.log(`${list.length} ${kind} models (the engine's list, providers/openrouter-models.json)`)
 }
 
+// how a field is given on the command line: an option's label (Auto for an empty one), several in order, words
+function fieldHelp(f) {
+  const list = f.options?.map(o => (typeof o === 'object' ? o.label ?? o.value : o) || 'Auto').join('|')
+  if (f.type === 'multi') return `--field ${f.key}="<one>, then <another>" (${list})`
+  if (f.type === 'light') return `--field ${f.key}=<the light in words>${list ? `|${list}` : ''}`
+  if (f.type === 'margin') return `--field ${f.key}=<0–2, a share of the image>`
+  return `--field ${f.key}=${list || `<${f.type}>`}`
+}
+
 function cmdTools(kind) {
   for (const k of kind ? [kind] : KINDS) {
     const list = TOOLS[k].filter(t => !opt.search || `${t.id} ${t.label} ${t.group} ${t.description}`.toLowerCase().includes(opt.search.toLowerCase()))
     if (opt.json) { console.log(JSON.stringify(list)); continue }
     for (const t of list) {
-      const ins = t.inputs.map(i => `--in ${i.key}=<${i.kind}>${i.optional ? '?' : ''}`).join(' '), fields = t.fields.map(f => `--field ${f.key}=${f.options ? f.options.join('|') : `<${f.type}>`}`).join(' ')
+      const ins = t.inputs.map(i => `--in ${i.key}=<${i.kind}>${i.optional ? '?' : ''}`).join(' '), fields = t.fields.map(fieldHelp).join(' ')
       console.log(`${k} ${t.id} (${t.mode}, ${t.group}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${t.models ? `\n    models: ${t.models.join(', ')}` : ''}`)
     }
   }
@@ -678,7 +729,7 @@ async function handle(req, res) {
   if (p === '/api/estimate' && post) {
     const spec = await readBody(req)
     try {
-      const pl = await plan(spec), s = settings()
+      const pl = times(await plan(spec), batchOf(spec)), s = settings()
       return reply(res, 200, { model: pl.model, provider: pl.provider, prompt: pl.prompt, estimate: pl.estimate, shown: money(pl.estimate.amount, pl.estimate.unit, per1000()),
         needs: pl.provider === 'local' ? null : needsYes(pl.estimate, s[pl.provider], spentThisMonth(readLedger(HOME), pl.provider)) })
     } catch (e) { return reply(res, 400, { error: e.message }) }
@@ -686,9 +737,9 @@ async function handle(req, res) {
   if (p === '/api/generate' && post) {
     const { confirm, ...spec } = await readBody(req)
     try {
-      const job = await create(spec, { by: 'dashboard', confirm })
-      startRun(job.id)
-      return reply(res, 200, { id: job.id })
+      const jobs = await create(spec, { by: 'dashboard', confirm })
+      for (const j of jobs) startRun(j.id)
+      return reply(res, 200, { id: jobs[0].id, ids: jobs.map(j => j.id) })
     } catch (e) { return reply(res, e.code === 2 ? 409 : 400, { error: e.message, needs: e.reason, estimate: e.estimate, shown: e.shown }) }
   }
   if (p === '/api/upload' && post) {
@@ -698,13 +749,13 @@ async function handle(req, res) {
     await pipeline(req, fs.createWriteStream(file))
     return reply(res, 200, { path: file })
   }
-  // a frame of a video, to draw on (Sketch) or to pick a point on (Reframe)
+  // a frame of a video, to draw or paint on (Sketch, mask): its first, its last (last) or the one at t seconds
   if (p === '/api/frame' && post) {
-    const { path: file, last } = await readBody(req), src = inside(HOME, file)
+    const { path: file, last, t } = await readBody(req), src = inside(HOME, file)
     if (!src) return reply(res, 403, { error: 'outside the folder' })
     const out = at('.cache', 'uploads', `${Date.now()}-frame.png`)
     fs.mkdirSync(path.dirname(out), { recursive: true })
-    ffmpeg([...(last ? ['-sseof', '-0.1'] : []), '-i', src, '-frames:v', '1', '-update', '1', out])
+    ffmpeg([...(last ? ['-sseof', '-0.1'] : t > 0 ? ['-ss', `${+t}`] : []), '-i', src, '-frames:v', '1', '-update', '1', out])
     return reply(res, 200, { path: out })
   }
   // a video sent as an input, cut to the part and the area kept (Edit reference): a new file, the original stays.

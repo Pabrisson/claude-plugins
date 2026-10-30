@@ -4,16 +4,26 @@ export type Page = Kind | "library" | "credits" | "settings"
 
 export type Input = {
   key: string
-  kind: "image" | "video" | "audio" | "sketch" | "media"
+  kind: "image" | "video" | "audio" | "sketch" | "mask" | "media"
   label: string
   optional?: boolean
   multiple?: boolean
 }
+// an option: its value, or the value with what the dashboard shows of it (a preset light carries its lights)
+export type Option = string | { value: string; label?: string; group?: string; note?: string; rig?: Light[] }
+// one light around the subject: azimuth (0 front, 90 right, 180 behind) and elevation in degrees, 0–100 levels
+export type Light = { az: number; el: number; color: string; brightness: number; diffuse: number }
 export type Field = {
   key: string
   label: string
-  type: "choice" | "text" | "number" | "color"
-  options?: string[]
+  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin"
+  options?: Option[]
+  // how a value reads in the template ("shot on {}"): an empty one leaves nothing
+  phrase?: string
+  // the composer's heading this field sits under
+  section?: string
+  // a light field: how many lights the user may place
+  lights?: number
   default?: string | number
   placeholder?: string
   min?: number
@@ -35,6 +45,8 @@ export type Tool = {
   params?: Record<string, unknown>
   local?: string
   provider?: string
+  // setups that fill several fields at once
+  presets?: { label: string; fields: Record<string, string> }[]
 }
 export type Model = {
   id: string
@@ -126,6 +138,8 @@ export type Spec = {
   inputs: Record<string, string[]>
   params: Record<string, unknown>
   probe?: boolean
+  // the same generation 1 to 4 times, a job each
+  batch?: number
 }
 export type EstimateAnswer = {
   model: string
@@ -195,14 +209,14 @@ export const api = {
   ledger: () => call<LedgerLine[]>("/api/ledger"),
   estimate: (spec: Spec) => post<EstimateAnswer>("/api/estimate", spec),
   generate: (spec: Spec, confirm = false) =>
-    post<{ id: string }>("/api/generate", { ...spec, confirm }),
+    post<{ id: string; ids: string[] }>("/api/generate", { ...spec, confirm }),
   upload: (file: Blob, name: string) =>
     call<{ path: string }>(`/api/upload?name=${encodeURIComponent(name)}`, {
       method: "POST",
       body: file,
     }),
-  frame: (path: string, last = false) =>
-    post<{ path: string }>("/api/frame", { path, last }),
+  frame: (path: string, last = false, t?: number) =>
+    post<{ path: string }>("/api/frame", { path, last, t }),
   cut: (path: string, start: number, end: number, crop?: { x: number; y: number; w: number; h: number }) =>
     post<{ path: string }>("/api/cut", { path, start, end, crop }),
   import: (path: string) => post<{ id: string; kind: Kind }>("/api/import", { path }),
@@ -231,17 +245,29 @@ export const mediaKind = (file: string) =>
         ? "audio"
         : "other"
 
+// an option's value, its words and its group
+export const opt = (o: Option) => (typeof o === "string" ? { value: o, label: o } : { ...o, label: o.label ?? o.value })
+// a value's words: its option's label, sentence-cased; Auto for an empty one
+export function shown(f: Field, v: string) {
+  const l = f.options?.map(opt).find((o) => o.value === v)?.label ?? v
+  return l ? sentence(l) : "Auto"
+}
+// a label's first letter up, an aperture as written (f/2.8)
+export const sentence = (s: string) => (!s || /^f\//.test(s) ? s : s[0].toUpperCase() + s.slice(1))
+
 // the tool's template with its fields and the user's words: the same as media.mjs's fill
 export function fill(tool: Tool, fields: Record<string, string>, prompt: string) {
   let text = tool.template || "{prompt}"
-  for (const f of tool.fields)
-    text = text.replaceAll(`{${f.key}}`, String(fields[f.key] ?? f.default ?? ""))
+  for (const f of tool.fields) {
+    const v = String(fields[f.key] ?? f.default ?? "")
+    text = text.replaceAll(`{${f.key}}`, v && f.phrase ? f.phrase.replace("{}", v) : v)
+  }
   return text
     .replaceAll("{prompt}", prompt ?? "")
     .replace(/\s+/g, " ")
-    .replace(/\s+([.,:;)])/g, "$1")
-    .replace(/([.:])\s*\./g, "$1")
     .replace(/\(\s*\)/g, "")
+    .replace(/\s+([.,:;)])/g, "$1")
+    .replace(/[.,:;]{2,}/g, (m) => (m.includes(".") ? "." : m[0]))
     .replace(/^[\s.,:;]+|[\s,:;]+$/g, "")
     .trim()
 }

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { AudioLinesIcon, CheckIcon, FolderOpenIcon, LoaderCircleIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, ScissorsIcon, StarIcon, XIcon } from "lucide-react"
+import { AudioLinesIcon, BrushIcon, CheckIcon, FolderOpenIcon, LoaderCircleIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, ScissorsIcon, StarIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -7,12 +7,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { api, fileUrl, mediaKind, outputPath, plain, when, type Input, type Job, type Tool } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
 import { SketchDialog } from "@/components/sketch"
+import { MaskDialog } from "@/components/mask"
 import { CutDialog } from "@/components/cut"
 
-const ACCEPT = { image: "image/*", sketch: "image/*", video: "video/*", audio: "audio/*", media: "audio/*,video/*" }
+const ACCEPT = { image: "image/*", sketch: "image/*", mask: "image/*", video: "video/*", audio: "audio/*", media: "audio/*,video/*" }
+// an input drawn in the dashboard: a sketch (marks) or a mask (a painted area)
+const drawn = (input: Input) => input.kind === "sketch" || input.kind === "mask"
 const fits = (input: Input, file: string) => {
   const k = mediaKind(file)
-  return input.kind === "media" ? k === "audio" || k === "video" : input.kind === "sketch" ? k === "image" : k === input.kind
+  return input.kind === "media" ? k === "audio" || k === "video" : drawn(input) ? k === "image" : k === input.kind
 }
 
 export async function upload(file: File) {
@@ -21,7 +24,7 @@ export async function upload(file: File) {
 
 // where a pasted or dropped file goes: the first of the tool's inputs that takes its kind and has room
 export function slotFor(tool: Tool, value: Record<string, string[]>, name: string) {
-  return tool.inputs.find((i) => i.kind !== "sketch" && fits(i, name) && (i.multiple || !value[i.key]?.length))
+  return tool.inputs.find((i) => !drawn(i) && fits(i, name) && (i.multiple || !value[i.key]?.length))
 }
 
 // a file as a small tile: its picture, its first frame, or a sound icon
@@ -53,7 +56,7 @@ export function InputSlots({
   media: Job[]
   label?: boolean
 }) {
-  const [sketch, setSketch] = useState<{ key: string; src: string } | null>(null)
+  const [sketch, setSketch] = useState<{ key: string; src: string; mask: boolean; video?: string } | null>(null)
   const [cut, setCut] = useState<{ key: string; path: string } | null>(null)
   const set = (key: string, files: string[]) => onChange({ ...value, [key]: files })
 
@@ -75,8 +78,9 @@ export function InputSlots({
     } catch (e) {
       return toast.error(plain((e as Error).message))
     }
-    if (!base) return toast.error(`Add the ${tool.inputs.find((i) => i.kind !== "sketch")?.label.toLowerCase() ?? "image"} first, then draw on it`)
-    setSketch({ key, src: fileUrl(base) })
+    if (!base) return toast.error(`Add the ${tool.inputs.find((i) => !drawn(i))?.label.toLowerCase() ?? "image"} first, then draw on it`)
+    const mask = tool.inputs.find((i) => i.key === key)?.kind === "mask"
+    setSketch({ key, src: fileUrl(base), mask, video: mask && !value.image?.[0] && !value.first_frame?.[0] ? video : undefined })
   }
 
   if (!tool.inputs.length) return null
@@ -96,8 +100,19 @@ export function InputSlots({
           />
         ))}
       </div>
+      <MaskDialog
+        src={sketch?.mask ? sketch.src : null}
+        video={sketch?.video}
+        onClose={() => setSketch(null)}
+        onSave={async (png) => {
+          const key = sketch!.key
+          setSketch(null)
+          const { path } = await api.upload(png, "mask.png")
+          set(key, [path])
+        }}
+      />
       <SketchDialog
-        open={!!sketch}
+        open={!!sketch && !sketch.mask}
         src={sketch?.src ?? null}
         onClose={() => setSketch(null)}
         onSave={async (png) => {
@@ -196,16 +211,16 @@ function Slot({
               over && "border-space bg-space/10 text-space"
             )}
           >
-            {input.kind === "sketch" ? (
-              <button type="button" onClick={onDraw} className="grid size-full place-items-center rounded-lg" aria-label={`Draw ${input.label.toLowerCase()}`} title="Draw on the image">
-                <PencilIcon className="size-5" />
+            {drawn(input) ? (
+              <button type="button" onClick={onDraw} className="grid size-full place-items-center rounded-lg" aria-label={input.label} title={input.kind === "mask" ? "Paint the area on the image" : "Draw on the image"}>
+                {input.kind === "mask" ? <BrushIcon className="size-5" /> : <PencilIcon className="size-5" />}
               </button>
             ) : (
               <button type="button" disabled={busy} onClick={() => picker.current?.click()} className="grid size-full place-items-center rounded-lg" aria-label={`Add ${input.label.toLowerCase()}`} title="Pick a file, drop one here, or paste it">
                 {busy ? <LoaderCircleIcon className="size-5 animate-spin" /> : <PlusIcon className="size-5" />}
               </button>
             )}
-            {input.kind !== "sketch" && library.length > 0 && (
+            {!drawn(input) && library.length > 0 && (
               <LibraryPicker input={input} items={library} picked={files} onPick={(f) => onFiles(input.multiple ? (files.includes(f) ? files.filter((x) => x !== f) : [...files, f]) : [f])} />
             )}
             <input ref={picker} type="file" hidden multiple={input.multiple} accept={ACCEPT[input.kind]} onChange={(e) => e.target.files && add(e.target.files)} />

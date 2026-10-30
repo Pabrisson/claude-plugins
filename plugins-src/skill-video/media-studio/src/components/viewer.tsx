@@ -84,7 +84,8 @@ function Body({
   const k = file ? mediaKind(file) : null
   const failed = job.status === "failed"
   const params = Object.entries(job.params ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "")
-  const fields = Object.entries(job.fields ?? {}).filter(([, v]) => v)
+  // a field's words, not the dashboard's own state beside it (a light's stage: "light:rig") nor an untouched margin
+  const fields = Object.entries(job.fields ?? {}).filter(([k, v]) => v && v !== "0" && !k.includes(":"))
   const inputs = Object.values(job.inputs ?? {}).flat()
   const actions = [
     ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) }]),

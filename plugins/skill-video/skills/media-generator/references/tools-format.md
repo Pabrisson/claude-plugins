@@ -29,12 +29,25 @@ the same files: a new tool is a new entry, nothing else to code.
 | `mode` | `create` or `edit`: the composer's segmented control |
 | `icon` | A lucide icon name (kebab-case) |
 | `inputs` | The files it takes, in the order they are sent (below) |
-| `fields` | The settings the template uses: `choice` (options, chips), `text`, `number` (min, max, step, unit: a slider), `color` |
+| `fields` | The settings the template uses (below) |
+| `presets` | Setups that fill several fields at once: `[{ "label": "Noir", "fields": { "lens": "…", "grade": "…" } }]`, chips above the fields |
 | `template` | The prompt: `{key}` is a field's value (or its default), `{prompt}` the user's own words |
 | `models` | Router model ids, recommended first; without it, any model of the kind |
 | `params` | Settings forced for this tool, such as `{ "resolution": "4K" }` or `{ "background": "transparent" }` |
-| `local` | Done on the machine: `reframe` (ffmpeg, free), `extend` (a frame of the source, then the new shot joined) |
+| `local` | Done on the machine: `reframe` (ffmpeg, free), `extend` (a frame of the source, then the new shot joined), `expand` (the image padded with gray margins from its `margin` fields, sent at the model's closest ratio) |
 | `provider` | `elevenlabs` for the tools video-editor's engine does (change voice, translate) |
+
+Fields (`type`):
+- **choice**: a few `options`, as chips. **select**: a long list, as a searchable button (beside the composer, grouped, a
+  line on each). **multi**: several options in the order picked, joined by `, then ` (camera moves).
+- **text**, **number** (min, max, step, unit: a slider), **color**.
+- **light**: the lights around the subject, placed on a stage (`lights`: how many at most); its value is the light in
+  words. With `options` (presets, each with its `rig` of lights), the dashboard offers Preset, Custom and Describe.
+- **margin**: Expand's share of the image added on one side (0 to 2), set by the dashboard's frame editor.
+- An option is a value, or `{ "value", "label", "group", "note" }`; `"value": ""` with `"label": "Auto"` leaves the field
+  out of the prompt. On the command line, a label stands for its value (`--field light=Silhouette`).
+- `phrase` wraps a field's value in the template (`"Shot on {}"`), so an empty one leaves nothing behind.
+- `section` puts fields under one heading, the selects as tiles two a row.
 
 Inputs (`kind`):
 - **image**: images. For an image model, every image input becomes a reference, in the order of `inputs`, so the
@@ -44,9 +57,12 @@ Inputs (`kind`):
 - **audio**: a sound (a talking avatar's voice; a voice to clone with `voice_clips`).
 - **sketch**: a picture the user drew on (a frame with marks), sent as an image reference. The template says what
   the marks mean.
+- **mask**: the image (or a frame of the video, picked along it) with an area the user painted in translucent magenta
+  (brush, eraser, lasso), sent as an image reference. The template names the magenta area.
 - **media**: an audio or a video file (ElevenLabs tools).
 - `optional: true` when it may be left out, `multiple: true` when it takes several files.
 
-A template reads well with any field left empty: the engine drops empty parentheses and doubled punctuation. Test a
+A template reads well with any field left empty: the engine drops empty parentheses and folds the punctuation left by
+empty fields into one mark (the dashboard's `fill` does the same). Test a
 new tool with `media.mjs <kind> --tool <id> … --estimate`: it prints the filled prompt and the price without
 spending.

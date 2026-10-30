@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronRightIcon, CopyIcon, MicIcon, PlayIcon, RefreshCwIcon, SquareIcon, UploadIcon } from "lucide-react"
+import { ChevronRightIcon, CopyIcon, MicIcon, MinusIcon, PlayIcon, PlusIcon, RefreshCwIcon, SquareIcon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group"
 import { Kbd } from "@/components/ui/kbd"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -27,6 +28,10 @@ import {
   type Voice,
 } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, Price } from "@/components/chips"
+import { FieldInput, sections, Setups } from "@/components/fields"
+import { LightRig } from "@/components/light-rig"
+import { ExpandPreview, marginsOf } from "@/components/expand"
+import { ExtendPanel } from "@/components/extend"
 import { InputSlots, slotFor, upload } from "@/components/inputs"
 import { ToolPicker } from "@/components/tool-picker"
 import { capsOf, ModelPicker, type Priced } from "@/components/model-picker"
@@ -41,6 +46,8 @@ export type Compose = {
   fields: Record<string, string>
   inputs: Record<string, string[]>
   params: Record<string, unknown>
+  // the same generation 1 to 4 times
+  batch?: number
 }
 export const blank = (kind: Kind, tool = kind === "audio" ? "voice" : "free"): Compose => ({
   tool,
@@ -109,8 +116,11 @@ export function Composer({
   const modelId = eleven || local ? undefined : (value.model && fitting.some((m) => m.id === value.model) ? value.model : def && fitting.some((m) => m.id === def) ? def : fitting[0]?.id)
   const model = models.find((m) => m.id === modelId)
 
-  const prompt = value.raw ? value.rawText : fill(tool, value.fields, value.intent)
-  const hasIntent = tool.template.includes("{prompt}") && tool.template !== "{prompt}"
+  // the prompt sent: the tool's template filled with its fields and the user's words, or Claude's prompt (a draft)
+  // with the user's words after it
+  const prompt = value.raw ? [value.rawText, value.intent].filter(Boolean).join(" ").trim() : fill(tool, value.fields, value.intent)
+  // the user writes the whole prompt (Custom, speech), or adds words to the one the tool builds
+  const whole = tool.template === "{prompt}", takesWords = tool.template.includes("{prompt}")
   const missing = tool.inputs.find((i) => !i.optional && !value.inputs[i.key]?.length)
 
   const spec: Spec = useMemo(
@@ -118,20 +128,24 @@ export function Composer({
       kind,
       tool: tool.id,
       model: modelId,
-      prompt: value.raw ? value.rawText : value.intent,
+      prompt: value.raw ? prompt : value.intent,
       ...(value.raw ? { raw: true } : {}),
       fields: value.fields,
       inputs: value.inputs,
       params: value.params,
+      ...(value.batch && value.batch > 1 && !eleven && !local ? { batch: value.batch } : {}),
     }),
-    [kind, tool.id, modelId, value]
+    [kind, tool.id, modelId, value, eleven, local, prompt]
   )
 
   // the estimate, again after every change (debounced)
   // what is missing, as the button's words until it can run
+  const expand = tool.local === "expand", extend = tool.local === "extend"
   const blocker = missing
-    ? `Add ${missing.label.toLowerCase()}`
-    : !eleven && !local && !prompt && tool.id !== "upscale"
+    ? missing.kind === "mask" || missing.kind === "sketch" ? missing.label : `Add ${missing.label.toLowerCase()}`
+    : expand && !Object.values(marginsOf(value.fields)).some(Boolean)
+      ? "Set the frame"
+      : !eleven && !local && !prompt && tool.id !== "upscale"
       ? kind === "audio" ? "Write the text" : "Write a prompt"
       : tool.id === "translate" && !value.fields.to?.trim()
         ? "Pick the languages"
@@ -154,7 +168,7 @@ export function Composer({
 
   // until it can run, the button shows this tool's price on this model and settings, before the inputs and words
   // (not a voice's: it is priced by its text)
-  const probeSpec = (model?: string): Spec => ({ kind, tool: tool.id, model, prompt: "", fields: value.fields, inputs: {}, params: value.params, probe: true })
+  const probeSpec = (model?: string): Spec => ({ kind, tool: tool.id, model, prompt: "", fields: value.fields, inputs: {}, params: value.params, probe: true, ...(spec.batch ? { batch: spec.batch } : {}) })
   const probeKey = JSON.stringify(probeSpec(modelId))
   const [probe, setProbe] = useState<{ key: string; label: string | null }>({ key: "", label: null })
   useEffect(() => {
@@ -168,7 +182,7 @@ export function Composer({
   function priceModels() {
     const speech = kind === "audio" && !eleven
     if (speech && !prompt) return
-    const listSpec = (model?: string): Spec => ({ ...probeSpec(model), ...(speech ? { prompt } : {}) })
+    const listSpec = (model?: string): Spec => ({ ...probeSpec(model), batch: undefined, ...(speech ? { prompt } : {}) })
     const key = JSON.stringify(listSpec())
     if (modelPrices.key === key) return
     setModelPrices({ key, prices: {} })
@@ -202,7 +216,7 @@ export function Composer({
     try {
       await api.generate(spec, confirm)
       setAsk(null)
-      toast.success(`${tool.label} started`, { description: "It keeps running if you close this page." })
+      toast.success(`${spec.batch ? `${spec.batch} × ` : ""}${tool.label} started`, { description: "It keeps running if you close this page." })
     } catch (e) {
       const err = e as Error & { status?: number; body?: { needs: string; shown: string } }
       if (err.status === 409 && err.body) setAsk(err.body)
@@ -239,7 +253,11 @@ export function Composer({
   function applyDraft() {
     if (!draft) return
     const t = tools.find((x) => x.id === draft.tool) ?? tool
-    onChange({ ...value, tool: t.id, model: draft.model ?? value.model, fields: { ...value.fields, ...draft.fields }, raw: !!draft.prompt, rawText: draft.prompt ?? value.rawText })
+    // Claude's prompt replaces the tool's (shown read-only, the user's words still go after it); for a tool whose
+    // prompt is the user's own, it is those words
+    const own = t.template === "{prompt}" && !!draft.prompt
+    onChange({ ...value, tool: t.id, model: draft.model ?? value.model, fields: { ...value.fields, ...draft.fields }, raw: !!draft.prompt && !own,
+      rawText: draft.prompt ?? value.rawText, intent: draft.prompt ? (own ? draft.prompt : "") : value.intent })
     onDraftSeen(draft.at)
   }
 
@@ -312,7 +330,7 @@ export function Composer({
               options={["create", "edit"] as const}
               value={mode}
               label={(m) => (m === "create" ? "Create" : "Edit")}
-              onChange={(m) => onChange(blank(kind, m === "create" ? "free" : "free-edit"))}
+              onChange={(m) => onChange({ ...blank(kind, m === "create" ? "free" : "free-edit"), batch: value.batch })}
             />
             <ToolPicker
               kind={kind}
@@ -323,39 +341,64 @@ export function Composer({
               models={models}
               prices={prices}
               onOpen={priceTools}
-              onPick={(t) => onChange({ ...blank(kind, t.id), inputs: Object.fromEntries(Object.entries(value.inputs).filter(([k]) => t.inputs.some((i) => i.key === k))) })}
+              onPick={(t) => onChange({ ...blank(kind, t.id), batch: value.batch, inputs: Object.fromEntries(Object.entries(value.inputs).filter(([k]) => t.inputs.some((i) => i.key === k))) })}
             />
           </>
         )}
 
         {!tool.template && <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} />}
 
-        {tool.fields.map((f) =>
-          tool.id === "translate" && f.key === "to" ? (
-            <div key={f.key}>
-              <Label>{f.label}</Label>
-              <Input value={value.fields.to ?? ""} placeholder={f.placeholder} onChange={(e) => set({ fields: { ...value.fields, to: e.target.value } })} />
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {COMMON_LANGS.map((l) => {
-                  const list = (value.fields.to ?? "").split(/[,\s]+/).filter(Boolean), on = list.includes(l)
-                  return (
-                    <button
-                      key={l}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => set({ fields: { ...value.fields, to: (on ? list.filter((x) => x !== l) : [...list, l]).join(", ") } })}
-                      className={cn(CHIP, "px-2.5 py-0.5 text-xs", on ? CHIP_ON : CHIP_OFF)}
-                    >
-                      {l}
-                    </button>
+        {tool.presets && <Setups tool={tool} fields={value.fields} onPick={(fields) => set({ fields: { ...value.fields, ...fields }, raw: false })} />}
+
+        {/* the fields, those of one section under its heading (selects as tiles, two a row); Expand's margins and
+            Extend's direction and join have their own panels below */}
+        {sections(tool.fields.filter((f) => f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)))).map(({ section, fields }, i) =>
+          section ? (
+            <div key={section}>
+              <Label>{section}</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {fields.map((f) =>
+                  f.type === "select" ? (
+                    <FieldInput key={f.key} field={f} value={value.fields[f.key]} tile onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
+                  ) : (
+                    <div key={f.key} className="col-span-2 mt-2">
+                      <FieldInput field={f} value={value.fields[f.key]} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
+                    </div>
                   )
-                })}
+                )}
               </div>
             </div>
-          ) : tool.id === "translate" && f.key === "quality" ? (
-            <DubModels key={f.key} spec={spec} value={value.fields.quality ?? "dubbing_v1"} ready={!missing && !!value.fields.to} onChange={(q) => set({ fields: { ...value.fields, quality: q } })} />
           ) : (
-            <FieldInput key={f.key} field={f} value={value.fields[f.key]} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
+            fields.map((f) =>
+              tool.id === "translate" && f.key === "to" ? (
+                <div key={f.key}>
+                  <Label>{f.label}</Label>
+                  <Input value={value.fields.to ?? ""} placeholder={f.placeholder} onChange={(e) => set({ fields: { ...value.fields, to: e.target.value } })} />
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {COMMON_LANGS.map((l) => {
+                      const list = (value.fields.to ?? "").split(/[,\s]+/).filter(Boolean), on = list.includes(l)
+                      return (
+                        <button
+                          key={l}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => set({ fields: { ...value.fields, to: (on ? list.filter((x) => x !== l) : [...list, l]).join(", ") } })}
+                          className={cn(CHIP, "px-2.5 py-0.5 text-xs", on ? CHIP_ON : CHIP_OFF)}
+                        >
+                          {l}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : tool.id === "translate" && f.key === "quality" ? (
+                <DubModels key={f.key} spec={spec} value={value.fields.quality ?? "dubbing_v1"} ready={!missing && !!value.fields.to} onChange={(q) => set({ fields: { ...value.fields, quality: q } })} />
+              ) : f.type === "light" ? (
+                <LightRig key={`${f.key}-${i}`} field={f} fields={value.fields} video={kind === "video"} onChange={(patch) => set({ fields: { ...value.fields, ...patch }, raw: false })} />
+              ) : (
+                <FieldInput key={f.key} field={f} value={value.fields[f.key]} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
+              )
+            )
           )
         )}
 
@@ -364,38 +407,60 @@ export function Composer({
         )}
 
         {tool.template && (
-          <div className="flex flex-col gap-2">
-            {hasIntent && !value.raw && (
+          <div className="flex flex-col gap-3">
+            {/* the prompt the tool builds, read only: what goes to the model */}
+            {!whole && (
               <div>
-                <Label hint="optional">Your words</Label>
-                <Input value={value.intent} placeholder="anything to add" onChange={(e) => set({ intent: e.target.value })} />
+                <Label hint={value.raw ? "written by Claude" : "built by the tool, with your words"}>Prompt</Label>
+                <Textarea
+                  readOnly
+                  value={prompt}
+                  aria-label="Prompt sent to the model"
+                  className="max-h-60 min-h-16 resize-none border-dashed bg-muted/40 px-3 py-2 text-sm leading-relaxed text-foreground/80 focus-visible:ring-0 md:text-sm dark:bg-muted/30"
+                />
+                {value.raw && (
+                  <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => set({ raw: false })}>
+                    Back to the tool's prompt
+                  </button>
+                )}
               </div>
             )}
-            <div>
-              <Label hint={value.raw ? "edited by hand" : tool.template !== "{prompt}" ? "from the tool, edit freely" : undefined}>
-                {kind === "audio" ? "Text to speak" : "Prompt"}
-              </Label>
-              <InputGroup className="rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
-                <InputGroupTextarea
-                  value={prompt}
-                  aria-label={kind === "audio" ? "Text to speak" : "Prompt"}
-                  placeholder={kind === "audio" ? "What the voice says" : tool.description}
-                  className="max-h-80 min-h-28 px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px]"
-                  onChange={(e) => (tool.template === "{prompt}" ? set({ intent: e.target.value, raw: false }) : set({ raw: true, rawText: e.target.value }))}
-                />
-                {tool.inputs.length > 0 && (
-                  <InputGroupAddon align="block-end" className="border-t px-3 pt-3 pb-3 font-normal">
-                    <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} />
-                  </InputGroupAddon>
-                )}
-              </InputGroup>
-              {value.raw && (
-                <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => set({ raw: false })}>
-                  Back to the tool's template
-                </button>
-              )}
-            </div>
+            {/* the user's own words, with the tool's files */}
+            {(takesWords || tool.inputs.length > 0) && (
+              <div>
+                <Label hint={whole ? undefined : "added to the tool's prompt"}>{kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}</Label>
+                <InputGroup className="rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
+                  {takesWords && (
+                    <InputGroupTextarea
+                      value={value.intent}
+                      aria-label={kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}
+                      placeholder={kind === "audio" ? "What the voice says" : whole ? tool.description : "Anything to add: details, style, what must not change"}
+                      className={cn("max-h-80 px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
+                      onChange={(e) => set({ intent: e.target.value })}
+                    />
+                  )}
+                  {tool.inputs.length > 0 && (
+                    <InputGroupAddon align="block-end" className={cn("px-3 pt-3 pb-3 font-normal", takesWords && "border-t")}>
+                      <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} />
+                    </InputGroupAddon>
+                  )}
+                </InputGroup>
+              </div>
+            )}
           </div>
+        )}
+
+        {expand && <ExpandPreview image={value.inputs.image?.[0]} fields={value.fields} onChange={(patch) => set({ fields: { ...value.fields, ...patch } })} />}
+        {extend && (
+          <ExtendPanel
+            video={value.inputs.video?.[0]}
+            fields={value.fields}
+            join={tool.fields.find((f) => f.key === "join")}
+            durations={model?.params.duration ?? []}
+            duration={value.params.duration as number | undefined}
+            onFields={(patch) => set({ fields: { ...value.fields, ...patch } })}
+            onDuration={(duration) => set({ params: { ...value.params, duration } })}
+          />
         )}
 
         {model && (
@@ -411,7 +476,9 @@ export function Composer({
             onOpenModels={priceModels}
             // the image a result can take its ratio from: any for an image, a first or last frame (an avatar's photo) for a video
             hasImageInput={kind === "video" ? ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0) : tool.inputs.some((i) => i.kind === "image" && (value.inputs[i.key]?.length ?? 0) > 0)}
-            hasVideoInput={tool.inputs.some((i) => i.kind === "video")}
+            hasVideoInput={tool.inputs.some((i) => i.kind === "video") && !extend}
+            // settings a tool's own panel sets: Extend's length and ratio (its source's), Expand's ratio (its frame's)
+            own={extend ? ["duration", "aspect_ratio"] : expand ? ["aspect_ratio"] : []}
             cloning={(value.inputs.voice_clips?.length ?? 0) > 0}
           />
         )}
@@ -459,9 +526,10 @@ export function Composer({
               </TooltipContent>
             </Tooltip>
           )}
-          <Button variant="space" className="h-11 flex-1 justify-between px-4 text-[15px]" disabled={!ready} onClick={() => go()}>
-            <span className="flex items-center gap-2">
-              {blocker ?? label}
+          {!eleven && !local && <Batch value={value.batch ?? 1} onChange={(batch) => set({ batch })} />}
+          <Button variant="space" className="h-11 min-w-0 flex-1 justify-between px-4 text-[15px]" disabled={!ready} onClick={() => go()}>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{blocker ?? label}</span>
               {!blocker && <Kbd className="bg-space-foreground/15 text-space-foreground/80">⌘↵</Kbd>}
             </span>
             {price && <Price className="bg-space-foreground/15 text-space-foreground">{price}</Price>}
@@ -489,29 +557,19 @@ export function Composer({
   )
 }
 
-function FieldInput({ field: f, value, onChange }: { field: Tool["fields"][number]; value?: string; onChange: (v: string) => void }) {
-  const v = value ?? (f.default != null ? String(f.default) : "")
+// how many times to run it: 1 to 4 jobs, each its own result and cost; the button shows the total
+function Batch({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
-    <div>
-      <Label>{f.label}</Label>
-      {f.type === "choice" ? (
-        <Chips options={f.options ?? []} value={v} onChange={onChange} label={(o) => (/^[a-z ]+$/.test(o) ? o[0].toUpperCase() + o.slice(1) : o)} />
-      ) : f.type === "number" ? (
-        <div className="flex items-center gap-3">
-          <Slider min={f.min ?? 0} max={f.max ?? 100} step={f.step ?? 1} value={[Number(v)]} onValueChange={([n]) => onChange(String(n))} aria-label={f.label} />
-          <span className="w-12 text-right text-sm tabular-nums">
-            {v}
-            {f.unit ?? ""}
-          </span>
-        </div>
-      ) : f.type === "color" ? (
-        <div className="flex items-center gap-2">
-          <input type="color" value={v || "#ffffff"} onChange={(e) => onChange(e.target.value)} aria-label={f.label} className="h-9 w-14 cursor-pointer rounded-md border bg-transparent" />
-          <span className="text-sm text-muted-foreground tabular-nums">{v}</span>
-        </div>
-      ) : (
-        <Input value={value ?? ""} placeholder={f.placeholder} onChange={(e) => onChange(e.target.value)} />
-      )}
+    <div className="flex h-11 items-center rounded-md border bg-background dark:border-input dark:bg-input/30" role="group" aria-label="Batch: how many to generate">
+      <button type="button" aria-label="One less" disabled={value <= 1} onClick={() => onChange(value - 1)} className="grid h-full w-7 place-items-center rounded-l-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40">
+        <MinusIcon className="size-3.5" />
+      </button>
+      <span className="w-9 text-center text-sm font-medium tabular-nums" aria-live="polite" title="Batch: how many to generate">
+        {value}/4
+      </span>
+      <button type="button" aria-label="One more" disabled={value >= 4} onClick={() => onChange(value + 1)} className="grid h-full w-7 place-items-center rounded-r-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40">
+        <PlusIcon className="size-3.5" />
+      </button>
     </div>
   )
 }
@@ -530,6 +588,7 @@ function ModelBlock({
   cloning,
   prices,
   onOpenModels,
+  own = [],
 }: {
   kind: Kind
   recommended: Model[]
@@ -543,11 +602,11 @@ function ModelBlock({
   cloning: boolean
   prices: Record<string, Priced>
   onOpenModels: () => void
+  own?: string[]
 }) {
   const p = model.params, put = (k: string, v: unknown) => onParams({ ...params, [k]: v })
   const caps = capsOf(model)
-  const durations = p.duration ?? []
-  const ns = p.n && p.n.max > 1 ? Array.from({ length: Math.min(p.n.max, 4) - (p.n.min ?? 1) + 1 }, (_, i) => (p.n!.min ?? 1) + i) : []
+  const durations = own.includes("duration") ? [] : (p.duration ?? [])
   const edit = kind === "video" && hasVideoInput
 
   return (
@@ -575,13 +634,7 @@ function ModelBlock({
           )}
         </div>
       )}
-      {kind === "image" && ns.length > 1 && (
-        <div>
-          <Label>Images</Label>
-          <Chips options={ns} value={(params.n as number) ?? 1} onChange={(n) => put("n", n)} />
-        </div>
-      )}
-      {!edit && p.aspect_ratio?.length ? (
+      {!edit && !own.includes("aspect_ratio") && p.aspect_ratio?.length ? (
         <div>
           <Label>Ratio</Label>
           {hasImageInput ? (

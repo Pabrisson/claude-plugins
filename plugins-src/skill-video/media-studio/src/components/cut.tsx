@@ -38,37 +38,9 @@ function dragBox(b: Box, mode: string, dx: number, dy: number): Box {
   return { x, y, w: r - x, h: bottom - y }
 }
 
-// a video just sent to an input (or reopened from it): keep a part of it and an area of its frame, as a new file
-export function CutDialog({ path, onClose, onDone }: { path: string | null; onClose: () => void; onDone: (path: string) => void }) {
-  return (
-    <Dialog open={!!path} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[min(960px,calc(100%-2rem))] sm:max-w-[min(960px,calc(100%-2rem))]">
-        <DialogTitle>Edit reference</DialogTitle>
-        <DialogDescription>Drag the ends of the strip to keep a part, the frame's edges to crop. Closing keeps the video whole.</DialogDescription>
-        {path && <Editor key={path} path={path} onClose={onClose} onDone={onDone} />}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function Editor({ path, onClose, onDone }: { path: string; onClose: () => void; onDone: (path: string) => void }) {
-  const src = fileUrl(path)
-  const video = useRef<HTMLVideoElement>(null)
-  const frame = useRef<HTMLDivElement>(null)
-  const track = useRef<HTMLDivElement>(null)
+// a video's frames side by side: as many as fit at the strip's height, each the moment under its middle
+export function FilmStrip({ src, duration }: { src: string; duration: number }) {
   const strip = useRef<HTMLCanvasElement>(null)
-  const drag = useRef<{ mode: string; px: number; py: number; box: Box } | null>(null)
-  const scrub = useRef<string | null>(null)
-  const [size, setSize] = useState({ w: 0, h: 0, duration: 0 })
-  const [failed, setFailed] = useState(false)
-  const [box, setBox] = useState(WHOLE)
-  const [range, setRange] = useState({ start: 0, end: 0 })
-  const [time, setTime] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const { duration } = size
-
-  // the strip: as many frames as fit at its height, each the moment under its middle
   useEffect(() => {
     const c = strip.current
     if (!c || !duration) return
@@ -95,6 +67,37 @@ function Editor({ path, onClose, onDone }: { path: string; onClose: () => void; 
       v.load()
     }
   }, [src, duration])
+  return <canvas ref={strip} className="pointer-events-none size-full" />
+}
+
+// a video just sent to an input (or reopened from it): keep a part of it and an area of its frame, as a new file
+export function CutDialog({ path, onClose, onDone }: { path: string | null; onClose: () => void; onDone: (path: string) => void }) {
+  return (
+    <Dialog open={!!path} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-[min(960px,calc(100%-2rem))] sm:max-w-[min(960px,calc(100%-2rem))]">
+        <DialogTitle>Edit reference</DialogTitle>
+        <DialogDescription>Drag the ends of the strip to keep a part, the frame's edges to crop. Closing keeps the video whole.</DialogDescription>
+        {path && <Editor key={path} path={path} onClose={onClose} onDone={onDone} />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function Editor({ path, onClose, onDone }: { path: string; onClose: () => void; onDone: (path: string) => void }) {
+  const src = fileUrl(path)
+  const video = useRef<HTMLVideoElement>(null)
+  const frame = useRef<HTMLDivElement>(null)
+  const track = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ mode: string; px: number; py: number; box: Box } | null>(null)
+  const scrub = useRef<string | null>(null)
+  const [size, setSize] = useState({ w: 0, h: 0, duration: 0 })
+  const [failed, setFailed] = useState(false)
+  const [box, setBox] = useState(WHOLE)
+  const [range, setRange] = useState({ start: 0, end: 0 })
+  const [time, setTime] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const { duration } = size
 
   // while it plays: the playhead follows, and it stops at the end of the part kept
   useEffect(() => {
@@ -255,7 +258,7 @@ function Editor({ path, onClose, onDone }: { path: string; onClose: () => void; 
             onPointerUp={() => (scrub.current = null)}
           >
             <div className="absolute inset-0 overflow-hidden rounded-lg bg-black/40">
-              <canvas ref={strip} className="pointer-events-none size-full" />
+              <FilmStrip src={src} duration={duration} />
               <div className="absolute inset-y-0 left-0 bg-black/60" style={{ width: pct(range.start) }} />
               <div className="absolute inset-y-0 right-0 bg-black/60" style={{ left: pct(range.end) }} />
             </div>

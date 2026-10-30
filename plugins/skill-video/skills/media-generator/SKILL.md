@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background), video create and edit (animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, restyle, object swap, clean up, reframe), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit").
+description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, restyle, object swap, clean up, reframe), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -54,7 +54,10 @@ is the user's own prompt; the others fill a prompt template from their fields.
 
 - Inputs are files: `--in <input>=<file>`, once per file (`--in references=a.png --in references=b.png`). Files the
   user gave keep their path. A result of an earlier generation is in `media/<id>/`.
-- Fields: `--field <key>=<value>`, a choice among its options or free text.
+- Fields: `--field <key>=<value>`, one of its options (its label works too: `--field light=Silhouette`, `Auto` leaves it
+  out) or free text. Camera moves go in order: `--field movement="dolly in, then pan left"`. A relight's `light` is
+  words: where each light is, its color, brightness and softness. Expand's frame is four margins, a share of the image
+  on each side: `--field left=0.25 --field right=0.25`.
 - `--prompt "…"` adds the user's words to the template, or is the whole prompt with "Custom". `--raw` sends the prompt
   exactly as written, without the template.
 - `@name` in the prompt brings that Element's images as references. `media.mjs elements add <name> <images…>` makes
@@ -65,7 +68,8 @@ is the user's own prompt; the others fill a prompt template from their fields.
 The tool's first recommended model, unless the user names one or it cannot do the job. `media.mjs models <kind>
 --search <words>` shows what each model takes (durations, resolutions, frames, audio, references).
 Settings: `--duration`, `--ratio`, `--resolution`, `--n` (images), `--quality`, `--sound on|off` (video), `--seed`,
-`--voice` (speech). Without them, the engine picks sensible values the model accepts: a video made from an image
+`--voice` (speech). `--batch 2` to `4` runs the same generation that many times, one job each (a seed goes up by one a
+job); the estimate and the user's yes are for the total. Without them, the engine picks sensible values the model accepts: a video made from an image
 keeps that image's ratio (the closest the model takes).
 
 ### 3. The price, then the user's yes
@@ -74,7 +78,7 @@ Run the command without `--spend`. It stops with **exit code 2** and prints the 
 say it: `$0.84`, `1,610 credits`, or `1,610 credits · $0.29` once their ElevenLabs plan is set). Then ask with AskUserQuestion, in French:
 - the price, the model and what it will make;
 - options: go at that price (recommended when it matches the request), a cheaper way when there is one (a faster
-  model, a shorter clip, a lower resolution, fewer images, `dubbing_v1` rather than `dubbing_v2`), and no.
+  model, a shorter clip, a lower resolution, fewer images or a smaller batch, `dubbing_v1` rather than `dubbing_v2`), and no.
 
 Only after a yes, run it again with `--spend <amount>` (the estimate's amount: USD for OpenRouter, credits for
 ElevenLabs).

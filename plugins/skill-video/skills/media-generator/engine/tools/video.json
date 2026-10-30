@@ -31,6 +31,188 @@
     "models": ["google/veo-3.1-fast", "kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
   },
   {
+    "id": "cinematic-camera", "label": "Cinematic camera", "group": "Camera", "mode": "create", "icon": "clapperboard",
+    "description": "A shot as if filmed on a real camera body and lens, with its camera moves in order, pacing, light and grade; optional first and last frames.",
+    "inputs": [
+      { "key": "first_frame", "kind": "image", "label": "First frame", "optional": true },
+      { "key": "last_frame", "kind": "image", "label": "Last frame", "optional": true },
+      { "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }
+    ],
+    "fields": [
+      { "key": "body", "label": "Camera", "type": "select", "section": "Camera rig", "phrase": "Shot on {}", "default": "ARRI Alexa 35", "options": [
+        { "value": "", "label": "Auto", "note": "The model's choice" },
+        { "value": "ARRI Alexa 35", "group": "Digital", "note": "Super 35, natural skin, the modern feature look" },
+        { "value": "ARRI Alexa 65", "group": "Digital", "note": "Large format, shallow depth, epic scale" },
+        { "value": "Sony Venice 2", "group": "Digital", "note": "Full frame, rich and clean, great at night" },
+        { "value": "RED V-Raptor 8K", "group": "Digital", "note": "Full frame 8K, crisp, punchy commercial look" },
+        { "value": "Blackmagic URSA Cine 12K", "group": "Digital", "note": "Large format, indie cinema look" },
+        { "value": "IMAX 70mm film camera", "group": "Film", "note": "Huge negative, immense detail and depth" },
+        { "value": "Panavision 35mm film camera", "group": "Film", "note": "Classic 35mm: grain, halation, film color" },
+        { "value": "Arriflex 416 16mm film camera", "group": "Film", "note": "Visible grain, indie and documentary feel" },
+        { "value": "Super 8 film camera", "group": "Film", "note": "Home-movie grain, soft, light leaks" },
+        { "value": "2000s DV camcorder", "group": "Vintage & everyday", "note": "Early digital video, flat color, smeary" },
+        { "value": "VHS camcorder", "group": "Vintage & everyday", "note": "Tape noise, bleeding color, 80s–90s home video" },
+        { "value": "iPhone 17 Pro", "group": "Vintage & everyday", "note": "Smartphone look, deep focus, crisp HDR" }
+      ] },
+      { "key": "lens", "label": "Lens", "type": "select", "section": "Camera rig", "phrase": "{} lens", "default": "Cooke S4 spherical prime", "options": [
+        { "value": "", "label": "Auto", "note": "The model's choice" },
+        { "value": "premium modern spherical prime", "label": "Modern prime", "group": "Spherical", "note": "Clean, sharp, neutral" },
+        { "value": "Cooke S4 spherical prime", "label": "Cooke S4", "group": "Spherical", "note": "Warm, gentle roll-off, the Cooke look" },
+        { "value": "Zeiss Master Prime", "label": "Zeiss Master Prime", "group": "Spherical", "note": "Clinical sharpness, high contrast" },
+        { "value": "1970s Canon K35 vintage prime", "label": "Canon K35 (70s)", "group": "Spherical", "note": "Soft, warm, glowing flares" },
+        { "value": "Panavision C-series anamorphic", "label": "Classic anamorphic", "group": "Anamorphic", "note": "Oval bokeh, blue streak flares" },
+        { "value": "compact modern anamorphic", "label": "Modern anamorphic", "group": "Anamorphic", "note": "Cleaner, subtle flares" },
+        { "value": "vintage anamorphic", "label": "Vintage anamorphic", "group": "Anamorphic", "note": "Strong flares, edge falloff, character" },
+        { "value": "Helios 44 swirl-bokeh", "label": "Helios 44 (swirl)", "group": "Character", "note": "Swirling background, dreamy portraits" },
+        { "value": "halation diffusion (Pro-Mist filter)", "label": "Halation diffusion", "group": "Character", "note": "Glowing highlights, soft bloom" },
+        { "value": "macro", "label": "Extreme macro", "group": "Specialty", "note": "Tiny details, razor-thin focus" },
+        { "value": "tilt-shift", "label": "Tilt-shift", "group": "Specialty", "note": "Miniature look, one slice in focus" },
+        { "value": "fisheye", "label": "Fisheye", "group": "Specialty", "note": "Ultra wide, curved edges" }
+      ] },
+      { "key": "focal", "label": "Focal length", "type": "select", "section": "Camera rig", "phrase": "{} focal length", "default": "35mm", "options": [
+        { "value": "", "label": "Auto", "note": "The model's choice" },
+        { "value": "8mm", "group": "Wide", "note": "Ultra wide, strong distortion" },
+        { "value": "14mm", "group": "Wide", "note": "Very wide, dramatic space" },
+        { "value": "18mm", "group": "Wide", "note": "Wide, the place around" },
+        { "value": "24mm", "group": "Wide", "note": "Wide, natural space" },
+        { "value": "35mm", "group": "Normal", "note": "Storytelling, close to the eye" },
+        { "value": "50mm", "group": "Normal", "note": "Like the eye" },
+        { "value": "85mm", "group": "Long", "note": "Portrait, flattering compression" },
+        { "value": "135mm", "group": "Long", "note": "Tight, isolated subject" },
+        { "value": "200mm", "group": "Long", "note": "Telephoto, stacked background" }
+      ] },
+      { "key": "aperture", "label": "Aperture", "type": "select", "section": "Camera rig", "default": "f/2.8", "options": [
+        { "value": "", "label": "Auto", "note": "The model's choice" },
+        { "value": "f/1.2", "group": "Shallow", "note": "Dreamy, razor-thin focus" },
+        { "value": "f/1.4", "group": "Shallow", "note": "Wide open, creamy bokeh" },
+        { "value": "f/2", "group": "Shallow", "note": "The subject pops" },
+        { "value": "f/2.8", "group": "Shallow", "note": "Shallow but readable" },
+        { "value": "f/4", "group": "Moderate", "note": "Some background detail" },
+        { "value": "f/5.6", "group": "Moderate", "note": "Balanced depth" },
+        { "value": "f/8", "group": "Deep", "note": "Deep focus" },
+        { "value": "f/11", "group": "Deep", "note": "Everything sharp" },
+        { "value": "f/16", "group": "Deep", "note": "Everything sharp, sunstars" }
+      ] },
+      { "key": "movement", "label": "Movement", "type": "multi", "section": "Movement", "phrase": "Camera: {}", "default": "", "options": [
+        { "value": "static shot", "group": "Static" },
+        { "value": "dolly in", "group": "Push & pull" },
+        { "value": "dolly out", "group": "Push & pull" },
+        { "value": "slow zoom in", "group": "Push & pull" },
+        { "value": "slow zoom out", "group": "Push & pull" },
+        { "value": "crash zoom", "group": "Push & pull" },
+        { "value": "dolly zoom", "group": "Push & pull" },
+        { "value": "pan left", "group": "Pan & tilt" },
+        { "value": "pan right", "group": "Pan & tilt" },
+        { "value": "whip pan", "group": "Pan & tilt" },
+        { "value": "tilt up", "group": "Pan & tilt" },
+        { "value": "tilt down", "group": "Pan & tilt" },
+        { "value": "truck left", "group": "Lateral" },
+        { "value": "truck right", "group": "Lateral" },
+        { "value": "side tracking", "group": "Lateral" },
+        { "value": "crane up", "group": "Vertical" },
+        { "value": "crane down", "group": "Vertical" },
+        { "value": "pedestal up", "group": "Vertical" },
+        { "value": "pedestal down", "group": "Vertical" },
+        { "value": "arc left", "group": "Around" },
+        { "value": "arc right", "group": "Around" },
+        { "value": "orbit around the subject", "label": "Orbit", "group": "Around" },
+        { "value": "bullet time", "group": "Around" },
+        { "value": "tracking shot following the subject", "label": "Tracking", "group": "Follow" },
+        { "value": "handheld", "group": "Follow" },
+        { "value": "Steadicam follow", "group": "Follow" },
+        { "value": "snorricam on the actor", "label": "Snorricam", "group": "Follow" },
+        { "value": "POV", "group": "Follow" },
+        { "value": "FPV drone dive", "label": "FPV drone", "group": "Aerial" },
+        { "value": "drone orbit", "group": "Aerial" },
+        { "value": "aerial pullback", "group": "Aerial" },
+        { "value": "helicopter shot", "group": "Aerial" },
+        { "value": "robot arm move", "group": "Special" },
+        { "value": "rack focus", "group": "Special" }
+      ] },
+      { "key": "tempo", "label": "Tempo", "type": "choice", "section": "Movement", "default": "", "options": [
+        { "value": "", "label": "Auto" },
+        { "value": "calm, slow pacing", "label": "Calm" },
+        { "value": "dynamic, energetic pacing", "label": "Dynamic" },
+        { "value": "chaotic, frenetic pacing", "label": "Chaotic" },
+        { "value": "one single continuous take", "label": "Single shot" }
+      ] },
+      { "key": "shot", "label": "Shot size", "type": "select", "section": "Look", "default": "", "options": [
+        { "value": "", "label": "Auto", "note": "The model's choice" },
+        { "value": "extreme wide shot", "note": "The place first, the subject small" },
+        { "value": "wide shot", "note": "The whole subject in its place" },
+        { "value": "full shot", "note": "Head to toe" },
+        { "value": "medium shot", "note": "Waist up" },
+        { "value": "medium close-up", "note": "Chest up" },
+        { "value": "close-up", "note": "The face" },
+        { "value": "extreme close-up", "note": "Eyes, a detail" },
+        { "value": "over-the-shoulder shot", "note": "Behind one person, on another" },
+        { "value": "insert shot of a detail", "label": "Insert", "note": "An object, a hand" }
+      ] },
+      { "key": "lighting", "label": "Lighting", "type": "select", "section": "Look", "default": "", "options": [
+        { "value": "", "label": "Auto", "note": "The model's choice" },
+        { "value": "natural daylight", "label": "Daylight", "note": "Plain, true to life" },
+        { "value": "golden hour sunlight, long warm shadows", "label": "Golden hour", "note": "Low warm sun" },
+        { "value": "blue hour, cool ambient dusk light", "label": "Blue hour", "note": "Cool dusk" },
+        { "value": "soft overcast light", "label": "Overcast", "note": "Even, no hard shadows" },
+        { "value": "soft window light from the side", "label": "Window", "note": "Soft side light, gentle falloff" },
+        { "value": "low-key chiaroscuro lighting, deep shadows", "label": "Low key", "note": "Dark, dramatic" },
+        { "value": "bright high-key lighting", "label": "High key", "note": "Bright, few shadows" },
+        { "value": "strong backlight, the subject as a silhouette", "label": "Silhouette", "note": "Dark shape on light" },
+        { "value": "lit by practical lamps in the scene", "label": "Practicals", "note": "Pools of warm lamp light" },
+        { "value": "hard overhead light from directly above", "label": "Overhead", "note": "Top light, dark eyes" },
+        { "value": "magenta and cyan neon light at night", "label": "Neon night", "note": "Saturated colored light" },
+        { "value": "warm flickering candlelight", "label": "Candlelight", "note": "Warm, intimate" }
+      ] },
+      { "key": "grade", "label": "Color grade", "type": "select", "section": "Look", "default": "", "options": [
+        { "value": "", "label": "Auto", "note": "The model's choice" },
+        { "value": "natural film colors, gentle contrast", "label": "Film colors", "note": "Kodak-like, true" },
+        { "value": "teal and orange grade", "label": "Teal & orange", "note": "Blockbuster contrast" },
+        { "value": "bleach bypass, desaturated and contrasty", "label": "Bleach bypass", "note": "Gritty, silvery" },
+        { "value": "warm Kodak Portra tones", "label": "Portra warm", "note": "Soft warm skin" },
+        { "value": "saturated Fuji Velvia colors", "label": "Velvia vivid", "note": "Rich, saturated" },
+        { "value": "black and white, rich contrast", "label": "Black & white", "note": "Monochrome" },
+        { "value": "candy pink pastel palette", "label": "Candy pink", "note": "Pastel, pop" },
+        { "value": "nostalgic faded blue palette", "label": "Nostalgic blue", "note": "Cool, faded" },
+        { "value": "soft muted palette", "label": "Soft muted", "note": "Low saturation, calm" },
+        { "value": "three-strip Technicolor look", "label": "Technicolor", "note": "1950s saturated color" }
+      ] },
+      { "key": "era", "label": "Era", "type": "select", "section": "Look", "phrase": "a {} look", "default": "", "options": [
+        { "value": "", "label": "Auto", "note": "Today" },
+        { "value": "1920s silent film" },
+        { "value": "1950s" },
+        { "value": "1960s" },
+        { "value": "1970s" },
+        { "value": "1980s" },
+        { "value": "1990s" },
+        { "value": "2000s" }
+      ] },
+      { "key": "genre", "label": "Genre", "type": "select", "section": "Look", "phrase": "the mood of a {} film", "default": "", "options": [
+        { "value": "", "label": "Auto", "note": "No genre" },
+        { "value": "drama" },
+        { "value": "noir", "label": "Film noir" },
+        { "value": "thriller" },
+        { "value": "horror" },
+        { "value": "comedy" },
+        { "value": "action" },
+        { "value": "science fiction" },
+        { "value": "fantasy epic" },
+        { "value": "documentary" },
+        { "value": "romance" },
+        { "value": "western" }
+      ] }
+    ],
+    "presets": [
+      { "label": "Epic reveal", "fields": { "body": "ARRI Alexa 65", "lens": "Panavision C-series anamorphic", "focal": "24mm", "aperture": "f/4", "movement": "crane up, then aerial pullback", "shot": "extreme wide shot", "tempo": "calm, slow pacing" }},
+      { "label": "Intimate drama", "fields": { "body": "ARRI Alexa 35", "lens": "Cooke S4 spherical prime", "focal": "50mm", "aperture": "f/1.4", "movement": "dolly in", "shot": "close-up", "tempo": "calm, slow pacing", "genre": "drama" }},
+      { "label": "Action chase", "fields": { "body": "RED V-Raptor 8K", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "movement": "handheld, then whip pan", "tempo": "chaotic, frenetic pacing", "genre": "action" }},
+      { "label": "Music video", "fields": { "body": "Sony Venice 2", "lens": "vintage anamorphic", "focal": "35mm", "aperture": "f/2", "movement": "orbit around the subject", "lighting": "magenta and cyan neon light at night", "tempo": "dynamic, energetic pacing" }},
+      { "label": "Thriller", "fields": { "body": "ARRI Alexa 35", "lens": "Zeiss Master Prime", "focal": "35mm", "aperture": "f/2.8", "movement": "slow zoom in", "lighting": "low-key chiaroscuro lighting, deep shadows", "genre": "thriller" }},
+      { "label": "16mm documentary", "fields": { "body": "Arriflex 416 16mm film camera", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "movement": "handheld", "genre": "documentary" }}
+    ],
+    "template": "{prompt}. {body}, {lens}, {focal}, {aperture}. {movement}. {tempo}. {shot}. {lighting}. {grade}. {era}. {genre}. Cinematic, photorealistic.",
+    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+  },
+  {
     "id": "dolly-zoom-in", "label": "Dolly zoom in", "group": "Camera", "mode": "create", "icon": "zoom-in",
     "description": "Pushes in while zooming out: the background stretches, the subject holds.",
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
@@ -165,9 +347,13 @@
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [
       { "key": "direction", "label": "Direction", "type": "choice", "options": ["sequel", "prequel"], "default": "sequel" },
+      { "key": "join", "label": "Join", "type": "choice", "default": "seamless continuity with the video: the same shot, camera and framing", "options": [
+        { "value": "seamless continuity with the video: the same shot, camera and framing", "label": "Seamless" },
+        { "value": "a cut to a new camera angle on the same scene and moment", "label": "New shot" }
+      ] },
       { "key": "next", "label": "What happens", "type": "text", "placeholder": "she turns and walks away" }
     ],
-    "template": "{next}. Same characters, place, light and camera style as the video. {prompt}",
+    "template": "{next}. {join}. Same characters, place and light as the video. {prompt}",
     "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5"],
     "local": "extend"
   },
@@ -184,10 +370,22 @@
   },
   {
     "id": "relight-atmosphere", "label": "Relight & atmosphere", "group": "Light & color", "mode": "edit", "icon": "sun",
-    "description": "Changes the time of day or the lighting, shadows follow.",
+    "description": "Changes the lighting: a preset, up to three lights you place, or your own words; shadows follow.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
-    "fields": [{ "key": "light", "label": "New light", "type": "text", "placeholder": "golden hour, low sun from the left" }],
-    "template": "Relight the video: {light}. Light and shadows follow the 3D scene, nothing else changes. {prompt}",
+    "fields": [
+      { "key": "light", "label": "Light", "type": "light", "lights": 3, "default": "a low warm sun from behind the subject's right, long soft shadows, warm orange rim on the edges, gentle haze", "options": [
+        { "value": "a low warm sun from behind the subject's right, long soft shadows, warm orange rim on the edges, gentle haze", "label": "Golden hour", "rig": [{ "az": 120, "el": 10, "color": "#ffb15c", "brightness": 80, "diffuse": 40 }] },
+        { "value": "soft daylight from a large window on the left, gentle falloff across the face, the far side in soft shadow", "label": "Window", "rig": [{ "az": -80, "el": 20, "color": "#e8f0ff", "brightness": 75, "diffuse": 70 }] },
+        { "value": "a strong bright backlight behind the subject, the subject reads as a dark silhouette against the glowing background", "label": "Silhouette", "rig": [{ "az": 180, "el": 5, "color": "#ffd9a0", "brightness": 100, "diffuse": 30 }] },
+        { "value": "bright light behind the subject, a glowing rim on the hair and shoulders, a soft dim fill on the face", "label": "Contre-jour", "rig": [{ "az": 160, "el": 30, "color": "#fff4e0", "brightness": 90, "diffuse": 50 }, { "az": 20, "el": 0, "color": "#c8d8ff", "brightness": 25, "diffuse": 90 }] },
+        { "value": "the scene lit only by the warm lamps and fixtures visible in frame, pools of warm light with dark falloff between them", "label": "Practicals", "rig": [{ "az": -45, "el": -10, "color": "#ffa040", "brightness": 60, "diffuse": 70 }, { "az": 70, "el": 0, "color": "#ff7a30", "brightness": 30, "diffuse": 80 }] },
+        { "value": "a hard top light from directly above, dark eye sockets, a pool of light around the subject and darkness beyond", "label": "Overhead fall", "rig": [{ "az": 0, "el": 80, "color": "#ffffff", "brightness": 70, "diffuse": 20 }] },
+        { "value": "two soft lights from opposite sides, a warm key on the left and a cool fill on the right, evenly modeled contrast", "label": "Soft cross", "rig": [{ "az": -60, "el": 15, "color": "#ffe0c0", "brightness": 65, "diffuse": 85 }, { "az": 120, "el": 15, "color": "#c0d8ff", "brightness": 55, "diffuse": 85 }] },
+        { "value": "a dim cool blue moonlight from high on the left, deep shadows, a night mood", "label": "Moonlight", "rig": [{ "az": -60, "el": 35, "color": "#7fa6ff", "brightness": 40, "diffuse": 60 }] },
+        { "value": "saturated magenta neon from the left and cyan neon from the right, colored reflections, dark surroundings", "label": "Night neon", "rig": [{ "az": -90, "el": 0, "color": "#ff3fb4", "brightness": 70, "diffuse": 50 }, { "az": 90, "el": 0, "color": "#2fd6ff", "brightness": 70, "diffuse": 50 }] }
+      ] }
+    ],
+    "template": "Relight the video: {light}. Light and shadows follow the 3D scene through the whole shot, nothing else changes. {prompt}",
     "models": ["runway/aleph-2", "black-forest-labs/flux-video-edit"]
   },
   {
@@ -214,13 +412,13 @@
   },
   {
     "id": "clean-up", "label": "Clean up", "group": "Retouch", "mode": "edit", "icon": "eraser",
-    "description": "Removes objects, wires or people you name.",
+    "description": "Removes objects, wires or people you name or paint over on a frame.",
     "inputs": [
       { "key": "video", "kind": "video", "label": "Video" },
-      { "key": "sketch", "kind": "sketch", "label": "Mark what goes", "optional": true }
+      { "key": "sketch", "kind": "mask", "label": "Paint what goes", "optional": true }
     ],
     "fields": [{ "key": "what", "label": "Remove", "type": "text", "placeholder": "the boom mic at the top and the man in the background" }],
-    "template": "Remove {what} from the whole video and fill the background naturally. Nothing else changes. {prompt}",
+    "template": "Remove {what} from the whole video and fill the background naturally; a reference frame with an area painted in translucent magenta marks what goes. Nothing else changes. {prompt}",
     "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2"]
   },
   {

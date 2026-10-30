@@ -187,6 +187,50 @@ test('extend: the last frame starts the new shot, joined after the source; refra
   assert.ok(!ledger().some(l => l.tool === 'reframe'), 'nothing to log for a free local tool')
 })
 
+test('rich fields: an Auto option leaves nothing in the prompt, a label stands for its value, the moves come in order', async () => {
+  const est = async (...argv) => JSON.parse((await cli(...argv, '--estimate')).out)
+  const a = await est('image', '--tool', 'cinematic-camera', '--model', 'fake/img', '--prompt', 'a man', '--field', 'body=Auto', '--field', 'lens=Auto', '--field', 'shot=close-up')
+  assert.equal(a.prompt, 'a man. 35mm focal length, f/2.8: matching depth of field, perspective and lens rendering. close-up. A cinematic, photorealistic film still.')
+  const v = await est('video', '--tool', 'cinematic-camera', '--model', 'fake/vid', '--prompt', 'a dancer', '--field', 'movement=dolly in, then pan left', '--field', 'tempo=Calm')
+  assert.match(v.prompt, /^a dancer\. Shot on ARRI Alexa 35, Cooke S4 spherical prime lens, 35mm focal length, f\/2\.8\. Camera: dolly in, then pan left\. calm, slow pacing\. Cinematic/)
+  const f = await cli('video', '--tool', 'cinematic-camera', '--model', 'fake/vid', '--prompt', 'a dancer', '--in', `first_frame=${at('a.png')}`, '--in', `last_frame=${at('a.png')}`, '--spend', '1')
+  assert.equal(f.code, 0, f.err)
+  assert.deepEqual(sent('/api/v1/videos').body.frame_images.map(i => i.frame_type), ['first_frame', 'last_frame'])
+  const r = await est('video', '--tool', 'relight-atmosphere', '--model', 'fake/vid', '--in', `video=${at('talk.mp4')}`, '--field', 'light=silhouette')
+  assert.match(r.prompt, /^Relight the video: a strong bright backlight behind the subject, the subject reads as a dark silhouette/)
+  const t = await cli('tools', 'video', '--search', 'cinematic')
+  assert.match(t.out, /--field movement="<one>, then <another>" \(Static shot\|Dolly in\|/i)
+  assert.match(t.out, /--field body=Auto\|ARRI Alexa 35\|/)
+})
+
+test('a batch: one yes for the total, as many jobs as asked, side by side; a seed goes up by one a job', async () => {
+  const no = await cli('image', '--prompt', 'a kite', '--model', 'fake/img', '--batch', '3')
+  assert.equal(no.code, 2)
+  assert.deepEqual([JSON.parse(no.out.trim()).estimate.amount, JSON.parse(no.out.trim()).estimate.detail.startsWith('3 × ')], [0.12, true])
+  const before = media().length, lines = ledger().length
+  const r = await cli('image', '--prompt', 'a kite', '--model', 'fake/img', '--batch', '3', '--spend', '0.12')
+  assert.equal(r.code, 0, r.err)
+  assert.deepEqual([media().length - before, ledger().length - lines, (r.out.match(/^done: /gm) ?? []).length], [3, 3, 3])
+  const calls = fake.calls.filter(c => c.path === '/api/v1/videos' && c.method === 'POST').length
+  const s = await cli('video', '--prompt', 'waves', '--model', 'fake/vid', '--seed', '7', '--batch', '2', '--spend', '2')
+  assert.equal(s.code, 0, s.err)
+  assert.deepEqual(fake.calls.filter(c => c.path === '/api/v1/videos' && c.method === 'POST').slice(calls).map(c => c.body.seed).sort(), [7, 8])
+})
+
+test('expand: the image on its larger frame, gray margins, at the model\'s closest ratio; no frame, nothing sent', async () => {
+  const none = await cli('image', '--tool', 'expand', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--estimate')
+  assert.match(none.err, /drag the frame wider or taller first/)
+  const r = await cli('image', '--tool', 'expand', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'left=0.5', '--field', 'right=0.5', '--spend', '0.04')
+  assert.equal(r.code, 0, r.err)
+  const body = sent('/api/v1/images').body, png = at('sent-canvas.png')
+  fs.writeFileSync(png, Buffer.from(body.input_references[0].image_url.url.split(',')[1], 'base64'))
+  const c = probe(png).streams[0]
+  assert.deepEqual([c.width, c.height, body.aspect_ratio, body.input_references.length], [128, 64, '16:9', 1])
+  assert.match(body.prompt, /^The image sits on a larger canvas with flat gray margins/)
+  const job = JSON.parse(fs.readFileSync(at('media', media().filter(d => d.includes('expand')).at(-1), 'job.json'), 'utf8'))
+  assert.deepEqual(Object.keys(job.spec.inputs), ['image'], 'the original is kept for a remix, not the canvas')
+})
+
 test('speech: a voice that only answers PCM is wrapped into an MP3 at its rate; its cost from the generation stats, once they answer', async () => {
   const r = await cli('audio', '--model', 'fake/pcm-tts', '--prompt', 'Hello there', '--voice', 'bo', '--spend', '1')
   assert.equal(r.code, 0, r.err)
@@ -270,6 +314,13 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.deepEqual([job.status, job.by, job.outputs], ['done', 'dashboard', ['out-1.png', 'out-2.png']])
   assert.equal((await fetch(`${url}/files?path=${encodeURIComponent(at('media', job.id, 'out-1.png'))}`)).headers.get('content-type'), 'image/png')
   assert.equal((await fetch(`${url}/files?path=${encodeURIComponent('/etc/hosts')}`)).status, 404)
+  // a batch from the dashboard: its total asks first, then as many jobs
+  const batch = { ...spec, params: {}, batch: 2 }
+  assert.deepEqual([(await post('/api/estimate', batch)).body.shown, (await post('/api/generate', batch)).code], ['$0.08', 409])
+  assert.equal((await post('/api/generate', { ...batch, confirm: true })).body.ids.length, 2)
+  // a frame of a video at a moment, to paint a mask on
+  const frame = await post('/api/frame', { path: at('talk.mp4'), t: 1.5 })
+  assert.equal(probe(frame.body.path).streams[0].width, 320)
   // Edit reference: a sent video cut to 0.5–2 s and to its left half, as a new file with its sound; the original stays
   const cut = await post('/api/cut', { path: at('talk.mp4'), start: 0.5, end: 2, crop: { x: 0, y: 0, w: 0.5, h: 1 } }), c = probe(cut.body.path), v = c.streams.find(s => s.codec_type === 'video')
   assert.deepEqual([path.dirname(cut.body.path), v.width, v.height, c.streams.some(s => s.codec_type === 'audio')], [at('.cache', 'uploads'), 160, 180, true])
