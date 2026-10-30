@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { AudioLinesIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, StarIcon, Trash2Icon } from "lucide-react"
+import { AudioLinesIcon, ChevronLeftIcon, ChevronRightIcon, Columns2Icon, CopyIcon, DownloadIcon, StarIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -10,6 +10,7 @@ import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job }
 import { Label } from "@/components/chips"
 import { Thumb } from "@/components/inputs"
 import { BRIDGES, costOf, DeleteDialog, REMIX, SEND, sendToEdit, type Bridge } from "@/components/results"
+import { CompareDialog } from "@/components/compare"
 
 // the settings a result was made with, in words
 const PARAMS: Record<string, [string, (v: unknown) => string]> = {
@@ -54,7 +55,7 @@ export function Viewer({
             if (e.key === "ArrowRight") go(1)
           }}
         >
-          <Body key={job.id} job={job} home={home} per1000={per1000} prev={i > 0 ? () => go(-1) : null} next={i < jobs.length - 1 ? () => go(1) : null} onBridge={(b, f) => (onId(null), onBridge(b, job, f))} onDeleted={() => onId(null)} />
+          <Body key={job.id} job={job} jobs={jobs} home={home} per1000={per1000} prev={i > 0 ? () => go(-1) : null} next={i < jobs.length - 1 ? () => go(1) : null} onBridge={(b, f) => (onId(null), onBridge(b, job, f))} onDeleted={() => onId(null)} />
         </DialogContent>
       )}
     </Dialog>
@@ -63,6 +64,7 @@ export function Viewer({
 
 function Body({
   job,
+  jobs,
   home,
   per1000,
   prev,
@@ -71,6 +73,7 @@ function Body({
   onDeleted,
 }: {
   job: Job
+  jobs: Job[]
   home: string
   per1000: number | null
   prev: (() => void) | null
@@ -80,6 +83,7 @@ function Body({
 }) {
   const [out, setOut] = useState(0)
   const [confirm, setConfirm] = useState(false)
+  const [comparing, setComparing] = useState(false)
   const file = job.outputs[out] ? outputPath(home, job, job.outputs[out]) : null
   const k = file ? mediaKind(file) : null
   const failed = job.status === "failed"
@@ -91,6 +95,7 @@ function Body({
     ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) }]),
     ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => ({ ...x, run: () => onBridge(x.b, file!) }))),
     ...(failed || !file ? [] : [{ ...SEND, run: () => sendToEdit(file) }]),
+    ...(failed || !file ? [] : [{ label: "Compare", icon: Columns2Icon, run: () => setComparing(true) }]),
   ]
 
   return (
@@ -229,6 +234,7 @@ function Body({
           )}
         </div>
         <DeleteDialog job={job} open={confirm} onOpenChange={setConfirm} onDeleted={onDeleted} />
+        {file && <CompareDialog open={comparing} onOpenChange={setComparing} origin={job} file={file} jobs={jobs} home={home} per1000={per1000} />}
       </aside>
     </>
   )

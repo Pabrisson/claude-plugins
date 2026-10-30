@@ -238,7 +238,7 @@ function Slot({
 type Pick = { path: string; job: Job }
 
 // a voice in the list: its own play button
-function Listen({ path }: { path: string }) {
+export function Listen({ path }: { path: string }) {
   const [playing, setPlaying] = useState(false)
   const audio = useRef<HTMLAudioElement>(null)
   return (
