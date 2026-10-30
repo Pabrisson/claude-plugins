@@ -1,6 +1,6 @@
 {
   "name": "skill-video",
-  "version": "1.31.0",
+  "version": "1.32.0",
   "description": "Two skills. video-editor: edit a video of any genre from one or several rushes and B-roll, or create one from scratch in motion design, with a local review studio, editing rule packs per genre and synthesized sound. media-generator: generate and edit images, videos and voices through model routers (OpenRouter), change voices and dub through ElevenLabs, from a local dashboard or from prompts, every cost shown",
   "author": {
     "name": "Pierre Alain BRISSON"

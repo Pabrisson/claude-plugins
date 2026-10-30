@@ -1,39 +1,55 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { ContextMenu } from "radix-ui"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
+import { ContextMenu, DropdownMenu as DropdownPrims } from "radix-ui"
 import {
+  ChevronRightIcon,
+  ClapperboardIcon,
   CopyPlusIcon,
   EyeIcon,
   EyeOffIcon,
   FastForwardIcon,
   MaximizeIcon,
+  MicIcon,
   MinimizeIcon,
   MinusIcon,
   PauseIcon,
   PlayIcon,
   PlusIcon,
+  RatioIcon,
   RedoIcon,
   RefreshCwIcon,
   ReplaceIcon,
+  RewindIcon,
   ScissorsIcon,
   SkipBackIcon,
   SkipForwardIcon,
+  SnowflakeIcon,
   SparklesIcon,
   Trash2Icon,
   UndoIcon,
   Volume2Icon,
   VolumeXIcon,
+  WandSparklesIcon,
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { api, fileUrl, plain, STRIP, stripUrl, waveUrl, type Clip, type Job, type Timeline, type Workspace } from "@/lib/api"
-import { cuts, duplicate, edit, endOf, FPS, isStill, lay, layOnNewTrack, lenOf, mainOf, marks, move, nearest, numbers, place, RATIOS, remove, settle, split, totalOf, trackKind, trackName, uid, withTracks, type Shot } from "@/lib/timeline"
+import { api, fileUrl, isLocal, plain, STRIP, stripUrl, waveUrl, type Clip, type Job, type Kind, type Timeline, type Tool, type Workspace } from "@/lib/api"
+import { cuts, duplicate, edit, endOf, fits, FPS, inside, isStill, lay, layOnNewTrack, lenOf, mainOf, marks, move, nearest, numbers, offers, place, RATIOS, remove, settle, split, totalOf, trackKind, trackName, uid, voiceUnder, withTracks, type Shot } from "@/lib/timeline"
 import { LibraryList, type Pick } from "@/components/inputs"
+import { ToolIcon } from "@/components/chips"
+
+// what the timeline asks the composer for: a tool on a clip (edit it, start from its frame; ratio, the edit's format),
+// Extend after or before it, a Remix of it, a freeze frame of it at the playhead, or a voice at the playhead on a track
+export type Ask =
+  | { how: "edit" | "frame"; kind: Kind; tool: string; clip: Clip; time: number; ratio: string }
+  | { how: "after" | "before" | "remix" | "freeze"; clip: Clip; time: number }
+  | { how: "voice"; track: string; time: number }
 
 // a shot dragged from the bin, with its length: a drag's data cannot be read before the drop, its preview needs it
 let dragged: (Shot & { dur?: number }) | null = null
@@ -159,8 +175,9 @@ export function TimelineEditor({
   side,
   header,
   focus,
+  tools,
   onBridge,
-  onTake,
+  onAsk,
 }: {
   timeline: Timeline
   onChange: (fn: (t: Timeline) => Timeline) => void
@@ -174,10 +191,11 @@ export function TimelineEditor({
   header: React.ReactNode
   // a file to show selected at the start (a result's « #2 »)
   focus?: string | null
-  // a video made from the last frame of the shot before to the first frame of the one after
-  onBridge: (a: Clip, b: Clip, track: string) => void
-  // a new take of a clip, laid in its place once done
-  onTake: (how: "extend" | "remix", c: Clip) => void
+  tools: Record<Kind, Tool[]>
+  // a video made by a tool from the last frame of the shot before to the first frame of the one after
+  onBridge: (a: Clip, b: Clip, track: string, tool: string) => void
+  // a tool, a freeze frame or a voice, laid by its clip or at the playhead once done
+  onAsk: (a: Ask) => void
 }) {
   const focused = focus ? t.clips.find((c) => c.path === focus) : undefined
   const [time, setTime] = useState(focused?.at ?? 0)
@@ -420,11 +438,55 @@ export function TimelineEditor({
     split: () => onChange((x) => split(x, c.id, time)),
     duplicate: () => onChange((x) => duplicate(x, c.id)),
     swap: () => (setSel(c.id), setSwapping(true)),
-    extend: kindOf(c) === "video" && !isStill(c.path) ? () => onTake("extend", c) : undefined,
-    remix: job(c) && job(c)!.tool !== "import" ? () => onTake("remix", c) : undefined,
+    remix: job(c) && job(c)!.tool !== "import" ? () => onAsk({ how: "remix", clip: c, time }) : undefined,
     remove: () => drop(c.id),
+    generate: () => generate(c),
   })
   const act = selected && actions(selected)
+  // a picture not in the edit's format: Reframe (a video, here and free) or Expand (a still) bring it to it
+  const misfit = (c: Clip) => {
+    const m = meta(c)
+    return kindOf(c) === "video" && !!m?.w && !!m?.h && !fits(m.w, m.h, ratio)
+  }
+  const fit = (c: Clip) => onAsk({ how: "edit", kind: isStill(c.path) ? "image" : "video", tool: isStill(c.path) ? "expand" : "reframe", clip: c, time, ratio })
+  // what a clip's menus offer to make of it: Extend, a freeze frame, its format, then the tools that take it, by what
+  // they make of it, each list grouped as the tool picker groups them
+  function generate(c: Clip): Generate {
+    const kind = kindOf(c), still = isStill(c.path), video = kind === "video" && !still, at = inside(c, time) ? time : null
+    const voice = voiceUnder(t, c, time)
+    const top: Entry[] = [
+      ...(video
+        ? [
+            { label: "Extend after", icon: <FastForwardIcon />, note: "a new shot", run: () => onAsk({ how: "after", clip: c, time }) },
+            { label: "Extend before", icon: <RewindIcon />, note: "a new shot", run: () => onAsk({ how: "before", clip: c, time }) },
+          ]
+        : []),
+      ...(video && at != null ? [{ label: `Freeze frame at ${at.toFixed(1)} s`, icon: <SnowflakeIcon />, note: "free", run: () => onAsk({ how: "freeze", clip: c, time }) }] : []),
+      ...(misfit(c) ? [{ label: `Fit to ${ratio}`, icon: <RatioIcon />, note: still ? "Expand" : "Reframe, free", run: () => fit(c) }] : []),
+    ]
+    const title = (o: "edit" | "frame") =>
+      o === "edit" ? (kind === "audio" ? "Edit this sound" : still ? "Edit this image" : "Edit this shot") : still ? "Animate this image" : at != null ? `From the frame at ${at.toFixed(1)} s` : "Next shot from its last frame"
+    const subs = offers(tools, c, kind)
+      .filter((o) => o.items.length)
+      .map((o) => {
+        const groups: [string, Entry[]][] = []
+        for (const { kind: k, tool: x } of o.items) {
+          const e = { label: x.label, icon: <ToolIcon name={x.icon} />, note: x.id === "talking-avatar" && voice ? "says the voice under it" : isLocal(x) ? "free" : undefined, run: () => onAsk({ how: o.title, kind: k, tool: x.id, clip: c, time, ratio }) }
+          const g = groups.find(([name]) => name === x.group)
+          if (g) g[1].push(e)
+          else groups.push([x.group, [e]])
+        }
+        return { label: title(o.title), icon: o.title === "edit" ? <WandSparklesIcon /> : <ClapperboardIcon />, groups }
+      })
+    return { top, subs }
+  }
+  // the tools a Bridge shot can run: those that take a first and a last frame
+  const bridges = tools.video.filter((x) => ["first_frame", "last_frame"].every((k) => x.inputs.some((i) => i.key === k && i.kind === "image")))
+  // a voice at the playhead: on the first audio track free there, else on a new one
+  const voiceHere = () => {
+    const free = t.tracks.find((tr) => tr.kind === "audio" && !t.clips.some((c) => c.track === tr.id && time < endOf(c) && time + 0.1 > c.at))
+    onAsk({ how: "voice", track: free?.id ?? `a${uid()}`, time })
+  }
   return (
     <div className="col-span-2 grid min-h-0 min-w-0" style={{ gridTemplateRows: `minmax(0,1fr) 8px ${height}px` }} onKeyDown={keys}>
       <div className="grid min-h-0 min-w-0 grid-cols-[minmax(340px,392px)_minmax(0,1fr)]">
@@ -478,6 +540,9 @@ export function TimelineEditor({
           <Button size="icon-sm" variant="ghost" disabled={!act} aria-label="Delete the clip" title="Delete the clip (Delete)" onClick={act?.remove}>
             <Trash2Icon />
           </Button>
+          <Button size="sm" variant="ghost" onClick={voiceHere} title="Audio › Voice: the voice is laid at the playhead once done">
+            <MicIcon data-icon="inline-start" /> Voice here
+          </Button>
           {selected && act && (
             <span className="flex min-w-0 items-center gap-1.5 border-l pl-3">
               {nums[selected.id] && <span className="rounded bg-vid/15 px-1.5 text-xs font-semibold text-vid tabular-nums">#{nums[selected.id]}</span>}
@@ -500,11 +565,16 @@ export function TimelineEditor({
                   <LibraryList title={`In place of ${name(selected)}`} items={items.filter((i) => trackKind(i.path) === kindOf(selected))} picked={[selected.path]} onPick={(p) => swap(selected, p)} />
                 </PopoverContent>
               </Popover>
-              {act.extend && (
-                <Button size="sm" variant="ghost" onClick={act.extend} title="Continue this shot: the result takes its place">
-                  <FastForwardIcon data-icon="inline-start" /> Extend
-                </Button>
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="ghost" title="A tool on this clip: the result is laid by it once done">
+                    <SparklesIcon data-icon="inline-start" /> Generate
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-56">
+                  <GenerateItems M={DropdownPrims as unknown as Prims} make={act.generate} />
+                </DropdownMenuContent>
+              </DropdownMenu>
               {act.remix && (
                 <Button size="sm" variant="ghost" onClick={act.remix} title="The same settings in the composer: the result takes its place">
                   <RefreshCwIcon data-icon="inline-start" /> Remix
@@ -587,6 +657,7 @@ export function TimelineEditor({
                           aspect={meta(c)?.w && meta(c)?.h ? meta(c)!.w! / meta(c)!.h! : 16 / 9}
                           state={c.id === GHOST ? "ghost" : preview && c.id === sel ? "lifted" : sel === c.id ? "selected" : null}
                           off={!!tr.off}
+                          misfit={c.id !== GHOST && misfit(c) ? { ratio, run: () => fit(c) } : undefined}
                           onGrab={(e, mode) => grab(e, c, mode)}
                           onSelect={() => setSel(c.id)}
                         />
@@ -595,18 +666,28 @@ export function TimelineEditor({
                     {main &&
                       !preview &&
                       cuts(shown).map(({ a, b }) => (
-                        <button
-                          key={`${a.id}-${b.id}`}
-                          type="button"
-                          aria-label={`Bridge shot between #${nums[a.id]} and #${nums[b.id]}`}
-                          title="Bridge shot: a video from the last frame before to the first frame after, laid in this cut"
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={() => onBridge(a, b, tr.id)}
-                          className="absolute bottom-0 z-10 grid size-5 -translate-x-1/2 translate-y-1/2 place-items-center rounded-full border bg-background text-space shadow-sm transition-colors hover:bg-space hover:text-space-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                          style={{ left: endOf(a) * px }}
-                        >
-                          <SparklesIcon className="size-3" />
-                        </button>
+                        <DropdownMenu key={`${a.id}-${b.id}`}>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={`Bridge shot between #${nums[a.id]} and #${nums[b.id]}`}
+                              title="Bridge shot: a video from the last frame before to the first frame after, laid in this cut"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              className="absolute bottom-0 z-10 grid size-5 -translate-x-1/2 translate-y-1/2 place-items-center rounded-full border bg-background text-space shadow-sm transition-colors hover:bg-space hover:text-space-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-space data-[state=open]:text-space-foreground"
+                              style={{ left: endOf(a) * px }}
+                            >
+                              <SparklesIcon className="size-3" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="center" className="min-w-56" onPointerDown={(e) => e.stopPropagation()}>
+                            <DropdownPrims.Label className="px-2 py-1 text-xs text-muted-foreground">Bridge shot from #{nums[a.id]} to #{nums[b.id]}</DropdownPrims.Label>
+                            {bridges.map((x) => (
+                              <DropdownPrims.Item key={x.id} className={ITEM} onSelect={() => onBridge(a, b, tr.id, x.id)}>
+                                <ToolIcon name={x.icon} /> <span className="flex-1">{x.label}</span>
+                              </DropdownPrims.Item>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       ))}
                   </div>
                 </div>
@@ -646,6 +727,7 @@ function ClipBox({
   aspect,
   state,
   off,
+  misfit,
   onGrab,
   onSelect,
   ...rest
@@ -659,6 +741,8 @@ function ClipBox({
   aspect: number
   state: "ghost" | "lifted" | "selected" | null
   off: boolean
+  // not in the edit's format: a badge that fits it
+  misfit?: { ratio: string; run: () => void }
   onGrab: (e: React.PointerEvent, mode: "move" | "start" | "end") => void
   onSelect: () => void
 } & React.ComponentProps<"div">) {
@@ -699,6 +783,18 @@ function ClipBox({
         {number && <b className="tabular-nums">#{number}</b>}
         <span className="truncate">{name}</span>
       </span>
+      {misfit && width > 56 && (
+        <button
+          type="button"
+          aria-label={`Fit to ${misfit.ratio}`}
+          title={`Not ${misfit.ratio}: fit it to the edit's format (${still ? "Expand" : "Reframe, free"})`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={misfit.run}
+          className="absolute top-1 right-2.5 grid size-4.5 place-items-center rounded bg-black/60 text-white transition-colors hover:bg-space hover:text-space-foreground"
+        >
+          <RatioIcon className="size-3" />
+        </button>
+      )}
       <span aria-hidden onPointerDown={(e) => onGrab(e, "start")} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize hover:bg-white/30" />
       <span aria-hidden onPointerDown={(e) => onGrab(e, "end")} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize hover:bg-white/30" />
     </div>
@@ -706,27 +802,72 @@ function ClipBox({
 }
 
 // a clip's right-click menu: what the toolbar does to the selected one
-const ITEM = "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground [&_svg]:size-4"
-function ClipMenu({ actions, children }: { actions: { split: () => void; duplicate: () => void; swap: () => void; extend?: () => void; remix?: () => void; remove: () => void }; children: React.ReactNode }) {
+const ITEM = "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent [&_svg]:size-4 [&_svg]:shrink-0"
+const MENU = "z-50 min-w-48 rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+const SEPARATOR = "-mx-1 my-1 h-px bg-border"
+
+// Generate's items, the same in the right-click menu and the toolbar's: a few on their own, then a sub-menu per thing
+// to make of the clip, its tools under their group; made when the menu opens
+type Entry = { label: string; icon: React.ReactNode; note?: string; run: () => void }
+type Generate = { top: Entry[]; subs: { label: string; icon: React.ReactNode; groups: [string, Entry[]][] }[] }
+// the menu parts both kinds of menu have alike
+type Prims = typeof ContextMenu
+function GenerateItems({ M, make }: { M: Prims; make: () => Generate }) {
+  const { top, subs } = make()
+  const item = (e: Entry) => (
+    <M.Item key={e.label} className={ITEM} onSelect={e.run}>
+      {e.icon} <span className="flex-1">{e.label}</span>
+      {e.note && <span className="text-xs text-muted-foreground">{e.note}</span>}
+    </M.Item>
+  )
+  return (
+    <>
+      {top.map(item)}
+      {subs.map((s, i) => (
+        <M.Sub key={i}>
+          <M.SubTrigger className={ITEM}>
+            {s.icon} <span className="flex-1">{s.label}</span>
+            <ChevronRightIcon className="text-muted-foreground" />
+          </M.SubTrigger>
+          <M.Portal>
+            <M.SubContent className={cn(MENU, "max-h-[70vh] min-w-60 overflow-y-auto")}>
+              {s.groups.map(([group, list], i) => (
+                <Fragment key={group}>
+                  {i > 0 && <M.Separator className={SEPARATOR} />}
+                  <M.Label className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">{group}</M.Label>
+                  {list.map(item)}
+                </Fragment>
+              ))}
+            </M.SubContent>
+          </M.Portal>
+        </M.Sub>
+      ))}
+    </>
+  )
+}
+
+function ClipMenu({ actions, children }: { actions: { split: () => void; duplicate: () => void; swap: () => void; remix?: () => void; remove: () => void; generate: () => Generate }; children: React.ReactNode }) {
   const items = [
     { label: "Split at the playhead", run: actions.split, icon: ScissorsIcon, key: "S" },
     { label: "Duplicate", run: actions.duplicate, icon: CopyPlusIcon, key: "⌘D" },
     { label: "Swap take…", run: actions.swap, icon: ReplaceIcon },
-    ...(actions.extend ? [{ label: "Extend", run: actions.extend, icon: FastForwardIcon }] : []),
     ...(actions.remix ? [{ label: "Remix", run: actions.remix, icon: RefreshCwIcon }] : []),
   ]
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content className="z-50 min-w-48 rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95">
+        {/* a press in it never reaches the track it is drawn from (React bubbles through portals): the playhead stays */}
+        <ContextMenu.Content className={MENU} onPointerDown={(e) => e.stopPropagation()}>
           {items.map((it) => (
             <ContextMenu.Item key={it.label} className={ITEM} onSelect={it.run}>
               <it.icon /> <span className="flex-1">{it.label}</span>
               {"key" in it && <span className="text-xs text-muted-foreground">{it.key}</span>}
             </ContextMenu.Item>
           ))}
-          <ContextMenu.Separator className="-mx-1 my-1 h-px bg-border" />
+          <ContextMenu.Separator className={SEPARATOR} />
+          <GenerateItems M={ContextMenu} make={actions.generate} />
+          <ContextMenu.Separator className={SEPARATOR} />
           <ContextMenu.Item className={cn(ITEM, "text-destructive focus:bg-destructive/10 focus:text-destructive")} onSelect={actions.remove}>
             <Trash2Icon /> <span className="flex-1">Delete</span>
             <span className="text-xs text-muted-foreground">⌫</span>

@@ -33,9 +33,9 @@ export function slotFor(tool: Tool, value: Record<string, string[]>, name: strin
   return tool.inputs.find((i) => !drawn(i) && fits(i, name) && (i.multiple ? limits[i.key] == null || n(i) < limits[i.key] : !n(i)))
 }
 
-// a file as a small tile: its picture, its first frame, or a sound icon
+// a file as a small tile: its picture, its first frame, or a sound icon (its name without the time an upload put first)
 export function Thumb({ path, className }: { path: string; className?: string }) {
-  const k = mediaKind(path), name = path.split("/").pop()
+  const k = mediaKind(path), name = path.split("/").pop()?.replace(/^\d+-/, "")
   if (k === "image") return <img src={fileUrl(path)} alt={name} className={cn("size-full object-cover", className)} />
   if (k === "video") return <video src={fileUrl(path)} muted preload="metadata" className={cn("size-full object-cover", className)} />
   return (

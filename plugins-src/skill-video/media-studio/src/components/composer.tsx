@@ -100,6 +100,14 @@ export function modelsFor(tool: Tool, kind: Kind, models: Model[]) {
 
 const COMMON_LANGS = ["en", "fr", "es", "de", "it", "pt", "ja", "zh"]
 
+// where the result goes, as the composer says it (back: Extend going back in time, before its clip)
+function placeText(p: Place, kind: Kind, back: boolean) {
+  if (!p.replace) return kind === "audio" ? `The voice goes in at ${p.at.toFixed(1)} s` : `The result goes into the cut at ${p.at.toFixed(1)} s`
+  if (p.how === "after") return back ? "The result goes right before its clip" : "The result goes right after its clip"
+  if (p.how === "from") return p.to == null ? `The result replaces its clip from ${p.at.toFixed(1)} s` : `The result replaces its clip from ${p.at.toFixed(1)} s, for the voice's ${(p.to - (p.from ?? 0)).toFixed(1)} s`
+  return p.how === "whole" ? "The result replaces its clip" : "The result takes its clip's place"
+}
+
 // the tool list's prices for the session, per space, tool and model (a probe estimate, before any input)
 const PRICES = new Map<string, string>()
 
@@ -380,7 +388,7 @@ export function Composer({
           <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
             <ListVideoIcon className="size-4 shrink-0 text-space" aria-hidden />
             <span className="flex-1">
-              {value.place.replace ? "The result takes its clip's place" : `The result goes into the cut at ${value.place.at.toFixed(1)} s`} on the timeline of{" "}
+              {placeText(value.place, kind, tool.id === "extend" && value.fields.direction === "prequel")} on the timeline of{" "}
               {state.workspaces.find((w) => w.slug === value.place!.workspace)?.name ?? "its workspace"}.
             </span>
             <Button size="icon-xs" variant="ghost" aria-label="Do not lay the result on the timeline" title="Do not lay it on the timeline" onClick={() => set({ place: undefined })}>

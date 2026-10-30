@@ -1,13 +1,14 @@
 // The timeline's edits, as plain functions of it (the editor, the App's Bridge shots and takes, the drag previews all
 // use them). The main track (the bottom video track) holds its shots end to end, in order, from 0; on the other
 // tracks a clip sits where it is put, and pushes the ones it would cover to the right
-import type { Clip, Place, Timeline, Track } from "./api.ts"
+import type { Clip, Kind, Place, Timeline, Tool, Track } from "./api.ts"
 
 // what a file lays on the timeline: its path and the generation it is from
 export type Shot = { path: string; job: string }
 
-// a still's length when laid
+// a still's length when laid, a freeze frame's
 export const STILL = 3
+export const FREEZE = 2
 export const FPS = 30
 export const RATIOS = { "16:9": 16 / 9, "9:16": 9 / 16, "1:1": 1, "4:5": 4 / 5 } as const
 
@@ -114,22 +115,44 @@ export function layOnNewTrack(t: Timeline, shot: Shot, dur?: number, at = 0, id?
   return put(t2, clipOf(shot, tr, dur, id), tr, at)
 }
 
-// a result laid where its Bridge shot or take asked: in place of a clip (its time and length kept, shorter if the file
-// is), or in a cut of its track
+// a result laid where it was asked (see Place): by its clip (a take keeps the clip's time and length, shorter if the
+// file is; whole and from take the result's; after and before make a shot of their own), or in a cut of its track (a
+// new track when it is gone)
 export function place(t: Timeline, shot: Shot, p: Place, dur?: number): Timeline {
   const old = p.replace ? t.clips.find((c) => c.id === p.replace) : null
-  if (old) return edit(t, old.id, { job: shot.job, file: shot.path.split("/").pop()!, path: shot.path, in: 0, out: Math.min(lenOf(old), dur ?? STILL), dur })
-  if (!t.tracks.some((x) => x.id === p.track && x.kind === trackKind(shot.path))) return lay(t, shot, dur, undefined, p.at)
+  const file = { job: shot.job, file: shot.path.split("/").pop()!, path: shot.path, ...(p.mute ? { volume: 0 } : {}) }
+  if (old && (p.how === "after" || p.how === "before")) {
+    const after = p.how === "after"
+    return put(t, { ...clipOf(shot, old.track, dur), ...file }, old.track, after ? endOf(old) : old.at, onTrack(t, old.track).indexOf(old) + Number(after))
+  }
+  if (old && p.how === "from") {
+    // the stretch cut out of the clip first (from `to`, then from `from`): the result takes its place, the rest stays
+    const time = (s: number) => old.at + Math.min(Math.max(s, old.in), old.out) - old.in, mid = uid()
+    const cut = split(p.to == null ? t : split(t, old.id, time(p.to)), old.id, time(p.from ?? old.in), mid)
+    return place(cut, shot, { ...p, replace: cut.clips.some((c) => c.id === mid) ? mid : old.id, how: "whole" }, dur)
+  }
+  if (old) return edit(t, old.id, { ...file, in: 0, out: dur == null ? lenOf(old) : p.how === "whole" ? dur : Math.min(lenOf(old), dur), dur })
+  const tr = t.tracks.find((x) => x.id === p.track)
+  if (!tr) return layOnNewTrack(t, shot, dur, p.at)
+  if (tr.kind !== trackKind(shot.path)) return lay(t, shot, dur, undefined, p.at)
   // into the cut: after the shots that end there
   return put(t, clipOf(shot, p.track, dur), p.track, p.at, onTrack(t, p.track).filter((c) => endOf(c) <= p.at + 1e-3).length)
 }
 
-// a clip cut in two at a time on the timeline
-export function split(t: Timeline, id: string, at: number): Timeline {
+// a clip cut in two at a time on the timeline (none within a frame or two of its ends); second: the id of its second half
+export const inside = (c: Clip, at: number) => at > c.at + 0.05 && at < endOf(c) - 0.05
+export function split(t: Timeline, id: string, at: number, second = uid()): Timeline {
   const c = t.clips.find((x) => x.id === id)
-  if (!c || at <= c.at + 0.05 || at >= endOf(c) - 0.05) return t
+  if (!c || !inside(c, at)) return t
   const cut = c.in + (at - c.at)
-  return { ...t, clips: t.clips.flatMap((x) => (x.id === id ? [{ ...c, out: cut }, { ...c, id: uid(), at, in: cut }] : [x])) }
+  return { ...t, clips: t.clips.flatMap((x) => (x.id === id ? [{ ...c, out: cut }, { ...c, id: second, at, in: cut }] : [x])) }
+}
+// a still of a clip's frame at a time, laid there for FREEZE seconds: the clip cut around it, what follows moved on
+export function freeze(t: Timeline, id: string, at: number, still: Shot): Timeline {
+  const c = t.clips.find((x) => x.id === id)
+  if (!c) return t
+  const cut = split(t, id, at), left = cut.clips.find((x) => x.id === id)!
+  return put(cut, { ...clipOf(still, c.track), out: FREEZE }, c.track, endOf(left), onTrack(cut, c.track).indexOf(left) + 1)
 }
 // a clip again, right after it
 export function duplicate(t: Timeline, id: string): Timeline {
@@ -142,5 +165,38 @@ export function cuts(t: Timeline) {
   const main = mainOf(t), list = main ? onTrack(t, main) : []
   return list.slice(1).map((b, i) => ({ a: list[i], b }))
 }
+// the voice a talking avatar of a clip says: the sound under it on a track playing (the one at the playhead first, else
+// the longest together), with the stretch they share on the timeline
+export function voiceUnder(t: Timeline, c: Clip, time: number) {
+  const from = (v: Clip) => Math.max(c.at, v.at), to = (v: Clip) => Math.min(endOf(c), endOf(v))
+  const list = t.clips.filter((v) => t.tracks.some((x) => x.id === v.track && x.kind === "audio" && !x.off) && to(v) - from(v) > 0.1)
+  const v = list.find((v) => time >= from(v) && time < to(v)) ?? list.sort((a, b) => to(b) - from(b) - (to(a) - from(a)))[0]
+  return v && { voice: v, from: from(v), to: to(v) }
+}
+
+// a picture's size already in the edit's format (a hair off counts as in it)
+export const fits = (w: number, h: number, ratio: string) => Math.abs(Math.log(w / h / (RATIOS[ratio as keyof typeof RATIOS] ?? 16 / 9))) < 0.02
+// Expand's margins that bring a picture to a format, half on each side, at most its own width or height a side
+export function marginsTo(w: number, h: number, ratio: string): Record<string, string> {
+  const r = RATIOS[ratio as keyof typeof RATIOS] ?? 16 / 9, wider = w / h < r
+  const side = String(+Math.min(1, wider ? (h * r - w) / w / 2 : (w / r - h) / h / 2).toFixed(3))
+  return fits(w, h, ratio) ? {} : wider ? { left: side, right: side } : { top: side, bottom: side }
+}
+
+// what Generate offers a clip: the tools that take its medium, by what they make of it (edit it: the result replaces
+// it; start from its frame: an image animated, a shot going on from a frame of it). Left out: Extend (its own items),
+// and what an edit has no use for yet (a depth map, HDR, a cut-out without layers)
+export type Offer = { title: "edit" | "frame"; items: { kind: Kind; tool: Tool }[] }
+const NOT_HERE = ["extend", "depth-map", "sdr-to-hdr", "remove-background"]
+export function offers(tools: Record<Kind, Tool[]>, c: Clip, kind: Track["kind"]): Offer[] {
+  const of = (k: Kind, ok: (t: Tool) => boolean) => tools[k].filter((t) => !NOT_HERE.includes(t.id) && ok(t)).map((tool) => ({ kind: k, tool }))
+  const takes = (t: Tool, key: string, k: string) => t.inputs.some((i) => i.key === key && i.kind === k)
+  const sound = of("audio", (t) => t.inputs.some((i) => i.kind === "media"))
+  if (kind === "audio") return [{ title: "edit", items: sound }]
+  const frames = { title: "frame" as const, items: of("video", (t) => takes(t, "first_frame", "image")) }
+  if (isStill(c.path)) return [{ title: "edit", items: of("image", (t) => t.mode === "edit" && takes(t, "image", "image")) }, frames]
+  return [{ title: "edit", items: [...of("video", (t) => takes(t, "video", "video")), ...sound] }, frames]
+}
+
 // every time a clip starts or ends, for ⏮ ⏭ and ↑ ↓
 export const marks = (t: Timeline) => [...new Set([0, ...t.clips.flatMap((c) => [c.at, endOf(c)])])].sort((a, b) => a - b)

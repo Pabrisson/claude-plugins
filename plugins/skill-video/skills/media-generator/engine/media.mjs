@@ -450,41 +450,6 @@ function editText(slug, file = c => c.path) {
   lines.push('', 'Keep these cuts, their order and their timings; ask me before changing any.')
   return lines.join('\n')
 }
-// the timeline as a video, 720p on its short side, a reference for the edit: the video tracks stacked from the bottom
-// up (each clip covers the tracks under it while it plays, letterboxed), every sound mixed at its volume
-async function renderMontage(slug) {
-  const t = workspace(slug).timeline, clips = liveClips(t)
-  if (!clips.length) throw userError('the timeline is empty')
-  const [W, H] = RATIOS[ratioFor(t, clips)], total = Math.max(...clips.map(c => c.at + c.len))
-  const argv = ['-f', 'lavfi', '-i', `color=black:s=${W}x${H}:r=30:d=${total}`, '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo'], graph = [], sounds = ['[1:a]']
-  let v = '[0:v]', n = 2
-  for (const c of clips.filter(c => c.kind === 'video').sort((a, b) => b.layer - a.layer || a.at - b.at)) {
-    argv.push(...(c.still ? ['-loop', '1', '-framerate', '30', '-t', `${c.len}`] : ['-ss', `${c.in}`, '-t', `${c.len}`]), '-i', c.path)
-    graph.push(`[${n}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:-1:-1:black,setsar=1,fps=30,format=yuv420p,setpts=PTS-STARTPTS+${c.at}/TB[c${n}]`, `${v}[c${n}]overlay=eof_action=pass[o${n}]`)
-    v = `[o${n}]`
-    if (!c.still && (c.volume ?? 1) > 0 && probe(c.path).audio) (graph.push(`[${n}:a]aresample=48000,volume=${c.volume ?? 1},adelay=${Math.round(c.at * 1000)}:all=1[s${n}]`), sounds.push(`[s${n}]`))
-    n++
-  }
-  for (const c of clips.filter(c => c.kind === 'audio' && kindOfFile(c.path) !== 'image')) {
-    argv.push('-ss', `${c.in}`, '-t', `${c.len}`, '-i', c.path)
-    graph.push(`[${n}:a]aresample=48000,volume=${c.volume ?? 1},adelay=${Math.round(c.at * 1000)}:all=1[s${n}]`)
-    sounds.push(`[s${n++}]`)
-  }
-  graph.push(`${sounds.join('')}amix=inputs=${sounds.length}:normalize=0:duration=longest[mix]`)
-  const out = at('.cache', 'montage', `${slug}.mp4`), tmp = `${out}.tmp.mp4`
-  fs.mkdirSync(path.dirname(out), { recursive: true })
-  await new Promise((ok, ko) => {
-    const p = spawn('ffmpeg', ['-y', '-v', 'error', ...argv, '-filter_complex', graph.join(';'), '-map', v, '-map', '[mix]', '-t', `${total}`,
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', tmp], { stdio: ['ignore', 'ignore', 'pipe'] })
-    let err = ''
-    p.stderr.on('data', d => (err += d))
-    p.on('error', ko)
-    p.on('close', code => (code ? ko(new Error(`the montage did not render: ${err.trim().split('\n').pop()}`)) : ok()))
-  })
-  fs.renameSync(tmp, out)
-  return out
-}
-
 // a .zip of files as they are (stored: media are compressed already), streamed to the page
 // ponytail: no ZIP64, so 4 GB in all at most; add it when a workspace outgrows that
 async function sendZip(res, name, entries) {
@@ -517,8 +482,8 @@ async function sendZip(res, name, entries) {
   await write(cd)
   res.end(end)
 }
-// a workspace's files in the zip, under its name: its media by medium, its Elements, and with edit its timeline, the
-// edit in words and its render
+// a workspace's files in the zip, under its name: its media by medium, its Elements, and with edit its timeline and the
+// edit in words
 function zipEntries(slug, edit) {
   const w = workspace(slug), root = w.name.replace(/[/\\:*?"<>|]/g, '-'), jobs = allJobs()
   const DIRS = { image: 'images', video: 'videos', audio: 'audio' }, entries = [], named = new Map()
@@ -529,11 +494,10 @@ function zipEntries(slug, edit) {
     }
   for (const name of linkedElements(slug, jobs)) for (const f of fs.readdirSync(at('elements', name))) entries.push({ name: `${root}/elements/${name}/${f}`, file: at('elements', name, f) })
   if (edit) {
-    const t = w.timeline, montage = at('.cache', 'montage', `${slug}.mp4`), rel = c => `../${named.get(c.path) ?? path.relative(HOME, c.path)}`
+    const t = w.timeline, rel = c => `../${named.get(c.path) ?? path.relative(HOME, c.path)}`
     entries.push({ name: `${root}/edit/timeline.json`, data: Buffer.from(JSON.stringify({ ...t, clips: t.clips.map(c => ({ ...c, file: rel(c) })) }, null, 2) + '\n') })
     const text = editText(slug, rel)
     if (text) entries.push({ name: `${root}/edit/EDIT.md`, data: Buffer.from(`# ${w.name}: the edit\n\nThe files are named from this folder (edit/).\n\n${text}\n`) })
-    if (fs.existsSync(montage)) entries.push({ name: `${root}/edit/montage.mp4`, file: montage })
   }
   return { root, entries }
 }
@@ -1433,8 +1397,8 @@ async function handle(req, res) {
     if (!(last ? lastFrame() : grab([...(t > 0 ? ['-ss', `${+t}`] : []), '-i', src, '-frames:v', '1']) || lastFrame())) return reply(res, 400, { error: 'no frame in this file' })
     return reply(res, 200, { path: out })
   }
-  // a video sent as an input, cut to the part and the area kept (Edit reference): a new file, the original stays.
-  // crop is { x, y, w, h } in fractions of the frame
+  // a video sent as an input, cut to the part and the area kept (Edit reference, a clip of the timeline): a new file, the
+  // original stays; a sound alone is cut to an .mp3. crop is { x, y, w, h } in fractions of the frame
   if (p === '/api/cut' && post) {
     const { path: file, start = 0, end, crop } = await readBody(req), src = inside(HOME, file)
     if (!src) return reply(res, 403, { error: 'outside the folder' })
@@ -1443,9 +1407,9 @@ async function handle(req, res) {
     const even = x => Math.max(2, Math.floor(x / 2) * 2), clamp = (x, max) => Math.min(Math.max(0, x || 0), max)
     const w = crop && even(clamp(crop.w, 1) * s.width), h = crop && even(clamp(crop.h, 1) * s.height)
     const vf = crop ? ['-vf', `crop=${w}:${h}:${Math.round(clamp(crop.x * s.width, s.width - w))}:${Math.round(clamp(crop.y * s.height, s.height - h))}`] : []
-    const out = at('.cache', 'uploads', `${Date.now()}-${path.basename(src, path.extname(src)).replace(/^\d+-/, '')}-cut.mp4`)
+    const sound = !s.width, out = at('.cache', 'uploads', `${Date.now()}-${path.basename(src, path.extname(src)).replace(/^\d+-/, '')}-cut.${sound ? 'mp3' : 'mp4'}`)
     fs.mkdirSync(path.dirname(out), { recursive: true })
-    ffmpeg(['-ss', `${from}`, '-i', src, '-t', `${to - from}`, ...vf, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', out])
+    ffmpeg(['-ss', `${from}`, '-i', src, '-t', `${to - from}`, ...(sound ? ['-vn', '-b:a', '192k'] : [...vf, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac']), out])
     return reply(res, 200, { path: out })
   }
   // a file dropped on the page, just sent: it moves to the library as a result of its own, free, nothing in the ledger
@@ -1545,17 +1509,16 @@ async function handle(req, res) {
     } catch (e) { return reply(res, 400, { error: e.message }) }
     return reply(res, 200, { current: currentWorkspace(), workspaces: workspaceList() })
   }
-  // a workspace's edit in words (Copy prompt for video-editor), its render, and the whole of it as a .zip
-  const wsRoute = p.match(/^\/api\/workspaces\/([a-z0-9-]+)\/(edit|montage|zip)$/)
+  // a workspace's edit in words (Copy prompt for video-editor), and the whole of it as a .zip
+  const wsRoute = p.match(/^\/api\/workspaces\/([a-z0-9-]+)\/(edit|zip)$/)
   if (wsRoute) {
     const [, slug, what] = wsRoute
     if (!workspace(slug)) return reply(res, 404, { error: `no workspace ${slug}` })
     try {
       if (what === 'edit') {
-        const montage = at('.cache', 'montage', `${slug}.mp4`), text = editText(slug)
-        return reply(res, 200, { text: text && `${text}\nThe timeline as data: ${wsFile(slug)} (timeline).${fs.existsSync(montage) ? ` A 720p reference render of it: ${montage}.` : ''}` })
+        const text = editText(slug)
+        return reply(res, 200, { text: text && `${text}\nThe timeline as data: ${wsFile(slug)} (timeline).` })
       }
-      if (what === 'montage' && post) return reply(res, 200, { path: await renderMontage(slug) })
       if (what === 'zip') {
         const { root, entries } = zipEntries(slug, url.searchParams.has('edit'))
         // once it streams, a failure can only cut it short

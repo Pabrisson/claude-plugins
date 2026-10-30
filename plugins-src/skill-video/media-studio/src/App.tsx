@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, type Balances, type Clip, type Job, type Kind, type Model, type Page, type Place, type State, type Tool } from "@/lib/api"
-import { endOf, lay, place, placeOf } from "@/lib/timeline"
+import { endOf, freeze, inside, isStill, lay, marginsTo, place, placeOf, voiceUnder } from "@/lib/timeline"
 import { Chips } from "@/components/chips"
 import { blank, Composer, type Compose } from "@/components/composer"
 import { CutDialog } from "@/components/cut"
@@ -18,7 +18,7 @@ import { Credits, Library } from "@/components/pages"
 import type { ElementDraft, Use } from "@/components/elements"
 import { SettingsPage } from "@/components/settings"
 import { isRunning, Results, type Bridge } from "@/components/results"
-import { lengthOf, useTimelines } from "@/components/timeline"
+import { lengthOf, useTimelines, type Ask } from "@/components/timeline"
 import { WorkspaceMenu, WorkspacePage } from "@/components/workspace"
 
 const RAIL = [
@@ -132,15 +132,20 @@ function Dashboard() {
     was.current = Object.fromEntries(state.media.map((j) => [j.id, j.status]))
   }, [state, page])
 
-  // a Bridge shot or a take, once done, lands where it was asked on its workspace's timeline (once: placed keeps it)
+  // a result asked from the timeline (a Bridge shot, a take, a tool on a clip, a voice), once done, lands where it was
+  // asked on its workspace's timeline (once: placed keeps it)
   const laid = useRef(new Set<string>())
   useEffect(() => {
     if (!state) return
     for (const j of state.media) {
-      const p = j.place, t = p && timelines.get(p.workspace)
-      if (!p || !t || isRunning(j) || laid.current.has(j.id) || t.placed.includes(j.id)) continue
+      const asked = j.place, t = asked && timelines.get(asked.workspace)
+      if (!asked || !t || isRunning(j) || laid.current.has(j.id) || t.placed.includes(j.id)) continue
       laid.current.add(j.id)
-      const out = j.status === "done" ? j.outputs.find((o) => mediaKind(o) !== "other" && !/\.mov$/i.test(o)) : undefined
+      // Extend going back in time lands before its clip
+      const p = j.tool === "extend" && asked.how === "after" && j.fields?.direction === "prequel" ? { ...asked, how: "before" as const } : asked
+      // a new shot of its own: Extend's new part (its last output), not the whole extended video
+      const files = j.status === "done" ? j.outputs.filter((o) => mediaKind(o) !== "other" && !/\.mov$/i.test(o)) : []
+      const out = p.how === "after" || p.how === "before" ? files.at(-1) : files[0]
       if (!out) {
         timelines.change(p.workspace, (x) => ({ ...x, placed: [...x.placed, j.id] }))
         continue
@@ -149,7 +154,8 @@ function Dashboard() {
       if (!inWorkspace(j, p.workspace)) api.workspaces({ slug: p.workspace, add: [j.id] }).catch(() => {})
       lengthOf(path).then((dur) => {
         timelines.change(p.workspace, (x) => ({ ...place(x, { path, job: j.id }, p, dur), placed: [...x.placed, j.id] }))
-        toast.success(p.replace ? "The new take is on the timeline" : "The Bridge shot is on the timeline", { description: name, action: { label: "Show", onClick: () => (window.location.hash = "workspace/timeline") } })
+        const what = p.how === "after" || p.how === "before" ? "The new shot" : p.replace ? "The new take" : j.kind === "audio" ? "The voice" : "The Bridge shot"
+        toast.success(`${what} is on the timeline`, { description: name, action: { label: "Show", onClick: () => (window.location.hash = "workspace/timeline") } })
       })
     }
   }, [state, timelines])
@@ -221,25 +227,62 @@ function Dashboard() {
     setPage("video")
   }
 
-  // a Bridge shot: First & last frame from the last frame of the clip before to the first frame of the one after,
-  // laid in the cut once done
-  async function bridgeShot(a: Clip, b: Clip, track: string) {
+  // a Bridge shot: a tool (First & last frame…) from the last frame of the clip before to the first frame of the one
+  // after, laid in the cut once done
+  async function bridgeShot(a: Clip, b: Clip, track: string, tool: string) {
     const ws = currentOf(state!)
     try {
-      const still = (p: string) => /\.(png|jpe?g|webp|gif)$/i.test(p)
-      const [from, to] = await Promise.all([still(a.path) ? a.path : api.frame(a.path, false, Math.max(0, a.out - 0.05)).then((r) => r.path), still(b.path) ? b.path : api.frame(b.path, false, b.in).then((r) => r.path)])
-      setCompose((c) => ({ ...c, video: { ...blank("video", "first-last-frame"), inputs: { first_frame: [from], last_frame: [to] }, place: { workspace: ws.slug, track, at: endOf(a) } } }))
+      const [from, to] = await Promise.all([isStill(a.path) ? a.path : api.frame(a.path, false, Math.max(0, a.out - 0.05)).then((r) => r.path), isStill(b.path) ? b.path : api.frame(b.path, false, b.in).then((r) => r.path)])
+      setCompose((c) => ({ ...c, video: { ...blank("video", tool), inputs: { first_frame: [from], last_frame: [to] }, place: { workspace: ws.slug, track, at: endOf(a) } } }))
       setPage("video")
     } catch (e) {
       toast.error(plain((e as Error).message))
     }
   }
-  // a new take of a clip (Extend, Remix), laid in its place once done
-  function take(how: "extend" | "remix", c: Clip) {
-    const ws = currentOf(state!), job = state!.media.find((j) => j.id === c.job), at: Place = { workspace: ws.slug, track: c.track, at: c.at, replace: c.id }
-    if (how === "remix") return job && bridge("remix", job, c.path, at)
-    setCompose((cs) => ({ ...cs, video: { ...blank("video", "extend"), inputs: { video: [c.path] }, place: at } }))
-    setPage("video")
+  // what the timeline asks: the composer opens on the tool, filled from the clip as it is cut (its part of its file,
+  // the frame at the playhead or its last, the voice under it), the result laid by it once done; a freeze frame is
+  // made here, free
+  async function ask(a: Ask) {
+    const ws = currentOf(state!), home = state!.home
+    const open = (kind: Kind, tool: string, patch: Partial<Compose>) => (setCompose((cs) => ({ ...cs, [kind]: { ...blank(kind, tool), ...patch } })), setPage(kind))
+    if (a.how === "voice") return open("audio", "voice", { place: { workspace: ws.slug, track: a.track, at: a.time } })
+    const c = a.clip, by: Place = { workspace: ws.slug, track: c.track, at: c.at, replace: c.id }
+    // a second of the timeline in the clip's file; the clip's file as it is cut there (the file itself when it is all of it)
+    const fileAt = (x: number) => c.in + x - c.at
+    const source = async (x: Clip, from = x.in, to = x.out) => (isStill(x.path) || (from < 0.05 && (x.dur == null || to > x.dur - 0.05)) ? x.path : (await api.cut(x.path, from, to)).path)
+    try {
+      if (a.how === "remix") {
+        const job = state!.media.find((j) => j.id === c.job)
+        return job && bridge("remix", job, c.path, by)
+      }
+      if (a.how === "freeze") {
+        const frame = (await api.frame(c.path, false, fileAt(a.time))).path, made = await api.import(frame)
+        timelines.change(ws.slug, (t) => freeze(t, c.id, a.time, { path: `${home}/media/${made.id}/${frame.split("/").pop()!.replace(/^\d+-/, "")}`, job: made.id }))
+        refresh()
+        return toast.success("Freeze frame laid", { description: "Free, from this machine." })
+      }
+      if (a.how === "after" || a.how === "before") return open("video", "extend", { inputs: { video: [await source(c)] }, fields: { direction: a.how === "before" ? "prequel" : "sequel" }, place: { ...by, how: "after" } })
+      if (a.how !== "edit" && a.how !== "frame") return
+      const tool = tools![a.kind].find((x) => x.id === a.tool)
+      if (!tool) return
+      if (a.how === "edit") {
+        // the clip goes into the tool's first input; Reframe and Expand bring it to the edit's format
+        const m = state!.media.find((j) => j.id === c.job)?.meta?.[c.file]
+        const fields = tool.id === "reframe" ? { ratio: a.ratio } : tool.id === "expand" && m?.w && m?.h ? marginsTo(m.w, m.h, a.ratio) : {}
+        return open(a.kind, tool.id, { inputs: { [tool.inputs.find((i) => !i.optional)!.key]: [await source(c)] }, fields, place: { ...by, how: "whole" } })
+      }
+      // from a frame: a talking avatar from the start of the voice under it, saying its stretch, in place of that
+      // stretch (its sound off: the voice plays already); else the frame at the playhead (what follows it replaced),
+      // or its last (a shot after it); a still animated in its place
+      const voice = tool.id === "talking-avatar" ? voiceUnder(timelines.get(ws.slug)!, c, a.time) : undefined
+      const at = voice ? voice.from : inside(c, a.time) ? a.time : null
+      const frame = isStill(c.path) ? c.path : (await api.frame(c.path, false, at == null ? Math.max(0, c.out - 0.05) : fileAt(at))).path
+      const said = voice && (await source(voice.voice, voice.voice.in + voice.from - voice.voice.at, voice.voice.in + voice.to - voice.voice.at))
+      const where: Place = voice ? { ...by, at: voice.from, how: "from", from: fileAt(voice.from), to: fileAt(voice.to), mute: true } : isStill(c.path) ? { ...by, how: "whole" } : at == null ? { ...by, how: "after" } : { ...by, at, how: "from", from: fileAt(at) }
+      open("video", tool.id, { inputs: { first_frame: [frame], ...(said ? { audio: [said] } : {}) }, place: where })
+    } catch (e) {
+      toast.error(plain((e as Error).message))
+    }
   }
 
   if (!state || !tools)
@@ -353,7 +396,7 @@ function Dashboard() {
           </main>
         </>
       ) : page === "workspace" ? (
-        <WorkspacePage state={state} tools={tools} engine={engine} onBridge={bridge} onUse={use} onChanged={refresh} timelines={timelines} focus={focus} onBridgeShot={bridgeShot} onTake={take} />
+        <WorkspacePage state={state} tools={tools} engine={engine} onBridge={bridge} onUse={use} onChanged={refresh} timelines={timelines} focus={focus} onBridgeShot={bridgeShot} onAsk={ask} />
       ) : page === "library" ? (
         <Library state={state} tools={tools} engine={engine} onBridge={bridge} draft={elementDraft} onDraftUsed={draftUsed} onUse={use} onChanged={refresh} />
       ) : page === "credits" ? (

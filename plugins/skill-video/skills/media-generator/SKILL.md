@@ -191,7 +191,9 @@ or none). The dashboard's header switches it.
   `workspaces use <slug>` switches; `workspaces add <slug> <generation ids…>` (and `drop`) puts results in or out.
 - `media.mjs workspaces show <slug>` gives its files, its Elements and its timeline in words (`--json` for all of
   it). The user lays the timeline in the dashboard (Workspace › Timeline: the main track V1 holds the shots end to
-  end, numbered #1, #2…; the tracks above overlay it, the audio tracks mix); you only read it.
+  end, numbered #1, #2…; the tracks above overlay it, the audio tracks mix); you only read it. Its clips' menus
+  (Generate: a tool on the clip as it is cut, or from its frame; Extend after or before; Freeze frame; Fit to the
+  format; Voice here; ✦ Bridge shot on a cut) fill the dashboard's composer, and the result lays itself by its clip.
 - A pasted prompt that starts with `/skill-video:video-editor Make a video from my media-generator workspace` is
   for the video-editor skill: its clips, their times and their sound are an exact edit, keep it.
 

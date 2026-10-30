@@ -129,12 +129,16 @@ export type Job = {
   after?: string
   // the workspaces it is in
   workspaces?: string[]
-  // where it goes on a timeline once done: a Bridge shot into a cut, a take in place of a clip
+  // where it goes on a timeline once done: a Bridge shot into a cut, a take in place of a clip, a new shot by it
   place?: Place
   // each file's size and length, measured once by the engine
   meta?: Record<string, { w?: number; h?: number; dur?: number }>
 }
-export type Place = { workspace: string; track: string; at: number; replace?: string }
+// where a result goes on a timeline once done: into the cut at `at` (a Bridge shot, a voice at the playhead), or by
+// the clip it replaces: in its place at its length (a take), at the result's length (whole), in place of the stretch
+// of it from its file's second `from` to `to` or its end (from: `at` is that stretch's start on the timeline), right
+// after it or right before it. mute: the result's own sound off (a talking avatar says the voice already under it)
+export type Place = { workspace: string; track: string; at: number; replace?: string; how?: "whole" | "from" | "after" | "before"; from?: number; to?: number; mute?: boolean }
 export type Limits = { threshold: number | null; cap: number | null }
 export type Settings = {
   openrouter: Limits
@@ -299,7 +303,6 @@ export const api = {
   workspaces: (body: { new?: string; slug?: string; use?: boolean; name?: string; add?: string[]; drop?: string[]; link?: string[]; unlink?: string[]; timeline?: Timeline; rev?: number; remove?: boolean }) =>
     post<{ current: string; workspaces: Workspace[] }>("/api/workspaces", body),
   edit: (slug: string) => call<{ text: string | null }>(`/api/workspaces/${slug}/edit`),
-  montage: (slug: string) => post<{ path: string }>(`/api/workspaces/${slug}/montage`, {}),
 }
 // a clip's pictures on the timeline: a video's frames side by side (STRIP of them), a sound's waveform
 export const STRIP = 20

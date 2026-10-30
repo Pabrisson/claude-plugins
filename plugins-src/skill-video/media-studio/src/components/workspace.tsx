@@ -26,7 +26,7 @@ import { byMedium, FilterChips, LibraryList, Listen, Section, SortSelect, Thumb,
 import { factsOf, NO_FILTERS, passes, ratioOf, resOf, sorted } from "@/lib/filters"
 import { Main, Side } from "@/components/pages"
 import { Results, type Bridge } from "@/components/results"
-import { dragShot, lengthOf, TimelineEditor, type useTimelines } from "@/components/timeline"
+import { dragShot, lengthOf, TimelineEditor, type Ask, type useTimelines } from "@/components/timeline"
 import { NewWorkspaceDialog, WorkspaceRows } from "@/components/workspace-list"
 
 type Timelines = ReturnType<typeof useTimelines>
@@ -85,11 +85,7 @@ function DownloadMenu({ ws, timeline, flush }: { ws: Workspace; timeline: Timeli
   const edited = timeline.clips.length > 0
   async function withEdit() {
     await flush()
-    toast.promise(api.montage(ws.slug), {
-      loading: "Rendering the edit…",
-      success: () => (download(`/api/workspaces/${ws.slug}/zip?edit`), "The edit is rendered: the download starts"),
-      error: (e) => plain((e as Error).message),
-    })
+    download(`/api/workspaces/${ws.slug}/zip?edit`)
   }
   return (
     <DropdownMenu>
@@ -108,7 +104,7 @@ function DownloadMenu({ ws, timeline, flush }: { ws: Workspace; timeline: Timeli
         <DropdownMenuItem disabled={!edited} onSelect={withEdit}>
           <span className="flex flex-col">
             <span>With the edit</span>
-            <span className="text-xs text-muted-foreground">{edited ? "Plus the timeline, the edit in words and a 720p render" : "Lay shots on the timeline first"}</span>
+            <span className="text-xs text-muted-foreground">{edited ? "Plus the timeline and the edit in words" : "Lay shots on the timeline first"}</span>
           </span>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -157,7 +153,7 @@ export function WorkspacePage({
   timelines,
   focus,
   onBridgeShot,
-  onTake,
+  onAsk,
 }: {
   state: State
   tools: Record<Kind, Tool[]>
@@ -168,8 +164,8 @@ export function WorkspacePage({
   timelines: Timelines
   // a file the timeline opens on (a result's « #2 »)
   focus: string | null
-  onBridgeShot: (a: Clip, b: Clip, track: string) => void
-  onTake: (how: "extend" | "remix", c: Clip) => void
+  onBridgeShot: (a: Clip, b: Clip, track: string, tool: string) => void
+  onAsk: (a: Ask) => void
 }) {
   const [tab, setTab] = useState<Tab>(tabOf)
   useEffect(() => {
@@ -210,8 +206,9 @@ export function WorkspacePage({
         jobs={state.media}
         items={results}
         focus={focus}
+        tools={tools}
         onBridge={onBridgeShot}
-        onTake={onTake}
+        onAsk={onAsk}
         header={
           <Title
             ws={ws}

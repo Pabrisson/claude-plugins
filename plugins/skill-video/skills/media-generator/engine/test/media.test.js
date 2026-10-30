@@ -500,6 +500,10 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.deepEqual([path.dirname(cut.body.path), v.width, v.height, c.streams.some(s => s.codec_type === 'audio')], [at('.cache', 'uploads'), 160, 180, true])
   assert.ok(Math.abs(c.format.duration - 1.5) < 0.1, `cut to ${c.format.duration} s`)
   assert.ok(Math.abs(probe(at('talk.mp4')).format.duration - 3) < 0.1)
+  // a sound alone: an .mp3 of the part
+  const said = (await post('/api/cut', { path: at('voice.mp3'), start: 0.5, end: 1.5 })).body.path, sp = probe(said)
+  assert.deepEqual([path.extname(said), sp.streams.map(s => s.codec_type)], ['.mp3', ['audio']])
+  assert.ok(Math.abs(sp.format.duration - 1) < 0.1, `cut to ${sp.format.duration} s`)
   assert.deepEqual([(await post('/api/cut', { path: '/etc/hosts', end: 1 })).code, (await post('/api/cut', { path: at('talk.mp4'), start: 2, end: 2 })).code], [403, 400])
   // a file dropped on the page goes to the library: moved out of the uploads, a free local result of its kind, no ledger line
   const sentPng = at('.cache', 'uploads', '123-photo.png'), spent = ledger().length
@@ -581,17 +585,14 @@ test('workspaces: the Default one from the start, new generations join the curre
   assert.match(edit, /V2 \(video, over V1\):\n- 1\.00–2\.00 {2}.+out-1\.png, a still/)
   assert.match(edit, /V1 \(video, the base\):\n- 0\.00–2\.00 {2}.+talk\.mp4, source 0\.50–2\.50, its sound at 50 %/)
   assert.match(edit, /A1 \(audio\):\n- 0\.50–2\.00 {2}.+voice\.mp3, source 0\.00–1\.50, volume 100 %/)
-  // its render: 720p in its format, as long as the timeline, with its sound
-  const montage = (await post('/api/workspaces/pub-lulu/montage', {})).body.path, m = probe(montage)
-  assert.deepEqual([m.streams.find(s => s.codec_type === 'video').width, m.streams.some(s => s.codec_type === 'audio')], [1280, true])
-  assert.ok(Math.abs(m.format.duration - 2) < 0.15, `montage of ${m.format.duration} s`)
-  // the .zip: its media by medium, its Elements, and with the edit its timeline, the edit in words and the render
+  // the .zip: its media by medium, its Elements, and with the edit its timeline and the edit in words, no render
   const zip = at('pub.zip')
   fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip?edit`)).arrayBuffer()))
   execFileSync('unzip', ['-tq', zip])
   const names = execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).trim().split('\n')
-  for (const n of [`Pub Lulu/videos/${imported['talk.mp4']}-talk.mp4`, `Pub Lulu/audio/${imported['voice.mp3']}-voice.mp3`, `Pub Lulu/images/${fox}-out-1.png`, 'Pub Lulu/elements/Fox/element.json', 'Pub Lulu/edit/timeline.json', 'Pub Lulu/edit/EDIT.md', 'Pub Lulu/edit/montage.mp4'])
+  for (const n of [`Pub Lulu/videos/${imported['talk.mp4']}-talk.mp4`, `Pub Lulu/audio/${imported['voice.mp3']}-voice.mp3`, `Pub Lulu/images/${fox}-out-1.png`, 'Pub Lulu/elements/Fox/element.json', 'Pub Lulu/edit/timeline.json', 'Pub Lulu/edit/EDIT.md'])
     assert.ok(names.includes(n), `${n} in ${names.join(', ')}`)
+  assert.equal(names.some(n => n.endsWith('.mp4') && n.includes('/edit/')), false)
   assert.match(execFileSync('unzip', ['-p', zip, 'Pub Lulu/edit/EDIT.md'], { encoding: 'utf8' }), new RegExp(`\\.\\./videos/${imported['talk.mp4']}-talk\\.mp4, source 0\\.50`))
   assert.equal(execFileSync('unzip', ['-Z1', fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip`)).arrayBuffer())) ?? zip], { encoding: 'utf8' }).includes('edit/'), false)
   // the CLI shows it to Claude; removed, its media stay and leave it, the Default one is current again and stays
