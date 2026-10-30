@@ -13,6 +13,7 @@ import { blank, Composer, type Compose } from "@/components/composer"
 import { CutDialog } from "@/components/cut"
 import { upload } from "@/components/inputs"
 import { Credits, Library } from "@/components/pages"
+import type { ElementDraft, Use } from "@/components/elements"
 import { SettingsPage } from "@/components/settings"
 import { isRunning, Results, type Bridge } from "@/components/results"
 
@@ -73,6 +74,13 @@ function Dashboard() {
     return () => window.removeEventListener("hashchange", on)
   }, [])
   const [compose, setCompose] = useState<Record<Kind, Compose>>({ image: blank("image"), video: blank("video"), audio: blank("audio") })
+  const [elementDraft, setElementDraft] = useState<ElementDraft | null>(null)
+  const draftUsed = useCallback(() => setElementDraft(null), [])
+  // a Library page opens a tool of a space, filled in (Make sheets, Restyle with a style, speak with a voice)
+  const use: Use = (kind, tool, patch) => {
+    setCompose((c) => ({ ...c, [kind]: { ...blank(kind, tool), ...patch } }))
+    setPage(kind)
+  }
   const [seen, setSeen] = useState<Record<string, string>>(readSeen)
 
   // the folder's state every 2 s: running jobs, results, drafts, settings
@@ -145,6 +153,20 @@ function Dashboard() {
         [job.kind]: { tool: job.tool, model: job.provider === "openrouter" ? `openrouter:${job.model}` : undefined, intent: raw ? "" : intent, raw, rawText: raw ? intent : "", fields: job.fields ?? {}, inputs, params: job.params ?? {} },
       }))
       return setPage(job.kind)
+    }
+    // a new Element of a result: a References sheet brings its whole set and the photos it was made from
+    if (b === "element") {
+      const tool = tools?.[job.kind].find((t) => t.id === job.tool), root = job.after ?? job.id
+      const set = tool?.element ? state!.media.filter((j) => j.status === "done" && (j.id === root || j.after === root)).reverse() : [job]
+      const first = state!.media.find((j) => j.id === root) ?? job
+      const kind = job.kind === "audio" ? "audio" : "image"
+      setElementDraft({
+        type: job.kind === "audio" ? "voice" : (tool?.element ?? "other"),
+        paths: [...set.flatMap((j) => j.outputs.filter((o) => mediaKind(o) === kind).map((o) => `${home}/media/${j.id}/${o}`)), ...(tool?.element ? (first.inputs?.references ?? []).map((f) => `${home}/media/${first.id}/${f}`) : [])],
+        words: job.fields?.who ?? job.fields?.what ?? "",
+      })
+      window.location.hash = "library/elements"
+      return
     }
     const next = { animate: ["animate", "first_frame"], extend: ["extend", "video"], upscale: ["upscale", "video"], avatar: ["talking-avatar", "audio"] }[b]
     setCompose((c) => ({ ...c, video: { ...blank("video", next[0]), inputs: { [next[1]]: [file] } } }))
@@ -239,7 +261,7 @@ function Dashboard() {
           </main>
         </>
       ) : page === "library" ? (
-        <Library state={state} onBridge={bridge} />
+        <Library state={state} tools={tools} engine={engine} onBridge={bridge} draft={elementDraft} onDraftUsed={draftUsed} onUse={use} onChanged={refresh} />
       ) : page === "credits" ? (
         <Credits state={state} balances={balances} onBridge={bridge} />
       ) : (

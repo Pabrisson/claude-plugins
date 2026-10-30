@@ -31,6 +31,7 @@ const media = () => (fs.existsSync(at('media')) ? fs.readdirSync(at('media')) : 
 const probe = f => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,width,height:format=duration', '-of', 'json', f], { encoding: 'utf8' }))
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=64x64', '-frames:v', '1', at('a.png')])
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=3', '-f', 'lavfi', '-i', 'sine=d=3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', at('talk.mp4')])
+execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=2', at('voice.mp3')])
 test.after(() => { fake.close(); fs.rmSync(home, { recursive: true, force: true }) })
 
 test('the catalogs: tools from the engine, models from its own list in one shape, never fetched', async () => {
@@ -99,13 +100,78 @@ test('a tool: its template filled from the fields, its inputs sent in order', as
   const miss = await cli('image', '--tool', 'face-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`)
   assert.match(miss.err, /Face swap needs face \(--in face=<file>\)/)
   // an @Element brings its images
-  assert.match((await cli('elements', 'add', 'Lulu', at('a.png'))).out, /@Lulu: 1 images/)
+  assert.match((await cli('elements', 'add', 'Lulu', at('a.png'))).out, /@Lulu: other, 1 image$/m)
   const e = await cli('image', '--prompt', '@Lulu in a café', '--model', 'fake/img', '--estimate')
-  assert.equal(JSON.parse(e.out).prompt, 'Lulu in a café')
+  assert.equal(JSON.parse(e.out).prompt, 'Lulu (shown in the first image) in a café')
   // the user's words are optional on a tool with its own prompt, needed on Custom and Custom edit (only a style is not enough)
   assert.equal((await cli('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--estimate')).code, 0)
   for (const argv of [['--tool', 'free-edit', '--in', `image=${at('a.png')}`], ['--field', 'style=Watercolor']])
     assert.match((await cli('image', ...argv, '--model', 'fake/img', '--estimate')).err, /write a prompt \(--prompt "…"\): Custom has no prompt of its own/)
+})
+
+test('Elements: typed, from files or results; an @name says what it is and where its images are, never a style', async () => {
+  const est = async (...argv) => JSON.parse((await cli(...argv, '--estimate')).out)
+  const bad = await cli('elements', 'add', 'Mo', at('a.png'), '--type', 'hero')
+  assert.match(bad.err, /the types are character, outfit, object, location, pose, brand, voice, other/)
+  assert.match((await cli('elements', 'add', 'Mo', at('a.png'), '--type', 'character', '--words', 'a tall man, grey beard')).out, /^@Mo: character, 1 image · a tall man, grey beard$/m)
+  // a result joins it by its generation's id; the same file twice is kept once
+  await cli('image', '--prompt', 'a jacket', '--model', 'fake/img', '--spend', '1')
+  const jacket = media().filter(d => d.includes('-free-')).sort().at(-1)
+  assert.match((await cli('elements', 'add', 'Veste', '--type', 'outfit', '--from', jacket)).out, /^@Veste: outfit, 1 image$/m)
+  assert.match((await cli('elements', 'add', 'Veste', '--from', jacket)).out, /^@Veste: outfit, 1 image$/m)
+  assert.ok(fs.existsSync(at('elements', 'Veste', `${jacket}-out-1.png`)))
+  assert.match((await cli('elements', 'add', 'Acme', at('a.png'), '--type', 'brand', '--colors', '#0E2A47, #F2B134', '--font', 'Inter')).out, /^@Acme: brand, 1 image · #0E2A47 #F2B134$/m)
+  // in the prompt, after the tool's own images, each once; a style of the Library too; an unknown name stays
+  await cli('styles', 'add', 'Ink', at('a.png'), '--words', 'thick brush ink')
+  const r = await est('image', '--tool', 'free-edit', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--prompt', '@Mo wears @Veste, @Acme on the wall, by @nobody. @Mo smiles')
+  assert.equal(r.prompt, 'Edit the first image: Mo (the character in the second image, a tall man, grey beard) wears Veste (the outfit in the third image), '
+    + 'Acme (the brand in the fourth image: its logo reproduced exactly, its colors #0E2A47, #F2B134, the typeface Inter) on the wall, by @nobody. Mo smiles. Keep everything else identical.')
+  // a style is picked in a Style field, never cited
+  assert.equal((await est('image', '--model', 'fake/img', '--prompt', 'a fox in @Ink')).prompt, 'a fox in @Ink')
+  // the model's count holds them too
+  assert.match((await cli('image', '--tool', 'free-edit', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--prompt', '@Mo @Veste @Acme @Lulu', '--estimate')).err, /Fake: Image takes 4 reference images, this asks for 5/)
+  // a video model counts its reference images apart from its frames
+  assert.match((await est('video', '--model', 'fake/vid', '--prompt', '@Mo runs')).prompt, /^Mo \(the character in the first reference image, a tall man, grey beard\) runs/)
+  // set changes one, show tells all, a voice holds clips and is never cited in words
+  assert.match((await cli('elements', 'set', 'Mo', '--type', 'pose')).out, /^@Mo: pose, 1 image · a tall man, grey beard$/m)
+  assert.match((await cli('elements', 'set', 'Nope', '--words', 'x')).err, /no Element @Nope/)
+  assert.deepEqual(JSON.parse((await cli('elements', 'show', 'Acme')).out).colors, ['#0E2A47', '#F2B134'])
+  assert.match((await cli('elements', 'add', 'Narr', at('a.png'), '--type', 'voice')).err, /a.png is not a sound: a voice takes clips/)
+  assert.match((await cli('elements', 'add', 'Narr', at('voice.mp3'), '--type', 'voice', '--words', 'warm and slow')).out, /^@Narr: voice, 1 clip · warm and slow$/m)
+  assert.equal((await est('image', '--model', 'fake/img', '--prompt', 'hello @Narr')).prompt, 'hello @Narr')
+  // a voice of the Library speaks: its clips cloned, its words as the instructions
+  const v = await cli('audio', '--model', 'fake/tts', '--prompt', 'Bonjour @Narr', '--voice', '@Narr', '--spend', '1')
+  assert.equal(v.code, 0, v.err)
+  const body = sent('/api/v1/audio/speech').body
+  assert.deepEqual([body.input, body.voice, body.instructions, body.input_references.length], ['Bonjour @Narr', undefined, 'warm and slow', 1])
+  assert.match((await cli('audio', '--model', 'fake/tts', '--prompt', 'x', '--voice', '@Mo', '--estimate')).err, /no voice @Mo in the Library/)
+  for (const n of ['Mo', 'Veste', 'Acme', 'Narr']) await cli('elements', 'remove', n)
+  await cli('styles', 'remove', 'Ink')
+})
+
+test('References: one job a sheet at its own ratio, priced together; the next sheets wait for the first and match its image', async () => {
+  const est = async (...argv) => JSON.parse((await cli(...argv, '--estimate')).out)
+  assert.match((await cli('image', '--tool', 'character', '--model', 'fake/img', '--estimate')).err, /Character references: describe it \(--field who="…"\) or add photos \(--in references=<file>\)/)
+  assert.match((await cli('image', '--tool', 'character', '--model', 'fake/img', '--field', 'who=a fox', '--field', 'sheets=Nothing', '--estimate')).err, /pick one sheet or more \(--field sheets="Body turnaround, Face close-up, Expressions"\)/)
+  const e = await est('image', '--tool', 'character', '--model', 'fake/img', '--field', 'who=a red fox in a green coat')
+  assert.equal(e.estimate.amount, 0.08)
+  assert.match(e.prompt, /^Character reference sheet: the same character four times side by side, .+\. The character: a red fox in a green coat\. Plain light gray studio background/)
+  const no = await cli('image', '--tool', 'character', '--model', 'fake/img', '--field', 'who=a red fox in a green coat', '--spend', '0.04')
+  assert.equal(no.code, 2)
+  const before = new Set(media())
+  const r = await cli('image', '--tool', 'character', '--model', 'fake/img', '--field', 'who=a red fox in a green coat', '--in', `references=${at('a.png')}`, '--spend', '0.08')
+  assert.equal(r.code, 0, r.err)
+  const [a, b] = media().filter(d => !before.has(d)).sort().map(d => JSON.parse(fs.readFileSync(at('media', d, 'job.json'), 'utf8')))
+    .sort((x, y) => (x.after ? 1 : 0) - (y.after ? 1 : 0))
+  assert.deepEqual([a.status, a.spec.fields.sheets, a.spec.params.aspect_ratio, a.after], ['done', 'Body turnaround', '16:9', undefined])
+  assert.deepEqual([b.status, b.spec.fields.sheets, b.spec.params.aspect_ratio, b.after, b.spec.inputs.sheet], ['done', 'Face close-up', '1:1', a.id, ['in-sheet-1.png']])
+  assert.ok(fs.existsSync(at('media', b.id, 'in-sheet-1.png')))
+  assert.match(b.prompt, /The character is the person in the first image: .+ Keep everything exactly as in the second image, a sheet of the same set/)
+  const last = sent('/api/v1/images').body
+  assert.deepEqual([last.aspect_ratio, last.input_references.length], ['1:1', 2])
+  // the face alone again (a remix): the first sheet as its input, no wait
+  const one = await est('image', '--tool', 'character', '--model', 'fake/img', '--field', 'who=a red fox', '--field', 'sheets=Face close-up', '--in', `sheet=${at('media', b.id, 'in-sheet-1.png')}`)
+  assert.deepEqual([one.estimate.amount, /Keep everything exactly as in the first image/.test(one.prompt)], [0.04, true])
 })
 
 test('an unknown price needs its own yes; a refused payment (402) fails with exit 3, logged at no cost', async () => {
@@ -386,7 +452,20 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   const pen = (await fetch(url + '/api/state').then(r => r.json())).styles[0]
   assert.match(pen.text, /^the last reference image: .+ \(fine pen\)$/)
   assert.equal((await post('/api/styles', { name: '../x', paths: [] })).code, 400)
+  // its words change alone, without new images
+  assert.deepEqual((await post('/api/styles', { name: 'Pen', words: 'finer pen' })).body.map(s => [s.files.length, s.words]), [[1, 'finer pen']])
   assert.deepEqual((await post('/api/styles', { name: 'Pen', remove: true })).body, [])
+  // the Library's Elements: in the state, made and changed from the page; a voice refused by ElevenLabs says why
+  const made = await post('/api/elements', { name: 'Zoe', type: 'character', words: 'red hair', paths: [at('a.png'), '/etc/hosts'] })
+  assert.deepEqual(made.body.filter(e => e.name === 'Zoe').map(e => [e.type, e.files.length, e.words]), [['character', 1, 'red hair']])
+  assert.equal((await post('/api/elements', { name: 'Zoe', type: 'hero' })).code, 400)
+  await post('/api/elements', { name: 'Zoe', words: 'short red hair', drop: ['a.png'] })
+  const zoe = (await fetch(url + '/api/state').then(r => r.json())).elements.find(e => e.name === 'Zoe')
+  assert.deepEqual([zoe.type, zoe.words, zoe.files.length], ['character', 'short red hair', 0])
+  await post('/api/elements', { name: 'Vox', type: 'voice', paths: [at('voice.mp3')] })
+  const cloned = await post('/api/elements', { name: 'Vox', elevenlabs: true })
+  assert.deepEqual([cloned.code, /instant voice cloning/.test(cloned.body.error)], [400, true])
+  for (const name of ['Zoe', 'Vox']) await post('/api/elements', { name, remove: true })
   const spec = { kind: 'image', tool: 'free', model: 'openrouter:fake/img', prompt: 'a lighthouse', inputs: {}, params: { n: 2 } }
   const est = await post('/api/estimate', spec)
   assert.deepEqual([est.body.estimate.amount, est.body.shown, est.body.needs], [0.08, '$0.08', null])

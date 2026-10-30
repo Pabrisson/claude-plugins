@@ -12,14 +12,14 @@ export type Input = {
   phrase?: string
 }
 // an option: its value, or the value with what the dashboard shows of it (a preset light carries its lights, a style
-// the palette of its card)
-export type Option = string | { value: string; label?: string; group?: string; note?: string; rig?: Light[]; swatch?: string[] }
+// the palette of its card, a References sheet its ratio)
+export type Option = string | { value: string; label?: string; group?: string; note?: string; rig?: Light[]; swatch?: string[]; ratio?: string }
 // one light around the subject: azimuth (0 front, 90 right, 180 behind) and elevation in degrees, 0–100 levels
 export type Light = { az: number; el: number; color: string; brightness: number; diffuse: number }
 export type Field = {
   key: string
   label: string
-  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin" | "style"
+  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin" | "style" | "sheets"
   options?: Option[]
   // how a value reads in the template ("shot on {}"): an empty one leaves nothing
   phrase?: string
@@ -50,6 +50,9 @@ export type Tool = {
   provider?: string
   // setups that fill several fields at once
   presets?: { label: string; fields: Record<string, string> }[]
+  // a References tool: the Element its sheets make, and the field or input it needs one of (words or photos)
+  element?: ElementType
+  one_of?: string[]
 }
 export type Model = {
   id: string
@@ -106,6 +109,8 @@ export type Job = {
   inputs?: Record<string, string[]>
   raw_prompt?: string
   raw?: boolean
+  // a References sheet made after the first of its set, matched to its image
+  after?: string
 }
 export type Limits = { threshold: number | null; cap: number | null }
 export type Settings = {
@@ -127,6 +132,7 @@ export type State = {
   media: Job[]
   drafts: Partial<Record<Kind, Draft>>
   styles: SavedStyle[]
+  elements: Element[]
   // ElevenLabs' plans: USD per 1,000 credits
   plans: Record<string, number>
   // the fake APIs a dev or test server was started on (none for a real one), and whether it uses them now
@@ -189,7 +195,21 @@ export type Voice = {
   description?: string | null
   preview_url?: string | null
 }
-export type Element = { name: string; files: string[] }
+// an Element of the Library: what its images are to the model (a voice holds clips), its words, a brand's colors and
+// typeface, a voice's ElevenLabs id once it is on the account
+export type ElementType = "character" | "outfit" | "object" | "location" | "pose" | "brand" | "voice" | "other"
+export type Element = { name: string; type: ElementType; words: string; colors: string[]; font: string; voice_id: string | null; files: string[] }
+export const ELEMENT_TYPES: { type: ElementType; label: string; plural: string; hint: string }[] = [
+  { type: "character", label: "Character", plural: "Characters", hint: "a person, a creature, a mascot" },
+  { type: "outfit", label: "Outfit", plural: "Outfits", hint: "clothes, shoes, accessories worn" },
+  { type: "object", label: "Object", plural: "Objects", hint: "a product, a prop, a vehicle" },
+  { type: "location", label: "Location", plural: "Locations", hint: "a place, a set" },
+  { type: "pose", label: "Pose", plural: "Poses", hint: "a body pose to copy, nothing else" },
+  { type: "brand", label: "Brand", plural: "Brands", hint: "a logo kept exact, its colors" },
+  { type: "voice", label: "Voice", plural: "Voices", hint: "1 to 3 clips, picked as Audio's voice" },
+  { type: "other", label: "Other", plural: "Other", hint: "anything else" },
+]
+export const typeLabel = (t: ElementType) => ELEMENT_TYPES.find((x) => x.type === t)!.label
 // a style of the Library: its images, the words on its look, and how a prompt cites it (media.mjs writes it)
 export type SavedStyle = { name: string; files: string[]; words: string; text: string }
 
@@ -234,9 +254,9 @@ export const api = {
   voices: () => call<Voice[] | { voices: Voice[] }>("/api/voices"),
   clone: (name: string, paths: string[]) =>
     post<{ ok: true }>("/api/voice-clone", { name, paths }),
-  elements: (body?: { name: string; paths?: string[]; remove?: boolean }) =>
-    body ? post<Element[]>("/api/elements", body) : call<Element[]>("/api/elements"),
-  styles: (body: { name: string; paths?: string[]; words?: string; remove?: boolean }) => post<SavedStyle[]>("/api/styles", body),
+  elements: (body: { name: string; type?: ElementType; words?: string; colors?: string[]; font?: string; paths?: string[]; drop?: string[]; remove?: boolean; elevenlabs?: boolean }) =>
+    post<Element[]>("/api/elements", body),
+  styles: (body: { name: string; paths?: string[]; words?: string; drop?: string[]; remove?: boolean }) => post<SavedStyle[]>("/api/styles", body),
 }
 
 export const fileUrl = (path: string) => `/files?path=${encodeURIComponent(path)}`
@@ -277,30 +297,70 @@ export const imageInputs = (kind: Kind, tool: Tool) =>
 
 // where an input's images reach the model, as the prompt names them: the same as media.mjs's places
 const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"]
+const placeOf = (kind: Kind, at: number, n: number) => {
+  const noun = kind === "image" ? "image" : "reference image"
+  return n === 1 ? `the ${ORDINALS[at - 1] ?? `#${at}`} ${noun}` : `${noun}s ${at} to ${at + n - 1}`
+}
 export function places(kind: Kind, tool: Tool, inputs: Record<string, string[]>) {
-  const noun = kind === "image" ? "image" : "reference image", out: Record<string, string> = {}
+  const out: Record<string, string> = {}
   let at = 1
   for (const i of imageInputs(kind, tool)) {
     const n = inputs[i.key]?.length ?? 0
-    if (n) out[i.key] = n === 1 ? `the ${ORDINALS[at - 1] ?? `#${at}`} ${noun}` : `${noun}s ${at} to ${at + n - 1}`
+    if (n) out[i.key] = placeOf(kind, at, n)
     at += n
   }
   return out
 }
 
+// what a prompt can cite with @name: the Library's Elements with images (a voice is picked as Audio's voice, a style in
+// a Style field)
+export type Mentionable = Pick<Element, "name" | "type" | "files" | "words">
+export const mentionables = (s: State): Mentionable[] => (s.elements ?? []).filter((e) => e.type !== "voice" && e.files.length)
+// the @names a prompt cites, once each and in order, of those it can
+export const cited = (text: string, items: Mentionable[]) =>
+  [...new Set([...text.matchAll(/@([\w-]+)/g)].map((m) => m[1]))].flatMap((n) => items.filter((i) => i.name === n))
+// how media.mjs names them in the prompt: what each is and where its images are (after the tool's, from), once
+const CITED: Record<string, (w: string) => string> = {
+  character: (w) => `the character in ${w}`,
+  outfit: (w) => `the outfit in ${w}`,
+  object: (w) => `the object in ${w}`,
+  location: (w) => `the place in ${w}`,
+  pose: (w) => `the pose in ${w}: only its body pose, never its face, clothes or place`,
+  brand: (w) => `the brand in ${w}: its logo reproduced exactly`,
+  other: (w) => `shown in ${w}`,
+}
+export function withMentions(text: string, kind: Kind, from: number, s: State) {
+  const items = mentionables(s), done = new Set<string>()
+  let at = from
+  return text.replace(/@([\w-]+)/g, (all, name: string) => {
+    if (done.has(name)) return name
+    const it = items.find((i) => i.name === name)
+    if (!it) return all
+    const where = placeOf(kind, at, it.files.length), el = s.elements.find((e) => e.name === name)!
+    at += it.files.length
+    done.add(name)
+    const brand = el.type === "brand" ? [el.colors.length ? `its colors ${el.colors.join(", ")}` : "", el.font ? `the typeface ${el.font}` : ""] : []
+    return `${name} (${[CITED[el.type](where), ...brand, el.words].filter(Boolean).join(", ")})`
+  })
+}
+// the place of the first image an @name brings: after the tool's own
+export const mentionFrom = (kind: Kind, tool: Tool, inputs: Record<string, string[]>) => 1 + imageInputs(kind, tool).reduce((n, i) => n + (inputs[i.key]?.length ?? 0), 0)
+
 // the tool's template with its fields, its inputs' places and the user's words: the same as media.mjs's fill. holes
-// (the read-only prompt) keeps a placeholder not filled yet as {key}, the user's words aside; an Auto picked on purpose
-// still leaves nothing
+// (the read-only prompt) keeps what is still to fill as {key}, the user's words aside; an optional part (a style without
+// a default, an optional input) or an Auto picked on purpose leaves nothing
 export function fill(tool: Tool, fields: Record<string, string>, prompt: string, kind: Kind, inputs: Record<string, string[]>, holes = false) {
   const hole = (key: string) => (holes ? `{${key}}` : "")
   let text = tool.template || "{prompt}"
   for (const f of tool.fields) {
-    const v = String(fields[f.key] ?? f.default ?? "")
-    const auto = f.options?.some((o) => opt(o).value === "")
+    let v = String(fields[f.key] ?? f.default ?? "")
+    // a References tool's sheets: the first one's words, as its job sends them (the others follow it)
+    if (f.type === "sheets") v = f.options?.map(opt).find((o) => v.split(",").some((x) => x.trim().toLowerCase() === o.label.toLowerCase()))?.value ?? ""
+    const auto = f.options?.some((o) => opt(o).value === "") || (f.type === "style" && f.default == null)
     text = text.replaceAll(`{${f.key}}`, v ? (f.phrase ? f.phrase.replace("{}", v) : v) : auto ? "" : hole(f.key))
   }
   const at = places(kind, tool, inputs)
-  for (const i of tool.inputs) if (i.phrase) text = text.replaceAll(`{${i.key}}`, at[i.key] ? i.phrase.replace("{}", at[i.key]) : hole(i.key))
+  for (const i of tool.inputs) if (i.phrase) text = text.replaceAll(`{${i.key}}`, at[i.key] ? i.phrase.replace("{}", at[i.key]) : i.optional ? "" : hole(i.key))
   return text
     .replaceAll("{prompt}", prompt ?? "")
     .replace(/\s+/g, " ")

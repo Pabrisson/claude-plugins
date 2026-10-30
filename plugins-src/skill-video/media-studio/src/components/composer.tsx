@@ -16,11 +16,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Slider } from "@/components/ui/slider"
 import {
   api,
+  cited,
   fill,
   imageInputs,
+  mentionables,
+  mentionFrom,
   ownPrompt,
   plain,
   priceLabel,
+  type Element,
   type EstimateAnswer,
   type Kind,
   type Model,
@@ -29,6 +33,7 @@ import {
   type Tool,
   type Voice,
   withLooks,
+  withMentions,
 } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, Price } from "@/components/chips"
 import { FieldInput, sections, Setups } from "@/components/fields"
@@ -36,7 +41,8 @@ import { LightRig } from "@/components/light-rig"
 import { StyleField } from "@/components/style-picker"
 import { ExpandPreview, marginsOf } from "@/components/expand"
 import { ExtendPanel } from "@/components/extend"
-import { InputSlots, slotFor, upload } from "@/components/inputs"
+import { InputSlots, Listen, slotFor, upload } from "@/components/inputs"
+import { MentionTextarea } from "@/components/mention"
 import { ToolPicker } from "@/components/tool-picker"
 import { capsOf, ModelPicker, type Priced } from "@/components/model-picker"
 
@@ -123,13 +129,21 @@ export function Composer({
   // the prompt sent: the tool's template filled with its fields and the user's words, or Claude's prompt (a draft)
   // with the user's words after it
   const prompt = value.raw ? [value.rawText, value.intent].filter(Boolean).join(" ").trim() : fill(tool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs)
-  // the same, read only, with what is still to fill as {key}
-  const shownPrompt = value.raw ? prompt : fill(tool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs, true)
+  // the same, read only, with what is still to fill as {key}, and the @names as the model reads them
+  const filled = value.raw ? prompt : fill(tool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs, true)
+  const shownPrompt = kind === "audio" ? filled : withMentions(filled, kind, mentionFrom(kind, tool, value.inputs), state)
+  // what the words can cite with @name (a voice's text is read as written), and the images those bring
+  const items = kind === "audio" ? [] : mentionables(state)
+  const mentioned = cited(value.raw ? prompt : value.intent, items).reduce((n, i) => n + i.files.length, 0)
   // the user writes the whole prompt (Custom, speech), or adds words to the one the tool builds; those are needed on
   // Custom and Custom edit (no prompt of their own), optional beside a tool's
   const whole = ownPrompt(tool), takesWords = tool.template.includes("{prompt}")
   const custom = tool.id === "free" || tool.id === "free-edit"
   const missing = tool.inputs.find((i) => !i.optional && !value.inputs[i.key]?.length)
+  // a References tool: a job a sheet, so no batch; it needs words or photos
+  const sheets = tool.fields.find((f) => f.type === "sheets")
+  const sheetCount = sheets ? String(value.fields[sheets.key] ?? sheets.default ?? "").split(",").filter((x) => x.trim()).length : 0
+  const unsaid = tool.one_of && !tool.one_of.some((k) => value.inputs[k]?.length || value.fields[k]?.trim())
   // the reference images the model takes, and those this sends: the tool's image inputs and a Library style's; an
   // input of several takes what is left (« 2 / 13 »)
   // with a frame, OpenRouter keeps a video's frames and drops its reference images: none then
@@ -137,7 +151,7 @@ export function Composer({
   const maxRefs = framed ? 0 : model?.params.references
   const styleField = tool.fields.find((f) => f.type === "style")
   const styleImages = (styleField && state.styles?.find((s) => s.name === (value.fields[styleField.key] ?? styleField.default))?.files.length) || 0
-  const usedRefs = imageInputs(kind, tool).reduce((n, i) => n + (value.inputs[i.key]?.length ?? 0), 0) + styleImages
+  const usedRefs = imageInputs(kind, tool).reduce((n, i) => n + (value.inputs[i.key]?.length ?? 0), 0) + styleImages + mentioned
   const overRefs = maxRefs != null ? usedRefs - maxRefs : 0
   const limits = maxRefs == null ? {} : Object.fromEntries(imageInputs(kind, tool).filter((i) => i.multiple).map((i) => [i.key, Math.max(0, (value.inputs[i.key]?.length ?? 0) + maxRefs - usedRefs)]))
 
@@ -151,9 +165,9 @@ export function Composer({
       fields: value.fields,
       inputs: value.inputs,
       params: value.params,
-      ...(value.batch && value.batch > 1 && !eleven && !local ? { batch: value.batch } : {}),
+      ...(value.batch && value.batch > 1 && !eleven && !local && !sheets ? { batch: value.batch } : {}),
     }),
-    [kind, tool.id, modelId, value, eleven, local, prompt]
+    [kind, tool.id, modelId, value, eleven, local, prompt, sheets]
   )
 
   // the estimate, again after every change (debounced)
@@ -167,6 +181,10 @@ export function Composer({
         : framed ? "Frames or references, not both" : `Remove ${overRefs} image${overRefs > 1 ? "s" : ""}`
     : expand && !Object.values(marginsOf(value.fields)).some(Boolean)
       ? "Set the frame"
+    : sheets && !sheetCount
+      ? "Pick a sheet"
+    : unsaid
+      ? "Describe it or add photos"
       : !eleven && !local && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale"
       ? kind === "audio" ? "Write the text" : "Write a prompt"
       : tool.id === "translate" && !value.fields.to?.trim()
@@ -238,7 +256,9 @@ export function Composer({
     try {
       await api.generate(spec, confirm)
       setAsk(null)
-      toast.success(`${spec.batch ? `${spec.batch} × ` : ""}${tool.label} started`, { description: "It keeps running if you close this page." })
+      toast.success(sheetCount > 1 ? `${sheetCount} sheets started` : `${spec.batch ? `${spec.batch} × ` : ""}${tool.label} started`, {
+        description: sheetCount > 1 ? "The first sets the look, the others follow it. They keep running if you close this page." : "It keeps running if you close this page.",
+      })
     } catch (e) {
       const err = e as Error & { status?: number; body?: { needs: string; shown: string } }
       if (err.status === 409 && err.body) setAsk(err.body)
@@ -253,7 +273,7 @@ export function Composer({
     const files = Object.entries(value.inputs).filter(([, f]) => f.length).map(([k, f]) => `${k}: ${f.join(", ")}`)
     const fields = tool.fields.map((f) => `${f.key} = ${value.fields[f.key] ?? f.default ?? ""}`)
     const text = [
-      "media-generator: write the best prompt for this generation. Do not generate anything.",
+      "/skill-video:media-generator Write the best prompt for this generation. Do not generate anything.",
       `Space: ${kind} (${mode}). Tool: ${tool.label} (${tool.id}). Model: ${modelId ?? "the tool's default"}${model ? ` (${model.name})` : ""}.`,
       fields.length ? `Fields: ${fields.join("; ")}.` : "",
       files.length ? `Inputs: ${files.join("; ")}.` : "",
@@ -427,7 +447,17 @@ export function Composer({
         )}
 
         {tool.id === "change-voice" && (
-          <ElevenVoices enabled={state.keys.elevenlabs} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} />
+          <ElevenVoices enabled={state.keys.elevenlabs} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
+        )}
+        {tool.id === "voice" && (
+          <LibraryVoices
+            voices={(state.elements ?? []).filter((e) => e.type === "voice" && e.files.length)}
+            value={String(value.params.voice ?? "").startsWith("@") ? String(value.params.voice).slice(1) : null}
+            onChange={(name) => {
+              const { voice_clips, ...inputs } = value.inputs
+              set(name ? { params: { ...value.params, voice: `@${name}` }, inputs } : { params: { ...value.params, voice: undefined }, inputs: { ...inputs, ...(voice_clips ? { voice_clips } : {}) } })
+            }}
+          />
         )}
 
         {tool.template && (
@@ -453,14 +483,25 @@ export function Composer({
             {(takesWords || tool.inputs.length > 0) && (
               <div>
                 <Label hint={whole ? undefined : custom ? "added to the tool's prompt" : "optional, added to the tool's prompt"}>{kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}</Label>
-                <InputGroup className="rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
-                  {takesWords && (
+                <InputGroup className="h-auto flex-col rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
+                  {takesWords && kind === "audio" && (
                     <InputGroupTextarea
                       value={value.intent}
-                      aria-label={kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}
-                      placeholder={kind === "audio" ? "What the voice says" : whole ? tool.description : custom ? "What to change" : "Anything to add: details, style, what must not change"}
+                      aria-label="Text to speak"
+                      placeholder="What the voice says"
                       className={cn("max-h-80 px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
                       onChange={(e) => set({ intent: e.target.value })}
+                    />
+                  )}
+                  {takesWords && kind !== "audio" && (
+                    <MentionTextarea
+                      value={value.intent}
+                      items={items}
+                      blocked={maxRefs === 0 ? (framed ? "Not with a frame: with a first or last frame, the model takes no reference image." : `${model?.name ?? "This model"} takes no reference image: pick another model to cite one.`) : undefined}
+                      aria-label={whole ? "Prompt" : "Your words"}
+                      placeholder={`${whole ? tool.description : custom ? "What to change." : "Anything to add: details, style, what must not change."} Type @ to cite an element.`}
+                      className={cn("max-h-80 px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
+                      onChange={(intent) => set({ intent })}
                     />
                   )}
                   {tool.inputs.length > 0 && (
@@ -502,8 +543,8 @@ export function Composer({
             hasImageInput={kind === "video" ? ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0) : tool.inputs.some((i) => i.kind === "image" && (value.inputs[i.key]?.length ?? 0) > 0)}
             hasVideoInput={tool.inputs.some((i) => i.kind === "video") && !extend}
             // settings a tool's own panel sets: Extend's length and ratio (its source's), Expand's ratio (its frame's)
-            own={extend ? ["duration", "aspect_ratio"] : expand ? ["aspect_ratio"] : []}
-            cloning={(value.inputs.voice_clips?.length ?? 0) > 0}
+            own={extend ? ["duration", "aspect_ratio"] : expand || sheets ? ["aspect_ratio"] : []}
+            cloning={(value.inputs.voice_clips?.length ?? 0) > 0 || String(value.params.voice ?? "").startsWith("@")}
           />
         )}
 
@@ -550,8 +591,8 @@ export function Composer({
               </TooltipContent>
             </Tooltip>
           )}
-          {!eleven && !local && <Batch value={value.batch ?? 1} onChange={(batch) => set({ batch })} />}
-          <Button variant="space" className="h-11 min-w-0 flex-1 justify-between px-4 text-[15px]" disabled={!ready} onClick={() => go()}>
+          {!eleven && !local && !sheets && <Batch value={value.batch ?? 1} onChange={(batch) => set({ batch })} />}
+          <Button variant="space" className={cn("h-11 min-w-0 flex-1 px-4 text-[15px]", blocker && !price ? "justify-center" : "justify-between")} disabled={!ready} onClick={() => go()}>
             <span className="flex min-w-0 items-center gap-2">
               <span className="truncate">{blocker ?? label}</span>
               {!blocker && <Kbd className="bg-space-foreground/15 text-space-foreground/80">⌘↵</Kbd>}
@@ -734,8 +775,38 @@ function ModelBlock({
   )
 }
 
-// the ElevenLabs account's voices, and the two ways to add one: record it, or clone it from a file
-function ElevenVoices({ enabled, value, onChange }: { enabled: boolean; value?: string; onChange: (id: string) => void }) {
+// the Library's voices for the speech tool: one picked sends its clips to be cloned and says how it sounds
+function LibraryVoices({ voices, value, onChange }: { voices: Element[]; value: string | null; onChange: (name: string | null) => void }) {
+  return (
+    <div>
+      <Label hint="cloned from its clips">Your voices</Label>
+      {!voices.length ? (
+        <p className="text-xs text-muted-foreground">
+          No voice in the Library yet: a Voice element is 1 to 3 clean clips. <a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">Make one</a>, or use the model's voices below.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Your voices">
+          {[null, ...voices].map((v) => {
+            const on = (v?.name ?? null) === value
+            return (
+              <div key={v?.name ?? ""} className={cn("flex items-center gap-2.5 rounded-lg border bg-background px-2.5 py-2", on && "border-space/60 bg-space/10")}>
+                {v ? <Listen path={v.files[0]} /> : <span className="size-8 shrink-0" />}
+                <button type="button" role="radio" aria-checked={on} onClick={() => onChange(v?.name ?? null)} className="min-w-0 flex-1 text-left outline-none focus-visible:underline">
+                  <span className="block truncate text-sm font-medium">{v ? `@${v.name}` : "The model's voices"}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{v ? v.words || `${v.files.length} clip${v.files.length > 1 ? "s" : ""}` : "A preset voice, or clips to clone below"}</span>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// the ElevenLabs account's voices, and the two ways to add one: record it, or clone it from a file; one put there from
+// the Library says its @name
+function ElevenVoices({ enabled, value, onChange, library }: { enabled: boolean; value?: string; onChange: (id: string) => void; library: Element[] }) {
   const [voices, setVoices] = useState<Voice[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState("My voice")
@@ -823,7 +894,11 @@ function ElevenVoices({ enabled, value, onChange }: { enabled: boolean; value?: 
               <span className="block truncate text-sm font-medium">{v.name}</span>
               {tags(v) && <span className="block truncate text-xs text-muted-foreground">{tags(v)}</span>}
             </span>
-            {v.category && <Badge variant="outline" className="font-normal text-muted-foreground">{v.category === "cloned" ? "cloned" : "account"}</Badge>}
+            {library.some((e) => e.voice_id === v.voice_id) ? (
+              <Badge variant="outline" className="font-normal text-space">@{library.find((e) => e.voice_id === v.voice_id)!.name}</Badge>
+            ) : (
+              v.category && <Badge variant="outline" className="font-normal text-muted-foreground">{v.category === "cloned" ? "cloned" : "account"}</Badge>
+            )}
           </div>
         ))}
       </div>

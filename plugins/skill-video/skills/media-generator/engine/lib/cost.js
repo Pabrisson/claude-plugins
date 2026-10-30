@@ -86,13 +86,15 @@ export function estimateImage(model, endpoints, req) {
   const priced = (endpoints ?? []).map(e => e.pricing ?? []).filter(p => p.length)
   if (!priced.length) return { amount: null, unit: 'usd', known: false, detail: 'no price listed' }
   const inTokens = req.sizes?.length ? req.sizes.reduce((a, s) => a + inputTokens(model, s), 0) / req.sizes.length : 1000
-  // per billable line: its resolution tier's variant, else the plain one; other variants are optional surcharges
-  const tier = v => /^\d+(\.\d+)?k$/i.test(v)
+  // per billable line: its resolution tier's variant (768, 1k, Grok's low_1k with the quality first), else the plain
+  // one; other variants are optional surcharges
+  const tier = v => /^((low|medium|high)_)?\d+(\.\d+)?k?$/i.test(v)
+  const want = [String(res), `${req.quality}_${res}`].map(s => s.toLowerCase())
   const one = lines => {
     let usd = 0
     for (const billable of new Set(lines.map(l => l.billable))) {
       const same = lines.filter(l => l.billable === billable && (!l.variant || tier(l.variant)))
-      const l = same.find(x => x.variant?.toLowerCase() === String(res).toLowerCase()) ?? same.find(x => !x.variant) ?? same[0]
+      const l = same.find(x => want.includes(x.variant?.toLowerCase())) ?? same.find(x => !x.variant) ?? same[0]
       const count = billable === 'output_image' ? n : /input_image|input_reference/.test(billable) ? refs : 0
       if (!l || !count) continue
       const each = l.unit === 'megapixel' ? (MEGAPIXELS[res] ?? 1.05) : l.unit === 'token' ? (billable === 'output_image' ? imageTokens(model, res, req.quality) : inTokens) : 1

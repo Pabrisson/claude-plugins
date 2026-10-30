@@ -265,7 +265,7 @@ function Slot({
   )
 }
 
-type Pick = { path: string; job: Job }
+export type Pick = { path: string; job: Job }
 
 // how many files an input of several holds, of what the model takes here: red when it holds too many
 function Count({ files, limit }: { files: number; limit: number }) {
@@ -295,9 +295,6 @@ export function Listen({ path }: { path: string }) {
 // the input are checked, a click adds or removes one (replaces it for a single file)
 function LibraryPicker({ input, items, picked, onPick }: { input: Input; items: Pick[]; picked: string[]; onPick: (path: string) => void }) {
   const [open, setOpen] = useState(false)
-  const [show, setShow] = useState<"all" | "favorites">("all")
-  const list = items.filter((i) => show === "all" || i.job.favorite)
-  const tiles = list.filter((i) => mediaKind(i.path) !== "audio"), voices = list.filter((i) => mediaKind(i.path) === "audio")
   const pick = (path: string) => {
     onPick(path)
     if (!input.multiple) setOpen(false)
@@ -310,62 +307,82 @@ function LibraryPicker({ input, items, picked, onPick }: { input: Input; items: 
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[min(460px,calc(100vw-2rem))] gap-0 p-0">
-        <div className="flex items-center gap-3 border-b px-3 py-2.5">
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold">{input.label} from the library</span>
-            <span className="block text-xs text-muted-foreground">
-              {items.length} result{items.length > 1 ? "s" : ""}, newest first{input.multiple ? " · pick several" : ""}
-            </span>
+        <LibraryList title={`${input.label} from the library`} items={items} picked={picked} onPick={pick} multiple={input.multiple} />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+// the library's results in a picker: how many, all or the favorites, the grid to pick from
+export function LibraryList({ title, items, picked, onPick, multiple }: { title: string; items: Pick[]; picked: string[]; onPick: (path: string) => void; multiple?: boolean }) {
+  const [show, setShow] = useState<"all" | "favorites">("all")
+  const list = items.filter((i) => show === "all" || i.job.favorite)
+  return (
+    <>
+      <div className="flex items-center gap-3 border-b px-3 py-2.5">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold">{title}</span>
+          <span className="block text-xs text-muted-foreground">
+            {items.length} result{items.length > 1 ? "s" : ""}, newest first{multiple ? " · pick several" : ""}
           </span>
-          {items.some((i) => i.job.favorite) && (
-            <Chips options={["all", "favorites"] as const} value={show} onChange={setShow} label={(o) => (o === "all" ? "All" : "Favorites")} className="[&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs" />
-          )}
-        </div>
-        <div className="flex max-h-[min(380px,55vh)] flex-col gap-3 overflow-auto p-3">
-          {!list.length && <p className="py-6 text-center text-sm text-muted-foreground">No favorite here yet.</p>}
-          {tiles.length > 0 && (
-            <div className="grid grid-cols-4 gap-2">
-              {tiles.map((i) => {
-                const on = picked.includes(i.path)
-                return (
-                  <button
-                    key={i.path}
-                    type="button"
-                    aria-pressed={on}
-                    aria-label={`${i.job.label}, ${when(i.job.created)}`}
-                    title={`${i.job.label} · ${when(i.job.created)}`}
-                    onClick={() => pick(i.path)}
-                    className={cn("group/tile relative aspect-square overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/5 transition outline-none hover:ring-2 hover:ring-space/60 focus-visible:ring-2 focus-visible:ring-ring", on && "ring-2 ring-space")}
-                  >
-                    <Thumb path={i.path} />
-                    {mediaKind(i.path) === "video" && <PlayIcon className="absolute bottom-1.5 left-1.5 size-3.5 text-white drop-shadow" />}
-                    {i.job.favorite && <StarIcon className="absolute top-1.5 left-1.5 size-3.5 fill-current text-cost drop-shadow" />}
-                    <span className="absolute inset-x-0 bottom-0 truncate bg-linear-to-t from-black/75 to-transparent px-1.5 pt-5 pb-1 text-left text-xs text-white opacity-0 transition-opacity group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100">
-                      {i.job.label}
-                    </span>
-                    {on && <CheckIcon className="absolute top-1.5 right-1.5 size-5 rounded-full bg-space p-0.5 text-space-foreground" />}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-          {voices.map((i) => {
+        </span>
+        {items.some((i) => i.job.favorite) && (
+          <Chips options={["all", "favorites"] as const} value={show} onChange={setShow} label={(o) => (o === "all" ? "All" : "Favorites")} className="[&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs" />
+        )}
+      </div>
+      <PickList items={list} picked={picked} onPick={onPick} empty={items.length ? "No favorite here yet." : "Nothing in the library yet."} className="max-h-[min(380px,55vh)] p-3" />
+    </>
+  )
+}
+
+// results as a grid to pick from, newest first: pictures and clips as tiles, voices as rows to listen to; the ones
+// picked are checked
+export function PickList({ items, picked, onPick, empty, className }: { items: Pick[]; picked: string[]; onPick: (path: string) => void; empty: string; className?: string }) {
+  const tiles = items.filter((i) => mediaKind(i.path) !== "audio"), voices = items.filter((i) => mediaKind(i.path) === "audio")
+  return (
+    <div className={cn("flex flex-col gap-3 overflow-auto", className)}>
+      {!items.length && <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>}
+      {tiles.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {tiles.map((i) => {
             const on = picked.includes(i.path)
             return (
-              <div key={i.path} className={cn("flex items-center gap-2.5 rounded-lg border px-2 py-1.5 transition-colors hover:bg-muted/60", on && "border-space/60 bg-space/10")}>
-                <Listen path={i.path} />
-                <button type="button" aria-pressed={on} onClick={() => pick(i.path)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm">{i.job.prompt || i.job.label}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {i.job.label} · {when(i.job.created)}
-                  </span>
-                </button>
-                {on && <CheckIcon className="size-4 shrink-0 text-space" />}
-              </div>
+              <button
+                key={i.path}
+                type="button"
+                aria-pressed={on}
+                aria-label={`${i.job.label}, ${when(i.job.created)}`}
+                title={`${i.job.label} · ${when(i.job.created)}`}
+                onClick={() => onPick(i.path)}
+                className={cn("group/tile relative aspect-square overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/5 transition outline-none hover:ring-2 hover:ring-space/60 focus-visible:ring-2 focus-visible:ring-ring", on && "ring-2 ring-space")}
+              >
+                <Thumb path={i.path} />
+                {mediaKind(i.path) === "video" && <PlayIcon className="absolute bottom-1.5 left-1.5 size-3.5 text-white drop-shadow" />}
+                {i.job.favorite && <StarIcon className="absolute top-1.5 left-1.5 size-3.5 fill-current text-cost drop-shadow" />}
+                <span className="absolute inset-x-0 bottom-0 truncate bg-linear-to-t from-black/75 to-transparent px-1.5 pt-5 pb-1 text-left text-xs text-white opacity-0 transition-opacity group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100">
+                  {i.job.label}
+                </span>
+                {on && <CheckIcon className="absolute top-1.5 right-1.5 size-5 rounded-full bg-space p-0.5 text-space-foreground" />}
+              </button>
             )
           })}
         </div>
-      </PopoverContent>
-    </Popover>
+      )}
+      {voices.map((i) => {
+        const on = picked.includes(i.path)
+        return (
+          <div key={i.path} className={cn("flex items-center gap-2.5 rounded-lg border px-2 py-1.5 transition-colors hover:bg-muted/60", on && "border-space/60 bg-space/10")}>
+            <Listen path={i.path} />
+            <button type="button" aria-pressed={on} onClick={() => onPick(i.path)} className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-sm">{i.job.prompt || i.job.label}</span>
+              <span className="block text-xs text-muted-foreground">
+                {i.job.label} · {when(i.job.created)}
+              </span>
+            </button>
+            {on && <CheckIcon className="size-4 shrink-0 text-space" />}
+          </div>
+        )
+      })}
+    </div>
   )
 }

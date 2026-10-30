@@ -1,26 +1,11 @@
-import { useEffect, useRef, useState } from "react"
-import { PlusIcon } from "lucide-react"
-import { toast } from "sonner"
+import { useEffect, useState } from "react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  api,
-  fileUrl,
-  money,
-  per1000,
-  plain,
-  type Balances,
-  type Element,
-  type Job,
-  type Kind,
-  type LedgerLine,
-  type SavedStyle,
-  type State,
-} from "@/lib/api"
+import { api, money, per1000, type Balances, type Job, type Kind, type LedgerLine, type State, type Tool } from "@/lib/api"
 import { Chips, Label, MultiChips } from "@/components/chips"
-import { upload } from "@/components/inputs"
+import { ElementsTab, type ElementDraft, type Use } from "@/components/elements"
+import { StylesTab } from "@/components/styles"
 import { isRunning, Results, type Bridge } from "@/components/results"
 import { Viewer } from "@/components/viewer"
 
@@ -45,188 +30,80 @@ export function Main({ title, aside, children }: { title: string; aside?: React.
 
 // ---------- Library ----------
 
-export function Library({ state, onBridge }: { state: State; onBridge: (b: Bridge, job: Job, file: string) => void }) {
-  const [tab, setTab] = useState<"media" | "elements" | "styles">(() => (window.location.hash.endsWith("/styles") ? "styles" : "media"))
+// the Library's tab lives in the URL (#library/elements), so a result's « Make an element » lands on it
+const TABS = ["media", "elements", "styles"] as const
+type Tab = (typeof TABS)[number]
+const tabOf = (): Tab => TABS.find((t) => t !== "media" && window.location.hash.endsWith(`/${t}`)) ?? "media"
+
+export function Library({
+  state,
+  tools,
+  engine,
+  onBridge,
+  draft,
+  onDraftUsed,
+  onUse,
+  onChanged,
+}: {
+  state: State
+  tools: Record<Kind, Tool[]>
+  engine: string
+  onBridge: (b: Bridge, job: Job, file: string) => void
+  draft: ElementDraft | null
+  onDraftUsed: () => void
+  onUse: Use
+  onChanged: () => void
+}) {
+  const [tab, setTab] = useState<Tab>(tabOf)
+  useEffect(() => {
+    const on = () => setTab(tabOf())
+    window.addEventListener("hashchange", on)
+    return () => window.removeEventListener("hashchange", on)
+  }, [])
   const [kind, setKind] = useState<"all" | Kind>("all")
   const [provider, setProvider] = useState("all")
   const [favorites, setFavorites] = useState(false)
   const jobs = state.media.filter(
     (j) => (kind === "all" || j.kind === kind) && (provider === "all" || j.provider === provider) && (!favorites || j.favorite)
   )
+  const tabs = (
+    <Chips
+      options={TABS}
+      value={tab}
+      label={(t) => ({ media: "Media", elements: "Elements", styles: "Styles" })[t]}
+      onChange={(t) => (window.location.hash = t === "media" ? "library" : `library/${t}`)}
+      className="grid grid-cols-3 [&>button]:px-1"
+    />
+  )
+  if (tab === "elements") return <ElementsTab tabs={tabs} state={state} tools={tools.image} engine={engine} draft={draft} onDraftUsed={onDraftUsed} onUse={onUse} onChanged={onChanged} />
+  if (tab === "styles")
+    return <StylesTab tabs={tabs} state={state} options={tools.image.find((t) => t.id === "restyle")?.fields.find((f) => f.type === "style")?.options ?? []} engine={engine} onUse={onUse} onChanged={onChanged} />
   return (
     <>
       <Side>
-        <Chips options={["media", "elements", "styles"] as const} value={tab} label={(t) => ({ media: "Media", elements: "Elements", styles: "Styles" })[t]} onChange={setTab} className="grid grid-cols-3 [&>button]:px-1" />
-        {tab === "media" ? (
-          <>
-            <div>
-              <Label>Medium</Label>
-              <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
-            </div>
-            <div>
-              <Label>Made with</Label>
-              <Chips
-                options={["all", "openrouter", "elevenlabs", "local"]}
-                value={provider}
-                label={(p) => ({ all: "All", openrouter: "OpenRouter", elevenlabs: "ElevenLabs", local: "Local" })[p] ?? p}
-                onChange={setProvider}
-              />
-            </div>
-            <div>
-              <Label>Show</Label>
-              <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? "Everything" : "Favorites")} onChange={(f) => setFavorites(f === "favorites")} />
-            </div>
-          </>
-        ) : tab === "elements" ? (
-          <p className="text-sm text-muted-foreground">
-            Elements are your people, products and places. Cite one in a prompt with @name: its images go with the request, and the model keeps the same face or object.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Styles are looks taken from your images: a painting, a film frame, an illustration. Pick one in Restyle or in Custom: its images go with the request, and the model copies the look, never what is in them.
-          </p>
-        )}
+        {tabs}
+        <div>
+          <Label>Medium</Label>
+          <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
+        </div>
+        <div>
+          <Label>Made with</Label>
+          <Chips
+            options={["all", "openrouter", "elevenlabs", "local"]}
+            value={provider}
+            label={(p) => ({ all: "All", openrouter: "OpenRouter", elevenlabs: "ElevenLabs", local: "Local" })[p] ?? p}
+            onChange={setProvider}
+          />
+        </div>
+        <div>
+          <Label>Show</Label>
+          <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? "Everything" : "Favorites")} onChange={(f) => setFavorites(f === "favorites")} />
+        </div>
       </Side>
-      {tab === "media" ? (
-        <Main title="Library" aside={<span className="text-sm text-muted-foreground">{jobs.length} items</span>}>
-          <Results jobs={jobs} home={state.home} per1000={per1000(state)} onBridge={onBridge} empty={<p className="text-sm text-muted-foreground">Nothing here yet: what you generate lands here, by you or by Claude.</p>} />
-        </Main>
-      ) : tab === "elements" ? (
-        <Elements />
-      ) : (
-        <Styles saved={state.styles ?? []} />
-      )}
+      <Main title="Library" aside={<span className="text-sm text-muted-foreground">{jobs.length} items</span>}>
+        <Results jobs={jobs} home={state.home} per1000={per1000(state)} onBridge={onBridge} empty={<p className="text-sm text-muted-foreground">Nothing here yet: what you generate lands here, by you or by Claude.</p>} />
+      </Main>
     </>
-  )
-}
-
-function Elements() {
-  const [list, setList] = useState<Element[]>([])
-  const [name, setName] = useState("")
-  const [busy, setBusy] = useState(false)
-  const file = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    api.elements().then(setList, () => {})
-  }, [])
-  return (
-    <Main title="Elements">
-      <div className="flex flex-wrap items-end gap-2 rounded-xl border bg-card/60 p-3">
-        <div className="min-w-56 flex-1">
-          <Label>Name, cited as @name</Label>
-          <Input value={name} placeholder="Lulu" onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))} />
-        </div>
-        <Button disabled={!name || busy} onClick={() => file.current?.click()}>
-          <PlusIcon /> {busy ? "Adding…" : "Add images"}
-        </Button>
-        <input
-          ref={file}
-          type="file"
-          hidden
-          multiple
-          accept="image/*"
-          onChange={async (e) => {
-            if (!e.target.files?.length) return
-            setBusy(true)
-            try {
-              const paths = await Promise.all([...e.target.files].map(upload))
-              setList(await api.elements({ name, paths }))
-              toast.success(`@${name} saved`)
-              setName("")
-            } catch (err) {
-              toast.error(plain((err as Error).message))
-            } finally {
-              setBusy(false)
-              e.target.value = ""
-            }
-          }}
-        />
-      </div>
-      {list.length === 0 && <p className="text-sm text-muted-foreground">No element yet. Add a few photos of a person or a product from different angles.</p>}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3.5">
-        {list.map((el) => (
-          <div key={el.name} className="overflow-hidden rounded-xl border bg-card/60">
-            <div className="grid aspect-video grid-cols-2 gap-px bg-border">
-              {el.files.slice(0, 4).map((f) => <img key={f} src={fileUrl(f)} alt="" className="size-full object-cover" />)}
-            </div>
-            <div className="flex items-center justify-between px-3 py-2">
-              <span className="font-semibold">@{el.name}</span>
-              <span className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{el.files.length} images</span>
-                <Button size="xs" variant="ghost" onClick={async () => setList(await api.elements({ name: el.name, remove: true }))}>Remove</Button>
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Main>
-  )
-}
-
-// the Library's styles: a name, 1 to 5 images of the look and a few words on it, picked in Restyle and Custom
-function Styles({ saved }: { saved: SavedStyle[] }) {
-  const [list, setList] = useState<SavedStyle[] | null>(null)
-  const [name, setName] = useState("")
-  const [words, setWords] = useState("")
-  const [busy, setBusy] = useState(false)
-  const file = useRef<HTMLInputElement>(null)
-  const styles = list ?? saved
-  return (
-    <Main title="Styles">
-      <div className="flex flex-wrap items-end gap-2 rounded-xl border bg-card/60 p-3">
-        <div className="min-w-44 flex-1">
-          <Label>Name</Label>
-          <Input value={name} placeholder="Ink-wash" onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))} />
-        </div>
-        <div className="min-w-64 flex-[2]">
-          <Label hint="optional">The look in words</Label>
-          <Input value={words} placeholder="loose sumi ink washes, rice paper, one red accent" onChange={(e) => setWords(e.target.value)} />
-        </div>
-        <Button disabled={!name || busy} onClick={() => file.current?.click()}>
-          <PlusIcon /> {busy ? "Adding…" : "Add images"}
-        </Button>
-        <input
-          ref={file}
-          type="file"
-          hidden
-          multiple
-          accept="image/*"
-          onChange={async (e) => {
-            const picked = [...(e.target.files ?? [])].slice(0, 5)
-            if (!picked.length) return
-            setBusy(true)
-            try {
-              const paths = await Promise.all(picked.map(upload))
-              setList(await api.styles({ name, paths, words: words || undefined }))
-              toast.success(`Style ${name} saved`, { description: "Pick it in Restyle or Custom, under Yours." })
-              setName("")
-              setWords("")
-            } catch (err) {
-              toast.error(plain((err as Error).message))
-            } finally {
-              setBusy(false)
-              e.target.value = ""
-            }
-          }}
-        />
-      </div>
-      {styles.length === 0 && <p className="text-sm text-muted-foreground">No style yet. Add 1 to 5 images that share the look you want: the model takes their medium, palette, line and texture, not their subject.</p>}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3.5">
-        {styles.map((st) => (
-          <div key={st.name} className="overflow-hidden rounded-xl border bg-card/60">
-            <div className={cn("grid aspect-video gap-px bg-border", st.files.length > 1 && "grid-cols-2")}>
-              {st.files.slice(0, 4).map((f) => <img key={f} src={fileUrl(f)} alt="" className="size-full object-cover" />)}
-            </div>
-            <div className="flex items-start justify-between gap-2 px-3 py-2">
-              <span className="min-w-0">
-                <span className="block truncate font-semibold">{st.name}</span>
-                <span className="block truncate text-xs text-muted-foreground">{st.words || `${st.files.length} image${st.files.length > 1 ? "s" : ""}`}</span>
-              </span>
-              <Button size="xs" variant="ghost" onClick={async () => setList(await api.styles({ name: st.name, remove: true }))}>Remove</Button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Main>
   )
 }
 

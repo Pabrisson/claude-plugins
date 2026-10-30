@@ -33,6 +33,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' },
+    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true },
   },
 })
 
@@ -159,13 +160,17 @@ async function modelOf(kind, id) {
 // second image », « images 2 to 4 »), a video model its references and sketch apart from its frames (« reference
 // images 1 to 2 »). The dashboard's places does the same
 const ORDINALS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth']
+const counted = (kind, tool) => tool.inputs.filter(i => (kind === 'image' ? ['image', 'sketch', 'mask'].includes(i.kind) : ['references', 'sketch'].includes(i.key)))
+const placeOf = (kind, at, n) => {
+  const noun = kind === 'image' ? 'image' : 'reference image'
+  return n === 1 ? `the ${ORDINALS[at - 1] ?? `#${at}`} ${noun}` : `${noun}s ${at} to ${at + n - 1}`
+}
 function places(kind, tool, inputs) {
-  const noun = kind === 'image' ? 'image' : 'reference image', out = {}
+  const out = {}
   let at = 1
-  for (const i of tool.inputs) {
-    if (kind === 'image' ? !['image', 'sketch', 'mask'].includes(i.kind) : !['references', 'sketch'].includes(i.key)) continue
+  for (const i of counted(kind, tool)) {
     const n = inputs?.[i.key]?.length ?? 0
-    if (n) out[i.key] = n === 1 ? `the ${ORDINALS[at - 1] ?? `#${at}`} ${noun}` : `${noun}s ${at} to ${at + n - 1}`
+    if (n) out[i.key] = placeOf(kind, at, n)
     at += n
   }
   return out
@@ -189,14 +194,103 @@ function fill(tool, spec) {
 // an option is a value, or { value, label, group, note }; a label given for a value stands for it (light=Silhouette)
 const optionValue = (f, v) => f.options?.find(o => typeof o === 'object' && o.label?.toLowerCase() === String(v).toLowerCase())?.value ?? v
 
-// the Elements an @name of the prompt cites: their images join the references, the name stays in the words
-function mentions(text) {
-  const refs = []
+// ---------- the Library: Elements and styles, cited with @name ----------
+
+// an Element's type says what its images are to the model; a voice holds clips, picked as Audio's voice, never in words.
+// One made before the types is « other »
+const TYPES = ['character', 'outfit', 'object', 'location', 'pose', 'brand', 'voice', 'other']
+const NAME = /^[\w-]+$/
+// an Element (elements/<name>/): its images (a voice's clips) and element.json: its type, its words, a brand's colors and
+// typeface, a voice's ElevenLabs id once it is on the account
+function element(name) {
+  const d = at('elements', String(name ?? ''))
+  if (!NAME.test(name ?? '') || !fs.existsSync(d) || !fs.statSync(d).isDirectory()) return null
+  const meta = fs.existsSync(path.join(d, 'element.json')) ? readJson(path.join(d, 'element.json')) : {}
+  const type = TYPES.includes(meta.type) ? meta.type : 'other'
+  const files = fs.readdirSync(d).filter(f => kindOfFile(f) === (type === 'voice' ? 'audio' : 'image')).sort().map(f => path.join(d, f))
+  return { name, type, words: meta.words ?? '', colors: meta.colors ?? [], font: meta.font ?? '', voice_id: meta.voice_id ?? null, files }
+}
+const elementList = () => (fs.existsSync(at('elements')) ? fs.readdirSync(at('elements')).sort().map(element).filter(Boolean) : [])
+
+// a file copied into an Element's or a style's folder: a result keeps its job in its name (each job has its out-1.png),
+// an upload loses its time stamp; the same file again is skipped, another of the same name gets -2, -3…
+function copyIn(dir, f) {
+  const job = inside(at('media'), f) && path.basename(path.dirname(f))
+  let name = job ? `${job}-${path.basename(f)}` : path.basename(f).replace(/^\d+-/, '')
+  const { name: base, ext } = path.parse(name), size = fs.statSync(f).size
+  for (let i = 2; fs.existsSync(path.join(dir, name)); i++) {
+    if (fs.statSync(path.join(dir, name)).size === size) return
+    name = `${base}-${i}${ext}`
+  }
+  fs.copyFileSync(f, path.join(dir, name))
+}
+// the results of generations (--from <id>, several, or ids joined by commas) of one medium
+function outputsOf(ids, kind) {
+  return (ids ?? []).flatMap(x => x.split(',')).map(x => path.basename(x.trim())).filter(Boolean).flatMap(id => {
+    const j = fs.existsSync(path.join(mediaDir(id), 'job.json')) ? readJob(id) : null
+    if (!j) throw userError(`no generation ${id} (media.mjs jobs)`)
+    if (j.status !== 'done') throw userError(`${id} is ${j.status}, not done`)
+    const files = j.outputs.filter(f => kindOfFile(f) === kind).map(f => path.join(mediaDir(id), f))
+    if (!files.length) throw userError(`${id} made no ${kind}`)
+    return files
+  })
+}
+
+// adds files to an Element (made when new) and sets what is given: its type, words, a brand's colors and typeface;
+// from: generations whose results join it; drop: file names taken out
+function saveElement(name, { type, words, colors, font, files = [], from = [], drop = [] }) {
+  if (!NAME.test(name ?? '')) throw userError('an Element\'s name is letters, digits, - and _')
+  const now = element(name), t = type ?? now?.type ?? 'other'
+  if (!TYPES.includes(t)) throw userError(`the types are ${TYPES.join(', ')}`)
+  const want = t === 'voice' ? 'audio' : 'image', all = [...files, ...outputsOf(from, want)]
+  const odd = all.find(f => kindOfFile(f) !== want)
+  if (odd) throw userError(`${path.basename(odd)} is not ${want === 'audio' ? 'a sound: a voice takes clips' : 'an image'}`)
+  if (!now && !all.length) throw userError(`a new Element takes ${want === 'audio' ? 'a voice clip' : 'an image'} or more`)
+  ensureHome()
+  const d = at('elements', name)
+  fs.mkdirSync(d, { recursive: true })
+  for (const f of all) copyIn(d, f)
+  for (const f of drop) fs.rmSync(path.join(d, path.basename(f)), { force: true })
+  writeJson(path.join(d, 'element.json'), clean({ type: t, words: (words ?? now?.words ?? '').trim(),
+    ...(t === 'brand' ? { colors: colors ?? now?.colors ?? [], font: (font ?? now?.font ?? '').trim() } : {}), voice_id: t === 'voice' ? now?.voice_id : undefined }))
+  return element(name)
+}
+
+// a voice of the Library on the ElevenLabs account (an instant clone), for Change voice: its id kept with it
+function voiceToEleven(name) {
+  const v = element(name)
+  if (v?.type !== 'voice') throw userError(`@${name} is not a voice of the Library`)
+  const r = videoMjs(['voice-clone', name, ...v.files])
+  if (r.status !== 0) throw userError((r.stderr || r.stdout).trim().split('\n').pop().replace(/^error: /, ''))
+  const id = r.stdout.match(/voice: (\S+)/)?.[1]
+  if (!id) throw userError('ElevenLabs gave no voice id')
+  const f = at('elements', name, 'element.json')
+  writeJson(f, { ...(fs.existsSync(f) ? readJson(f) : {}), voice_id: id })
+  return element(name)
+}
+
+// how the prompt names an Element: what it is and where its images are, then its words
+const CITED = {
+  character: w => `the character in ${w}`, outfit: w => `the outfit in ${w}`, object: w => `the object in ${w}`, location: w => `the place in ${w}`,
+  pose: w => `the pose in ${w}: only its body pose, never its face, clothes or place`, brand: w => `the brand in ${w}: its logo reproduced exactly`, other: w => `shown in ${w}`,
+}
+function cite(el, where) {
+  const brand = el.type === 'brand' ? [el.colors.length && `its colors ${el.colors.join(', ')}`, el.font && `the typeface ${el.font}`] : []
+  return [CITED[el.type](where), ...brand, el.words].filter(Boolean).join(', ')
+}
+// the Elements an @name cites, in order: their images join the references after the tool's (from: the place of the
+// first), the name reads as what they are and where (« Lulu (the character in images 2 to 3) »), once; a voice, a style
+// (picked in a Style field) or an unknown name stays as written
+function mentions(text, kind, from) {
+  const refs = [], done = new Set()
   const out = text.replace(/@([\w-]+)/g, (all, name) => {
-    const d = at('elements', name)
-    if (!fs.existsSync(d)) return all
-    refs.push(...fs.readdirSync(d).filter(f => kindOfFile(f) === 'image').sort().map(f => path.join(d, f)))
-    return name
+    if (done.has(name)) return name
+    const el = element(name)
+    if (!el || el.type === 'voice' || !el.files.length) return all
+    const where = placeOf(kind, from + refs.length, el.files.length)
+    refs.push(...el.files)
+    done.add(name)
+    return `${name} (${cite(el, where)})`
   })
   return { text: out, refs }
 }
@@ -205,7 +299,7 @@ function mentions(text) {
 // their place with the words on its look. A name, never a preset's value (those are sentences)
 function savedStyle(name) {
   const d = at('styles', String(name ?? ''))
-  if (!/^[\w-]+$/.test(name ?? '') || !fs.existsSync(d)) return null
+  if (!NAME.test(name ?? '') || !fs.existsSync(d)) return null
   const files = fs.readdirSync(d).filter(f => kindOfFile(f) === 'image').sort().map(f => path.join(d, f))
   const words = fs.existsSync(path.join(d, 'style.json')) ? readJson(path.join(d, 'style.json')).words ?? '' : ''
   const [its, img] = files.length === 1 ? ['its', 'reference image'] : ['their', `${files.length} reference images`]
@@ -322,6 +416,17 @@ function elevenEstimate(argv) {
 // probe: a price for the tool picker before its inputs and words are there (never run)
 async function plan(spec) {
   const tool = toolOf(spec.kind, spec.tool), probing = !!spec.probe
+  // a voice of the Library (--voice @name): its clips are cloned, its words say how it sounds
+  if (spec.kind === 'audio' && String(spec.params?.voice ?? '').startsWith('@')) {
+    const v = element(spec.params.voice.slice(1)), { voice, ...params } = spec.params
+    if (v?.type !== 'voice' || !v.files.length) throw userError(`no voice ${voice} in the Library (media.mjs elements)`)
+    spec = { ...spec, params, inputs: { ...spec.inputs, voice_clips: v.files.slice(0, 3) }, fields: { ...spec.fields, instructions: spec.fields?.instructions || v.words || undefined } }
+  }
+  // a References tool makes anyone without words or photos
+  if (!probing && tool.one_of && !tool.one_of.some(k => spec.inputs?.[k]?.length || String(spec.fields?.[k] ?? '').trim())) {
+    const [f, i] = [tool.fields.find(x => tool.one_of.includes(x.key)), tool.inputs.find(x => tool.one_of.includes(x.key))]
+    throw userError(`${tool.label}: describe it (--field ${f.key}="…") or add ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
+  }
   // the fields left out take their defaults (upscale's creativity, extend's direction…)
   const fields = { ...Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)])), ...spec.fields }
   // a style of the Library: its words in the prompt, its images after the other references
@@ -333,7 +438,10 @@ async function plan(spec) {
   spec = { ...spec, fields }
   if (!probing) for (const i of tool.inputs) if (!i.optional && !spec.inputs?.[i.key]?.length) throw userError(`${tool.label} needs ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
   for (const f of Object.values(spec.inputs ?? {}).flat()) if (!fs.existsSync(f)) throw userError(`no such file: ${f}`)
-  const { text: prompt, refs } = mentions(fill(tool, spec))
+  // the @names of an image or a video prompt (a voice's text is read as written): their images after the tool's
+  const filled = fill(tool, spec)
+  const { text: prompt, refs } = spec.kind === 'audio' ? { text: filled, refs: [] }
+    : mentions(filled, spec.kind, 1 + counted(spec.kind, tool).reduce((n, i) => n + (spec.inputs?.[i.key]?.length ?? 0), 0))
   // a probe prices the tool before its files: a style's images would only trip the model's count
   if (!probing) refs.push(...looks)
   if (tool.local === 'reframe') return { tool, prompt: '', provider: 'local', model: 'ffmpeg', estimate: { amount: 0, unit: 'usd', known: true, detail: 'local, free' } }
@@ -389,13 +497,49 @@ const newId = tool => `${new Date().toISOString().replace(/[-:]/g, '').replace('
 const batchOf = spec => (spec.batch == null ? 1 : Math.min(4, Math.max(1, Math.round(+spec.batch) || 1)))
 const times = (p, n) => (n === 1 ? p : { ...p, estimate: { ...p.estimate, amount: p.estimate.amount == null ? null : +(p.estimate.amount * n).toFixed(6), detail: `${n} × ${p.estimate.detail}` } })
 
+// a References tool's sheets, picked by label in the catalog's order (--field sheets="Body turnaround, Face close-up")
+function sheetsOf(tool, spec) {
+  const f = tool.fields.find(x => x.type === 'sheets')
+  if (!f) return null
+  const want = String(spec.fields?.[f.key] ?? f.default ?? '').split(',').map(s => s.trim().toLowerCase())
+  const list = f.options.filter(o => want.includes(o.label.toLowerCase()))
+  if (!list.length) throw userError(`pick one sheet or more (--field ${f.key}="${f.options.map(o => o.label).join(', ')}")`)
+  return { f, list }
+}
+// a gray image standing for a sheet not made yet: the estimate counts it as the reference it will be
+function standIn() {
+  const f = at('.cache', 'stand-in.png')
+  if (!fs.existsSync(f)) (fs.mkdirSync(path.dirname(f), { recursive: true }), ffmpeg(['-f', 'lavfi', '-i', 'color=gray:s=1024x1024', '-frames:v', '1', '-update', '1', f]))
+  return f
+}
+// the jobs a generation makes, each with its plan: a batch's takes of one, or a References tool's sheets at their own
+// ratio, the first alone, the others after it to match its image
+async function plans(spec) {
+  const tool = toolOf(spec.kind, spec.tool), sheets = sheetsOf(tool, spec)
+  if (!sheets) { const p = await plan(spec); return Array.from({ length: batchOf(spec) }, () => ({ spec, p })) }
+  return Promise.all(sheets.list.map(async (o, k) => {
+    const one = { ...spec, batch: undefined, fields: { ...spec.fields, [sheets.f.key]: o.label }, params: { aspect_ratio: o.ratio, ...spec.params } }
+    const after = k > 0 && !spec.probe
+    return { spec: one, after, p: await plan(after ? { ...one, inputs: { ...one.inputs, sheet: [standIn()] } } : one) }
+  }))
+}
+// what they cost together: a batch's n times one, sheets added up
+function total(list) {
+  if (list.every(x => x.p === list[0].p)) return times(list[0].p, list.length)
+  const amounts = list.map(x => x.p.estimate.amount)
+  return { ...list[0].p, estimate: { ...list[0].p.estimate, amount: amounts.includes(null) ? null : +amounts.reduce((a, b) => a + b, 0).toFixed(6),
+    known: list.every(x => x.p.estimate.known), detail: list.map(x => x.p.estimate.detail).join(' + ') } }
+}
+
 async function create(spec, gateOpts) {
   ensureHome()
-  const p = await plan(spec), n = batchOf(spec)
-  gate(times(p, n), gateOpts)
-  const { batch, ...kept } = spec
-  return Array.from({ length: n }, (_, k) => {
+  const list = await plans(spec)
+  gate(total(list), gateOpts)
+  let first = null
+  return list.map(({ spec: one, p, after }, k) => {
+    const { batch, ...kept } = one
     const id = newId(p.tool.id), dir = mediaDir(id)
+    first ??= id
     fs.mkdirSync(dir, { recursive: true })
     // the inputs are copied in: a remix works after the originals moved
     const inputs = {}
@@ -405,12 +549,12 @@ async function create(spec, gateOpts) {
       return name
     })
     const job = { id, kind: kept.kind, tool: p.tool.id, label: p.tool.label, provider: p.provider, model: p.model, name: p.name ?? p.model, prompt: p.prompt, spec: { ...kept, inputs },
-      estimate: p.estimate, actual: null, status: 'queued', by: gateOpts.by, created: new Date().toISOString(), outputs: [] }
+      estimate: p.estimate, actual: null, status: 'queued', by: gateOpts.by, created: new Date().toISOString(), outputs: [], ...(after ? { after: first } : {}) }
     saveJob(job)
     // what run needs and the folder does not keep: the request (data: URLs) and video.mjs's arguments; a batch's
-    // seed goes up by one a job, or its takes would all be the same
+    // seed goes up by one a job, or its takes would all be the same. A sheet after the first is planned when it runs
     const send = p.request?.send && typeof p.request.send.seed === 'number' ? { ...p.request.send, seed: p.request.send.seed + k } : p.request?.send
-    writeJson(at('.cache', 'requests', `${id}.json`), { request: send ?? null, argv: p.argv ?? null })
+    writeJson(at('.cache', 'requests', `${id}.json`), { request: after ? null : send ?? null, argv: p.argv ?? null })
     return job
   })
 }
@@ -419,10 +563,11 @@ const progress = (job, note) => { job.note = note; saveJob(job); if (!process.en
 
 async function run(id) {
   const dir = mediaDir(id), job = readJob(id), reqFile = at('.cache', 'requests', `${id}.json`)
-  const { request, argv } = fs.existsSync(reqFile) ? readJson(reqFile) : {}
+  let { request, argv } = fs.existsSync(reqFile) ? readJson(reqFile) : {}
   Object.assign(job, { status: 'running', pid: process.pid, started: job.started ?? new Date().toISOString() })
   saveJob(job)
   try {
+    if (job.after) request = await matchFirst(dir, job)
     if (job.provider === 'local') runReframe(dir, job)
     else if (job.provider === 'elevenlabs') runEleven(dir, job, argv)
     else await runRouter(dir, job, request)
@@ -440,6 +585,28 @@ async function run(id) {
   saveJob(job)
   fs.rmSync(reqFile, { force: true })
   return job
+}
+
+// a sheet after the first of its set: it waits for the first one's image, takes it as the sheet to match (kept in its
+// folder, so a remix redoes this sheet alone against it), then is planned with it
+async function matchFirst(dir, job) {
+  progress(job, 'waiting for the first sheet…')
+  for (;;) {
+    const first = fs.existsSync(path.join(mediaDir(job.after), 'job.json')) ? readJob(job.after) : null
+    if (!first) throw new Error('the first sheet of this set is gone')
+    if (first.status === 'failed') throw new Error(`the first sheet failed: ${first.error}`)
+    if (first.status === 'done') {
+      const img = first.outputs.find(f => kindOfFile(f) === 'image')
+      if (!img) throw new Error('the first sheet made no image')
+      job.spec.inputs.sheet = [`in-sheet-1${path.extname(img)}`]
+      fs.copyFileSync(path.join(mediaDir(first.id), img), path.join(dir, job.spec.inputs.sheet[0]))
+      const p = await plan({ ...job.spec, inputs: Object.fromEntries(Object.entries(job.spec.inputs).map(([k, l]) => [k, l.map(f => path.join(dir, f))])) })
+      job.prompt = p.prompt
+      saveJob(job)
+      return p.request.send
+    }
+    await sleep(+(process.env.MEDIA_GENERATOR_POLL ?? 1000))
+  }
 }
 
 async function runRouter(dir, job, request) {
@@ -563,7 +730,7 @@ async function generate(kind) {
   const spec = specFromArgs(kind)
   try {
     if (opt.estimate) {
-      const p = times(await plan(spec), batchOf(spec))
+      const p = total(await plans(spec))
       return console.log(JSON.stringify({ tool: p.tool.id, provider: p.provider, model: p.model, prompt: p.prompt, estimate: p.estimate, shown: money(p.estimate.amount, p.estimate.unit, per1000()) }))
     }
     const jobs = await create(spec, { spend: num(opt.spend), acceptUnknown: opt['accept-unknown'], force: opt.force, by: 'claude' })
@@ -597,6 +764,7 @@ async function cmdModels(kind = 'video') {
 function fieldHelp(f) {
   const list = f.options?.map(o => (typeof o === 'object' ? o.label ?? o.value : o) || 'Auto').join('|')
   if (f.type === 'multi') return `--field ${f.key}="<one>, then <another>" (${list})`
+  if (f.type === 'sheets') return `--field ${f.key}="<one>, <another>" (${list}; default ${f.default})`
   if (f.type === 'light') return `--field ${f.key}=<the light in words>${list ? `|${list}` : ''}`
   if (f.type === 'margin') return `--field ${f.key}=<0–2, a share of the image>`
   if (f.type === 'style') return `--field ${f.key}=${list}|<a style of the Library>`
@@ -675,35 +843,59 @@ function setup(sub, ...rest) {
   for (const [sec, o] of Object.entries(s)) console.log(`${sec}: ${Object.entries(o).map(([k, v]) => `${k} ${v ?? 'not set'}`).join(' · ')}`)
 }
 
-// elements [add <name> <files…> | remove <name>]: the people, products and places a prompt cites with @name
+// elements [add|set <name> [<files…>] | show <name> | remove <name> | elevenlabs <name>]: the characters, outfits,
+// objects, places, poses, brands and voices of the Library. add makes one or adds to it, set changes one; both take
+// --type, --words, --colors "#hex,#hex" and --font (a brand), --from <generation> (its results) and --drop <file>
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 function elements(sub, name, ...files) {
-  if (sub === 'add') {
-    if (!/^[\w-]+$/.test(name ?? '') || !files.length) die('usage: elements add <name> <images…> (letters, digits, - and _)')
-    ensureHome()
-    fs.mkdirSync(at('elements', name), { recursive: true })
-    for (const f of files) fs.copyFileSync(f, at('elements', name, path.basename(f)))
-  } else if (sub === 'remove') fs.rmSync(at('elements', name ?? '-'), { recursive: true, force: true })
-  const list = fs.existsSync(at('elements')) ? fs.readdirSync(at('elements')).filter(d => fs.statSync(at('elements', d)).isDirectory()) : []
-  for (const d of list) console.log(`@${d}: ${fs.readdirSync(at('elements', d)).length} images`)
-  if (!list.length) console.log('no element yet: elements add <name> <images…>')
+  const usage = `usage: elements [add|set <name> [<files…>] [--type ${TYPES.join('|')}] [--words "…"] [--colors "#hex,#hex"] [--font "…"] [--from <generation>] [--drop <file>] | show <name> | remove <name> | elevenlabs <name>]`
+  try {
+    if (sub === 'add' || sub === 'set') {
+      if (sub === 'set' && !element(name)) throw userError(`no Element @${name}: elements add ${name} <files…>`)
+      saveElement(name, { type: opt.type, words: opt.words, colors: opt.colors?.split(/[,\s]+/).filter(Boolean), font: opt.font, files: files.map(f => path.resolve(f)), from: opt.from, drop: opt.drop })
+    } else if (sub === 'show') {
+      const el = element(name)
+      if (!el) throw userError(`no Element @${name}`)
+      return console.log(JSON.stringify(el, null, 2))
+    } else if (sub === 'remove') fs.rmSync(at('elements', name ?? '-'), { recursive: true, force: true })
+    else if (sub === 'elevenlabs') voiceToEleven(name)
+    else if (sub) die(usage)
+  } catch (e) { die(e.message) }
+  const list = elementList()
+  for (const el of list) console.log(`@${el.name}: ${el.type}, ${plural(el.files.length, el.type === 'voice' ? 'clip' : 'image')}${el.colors.length ? ` · ${el.colors.join(' ')}` : ''}${el.words ? ` · ${el.words}` : ''}${el.voice_id ? ` · ElevenLabs ${el.voice_id}` : ''}`)
+  if (!list.length) console.log('no element yet: elements add <name> <images…> --type character')
 }
 
-// styles [add <name> <images…> [--words "…"] | remove <name>]: the Library's styles, their look taken from images
+// styles [add|set <name> [<images…>] [--words "…"] [--from <generation>] [--drop <file>] | show <name> | remove <name>]:
+// the Library's styles, their look taken from images
 function styles(sub, name, ...files) {
-  if (sub === 'add') {
-    if (!/^[\w-]+$/.test(name ?? '') || !files.length) die('usage: styles add <name> <images…> [--words "the look in words"] (letters, digits, - and _)')
-    addStyle(name, files, opt.words)
-  } else if (sub === 'remove') fs.rmSync(at('styles', name ?? '-'), { recursive: true, force: true })
+  try {
+    const all = [...files.map(f => path.resolve(f)), ...outputsOf(opt.from, 'image')]
+    if (sub === 'add') {
+      if (!NAME.test(name ?? '') || !all.length) die('usage: styles add <name> <images…> [--words "the look in words"] [--from <generation>] (letters, digits, - and _)')
+      addStyle(name, all, opt.words)
+    } else if (sub === 'set') {
+      if (!savedStyle(name)) throw userError(`no style ${name}: styles add ${name} <images…>`)
+      addStyle(name, all, opt.words, opt.drop)
+    } else if (sub === 'show') {
+      const s = savedStyle(name)
+      if (!s) throw userError(`no style ${name}`)
+      return console.log(JSON.stringify(s, null, 2))
+    } else if (sub === 'remove') fs.rmSync(at('styles', name ?? '-'), { recursive: true, force: true })
+    else if (sub) die('usage: styles [add|set <name> [<images…>] [--words "…"] [--from <generation>] [--drop <file>] | show <name> | remove <name>]')
+  } catch (e) { die(e.message) }
   const list = savedStyles()
-  for (const s of list) console.log(`${s.name}: ${s.files.length} image${s.files.length > 1 ? 's' : ''}${s.words ? ` · ${s.words}` : ''}`)
+  for (const s of list) console.log(`${s.name}: ${plural(s.files.length, 'image')}${s.words ? ` · ${s.words}` : ''}`)
   if (!list.length) console.log('no style yet: styles add <name> <images…> [--words "…"]')
 }
-function addStyle(name, files, words) {
+function addStyle(name, files, words, drop = []) {
   ensureHome()
-  fs.mkdirSync(at('styles', name), { recursive: true })
-  for (const f of files) fs.copyFileSync(f, at('styles', name, path.basename(f).replace(/^\d+-/, '')))
+  const d = at('styles', name)
+  fs.mkdirSync(d, { recursive: true })
+  for (const f of files) copyIn(d, f)
+  for (const f of drop) fs.rmSync(path.join(d, path.basename(f)), { force: true })
   // more images keep the words already written, unless new ones come
-  writeJson(at('styles', name, 'style.json'), { words: (words ?? savedStyle(name)?.words ?? '').trim() })
+  writeJson(path.join(d, 'style.json'), { words: (words ?? savedStyle(name)?.words ?? '').trim() })
 }
 
 function doctor() {
@@ -778,7 +970,7 @@ async function handle(req, res) {
     const drafts = fs.existsSync(at('.cache', 'drafts.json')) ? readJson(at('.cache', 'drafts.json')) : {}
     return reply(res, 200, { home: HOME, settings: settings(), keys: { openrouter: !!process.env.OPENROUTER_API_KEY, management: !!process.env.OPENROUTER_MANAGEMENT_KEY, elevenlabs: !!process.env.ELEVENLABS_API_KEY },
       fake: fakeState(),
-      media: mediaList(), drafts, styles: savedStyles(), plans: PLANS, month: Object.fromEntries(['openrouter', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
+      media: mediaList(), drafts, styles: savedStyles(), elements: elementList(), plans: PLANS, month: Object.fromEntries(['openrouter', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
   }
   if (p === '/api/tools') return reply(res, 200, TOOLS)
   if (p === '/api/models') {
@@ -798,7 +990,7 @@ async function handle(req, res) {
   if (p === '/api/estimate' && post) {
     const spec = await readBody(req)
     try {
-      const pl = times(await plan(spec), batchOf(spec)), s = settings()
+      const pl = total(await plans(spec)), s = settings()
       return reply(res, 200, { model: pl.model, provider: pl.provider, prompt: pl.prompt, estimate: pl.estimate, shown: money(pl.estimate.amount, pl.estimate.unit, per1000()),
         needs: pl.provider === 'local' ? null : needsYes(pl.estimate, s[pl.provider], spentThisMonth(readLedger(HOME), pl.provider)) })
     } catch (e) { return reply(res, 400, { error: e.message }) }
@@ -889,28 +1081,28 @@ async function handle(req, res) {
     const r = videoMjs(['voice-clone', name, ...files])
     return r.status === 0 ? reply(res, 200, { ok: true, out: r.stdout.trim() }) : reply(res, 400, { error: (r.stderr || r.stdout).trim().replace(/^error: /, '') })
   }
+  // the Library's Elements: made or changed from the page (a path inside the folder: an upload, a result), removed, a
+  // voice put on the ElevenLabs account
   if (p === '/api/elements') {
     if (post) {
-      const { name, paths, remove } = await readBody(req)
-      if (!/^[\w-]+$/.test(name ?? '')) return reply(res, 400, { error: 'a name of letters, digits, - and _' })
-      if (remove) fs.rmSync(at('elements', name), { recursive: true, force: true })
-      else {
-        ensureHome()
-        fs.mkdirSync(at('elements', name), { recursive: true })
-        for (const f of paths ?? []) if (inside(HOME, f)) fs.copyFileSync(f, at('elements', name, path.basename(f).replace(/^\d+-/, '')))
-      }
+      const { name, paths, remove, elevenlabs, type, words, colors, font, drop } = await readBody(req)
+      if (!NAME.test(name ?? '')) return reply(res, 400, { error: 'a name of letters, digits, - and _' })
+      try {
+        if (remove) fs.rmSync(at('elements', name), { recursive: true, force: true })
+        else if (elevenlabs) voiceToEleven(name)
+        else saveElement(name, { type, words, colors, font, drop, files: (paths ?? []).map(f => inside(HOME, f)).filter(Boolean) })
+      } catch (e) { return reply(res, 400, { error: e.message }) }
     }
-    const list = fs.existsSync(at('elements')) ? fs.readdirSync(at('elements')).filter(d => fs.statSync(at('elements', d)).isDirectory()) : []
-    return reply(res, 200, list.map(name => ({ name, files: fs.readdirSync(at('elements', name)).map(f => at('elements', name, f)) })))
+    return reply(res, 200, elementList())
   }
   if (p === '/api/styles' && post) {
-    const { name, paths, words, remove } = await readBody(req)
-    if (!/^[\w-]+$/.test(name ?? '')) return reply(res, 400, { error: 'a name of letters, digits, - and _' })
+    const { name, paths, words, drop, remove } = await readBody(req)
+    if (!NAME.test(name ?? '')) return reply(res, 400, { error: 'a name of letters, digits, - and _' })
     if (remove) fs.rmSync(at('styles', name), { recursive: true, force: true })
     else {
       const files = (paths ?? []).filter(f => inside(HOME, f) && kindOfFile(f) === 'image')
-      if (!files.length) return reply(res, 400, { error: 'a style takes one image or more' })
-      addStyle(name, files, words)
+      if (!files.length && !savedStyle(name)) return reply(res, 400, { error: 'a style takes one image or more' })
+      addStyle(name, files, words, drop)
     }
     return reply(res, 200, savedStyles())
   }

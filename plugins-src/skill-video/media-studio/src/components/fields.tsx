@@ -39,6 +39,7 @@ export function FieldInput({ field: f, value, onChange, tile }: { field: Field; 
   const v = value ?? (f.default != null ? String(f.default) : "")
   if (f.type === "select") return <RichSelect field={f} value={v} onChange={onChange} tile={tile} />
   if (f.type === "multi") return <Moves field={f} value={v} onChange={onChange} />
+  if (f.type === "sheets") return <Sheets field={f} value={v} onChange={onChange} />
   return (
     <div>
       <Label>{f.label}</Label>
@@ -60,6 +61,49 @@ export function FieldInput({ field: f, value, onChange, tile }: { field: Field; 
       ) : (
         <Input value={value ?? ""} placeholder={f.placeholder} onChange={(e) => onChange(e.target.value)} />
       )}
+    </div>
+  )
+}
+
+// a References tool's sheets: each picked one is a job and an image of its own, at its ratio; the first sets the look
+function Sheets({ field: f, value, onChange }: { field: Field; value: string; onChange: (v: string) => void }) {
+  const options = (f.options ?? []).map(opt)
+  const on = value.split(",").map((x) => x.trim().toLowerCase())
+  const toggle = (label: string) => {
+    const next = options.filter((o) => (o.label === label ? !on.includes(label.toLowerCase()) : on.includes(o.label.toLowerCase())))
+    onChange(next.map((o) => o.label).join(", "))
+  }
+  const count = options.filter((o) => on.includes(o.label.toLowerCase())).length
+  return (
+    <div>
+      <Label hint={count > 1 ? `${count} images, the first sets the look` : count === 1 ? "1 image" : undefined}>{f.label}</Label>
+      <div className="flex flex-col gap-1.5">
+        {options.map((o) => {
+          const picked = on.includes(o.label.toLowerCase())
+          const [w, h] = (o.ratio ?? "1:1").split(":").map(Number)
+          return (
+            <button
+              key={o.label}
+              type="button"
+              aria-pressed={picked}
+              onClick={() => toggle(o.label)}
+              className={cn(
+                "flex min-w-0 items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                picked ? "border-space/50 bg-space/10" : "hover:bg-muted/60"
+              )}
+            >
+              <span className="grid size-8 shrink-0 place-items-center" aria-hidden>
+                <span className={cn("rounded-[3px] border-2", picked ? "border-space" : "border-muted-foreground/50")} style={{ width: w >= h ? 28 : (28 * w) / h, height: h >= w ? 28 : (28 * h) / w }} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={cn("block truncate text-sm", picked && "font-medium text-space")}>{o.label}</span>
+                <span className="block truncate text-xs text-muted-foreground">{o.note}</span>
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums">{o.ratio}</span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

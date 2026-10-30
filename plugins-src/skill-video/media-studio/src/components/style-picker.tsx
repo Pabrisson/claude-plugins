@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { fileUrl, mediaKind, opt, outputPath, type Field, type Job, type Kind, type SavedStyle } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
 
-type Preset = ReturnType<typeof opt> & { swatch?: string[] }
+export type Preset = ReturnType<typeof opt> & { swatch?: string[] }
 
 // a grain for the painted styles, drawn once
 const GRAIN = `url("data:image/svg+xml,${encodeURIComponent(
@@ -34,7 +34,7 @@ function Art({ preset }: { preset: Preset }) {
 }
 
 // a style's picture: the user's last result in it (a video plays under the pointer), else its painted card
-function Thumb({ file, preset, className }: { file: string | null; preset?: Preset; className?: string }) {
+export function StyleThumb({ file, preset, className }: { file: string | null; preset?: Preset; className?: string }) {
   const k = file ? mediaKind(file) : null
   const still = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
   return (
@@ -58,7 +58,7 @@ function Thumb({ file, preset, className }: { file: string | null; preset?: Pres
 }
 
 // the last result made in a style (Restyle or Custom), of this space first: a preset by its value or its label
-function lastIn(value: string, label: string | undefined, kind: Kind, media: Job[], home: string) {
+export function lastIn(value: string, label: string | undefined, kind: Kind, media: Job[], home: string) {
   const made = (j: Job) => j.status === "done" && j.outputs.length && (j.fields?.style === value || (!!label && j.fields?.style?.toLowerCase() === label.toLowerCase()))
   const j = media.find((x) => x.kind === kind && made(x)) ?? media.find(made)
   return j ? outputPath(home, j, j.outputs.find((o) => mediaKind(o) === "image" || mediaKind(o) === "video") ?? j.outputs[0]) : null
@@ -94,7 +94,7 @@ export function StyleField({
       <div className="flex items-center gap-3 rounded-xl border bg-card p-2 pr-2.5">
         <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label={`Style: ${name || "none"}. Change it`}>
           {v ? (
-            <Thumb file={file} preset={preset} className="size-11 shrink-0 rounded-lg border" />
+            <StyleThumb file={file} preset={preset} className="size-11 shrink-0 rounded-lg border" />
           ) : (
             <span className="grid size-11 shrink-0 place-items-center rounded-lg border border-dashed text-muted-foreground">
               <PaintbrushIcon className="size-4" />
@@ -169,8 +169,8 @@ function Gallery({
         <div className="-mx-1 min-h-0 flex-1 overflow-auto px-1 pb-1">
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3" role="radiogroup" aria-label="Styles">
             {tab === "presets"
-              ? shown.map((p) => <Card key={p.value} on={p.value === value} title={p.label} note={p.note} onPick={() => onPick(p.value)} thumb={<Thumb file={lastIn(p.value, p.label, kind, media, home)} preset={p} className="absolute inset-0" />} />)
-              : yours.map((s) => <Card key={s.name} on={s.name === value} title={s.name} note={s.words || `${s.files.length} image${s.files.length > 1 ? "s" : ""}`} onPick={() => onPick(s.name)} thumb={<Thumb file={s.files[0]} className="absolute inset-0" />} />)}
+              ? shown.map((p) => <StyleCard key={p.value} on={p.value === value} title={p.label} note={p.note} onPick={() => onPick(p.value)} thumb={<StyleThumb file={lastIn(p.value, p.label, kind, media, home)} preset={p} className="absolute inset-0" />} />)
+              : yours.map((s) => <StyleCard key={s.name} on={s.name === value} title={s.name} note={s.words || `${s.files.length} image${s.files.length > 1 ? "s" : ""}`} onPick={() => onPick(s.name)} thumb={<StyleThumb file={s.files[0]} className="absolute inset-0" />} />)}
             {tab === "yours" && (
               <button
                 type="button"
@@ -190,12 +190,13 @@ function Gallery({
   )
 }
 
-function Card({ on, title, note, thumb, onPick }: { on: boolean; title: string; note?: string; thumb: React.ReactNode; onPick: () => void }) {
+// a style as a card: a choice in the picker (radio), a button that opens it in the Library
+export function StyleCard({ on, title, note, thumb, onPick, radio = true }: { on: boolean; title: string; note?: string; thumb: React.ReactNode; onPick: () => void; radio?: boolean }) {
   return (
     <button
       type="button"
-      role="radio"
-      aria-checked={on}
+      role={radio ? "radio" : undefined}
+      aria-checked={radio ? on : undefined}
       onClick={onPick}
       className={cn(
         "group/card relative aspect-video overflow-hidden rounded-xl border text-left transition-[box-shadow,border-color] duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",

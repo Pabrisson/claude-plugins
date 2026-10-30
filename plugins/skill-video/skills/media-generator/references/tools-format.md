@@ -25,7 +25,7 @@ the same files: a new tool is a new entry, nothing else to code.
 |---|---|
 | `id` | Unique in its file, letters, digits and `-` |
 | `label`, `description` | What the dashboard shows, in English, sentence case |
-| `group` | The picker's group: Custom, Style, Camera, VFX, Frames, Characters, Light & color, Retouch, Voice |
+| `group` | The picker's group: Custom, Style, Camera, References, Product, VFX, Frames, Characters, Light & color, Retouch, Voice |
 | `mode` | `create` or `edit`: the composer's segmented control |
 | `icon` | A lucide icon name (kebab-case) |
 | `inputs` | The files it takes, in the order they are sent (below) |
@@ -36,6 +36,8 @@ the same files: a new tool is a new entry, nothing else to code.
 | `params` | Settings forced for this tool, such as `{ "resolution": "4K" }` or `{ "background": "transparent" }` |
 | `local` | Done on the machine: `reframe` (ffmpeg, free), `extend` (a frame of the source, then the new shot joined), `expand` (the image padded with gray margins from its `margin` fields, sent at the model's closest ratio) |
 | `provider` | `elevenlabs` for the tools video-editor's engine does (change voice, translate) |
+| `element` | A References tool: the Element type its sheets make (`character`, `outfit`…), for the dashboard's « Make an element » |
+| `one_of` | Keys of which one at least must be given, a field or an input (`["who", "references"]`: words or photos) |
 
 Fields (`type`):
 - **choice**: a few `options`, as chips. **select**: a long list, as a searchable button (beside the composer, grouped, a
@@ -44,6 +46,10 @@ Fields (`type`):
 - **light**: the lights around the subject, placed on a stage (`lights`: how many at most); its value is the light in
   words. With `options` (presets, each with its `rig` of lights), the dashboard offers Preset, Custom and Describe.
 - **margin**: Expand's share of the image added on one side (0 to 2), set by the dashboard's frame editor.
+- **sheets**: a References tool's sheets, as cards to tick; the value is their labels joined by commas (the `default`
+  too). Each option adds `ratio`. A generation makes one job per sheet, at its ratio, the first alone, the others
+  after it with its image in the `sheet` input (an optional image input the template names with its `phrase`), so a
+  remix of one sheet redoes it alone against the first.
 - **style**: a look, picked in the dashboard's style gallery (a card per preset, the user's own from the Library under
   « Yours »). `"options": "styles"` takes the shared list of `tools/styles.json` (Restyle and Custom use it; a
   `default` may be one of its labels); without a `default` the field is optional (Custom: a × clears it). A style of

@@ -48,6 +48,12 @@ test('an image costs its outputs at the resolution tier, by image, megapixel or 
   const tiers = [{ pricing: [{ billable: 'output_image', unit: 'image', cost_usd: 0.13 }, { billable: 'output_image', unit: 'image', cost_usd: 0.15, variant: '2k' }, { billable: 'output_image', unit: 'image', cost_usd: 0.3, variant: '4k' }] }]
   assert.equal(estimateImage('x/y', tiers, { n: 2, resolution: '4K' }).amount, 0.6)
   assert.equal(estimateImage('x/y', tiers, { n: 1, resolution: '1K' }).amount, 0.13)
+  // a tier without its k (FLUX's 768), or with the quality first (Grok's low_1k)
+  const flux = [{ pricing: [{ billable: 'output_image', unit: 'image', cost_usd: 0.041, variant: '768' }, { billable: 'output_image', unit: 'image', cost_usd: 0.048, variant: '1k' }] }]
+  assert.equal(estimateImage('black-forest-labs/flux-3-image', flux, { resolution: '768' }).amount, 0.041)
+  const grok = [{ pricing: [{ billable: 'input_image', unit: 'image', cost_usd: 0.01 }, ...[['low_1k', 0.04], ['low_2k', 0.06], ['medium_1k', 0.06], ['medium_2k', 0.08]].map(([variant, cost_usd]) => ({ billable: 'output_image', unit: 'image', cost_usd, variant }))] }]
+  assert.equal(estimateImage('x-ai/grok-imagine-image-2.0', grok, { resolution: '1K', quality: 'low' }).amount, 0.04)
+  assert.equal(estimateImage('x-ai/grok-imagine-image-2.0', grok, { resolution: '2K', quality: 'medium', refs: 1 }).amount, 0.09)
   const gemini = [{ pricing: [{ billable: 'input_image', unit: 'token', cost_usd: 0.000002 }, { billable: 'output_image', unit: 'token', cost_usd: 0.00012 }] }, { pricing: [{ billable: 'output_image', unit: 'token', cost_usd: 0.0002 }] }]
   assert.equal(estimateImage('google/gemini-3-pro-image', gemini, { n: 1, resolution: '2K', refs: 1 }).amount, 0.224)
   assert.equal(estimateImage('flux/klein', [{ pricing: [{ billable: 'output_image', unit: 'megapixel', cost_usd: 0.014 }] }], { resolution: '1K' }).amount, 0.0147)

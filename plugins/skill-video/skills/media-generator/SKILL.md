@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, clean up, reframe), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit").
+description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, clean up, reframe), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -16,7 +16,8 @@ variable holding `node …` does not run under zsh). Everything lives in the fol
 (`$MEDIA_GENERATOR_DIR` overrides it):
 - `media/<id>/`: one folder per generation, with its outputs (`out-1.png`, `out.mp4`, `out.mp3`, `dub-en.mp4`…), its
   inputs (`in-*`) and its `job.json`;
-- `elements/<name>/`: the people, products and places a prompt cites with `@name`;
+- `elements/<name>/`: the Library's Elements a prompt cites with `@name` (characters, outfits, objects, places, poses,
+  brands; voices picked as a voice), their images or clips and `element.json` (type, words);
 - `styles/<name>/`: the user's own styles, a few images of a look and its words (`style.json`);
 - `ledger.jsonl`: every paid action, in the provider's unit;
 - `settings.json`: the confirmation thresholds, the monthly caps, the ElevenLabs plan and the default models.
@@ -43,6 +44,7 @@ Run `media.mjs doctor` once per conversation.
 | `credits`, "combien j'ai dépensé" | `media.mjs credits`, then sum it up |
 | A pasted "Copy prompt" from the dashboard | The model's prompt, as a draft (below) |
 | A pasted "Send to edit" from the dashboard | Hand the file to the video-editor skill |
+| An Element or a style to make, or a pasted "Ask Claude" | Elements and styles of the Library (below) |
 | Anything else | A generation (below) |
 
 ## A generation
@@ -69,8 +71,7 @@ is the user's own prompt; the others fill a prompt template from their fields. C
   on each side: `--field left=0.25 --field right=0.25`.
 - `--prompt "…"` adds the user's words to the template, or is the whole prompt with "Custom". `--raw` sends the prompt
   exactly as written, without the template.
-- `@name` in the prompt brings that Element's images as references. `media.mjs elements add <name> <images…>` makes
-  one, when the user wants a character or a product to come back.
+- `@name` in the prompt cites an Element or a style of the Library: see « Elements and styles of the Library ».
 - **Styles.** Restyle (`--tool restyle`, image and video) redraws the source in a style, what is in it and its motion
   kept; Custom takes one too, optional. `--field style=<style>`: a preset's label (`media.mjs tools image --search
   restyle` lists the 24) or the name of a style of the user's own. `media.mjs styles add <name> <images…> --words
@@ -121,11 +122,48 @@ it). Look at an image yourself (Read) before saying it is good. Offer the next s
 variant with another model, animating an image (`video --tool animate --in first_frame=<image>`), extending or
 upscaling a video, the dashboard (`media.mjs studio --open`).
 
+## Elements and styles of the Library
+
+The Library keeps what comes back from one generation to the next. Making or changing an Element or a style is free
+and local: no estimate, no yes.
+
+- **Elements** (`elements/<name>/`) each have a type, which tells the model what their images are: `character` (a
+  person, a creature, a mascot), `outfit`, `object` (a product, a prop, a vehicle), `location`, `pose` (a body pose,
+  nothing else), `brand` (a logo kept exact, its colors and typeface), `voice` (1 to 3 clips), `other` (one made
+  before the types).
+- **Citing.** `@name` in any image or video prompt (Custom, a tool's words, a raw prompt) sends the Element's images
+  after the tool's own and names them: « Lulu (the character in images 2 to 3, <its words>) ». Their images count
+  toward the model's references (`N refs`). A style is never cited: it goes in a Style field (`--field style=<name>`).
+  A voice is never cited in words either: `audio --tool voice --voice @name` clones its clips, its words say how it
+  sounds.
+- **Making one**, when the user asks (« crée le personnage Lulu avec ces photos », « garde ce produit », « fais-en un
+  style ») or pastes « Ask Claude » from the dashboard:
+  1. Look at the images (Read) and write what it is in a few English words: they go with every `@name`.
+  2. `media.mjs elements add <name> <files…> --type <type> --words "…"`; a brand adds `--colors "#hex,#hex"` and
+     `--font "…"`, a voice takes audio clips. `--from <generation id>` takes a result's images or clips (several
+     `--from` for several). A style: `media.mjs styles add <name> <images…> --words "<the look>"` (1 to 5 images,
+     `--from` too).
+  3. Photos that are not clean references (a busy background, one angle only) for a type with a References tool:
+     offer its sheets first. That is a generation: its price and the user's yes (step 3 above). Then save the sheets
+     that came out right, with the photos when they help.
+  4. Tell the user the `@name` to cite. The open dashboard shows it at once.
+- **Changing one.** `elements set <name> [<files…>] [--type …] [--words …] [--colors …] [--font …] [--drop <file>]`,
+  `elements show <name>`, `elements remove <name>`; the same `set`, `show`, `remove` for `styles`. `elements
+  elevenlabs <name>` puts a voice on the ElevenLabs account for Change voice (ElevenLabs needs a paid plan for it).
+- **References tools** (image, group References): `character`, `outfit`, `object`, `location`, `pose`. They only make
+  images in `media/`, never an Element by themselves. Each sheet picked (`--field sheets="Body turnaround, Face
+  close-up"`, their labels in `media.mjs tools image --search references`) is its own job at its own ratio, and the
+  estimate is their total. The first sheet sets the look; the others wait for it and take its image as the `sheet` to
+  match. They need words (`--field who="…"` for a character, `--field what="…"` for the others) or photos (`--in
+  references=<file>`), or both; a style is optional (`--field style=…`). To redo one sheet: the same tool with `--field
+  sheets=<that one>` and `--in sheet=<the first sheet's image>`. A brand has no tool: a model redraws a logo wrong,
+  the real file goes in.
+
 ## Voices, voice change, translation
 
 - **Speech** (`audio --tool voice`): `--prompt` is the text read. A preset voice of the model (`--voice`, from
-  `media.mjs models audio`), or a voice cloned from 1 to 3 clips (`--in voice_clips=<file>`). `--field
-  instructions="…"` says how it sounds.
+  `media.mjs models audio`), a voice of the Library (`--voice @name`), or a voice cloned from 1 to 3 clips (`--in
+  voice_clips=<file>`). `--field instructions="…"` says how it sounds.
 - **Change voice** (`audio --tool change-voice --in clip=<audio or video> --voice <voice_id>`): the same delivery
   (pauses, emotion, rhythm) in another voice, put back on the video. `media.mjs voices` lists the account's voices,
   and `media.mjs voice-clone <name> <recordings…>` makes one from the user's recordings (a minute or more of clean

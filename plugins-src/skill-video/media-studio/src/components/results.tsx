@@ -1,6 +1,7 @@
 import { useRef, useState } from "react"
 import {
   AudioLinesIcon,
+  BookmarkPlusIcon,
   FastForwardIcon,
   LoaderCircleIcon,
   MaximizeIcon,
@@ -23,16 +24,22 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api, elapsed, fileUrl, inputPath, mediaKind, money, outputPath, plain, type Job } from "@/lib/api"
 import { Viewer } from "@/components/viewer"
 
-export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar"
+export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar" | "element"
 
 // what a result leads to, by its medium: the next tool with it as input
 export const BRIDGES: Record<string, { b: Bridge; label: string; icon: LucideIcon }[]> = {
-  image: [{ b: "animate", label: "Animate", icon: PlayIcon }],
+  image: [
+    { b: "animate", label: "Animate", icon: PlayIcon },
+    { b: "element", label: "Make an element", icon: BookmarkPlusIcon },
+  ],
   video: [
     { b: "extend", label: "Extend", icon: FastForwardIcon },
     { b: "upscale", label: "Upscale", icon: MaximizeIcon },
   ],
-  audio: [{ b: "avatar", label: "Talking avatar", icon: MessageCircleIcon }],
+  audio: [
+    { b: "avatar", label: "Talking avatar", icon: MessageCircleIcon },
+    { b: "element", label: "Make a voice", icon: BookmarkPlusIcon },
+  ],
 }
 export const REMIX = { label: "Remix", icon: RefreshCwIcon }
 export const SEND = { label: "Send to edit", icon: ScissorsIcon }
@@ -48,7 +55,7 @@ export function costOf(job: Job, per1000: number | null) {
 }
 
 export function sendToEdit(file: string) {
-  const text = `Use ${file} in video-editor (skill-video): make a new video with it, or add it as B-roll to one of my projects. Ask me which.`
+  const text = `/skill-video:video-editor Use ${file}: make a new video with it, or add it as B-roll to one of my projects. Ask me which.`
   navigator.clipboard.writeText(text).then(() => toast.success("Prompt copied", { description: "Paste it in Claude Code to edit with it." }))
 }
 
@@ -85,7 +92,7 @@ function Pending({ job, home, per1000 }: { job: Job; home: string; per1000: numb
         <Skeleton className="absolute inset-0 rounded-none bg-space/12" />
         <div className="relative flex size-full flex-col items-center justify-center gap-1.5 p-3 text-center">
           <LoaderCircleIcon className="size-5 animate-spin text-space" aria-hidden />
-          <span className="text-sm font-medium">{job.status === "queued" ? "Waiting to start" : "Generating"}</span>
+          <span className="text-sm font-medium">{job.status === "queued" ? "Waiting to start" : job.after && job.note?.startsWith("waiting") ? "Waiting for the first sheet" : "Generating"}</span>
           {job.started && <span className="text-xs text-muted-foreground tabular-nums">{elapsed(job.started)}</span>}
         </div>
       </div>

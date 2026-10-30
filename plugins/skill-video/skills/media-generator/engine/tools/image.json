@@ -140,15 +140,104 @@
     "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
   },
   {
-    "id": "character", "label": "Character", "group": "Characters", "mode": "create", "icon": "user",
-    "description": "Puts one of your Elements in a new scene, same face and look.",
-    "inputs": [{ "key": "references", "kind": "image", "label": "Character", "multiple": true }],
-    "fields": [{ "key": "scene", "label": "Scene", "type": "text", "placeholder": "sitting in a Tokyo café at night, neon outside" }],
-    "template": "The same person as in the reference images, same face, hair and features: {scene}. {prompt}",
-    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro", "openai/gpt-image-2.5-sunburst"]
+    "id": "character", "label": "Character references", "group": "References", "mode": "create", "icon": "user", "element": "character",
+    "description": "Reference sheets of a person or a creature, each its own image: a turnaround and the face, close. Make an Element of them.",
+    "one_of": ["who", "references"],
+    "inputs": [
+      { "key": "references", "kind": "image", "label": "Photos", "optional": true, "multiple": true, "phrase": "The character is the person in {}: same face, hair, body and features." },
+      { "key": "sheet", "kind": "image", "label": "Match sheet", "optional": true, "phrase": "Keep everything exactly as in {}, a sheet of the same set: the same face, hair, body, outfit and colors." }
+    ],
+    "fields": [
+      { "key": "who", "label": "Who", "type": "text", "phrase": "The character: {}.", "placeholder": "a woman in her 30s, short red hair, green parka" },
+      { "key": "sheets", "label": "Sheets", "type": "sheets", "default": "Body turnaround, Face close-up", "options": [
+        { "value": "the same character four times side by side, full body from head to toe, front view, three-quarter view, side profile and back view, a neutral standing pose with the arms slightly away from the body, evenly spaced at the same scale", "label": "Body turnaround", "note": "4 views, head to toe", "ratio": "16:9" },
+        { "value": "a close-up of the character's head and shoulders facing the camera, a neutral expression, sharp detail of the face, eyes, skin and hair", "label": "Face close-up", "note": "The face, large", "ratio": "1:1" },
+        { "value": "the character's face six times in a 3 by 2 grid: neutral, happy, sad, angry, surprised and thinking", "label": "Expressions", "note": "6 faces", "ratio": "3:2" }
+      ] },
+      { "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": "Rendered in the style of {}." }
+    ],
+    "template": "Character reference sheet: {sheets}. {who} {references} {sheet} Plain light gray studio background, soft even light, no text, no labels, no props. {style} {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
   },
   {
-    "id": "product-shot", "label": "Product shot", "group": "Characters", "mode": "create", "icon": "package",
+    "id": "outfit", "label": "Outfit references", "group": "References", "mode": "create", "icon": "shirt", "element": "outfit",
+    "description": "Reference sheets of an outfit, each its own image: front and back on an invisible mannequin, its details. Make an Element of them.",
+    "one_of": ["what", "references"],
+    "inputs": [
+      { "key": "references", "kind": "image", "label": "Photos", "optional": true, "multiple": true, "phrase": "The outfit is the one in {}: only the clothes, shoes and accessories, never the person wearing them." },
+      { "key": "sheet", "kind": "image", "label": "Match sheet", "optional": true, "phrase": "Keep everything exactly as in {}, a sheet of the same set: the same garments, cut, fabrics, colors and prints." }
+    ],
+    "fields": [
+      { "key": "what", "label": "Outfit", "type": "text", "phrase": "The outfit: {}.", "placeholder": "a brown leather biker jacket, white tee, black jeans" },
+      { "key": "sheets", "label": "Sheets", "type": "sheets", "default": "Front & back, Details", "options": [
+        { "value": "the whole outfit twice side by side, front view and back view, on an invisible mannequin with no person, every garment, shoe and accessory visible", "label": "Front & back", "note": "On an invisible mannequin", "ratio": "16:9" },
+        { "value": "four close-ups of the outfit in a 2 by 2 grid: the fabric texture, the closures and buttons, a print or logo, the stitching and hems", "label": "Details", "note": "Fabric, closures, print", "ratio": "1:1" },
+        { "value": "the outfit worn by a plain fashion model, full body, front view and back view side by side, a neutral pose", "label": "Worn", "note": "On a model, front and back", "ratio": "16:9" }
+      ] },
+      { "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": "Rendered in the style of {}." }
+    ],
+    "template": "Outfit reference sheet: {sheets}. {what} {references} {sheet} Plain light gray studio background, soft even light, no text, no labels. {style} {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+  },
+  {
+    "id": "object", "label": "Object references", "group": "References", "mode": "create", "icon": "box", "element": "object",
+    "description": "Reference sheets of a product, a prop or a vehicle, each its own image: six views, its details. Make an Element of them.",
+    "one_of": ["what", "references"],
+    "inputs": [
+      { "key": "references", "kind": "image", "label": "Photos", "optional": true, "multiple": true, "phrase": "The object is the one in {}: its exact shape, proportions, colors, materials and labels." },
+      { "key": "sheet", "kind": "image", "label": "Match sheet", "optional": true, "phrase": "Keep everything exactly as in {}, a sheet of the same set: the same shape, colors, materials and labels." }
+    ],
+    "fields": [
+      { "key": "what", "label": "Object", "type": "text", "phrase": "The object: {}.", "placeholder": "a matte black ceramic coffee mug with a gold rim" },
+      { "key": "sheets", "label": "Sheets", "type": "sheets", "default": "Turnaround, Details", "options": [
+        { "value": "the same object six times in a 3 by 2 grid: front, back, left side, right side, top and three-quarter view, at the same scale and in the same light", "label": "Turnaround", "note": "6 views", "ratio": "3:2" },
+        { "value": "four close-ups of the object in a 2 by 2 grid: its label or logo, its material and texture, its finest detail, its base or underside", "label": "Details", "note": "Label, material, texture", "ratio": "1:1" }
+      ] },
+      { "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": "Rendered in the style of {}." }
+    ],
+    "template": "Product reference sheet: {sheets}. {what} {references} {sheet} Plain white seamless background, soft even studio light, no added text or labels. {style} {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+  },
+  {
+    "id": "location", "label": "Location references", "group": "References", "mode": "create", "icon": "map-pin", "element": "location",
+    "description": "Reference sheets of a place, each its own image: a wide shot, other angles, the same place at night. Make an Element of them.",
+    "one_of": ["what", "references"],
+    "inputs": [
+      { "key": "references", "kind": "image", "label": "Photos", "optional": true, "multiple": true, "phrase": "The place is the one in {}: the same architecture, layout, materials and colors." },
+      { "key": "sheet", "kind": "image", "label": "Match sheet", "optional": true, "phrase": "Keep everything exactly as in {}, a sheet of the same set: the same architecture, layout, materials and colors." }
+    ],
+    "fields": [
+      { "key": "what", "label": "Place", "type": "text", "phrase": "The place: {}.", "placeholder": "a narrow Lisbon street, yellow tram rails, tiled facades" },
+      { "key": "sheets", "label": "Sheets", "type": "sheets", "default": "Establishing, Coverage", "options": [
+        { "value": "a wide establishing shot of the place at eye level, the whole space readable, no people", "label": "Establishing", "note": "The wide shot", "ratio": "16:9" },
+        { "value": "four views of the same place in a 2 by 2 grid: the reverse angle, a side angle, a high angle, a close detail of a wall or floor material, no people", "label": "Coverage", "note": "Reverse, side, high, detail", "ratio": "16:9" },
+        { "value": "the same place at night with its own lights on, seen from the establishing shot's angle, no people", "label": "Night", "note": "The same place at night", "ratio": "16:9" }
+      ] },
+      { "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": "Rendered in the style of {}." }
+    ],
+    "template": "Location reference sheet: {sheets}. {what} {references} {sheet} Consistent architecture, materials and light direction, no text, no labels. {style} {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+  },
+  {
+    "id": "pose", "label": "Pose references", "group": "References", "mode": "create", "icon": "person-standing", "element": "pose",
+    "description": "A pose on a faceless gray mannequin, so the Element carries the pose alone, never a face or clothes: as in the photo, and from the side.",
+    "one_of": ["what", "references"],
+    "inputs": [
+      { "key": "references", "kind": "image", "label": "Pose photo", "optional": true, "multiple": true, "phrase": "Take the pose of the figure in {}: only its body pose, never its face, clothes or place." },
+      { "key": "sheet", "kind": "image", "label": "Match sheet", "optional": true, "phrase": "Keep exactly the pose of the mannequin in {}, a sheet of the same set." }
+    ],
+    "fields": [
+      { "key": "what", "label": "Pose", "type": "text", "phrase": "The pose: {}.", "placeholder": "mid-jump, arms raised, knees bent" },
+      { "key": "sheets", "label": "Sheets", "type": "sheets", "default": "Mannequin, Side view", "options": [
+        { "value": "a smooth gray artist's mannequin with no face, no hair and no clothes holding exactly that pose, full body, seen from the same camera angle as the photo", "label": "Mannequin", "note": "The pose, as in the photo", "ratio": "1:1" },
+        { "value": "the same gray mannequin in exactly the same pose seen from 90 degrees to the side, full body", "label": "Side view", "note": "The pose from the side", "ratio": "1:1" }
+      ] }
+    ],
+    "template": "Pose reference: {sheets}. {what} {references} {sheet} Plain light gray background, soft even light, no text. {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+  },
+  {
+    "id": "product-shot", "label": "Product shot", "group": "Product", "mode": "create", "icon": "package",
     "description": "Your product on a clean studio set or in a styled scene.",
     "inputs": [{ "key": "references", "kind": "image", "label": "Product", "multiple": true }],
     "fields": [

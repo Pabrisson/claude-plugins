@@ -73,6 +73,29 @@
         "Generates with the image tool free and `--field style=<the style name>`",
         "Asks before spending, with the price in USD"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Crée le personnage Lulu à partir de cette photo, je veux pouvoir le réutiliser dans mes prompts : ../video-editor/engine/test/assets/a.png",
+      "expected_output": "An Element of type character made with `media.mjs elements add Lulu <photo> --type character --words \"…\"` (words written after looking at the image), the @name given back; reference sheets only offered, never generated without a yes.",
+      "files": ["../video-editor/engine/test/assets/a.png"],
+      "expectations": [
+        "Runs `media.mjs elements add Lulu <the photo> --type character` with --words describing what it sees",
+        "Tells the user to cite it as @Lulu",
+        "Spends nothing without the user's yes (sheets are offered with their price, not made)"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Fais-moi une fiche personnage (vue de face, profil, dos et gros plan visage) d'une renarde en manteau vert, juste les images",
+      "expected_output": "The Character references tool (`image --tool character --field who=\"…\"`), the default sheets Body turnaround and Face close-up, the estimate (their total) asked first; no Element made.",
+      "files": [],
+      "expectations": [
+        "Uses `media.mjs image --tool character` with `--field who=…`",
+        "Keeps or names the sheets Body turnaround and Face close-up",
+        "Asks before spending, with the total price in USD",
+        "Does not run `elements add` (the user asked only for the images)"
+      ]
     }
   ]
 }
