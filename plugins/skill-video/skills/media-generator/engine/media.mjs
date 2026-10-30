@@ -304,13 +304,13 @@ const mediaDir = id => at('media', id)
 const readJob = id => readJson(path.join(mediaDir(id), 'job.json'))
 const saveJob = job => writeJson(path.join(mediaDir(job.id), 'job.json'), job)
 const alive = pid => { try { return !!pid && (process.kill(pid, 0), true) } catch (e) { return e.code === 'EPERM' } }
+const newId = tool => `${new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)}-${tool}-${randomBytes(2).toString('hex')}`
 
 async function create(spec, gateOpts) {
   ensureHome()
   const p = await plan(spec)
   gate(p, gateOpts)
-  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
-  const id = `${stamp}-${p.tool.id}-${randomBytes(2).toString('hex')}`, dir = mediaDir(id)
+  const id = newId(p.tool.id), dir = mediaDir(id)
   fs.mkdirSync(dir, { recursive: true })
   // the inputs are copied in: a remix works after the originals moved
   const inputs = {}
@@ -706,6 +706,34 @@ async function handle(req, res) {
     fs.mkdirSync(path.dirname(out), { recursive: true })
     ffmpeg([...(last ? ['-sseof', '-0.1'] : []), '-i', src, '-frames:v', '1', '-update', '1', out])
     return reply(res, 200, { path: out })
+  }
+  // a video sent as an input, cut to the part and the area kept (Edit reference): a new file, the original stays.
+  // crop is { x, y, w, h } in fractions of the frame
+  if (p === '/api/cut' && post) {
+    const { path: file, start = 0, end, crop } = await readBody(req), src = inside(HOME, file)
+    if (!src) return reply(res, 403, { error: 'outside the folder' })
+    const s = probe(src), from = Math.max(0, +start), to = Math.min(s.duration, +(end ?? s.duration))
+    if (!(to - from >= 0.1)) return reply(res, 400, { error: 'the cut keeps less than 0.1 s' })
+    const even = x => Math.max(2, Math.floor(x / 2) * 2), clamp = (x, max) => Math.min(Math.max(0, x || 0), max)
+    const w = crop && even(clamp(crop.w, 1) * s.width), h = crop && even(clamp(crop.h, 1) * s.height)
+    const vf = crop ? ['-vf', `crop=${w}:${h}:${Math.round(clamp(crop.x * s.width, s.width - w))}:${Math.round(clamp(crop.y * s.height, s.height - h))}`] : []
+    const out = at('.cache', 'uploads', `${Date.now()}-${path.basename(src, path.extname(src)).replace(/^\d+-/, '')}-cut.mp4`)
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    ffmpeg(['-ss', `${from}`, '-i', src, '-t', `${to - from}`, ...vf, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', out])
+    return reply(res, 200, { path: out })
+  }
+  // a file dropped on the page, just sent: it moves to the library as a result of its own, free, nothing in the ledger
+  if (p === '/api/import' && post) {
+    const src = inside(at('.cache', 'uploads'), (await readBody(req)).path ?? '')
+    if (!src || !fs.existsSync(src)) return reply(res, 403, { error: 'only a file just sent goes to the library' })
+    const kind = kindOfFile(src), name = path.basename(src).replace(/^\d+-/, '')
+    if (!KINDS.includes(kind)) return reply(res, 400, { error: `${name} is not an image, a video or a sound` })
+    const id = newId('import'), now = new Date().toISOString()
+    fs.mkdirSync(mediaDir(id), { recursive: true })
+    fs.renameSync(src, path.join(mediaDir(id), name))
+    saveJob({ id, kind, tool: 'import', label: 'Imported', provider: 'local', model: 'file', name, prompt: '', spec: { kind, tool: 'import', prompt: '', fields: {}, inputs: {}, params: {} },
+      estimate: { amount: 0, unit: 'usd', known: true, detail: 'imported, free' }, actual: 0, actual_known: true, status: 'done', by: 'dashboard', created: now, finished: now, outputs: [name] })
+    return reply(res, 200, { id, kind })
   }
   if (p.startsWith('/api/media/') && post) {
     const [, , , id, action] = p.split('/'), dir = mediaDir(path.basename(id))

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { AudioLinesIcon, CheckIcon, FolderOpenIcon, LoaderCircleIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, StarIcon, XIcon } from "lucide-react"
+import { AudioLinesIcon, CheckIcon, FolderOpenIcon, LoaderCircleIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, ScissorsIcon, StarIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { api, fileUrl, mediaKind, outputPath, plain, when, type Input, type Job, type Tool } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
 import { SketchDialog } from "@/components/sketch"
+import { CutDialog } from "@/components/cut"
 
 const ACCEPT = { image: "image/*", sketch: "image/*", video: "video/*", audio: "audio/*", media: "audio/*,video/*" }
 const fits = (input: Input, file: string) => {
@@ -53,7 +54,18 @@ export function InputSlots({
   label?: boolean
 }) {
   const [sketch, setSketch] = useState<{ key: string; src: string } | null>(null)
+  const [cut, setCut] = useState<{ key: string; path: string } | null>(null)
   const set = (key: string, files: string[]) => onChange({ ...value, [key]: files })
+
+  // a video just sent (picked, dropped or pasted here or on the composer) opens Edit reference; the inputs it came
+  // with (a draft, a pick from the library, a cut) do not
+  const [seen, setSeen] = useState(() => new Set(Object.values(value).flat()))
+  const fresh = Object.entries(value).flatMap(([key, files]) => files.filter((f) => !seen.has(f)).map((path) => ({ key, path })))
+  if (fresh.length) {
+    setSeen(new Set([...seen, ...fresh.map((f) => f.path)]))
+    const sent = fresh.find((f) => mediaKind(f.path) === "video" && /\/\.cache\/uploads\//.test(f.path) && !f.path.endsWith("-cut.mp4"))
+    if (sent) setCut(sent)
+  }
 
   async function openSketch(key: string) {
     let base = value.image?.[0] ?? value.first_frame?.[0]
@@ -79,6 +91,7 @@ export function InputSlots({
             files={value[input.key] ?? []}
             onFiles={(f) => set(input.key, f)}
             onDraw={() => openSketch(input.key)}
+            onCut={(path) => setCut({ key: input.key, path })}
             library={media.flatMap((j) => (j.status === "done" ? j.outputs.map((o) => ({ path: outputPath(home, j, o), job: j })) : [])).filter((x) => fits(input, x.path))}
           />
         ))}
@@ -94,6 +107,14 @@ export function InputSlots({
           set(key, [path])
         }}
       />
+      <CutDialog
+        path={cut?.path ?? null}
+        onClose={() => setCut(null)}
+        onDone={(path) => {
+          set(cut!.key, (value[cut!.key] ?? []).map((f) => (f === cut!.path ? path : f)))
+          setCut(null)
+        }}
+      />
     </div>
   )
 }
@@ -103,12 +124,14 @@ function Slot({
   files,
   onFiles,
   onDraw,
+  onCut,
   library,
 }: {
   input: Input
   files: string[]
   onFiles: (f: string[]) => void
   onDraw: () => void
+  onCut: (path: string) => void
   library: Pick[]
 }) {
   const picker = useRef<HTMLInputElement>(null)
@@ -142,6 +165,17 @@ function Slot({
             >
               <XIcon className="size-3.5" />
             </button>
+            {mediaKind(f) === "video" && (
+              <button
+                type="button"
+                aria-label={`Cut or crop the ${input.label.toLowerCase()}`}
+                title="Cut and crop"
+                onClick={() => onCut(f)}
+                className="absolute bottom-1 left-1 rounded-full bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              >
+                <ScissorsIcon className="size-3" />
+              </button>
+            )}
           </div>
           <span className="line-clamp-2 text-center text-xs leading-tight" title={input.label}>{input.label}</span>
         </div>

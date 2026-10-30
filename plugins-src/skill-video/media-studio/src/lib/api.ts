@@ -203,6 +203,9 @@ export const api = {
     }),
   frame: (path: string, last = false) =>
     post<{ path: string }>("/api/frame", { path, last }),
+  cut: (path: string, start: number, end: number, crop?: { x: number; y: number; w: number; h: number }) =>
+    post<{ path: string }>("/api/cut", { path, start, end, crop }),
+  import: (path: string) => post<{ id: string; kind: Kind }>("/api/import", { path }),
   media: (id: string, action: "favorite" | "delete") =>
     post<{ ok: true }>(`/api/media/${id}/${action}`, {}),
   settings: (s: Partial<Settings>) => post<Settings>("/api/settings", s),

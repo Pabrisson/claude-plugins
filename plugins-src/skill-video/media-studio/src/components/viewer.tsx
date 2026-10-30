@@ -87,7 +87,7 @@ function Body({
   const fields = Object.entries(job.fields ?? {}).filter(([, v]) => v)
   const inputs = Object.values(job.inputs ?? {}).flat()
   const actions = [
-    { ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) },
+    ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) }]),
     ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => ({ ...x, run: () => onBridge(x.b, file!) }))),
     ...(failed || !file ? [] : [{ ...SEND, run: () => sendToEdit(file) }]),
   ]

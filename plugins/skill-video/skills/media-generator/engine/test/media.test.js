@@ -270,6 +270,20 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.deepEqual([job.status, job.by, job.outputs], ['done', 'dashboard', ['out-1.png', 'out-2.png']])
   assert.equal((await fetch(`${url}/files?path=${encodeURIComponent(at('media', job.id, 'out-1.png'))}`)).headers.get('content-type'), 'image/png')
   assert.equal((await fetch(`${url}/files?path=${encodeURIComponent('/etc/hosts')}`)).status, 404)
+  // Edit reference: a sent video cut to 0.5–2 s and to its left half, as a new file with its sound; the original stays
+  const cut = await post('/api/cut', { path: at('talk.mp4'), start: 0.5, end: 2, crop: { x: 0, y: 0, w: 0.5, h: 1 } }), c = probe(cut.body.path), v = c.streams.find(s => s.codec_type === 'video')
+  assert.deepEqual([path.dirname(cut.body.path), v.width, v.height, c.streams.some(s => s.codec_type === 'audio')], [at('.cache', 'uploads'), 160, 180, true])
+  assert.ok(Math.abs(c.format.duration - 1.5) < 0.1, `cut to ${c.format.duration} s`)
+  assert.ok(Math.abs(probe(at('talk.mp4')).format.duration - 3) < 0.1)
+  assert.deepEqual([(await post('/api/cut', { path: '/etc/hosts', end: 1 })).code, (await post('/api/cut', { path: at('talk.mp4'), start: 2, end: 2 })).code], [403, 400])
+  // a file dropped on the page goes to the library: moved out of the uploads, a free local result of its kind, no ledger line
+  const sentPng = at('.cache', 'uploads', '123-photo.png'), spent = ledger().length
+  fs.copyFileSync(at('a.png'), sentPng)
+  const imported = await post('/api/import', { path: sentPng }), listed = (await fetch(url + '/api/state').then(r => r.json())).media.find(m => m.id === imported.body.id)
+  assert.deepEqual([listed.kind, listed.status, listed.provider, listed.label, listed.outputs, fs.existsSync(sentPng), ledger().length], ['image', 'done', 'local', 'Imported', ['photo.png'], false, spent])
+  assert.equal((await post('/api/import', { path: cut.body.path })).body.kind, 'video')
+  fs.writeFileSync(at('.cache', 'uploads', '124-notes.txt'), 'hi')
+  assert.deepEqual([(await post('/api/import', { path: at('talk.mp4') })).code, (await post('/api/import', { path: at('.cache', 'uploads', '124-notes.txt') })).code], [403, 400])
   // the Claude it works for quits: the server stops
   const claude = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'])
   await post(`/__media-generator/owner?pid=${claude.pid}`, {})

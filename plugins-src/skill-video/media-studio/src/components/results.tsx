@@ -106,7 +106,7 @@ function AudioFace({ job, file }: { job: Job; file: string }) {
   return (
     <>
       <div className="flex size-full items-center gap-3 bg-linear-to-br from-aud/20 to-aud/5 py-4 pr-5 pl-16">
-        <p className="line-clamp-4 text-[15px] leading-snug text-foreground/90">“{job.prompt}”</p>
+        <p className="line-clamp-4 text-[15px] leading-snug text-foreground/90">{job.prompt ? `“${job.prompt}”` : job.name}</p>
         <AudioLinesIcon className="absolute top-3 right-3 size-4 text-aud" aria-hidden />
       </div>
       <audio ref={audio} src={fileUrl(file)} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
@@ -202,7 +202,8 @@ function Tile({
         </div>
         <div className="absolute bottom-2 left-2 flex gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
           {[
-            { ...REMIX, run: () => onBridge("remix", job, file ?? "") },
+            // an imported file has nothing to remix
+            ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", job, file ?? "") }]),
             ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => ({ ...x, run: () => onBridge(x.b, job, file!) }))),
             ...(failed ? [] : [{ ...SEND, run: () => sendToEdit(file!) }]),
           ].map((a) => (

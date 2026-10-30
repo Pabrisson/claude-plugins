@@ -8,8 +8,10 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Switch } from "@/components/ui/switch"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
-import { api, per1000, plain, type Balances, type Job, type Kind, type Model, type Page, type State, type Tool } from "@/lib/api"
+import { api, mediaKind, per1000, plain, type Balances, type Job, type Kind, type Model, type Page, type State, type Tool } from "@/lib/api"
 import { blank, Composer, type Compose } from "@/components/composer"
+import { CutDialog } from "@/components/cut"
+import { upload } from "@/components/inputs"
 import { Credits, Library } from "@/components/pages"
 import { SettingsPage } from "@/components/settings"
 import { isRunning, Results, type Bridge } from "@/components/results"
@@ -242,7 +244,81 @@ function Dashboard() {
       ) : (
         <SettingsPage key={JSON.stringify(state.settings)} state={state} models={models} onSaved={refresh} />
       )}
+      <DropToLibrary onAdded={refresh} />
     </div>
+  )
+}
+
+// a file dropped anywhere the composer does not take it goes to the library; a video passes through Edit reference
+// first (closing it keeps the video whole), several one after the other
+async function keep(path: string, onAdded: () => void) {
+  try {
+    await api.import(path)
+    toast.success("Added to the library", { description: path.split("/").pop()?.replace(/^\d+-/, ""), action: { label: "Show", onClick: () => (window.location.hash = "library") } })
+    onAdded()
+  } catch (e) {
+    toast.error(plain((e as Error).message))
+  }
+}
+
+function DropToLibrary({ onAdded }: { onAdded: () => void }) {
+  const [over, setOver] = useState(false)
+  const [taken, setTaken] = useState(false)
+  const [videos, setVideos] = useState<string[]>([])
+  const depth = useRef(0)
+
+  useEffect(() => {
+    const files = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files")
+    const enter = (e: DragEvent) => files(e) && ++depth.current && setOver(true)
+    const leave = (e: DragEvent) => files(e) && --depth.current <= 0 && ((depth.current = 0), setOver(false))
+    // the composer prevents the default when its inputs take the file: then it is not the library's
+    const move = (e: DragEvent) => {
+      if (!files(e)) return
+      setTaken(e.defaultPrevented)
+      e.preventDefault()
+    }
+    const drop = async (e: DragEvent) => {
+      depth.current = 0
+      setOver(false)
+      if (e.defaultPrevented || !e.dataTransfer?.files.length) return
+      e.preventDefault()
+      for (const f of [...e.dataTransfer.files]) {
+        const k = mediaKind(f.name)
+        if (k === "other") {
+          toast.error(`${f.name} is not an image, a video or a sound`)
+          continue
+        }
+        try {
+          const path = await upload(f)
+          if (k === "video") setVideos((v) => [...v, path])
+          else await keep(path, onAdded)
+        } catch (err) {
+          toast.error(plain((err as Error).message))
+        }
+      }
+    }
+    const on = { dragenter: enter, dragleave: leave, dragover: move, drop } as const
+    for (const [type, fn] of Object.entries(on)) window.addEventListener(type, fn as EventListener)
+    return () => {
+      for (const [type, fn] of Object.entries(on)) window.removeEventListener(type, fn as EventListener)
+    }
+  }, [onAdded])
+
+  const next = (path: string) => {
+    setVideos((v) => v.slice(1))
+    keep(path, onAdded)
+  }
+  return (
+    <>
+      {over && !taken && (
+        <div className="pointer-events-none fixed inset-2 z-50 grid place-items-center rounded-2xl border-2 border-dashed border-space bg-space/10 animate-in fade-in-0">
+          <span className="flex items-center gap-2 rounded-full bg-background/95 px-4 py-2 text-sm font-medium shadow-lg">
+            <LibraryBigIcon className="size-4 text-space" /> Drop to add to the library
+          </span>
+        </div>
+      )}
+      <CutDialog path={videos[0] ?? null} onClose={() => next(videos[0])} onDone={next} />
+    </>
   )
 }
 
