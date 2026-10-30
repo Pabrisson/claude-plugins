@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react"
-import { AudioLinesIcon, ChevronLeftIcon, ChevronRightIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, StarIcon, Trash2Icon } from "lucide-react"
+import { useContext, useEffect, useState } from "react"
+import { AudioLinesIcon, ChevronLeftIcon, ChevronRightIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, FolderKanbanIcon, StarIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job } from "@/lib/api"
 import { Label } from "@/components/chips"
-import { Thumb } from "@/components/inputs"
+import { Thumb, Workspaces } from "@/components/inputs"
 import { ModelLogo } from "@/components/model-logo"
 import { BRIDGES, costOf, DeleteDialog, REMIX, SEND, sendToEdit, type Bridge } from "@/components/results"
 import { CompareDialog } from "@/components/compare"
@@ -37,6 +38,7 @@ const HINTS: Record<string, string> = {
   Upscale: "Sharper and larger",
   "Talking avatar": "A face speaks it",
   "Send to edit": "A rush in video-editor",
+  "Add to timeline": "After the last shot of the current workspace",
 }
 const bytes = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`)
 const span = (a?: string, b?: string) => {
@@ -103,6 +105,7 @@ function Body({
   const [out, setOut] = useState(0)
   const [confirm, setConfirm] = useState(false)
   const [comparing, setComparing] = useState(false)
+  const ws = useContext(Workspaces)
   // what the file itself says: its size on screen, its length, its weight; a video the browser cannot play (ProRes)
   const [known, setKnown] = useState<Record<string, { w?: number; h?: number; length?: number; size?: number; unplayable?: boolean }>>({})
   const file = job.outputs[out] ? outputPath(home, job, job.outputs[out]) : null
@@ -120,11 +123,12 @@ function Body({
   // a field's words, not the dashboard's own state beside it (a light's stage: "light:rig") nor an untouched margin
   const fields = Object.entries(job.fields ?? {}).filter(([k, v]) => v && v !== "0" && !k.includes(":"))
   const inputs = Object.entries(job.inputs ?? {}).flatMap(([key, list]) => list.map((f) => ({ key, f })))
-  const [lab, model] = job.name.includes(": ") ? [job.name.slice(0, job.name.indexOf(": ")), job.name.slice(job.name.indexOf(": ") + 2)] : [job.provider === "local" ? "On this machine" : job.provider, job.name]
+  const [lab, model] = job.name.includes(": ") ? [job.name.slice(0, job.name.indexOf(": ")), job.name.slice(job.name.indexOf(": ") + 2)] : [job.provider === "local" ? "Local" : job.provider, job.name]
   const made = span(job.started ?? job.created, job.finished)
   const actions = [
     ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) }]),
-    ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => ({ ...x, run: () => onBridge(x.b, file!) }))),
+    // already on the current workspace's timeline: its place there instead of « Add to timeline »
+    ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => (x.b === "timeline" && ws.shots[file!] ? { ...x, label: `${ws.shots[file!]} on the timeline`, hint: "Show it in the timeline", run: () => onBridge("shot", file!) } : { ...x, run: () => onBridge(x.b, file!) }))),
     ...(failed || !file ? [] : [{ ...SEND, run: () => sendToEdit(file) }]),
   ]
   const ext = file?.split(".").pop()?.toUpperCase()
@@ -305,10 +309,39 @@ function Body({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{a.label}</span>
-                      {HINTS[a.label] && <span className="block truncate text-xs text-muted-foreground">{HINTS[a.label]}</span>}
+                      {(("hint" in a && (a.hint as string)) || HINTS[a.label]) && <span className="block truncate text-xs text-muted-foreground">{("hint" in a && (a.hint as string)) || HINTS[a.label]}</span>}
                     </span>
                   </button>
                 ))}
+                {!failed && ws.list.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button type="button" className="flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted">
+                          <FolderKanbanIcon className="size-4" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">Add to workspace</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {job.workspaces?.length ? `In ${ws.list.filter((w) => job.workspaces!.includes(w.slug)).map((w) => w.name).join(", ")}` : "In no workspace"}
+                          </span>
+                        </span>
+                        <ChevronRightIcon className="size-4 text-muted-foreground" aria-hidden />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="left" align="start" className="min-w-56">
+                      <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+                      {ws.list.map((w) => {
+                        const on = !!job.workspaces?.includes(w.slug)
+                        return (
+                          <DropdownMenuCheckboxItem key={w.slug} checked={on} onSelect={(e) => e.preventDefault()} onCheckedChange={() => api.workspaces({ slug: w.slug, ...(on ? { drop: [job.id] } : { add: [job.id] }) }).catch((e) => toast.error(plain(e.message)))}>
+                            {w.name}
+                          </DropdownMenuCheckboxItem>
+                        )
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
             </div>
           )}

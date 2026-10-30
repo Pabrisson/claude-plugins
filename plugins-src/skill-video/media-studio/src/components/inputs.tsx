@@ -1,11 +1,15 @@
-import { useRef, useState } from "react"
-import { AudioLinesIcon, BrushIcon, CheckIcon, FolderOpenIcon, LoaderCircleIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, ScissorsIcon, StarIcon, XIcon } from "lucide-react"
+import { createContext, useContext, useRef, useState } from "react"
+import { ArrowDownUpIcon, AudioLinesIcon, BrushIcon, CheckIcon, FolderOpenIcon, LoaderCircleIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, ScissorsIcon, SearchIcon, SlidersHorizontalIcon, StarIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { api, fileUrl, mediaKind, outputPath, plain, when, type Input, type Job, type Tool } from "@/lib/api"
+import { Button } from "@/components/ui/button"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { api, fileUrl, inWorkspace, mediaKind, outputPath, plain, when, type Input, type Job, type Tool, type Workspace } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
+import { factsOf, NO_FILTERS, passes, RATIO_CHIPS, RES_CHIPS, sorted, SORTS, type Filters, type Sort } from "@/lib/filters"
 import { SketchDialog } from "@/components/sketch"
 import { MaskDialog } from "@/components/mask"
 import { CutDialog } from "@/components/cut"
@@ -280,6 +284,10 @@ function Slot({
 
 export type Pick = { path: string; job: Job }
 
+// the workspaces a picker lists from, the current one, and where each file is on its timeline (« #2 », « V2 »): the
+// App gives them to every picker and result
+export const Workspaces = createContext<{ list: Workspace[]; current: string; shots: Record<string, string> }>({ list: [], current: "default", shots: {} })
+
 // how many files an input of several holds, of what the model takes here: red when it holds too many
 function Count({ files, limit }: { files: number; limit: number }) {
   return <span className={cn("text-center text-xs tabular-nums", files > limit ? "font-medium text-destructive" : "text-muted-foreground/70")}>{files} / {limit}</span>
@@ -327,76 +335,233 @@ function LibraryPicker({ input, items, picked, onPick }: { input: Input; items: 
   )
 }
 
-// the library's results in a picker: how many, all or the favorites, the grid to pick from
-export function LibraryList({ title, items, picked, onPick, multiple }: { title: string; items: Pick[]; picked: string[]; onPick: (path: string) => void; multiple?: boolean }) {
-  const [show, setShow] = useState<"all" | "favorites">("all")
-  const list = items.filter((i) => show === "all" || i.job.favorite)
+const SORT_KEY = "media-generator:sort"
+export function useSort() {
+  const [sort, setSort] = useState<Sort>(() => {
+    try {
+      return SORTS.find(([k]) => k === localStorage.getItem(SORT_KEY))?.[0] ?? "newest"
+    } catch {
+      return "newest"
+    }
+  })
+  const pick = (s: Sort) => {
+    setSort(s)
+    try {
+      localStorage.setItem(SORT_KEY, s)
+    } catch {
+      /* a private window keeps it for the session */
+    }
+  }
+  return [sort, pick] as const
+}
+// the sort, as a small select
+export function SortSelect({ value, onChange }: { value: Sort; onChange: (s: Sort) => void }) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as Sort)}>
+      <SelectTrigger size="sm" className="h-7 gap-1 px-2 text-xs" aria-label="Sort">
+        <ArrowDownUpIcon className="size-3.5 text-muted-foreground" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper" align="start">
+        {SORTS.map(([k, label]) => (
+          <SelectItem key={k} value={k}>{label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+const SMALL = "[&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs"
+// the filter chips of a list: a medium when it holds several, a format and a quality for pictures, the favorites
+// when there are some
+export function FilterChips({ value, onChange, items, kinds = true }: { value: Filters; onChange: (f: Filters) => void; items: { path: string; job: Job }[]; kinds?: boolean }) {
+  const media = new Set(items.map((i) => mediaKind(i.path)))
+  const row = (label: string, chips: React.ReactNode) => (
+    <div className="flex items-baseline gap-2">
+      <span className="w-20 shrink-0 text-[11px] font-semibold tracking-wider text-foreground/70 uppercase">{label}</span>
+      {chips}
+    </div>
+  )
+  return (
+    <div className="flex flex-col gap-1.5">
+      {kinds && media.size > 1 && row("Media", <Chips options={["all", "video", "image", "audio"] as const} value={value.kind} label={(k) => (k === "all" ? "All" : k[0].toUpperCase() + k.slice(1))} onChange={(kind) => onChange({ ...value, kind })} className={SMALL} />)}
+      {value.kind !== "audio" && (media.has("image") || media.has("video")) && (
+        <>
+          {row("Ratio", <Chips options={RATIO_CHIPS} value={value.ratio} label={(r) => (r === "all" ? "All" : r === "other" ? "Other" : r)} onChange={(ratio) => onChange({ ...value, ratio })} className={SMALL} />)}
+          {row("Resolution", <Chips options={RES_CHIPS} value={value.res} label={(r) => (r === "all" ? "All" : r)} onChange={(res) => onChange({ ...value, res })} className={SMALL} />)}
+        </>
+      )}
+      {items.some((i) => i.job.favorite) && row("Show", <Chips options={["all", "favorites"] as const} value={value.favorites ? "favorites" : "all"} label={(o) => (o === "all" ? "All" : "Favorites")} onChange={(o) => onChange({ ...value, favorites: o === "favorites" })} className={SMALL} />)}
+    </div>
+  )
+}
+const activeFilters = (f: Filters) => [f.kind !== "all", f.ratio !== "all", f.res !== "all", f.favorites].filter(Boolean).length
+
+// the results in a picker: the current workspace's first (another one or the whole Library a select away), a search
+// on their words, filters folded behind a button, a sort kept in this browser, the list by medium
+export function LibraryList({ title, items, picked, onPick, multiple, from }: { title: string; items: Pick[]; picked: string[]; onPick: (path: string) => void; multiple?: boolean; from?: string }) {
+  const ws = useContext(Workspaces)
+  const [source, setSource] = useState(from ?? ws.current)
+  const [filters, setFilters] = useState(NO_FILTERS)
+  const [unfolded, setUnfolded] = useState(false)
+  const [sort, setSort] = useSort()
+  const [q, setQ] = useState("")
+  const words = q.trim().toLowerCase()
+  const inSource = items.filter((i) => source === "library" || inWorkspace(i.job, source))
+  const list = sorted(inSource.filter((i) => passes(i, filters) && (!words || `${i.job.prompt} ${i.job.label} ${i.job.name} ${i.path.split("/").pop()}`.toLowerCase().includes(words))), sort)
+  const name = ws.list.find((w) => w.slug === source)?.name
+  const active = activeFilters(filters)
   return (
     <>
-      <div className="flex items-center gap-3 border-b px-3 py-2.5">
-        <span className="min-w-0 flex-1">
+      <div className="flex flex-col gap-2 border-b px-3 py-2.5">
+        <span className="min-w-0">
           <span className="block truncate text-sm font-semibold">{title}</span>
           <span className="block text-xs text-muted-foreground">
-            {items.length} result{items.length > 1 ? "s" : ""}, newest first{multiple ? " · pick several" : ""}
+            {list.length} result{list.length === 1 ? "" : "s"}
+            {multiple ? " · pick several" : ""}
           </span>
         </span>
-        {items.some((i) => i.job.favorite) && (
-          <Chips options={["all", "favorites"] as const} value={show} onChange={setShow} label={(o) => (o === "all" ? "All" : "Favorites")} className="[&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs" />
-        )}
+        <div className="flex gap-2">
+          <InputGroup className="h-8 flex-1">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search prompts, tools, files" aria-label="Search the results" />
+          </InputGroup>
+          {ws.list.length > 0 && (
+            <Select value={source} onValueChange={setSource}>
+              <SelectTrigger size="sm" className="max-w-52" aria-label="Show the results of">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" align="end">
+                <SelectGroup>
+                  <SelectLabel>Workspaces</SelectLabel>
+                  {ws.list.map((w) => (
+                    <SelectItem key={w.slug} value={w.slug}>
+                      {w.name}
+                      {w.slug === ws.current ? <span className="text-muted-foreground"> · current</span> : null}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+                <SelectSeparator />
+                <SelectItem value="library">Whole library</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="xs" variant={active ? "secondary" : "ghost"} aria-expanded={unfolded} onClick={() => setUnfolded((u) => !u)}>
+            <SlidersHorizontalIcon data-icon="inline-start" /> Filters{active ? ` · ${active}` : ""}
+          </Button>
+          <SortSelect value={sort} onChange={setSort} />
+          <span className="flex-1" />
+          {active > 0 && (
+            <Button size="xs" variant="ghost" onClick={() => setFilters(NO_FILTERS)}>
+              Clear
+            </Button>
+          )}
+        </div>
+        {unfolded && <FilterChips value={filters} onChange={setFilters} items={inSource} />}
       </div>
-      <PickList items={list} picked={picked} onPick={onPick} empty={items.length ? "No favorite here yet." : "Nothing in the library yet."} className="max-h-[min(380px,55vh)] p-3" />
+      {!list.length && source !== "library" && !words && !active && items.length > 0 ? (
+        <div className="flex flex-col items-center gap-2 px-3 py-8 text-center text-sm text-muted-foreground">
+          Nothing from {name ?? "this workspace"} here yet.
+          <Button size="sm" variant="outline" onClick={() => setSource("library")}>
+            Show the whole library
+          </Button>
+        </div>
+      ) : (
+        <PickList items={list} picked={picked} onPick={onPick} empty={!items.length ? "Nothing in the library yet." : words ? `Nothing matches “${q.trim()}”.` : "Nothing matches these filters."} className="max-h-[min(380px,55vh)] p-3" />
+      )}
     </>
   )
 }
 
-// results as a grid to pick from, newest first: pictures and clips as tiles, voices as rows to listen to; the ones
-// picked are checked
-export function PickList({ items, picked, onPick, empty, className }: { items: Pick[]; picked: string[]; onPick: (path: string) => void; empty: string; className?: string }) {
-  const tiles = items.filter((i) => mediaKind(i.path) !== "audio"), voices = items.filter((i) => mediaKind(i.path) === "audio")
+// results by medium, videos first: each its own section, titled when the list holds more than one
+export const byMedium = <T extends { path: string }>(items: T[]) => ({
+  videos: items.filter((i) => mediaKind(i.path) === "video"),
+  images: items.filter((i) => mediaKind(i.path) === "image"),
+  sounds: items.filter((i) => mediaKind(i.path) === "audio"),
+})
+export function Section({ title, count, titled, children }: { title: string; count: number; titled: boolean; children: React.ReactNode }) {
   return (
-    <div className={cn("flex flex-col gap-3 overflow-auto", className)}>
-      {!items.length && <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>}
-      {tiles.length > 0 && (
-        <div className="grid grid-cols-4 gap-2">
-          {tiles.map((i) => {
-            const on = picked.includes(i.path)
-            return (
-              <button
-                key={i.path}
-                type="button"
-                aria-pressed={on}
-                aria-label={`${i.job.label}, ${when(i.job.created)}`}
-                title={`${i.job.label} · ${when(i.job.created)}`}
-                onClick={() => onPick(i.path)}
-                className={cn("group/tile relative aspect-square overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/5 transition outline-none hover:ring-2 hover:ring-space/60 focus-visible:ring-2 focus-visible:ring-ring", on && "ring-2 ring-space")}
-              >
-                <Thumb path={i.path} />
-                {mediaKind(i.path) === "video" && <PlayIcon className="absolute bottom-1.5 left-1.5 size-3.5 text-white drop-shadow" />}
-                {i.job.favorite && <StarIcon className="absolute top-1.5 left-1.5 size-3.5 fill-current text-cost drop-shadow" />}
-                <span className="absolute inset-x-0 bottom-0 truncate bg-linear-to-t from-black/75 to-transparent px-1.5 pt-5 pb-1 text-left text-xs text-white opacity-0 transition-opacity group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100">
-                  {i.job.label}
-                </span>
-                {on && <CheckIcon className="absolute top-1.5 right-1.5 size-5 rounded-full bg-space p-0.5 text-space-foreground" />}
-              </button>
-            )
-          })}
-        </div>
+    <section className="flex flex-col gap-2" aria-label={title}>
+      {titled && (
+        <h4 className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+          {title} <span className="font-normal tabular-nums">· {count}</span>
+        </h4>
       )}
-      {voices.map((i) => {
-        const on = picked.includes(i.path)
-        return (
-          <div key={i.path} className={cn("flex items-center gap-2.5 rounded-lg border px-2 py-1.5 transition-colors hover:bg-muted/60", on && "border-space/60 bg-space/10")}>
-            <Listen path={i.path} />
-            <button type="button" aria-pressed={on} onClick={() => onPick(i.path)} className="min-w-0 flex-1 text-left">
-              <span className="block truncate text-sm">{i.job.prompt || i.job.label}</span>
-              <span className="block text-xs text-muted-foreground">
-                {i.job.label} · {when(i.job.created)}
-              </span>
-            </button>
-            {on && <CheckIcon className="size-4 shrink-0 text-space" />}
+      {children}
+    </section>
+  )
+}
+// a file's length from what the engine measured
+export const lengthLabel = (i: Pick) => {
+  const d = factsOf(i).dur
+  return d ? `${d.toFixed(1)} s` : ""
+}
+
+// results to pick from, newest first, by medium: videos at 16:9 with their length, images square, sounds as rows to
+// listen to; the ones picked are checked
+export function PickList({ items, picked, onPick, empty, className }: { items: Pick[]; picked: string[]; onPick: (path: string) => void; empty: string; className?: string }) {
+  const { videos, images, sounds } = byMedium(items), titled = [videos, images, sounds].filter((l) => l.length).length > 1
+  const tile = (i: Pick, video: boolean) => {
+    const on = picked.includes(i.path)
+    return (
+      <button
+        key={i.path}
+        type="button"
+        aria-pressed={on}
+        aria-label={`${i.job.label}, ${when(i.job.created)}`}
+        title={`${i.job.label} · ${when(i.job.created)}`}
+        onClick={() => onPick(i.path)}
+        className={cn("group/tile relative overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/5 transition outline-none hover:ring-2 hover:ring-space/60 focus-visible:ring-2 focus-visible:ring-ring", video ? "aspect-video" : "aspect-square", on && "ring-2 ring-space")}
+      >
+        <Thumb path={i.path} />
+        {video && <PlayIcon className="absolute bottom-1.5 left-1.5 size-3.5 text-white drop-shadow" />}
+        {video && lengthLabel(i) && <span className="absolute right-1.5 bottom-1.5 rounded bg-black/60 px-1 text-[11px] text-white tabular-nums">{lengthLabel(i)}</span>}
+        {i.job.favorite && <StarIcon className="absolute top-1.5 left-1.5 size-3.5 fill-current text-cost drop-shadow" />}
+        <span className="absolute inset-x-0 bottom-0 truncate bg-linear-to-t from-black/75 to-transparent px-1.5 pt-5 pb-1 text-left text-xs text-white opacity-0 transition-opacity group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100">
+          {i.job.label}
+        </span>
+        {on && <CheckIcon className="absolute top-1.5 right-1.5 size-5 rounded-full bg-space p-0.5 text-space-foreground" />}
+      </button>
+    )
+  }
+  return (
+    <div className={cn("flex flex-col gap-4 overflow-auto", className)}>
+      {!items.length && <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>}
+      {videos.length > 0 && (
+        <Section title="Videos" count={videos.length} titled={titled}>
+          <div className="grid grid-cols-3 gap-2">{videos.map((i) => tile(i, true))}</div>
+        </Section>
+      )}
+      {images.length > 0 && (
+        <Section title="Images" count={images.length} titled={titled}>
+          <div className="grid grid-cols-4 gap-2">{images.map((i) => tile(i, false))}</div>
+        </Section>
+      )}
+      {sounds.length > 0 && (
+        <Section title="Audio" count={sounds.length} titled={titled}>
+          <div className="flex flex-col gap-1.5">
+            {sounds.map((i) => {
+              const on = picked.includes(i.path)
+              return (
+                <div key={i.path} className={cn("flex items-center gap-2.5 rounded-lg border px-2 py-1.5 transition-colors hover:bg-muted/60", on && "border-space/60 bg-space/10")}>
+                  <Listen path={i.path} />
+                  <button type="button" aria-pressed={on} onClick={() => onPick(i.path)} className="min-w-0 flex-1 text-left">
+                    <span className="block truncate text-sm">{i.job.prompt || i.job.label}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {i.job.label} · {when(i.job.created)}
+                      {lengthLabel(i) && ` · ${lengthLabel(i)}`}
+                    </span>
+                  </button>
+                  {on && <CheckIcon className="size-4 shrink-0 text-space" />}
+                </div>
+              )
+            })}
           </div>
-        )
-      })}
+        </Section>
+      )}
     </div>
   )
 }

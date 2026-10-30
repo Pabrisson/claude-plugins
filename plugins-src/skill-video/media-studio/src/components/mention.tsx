@@ -22,6 +22,8 @@ export function MentionTextarea({
   value,
   onChange,
   items,
+  first = [],
+  firstLabel,
   blocked,
   className,
   ...props
@@ -29,6 +31,9 @@ export function MentionTextarea({
   value: string
   onChange: (v: string) => void
   items: Mentionable[]
+  // the names listed first, under their own heading (the current workspace's Elements)
+  first?: string[]
+  firstLabel?: string
   // why nothing can be cited on this model (it takes no reference image, a frame is set)
   blocked?: string
 }) {
@@ -42,7 +47,10 @@ export function MentionTextarea({
   const found = items
     .filter((i) => `${i.name} ${i.words}`.toLowerCase().includes(q))
     .sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)))
-  const groups = GROUPS.map((g) => ({ ...g, items: found.filter((i) => i.type === g.type) })).filter((g) => g.items.length)
+  const groups = [
+    { type: "first", heading: firstLabel ? `In ${firstLabel}` : "First", items: found.filter((i) => first.includes(i.name)) },
+    ...GROUPS.map((g) => ({ ...g, items: found.filter((i) => i.type === g.type && !first.includes(i.name)) })),
+  ].filter((g) => g.items.length)
   const order = groups.flatMap((g) => g.items)
   const shown = order.find((i) => i.name === active) ?? order[0]
   const images = cited(value, items).reduce((n, i) => n + i.files.length, 0)

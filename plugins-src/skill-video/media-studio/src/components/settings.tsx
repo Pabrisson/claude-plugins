@@ -71,7 +71,7 @@ export function SettingsPage({ state, models, onSaved }: { state: State; models:
   const [busy, setBusy] = useState(false)
   const [at, setAt] = useState("spending")
 
-  const next: Settings = {
+  const next: Omit<Settings, "workspace"> = {
     openrouter: { threshold: amount(limits["openrouter.threshold"]), cap: amount(limits["openrouter.cap"]) },
     elevenlabs: { threshold: amount(limits["elevenlabs.threshold"]), cap: amount(limits["elevenlabs.cap"]), plan },
     defaults,

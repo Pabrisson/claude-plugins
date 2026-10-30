@@ -12,6 +12,7 @@ import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import zlib from 'node:zlib'
 import { appendLedger, money, needsYes, PLANS, readLedger, spentThisMonth } from './lib/cost.js'
 import { PROVIDERS, routerOf } from './providers/index.js'
 
@@ -33,7 +34,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' },
-    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true },
+    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true },
   },
 })
 
@@ -109,6 +110,8 @@ const SETTINGS = {
   openrouter: { threshold: null, cap: null },
   elevenlabs: { threshold: null, cap: null, plan: null },
   defaults: { image: null, video: null, audio: null },
+  // the workspace new generations join (workspaces use, the dashboard's header)
+  workspace: { current: 'default' },
 }
 const settings = () => {
   const s = fs.existsSync(at('settings.json')) ? readJson(at('settings.json')) : {}
@@ -117,12 +120,15 @@ const settings = () => {
 // the USD price of 1,000 ElevenLabs credits on the user's plan, null without a paid one
 const per1000 = () => PLANS[settings().elevenlabs.plan] || null
 
-// git keeps what the user made and cannot make again (media, elements, styles, the ledger, the settings), not the cache
-const IGNORE = '# media-generator: the cache is remade, the media, elements, styles, ledger and settings stay\n.cache/\n.trash/\n'
+// git keeps what the user made and cannot make again (media, elements, styles, workspaces, the ledger, the settings),
+// not the cache
+const IGNORE = '# media-generator: the cache is remade, the media, elements, styles, workspaces, ledger and settings stay\n.cache/\n.trash/\n'
 function ensureHome() {
   for (const d of ['media', 'elements', '.cache']) fs.mkdirSync(at(d), { recursive: true })
   const gi = at('.gitignore'), now = fs.existsSync(gi) ? fs.readFileSync(gi, 'utf8') : ''
   if (!now.includes('# media-generator')) fs.writeFileSync(gi, now + (now && !now.endsWith('\n') ? '\n' : '') + (now ? '\n' : '') + IGNORE)
+  // the Default workspace is there from the start, empty
+  if (!fs.existsSync(wsFile('default'))) writeJson(wsFile('default'), { name: 'Default workspace', created: new Date().toISOString(), elements: [], timeline: TIMELINE })
 }
 
 const TOOLS = Object.fromEntries(KINDS.map(k => [k, JSON.parse(fs.readFileSync(path.join(ENGINE, `tools/${k}.json`), 'utf8'))]))
@@ -241,7 +247,7 @@ function outputsOf(ids, kind) {
 
 // adds files to an Element (made when new) and sets what is given: its type, words, a brand's colors and typeface;
 // from: generations whose results join it; drop: file names taken out
-function saveElement(name, { type, words, colors, font, files = [], from = [], drop = [] }) {
+function saveElement(name, { type, words, colors, font, files = [], from = [], drop = [], workspace: ws }) {
   if (!NAME.test(name ?? '')) throw userError('an Element\'s name is letters, digits, - and _')
   const now = element(name), t = type ?? now?.type ?? 'other'
   if (!TYPES.includes(t)) throw userError(`the types are ${TYPES.join(', ')}`)
@@ -256,6 +262,9 @@ function saveElement(name, { type, words, colors, font, files = [], from = [], d
   for (const f of drop) fs.rmSync(path.join(d, path.basename(f)), { force: true })
   writeJson(path.join(d, 'element.json'), clean({ type: t, words: (words ?? now?.words ?? '').trim(),
     ...(t === 'brand' ? { colors: colors ?? now?.colors ?? [], font: (font ?? now?.font ?? '').trim() } : {}), voice_id: t === 'voice' ? now?.voice_id : undefined }))
+  // a new one is linked to the workspace asked (null: none), else the current one
+  const to = ws === undefined ? currentWorkspace() : ws
+  if (!now && to && workspace(to)) saveWorkspace(to, { elements: [...workspace(to).elements, name] })
   return element(name)
 }
 
@@ -318,6 +327,216 @@ function savedStyle(name) {
   return { name, files, words, text: `the last ${img}: ${its} medium, palette, line work, texture and light, never ${its} subject or content${words ? ` (${words})` : ''}` }
 }
 const savedStyles = () => (fs.existsSync(at('styles')) ? fs.readdirSync(at('styles')).sort().map(savedStyle).filter(s => s?.files.length) : [])
+
+// ---------- workspaces: a project's media and Elements, and its timeline ----------
+
+// workspaces/<slug>/workspace.json: its name, the Elements linked by hand, its timeline. Its media say it themselves
+// (job.json's workspaces), so one can be in several and a deleted one leaves nothing behind. The timeline's tracks go
+// top to bottom (the first video track covers the ones under it, the last one is the main track, its shots end to end);
+// a clip plays a file of a generation (job, file) from in to out, at a time on the timeline (seconds), so a moved
+// folder keeps it; placed: the results already laid there by a Bridge shot or a take; rev: one more at each save, so a
+// page holding an older copy takes the new one instead of writing over it
+const TIMELINE = { ratio: null, tracks: [{ id: 'v1', kind: 'video' }, { id: 'a1', kind: 'audio' }], clips: [], placed: [], rev: 0 }
+// a clip's file: its generation's folder and the file's name (a clip saved before kept a whole path)
+const clipFile = c => path.join(mediaDir(path.basename(String(c.job ?? ''))), path.basename(String(c.file ?? c.path ?? '')))
+// the frames of a video's strip on the timeline
+const STRIP = 20
+const RATIOS = { '16:9': [1280, 720], '9:16': [720, 1280], '1:1': [720, 720], '4:5': [720, 900] }
+const SLUG = /^[a-z0-9-]+$/
+const wsFile = slug => at('workspaces', slug, 'workspace.json')
+const slugOf = name => String(name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'workspace'
+function workspace(slug) {
+  if (!SLUG.test(slug ?? '') || !fs.existsSync(wsFile(slug))) return null
+  const w = readJson(wsFile(slug)), t = { ...TIMELINE, ...w.timeline }
+  return { slug, name: w.name ?? slug, created: w.created, elements: (w.elements ?? []).filter(n => element(n)),
+    timeline: { ...t, clips: t.clips.map(c => ({ ...c, file: path.basename(c.file ?? c.path), path: clipFile(c) })) } }
+}
+const workspaceList = () => (fs.existsSync(at('workspaces')) ? fs.readdirSync(at('workspaces')).sort().map(workspace).filter(Boolean) : [])
+const currentWorkspace = () => (workspace(settings().workspace.current) ? settings().workspace.current : 'default')
+const saveWorkspace = (slug, patch) => {
+  const { slug: _, ...w } = workspace(slug)
+  writeJson(wsFile(slug), { ...w, timeline: { ...w.timeline, clips: w.timeline.clips.map(({ path: _p, ...c }) => c) }, ...patch })
+}
+function useWorkspace(slug) {
+  if (!workspace(slug)) throw userError(`no workspace ${slug} (media.mjs workspaces)`)
+  const s = settings()
+  s.workspace.current = slug
+  writeJson(at('settings.json'), s)
+}
+function newWorkspace(name) {
+  name = String(name ?? '').trim()
+  if (!name || name.length > 60) throw userError('a workspace\'s name is 1 to 60 characters')
+  ensureHome()
+  let slug = slugOf(name)
+  for (let i = 2; fs.existsSync(wsFile(slug)); i++) slug = `${slugOf(name)}-${i}`
+  writeJson(wsFile(slug), { name, created: new Date().toISOString(), elements: [], timeline: TIMELINE })
+  return slug
+}
+// the generations of the folder, each read once
+const allJobs = () => (fs.existsSync(at('media')) ? fs.readdirSync(at('media')).filter(d => fs.existsSync(path.join(mediaDir(d), 'job.json'))).map(readJob) : [])
+// a generation joins or leaves a workspace
+function member(slug, ids, on) {
+  for (const id of ids ?? []) {
+    if (!fs.existsSync(path.join(mediaDir(path.basename(id)), 'job.json'))) throw userError(`no generation ${id} (media.mjs jobs)`)
+    const j = readJob(path.basename(id)), list = (j.workspaces ?? []).filter(s => s !== slug)
+    j.workspaces = on ? [...list, slug] : list
+    saveJob(j)
+  }
+}
+// a workspace goes, never its media: they only leave it (a new workspace of the same name starts empty)
+function removeWorkspace(slug) {
+  if (slug === 'default') throw userError('the Default workspace stays')
+  for (const j of allJobs().filter(j => j.workspaces?.includes(slug))) member(slug, [j.id], false)
+  fs.rmSync(at('workspaces', slug), { recursive: true, force: true })
+  if (settings().workspace.current === slug) useWorkspace('default')
+}
+// the Elements of a workspace: linked by hand, or cited by one of its generations (@name, an element field)
+function linkedElements(slug, jobs = allJobs()) {
+  const names = new Set(workspace(slug).elements)
+  for (const j of jobs.filter(j => j.workspaces?.includes(slug))) {
+    for (const m of String(j.spec?.prompt ?? '').matchAll(/@([\w-]+)/g)) names.add(m[1])
+    const tool = TOOLS[j.kind]?.find(t => t.id === j.tool)
+    for (const f of tool?.fields.filter(f => f.type === 'element') ?? []) if (j.spec?.fields?.[f.key]) names.add(String(j.spec.fields[f.key]).replace(/^@/, ''))
+  }
+  return [...names].filter(n => element(n)).sort()
+}
+
+// a timeline from the page, kept only as it should be: known tracks, files of the folder, times in order
+function cleanTimeline(t) {
+  const tracks = (Array.isArray(t?.tracks) ? t.tracks : []).filter(x => NAME.test(x?.id ?? '') && ['video', 'audio'].includes(x.kind)).map(x => clean({ id: x.id, kind: x.kind, off: x.off ? true : undefined }))
+  const fin = x => Number.isFinite(+x) && +x >= 0
+  const clips = (Array.isArray(t?.clips) ? t.clips : []).filter(c => NAME.test(c?.id ?? '') && NAME.test(c?.job ?? '') && tracks.some(x => x.id === c.track) && fs.existsSync(clipFile(c)) && fin(c.at) && fin(c.in) && fin(c.out) && +c.out > +c.in)
+    .map(c => clean({ id: c.id, track: c.track, job: c.job, file: path.basename(clipFile(c)), at: +c.at, in: +c.in, out: +c.out, volume: fin(c.volume) ? Math.min(2, +c.volume) : undefined, dur: fin(c.dur) ? +c.dur : undefined }))
+  return { ratio: t?.ratio in RATIOS ? t.ratio : null, tracks, clips, placed: (Array.isArray(t?.placed) ? t.placed : []).map(String) }
+}
+// what a timeline plays: the clips of tracks left on, each with its track's kind and place from the top
+function liveClips(t) {
+  return t.clips.flatMap(c => {
+    const i = t.tracks.findIndex(x => x.id === c.track), tr = t.tracks[i]
+    return tr && !tr.off ? [{ ...c, kind: tr.kind, layer: i, len: +(c.out - c.in).toFixed(3), still: kindOfFile(c.path) === 'image' }] : []
+  }).sort((a, b) => a.at - b.at)
+}
+// its format: the one set, else the closest to its first video clip's
+function ratioFor(t, clips = liveClips(t)) {
+  if (t.ratio) return t.ratio
+  const first = clips.find(c => c.kind === 'video')
+  const s = first && probe(first.path), gap = r => Math.abs(Math.log(RATIOS[r][0] / RATIOS[r][1] / (s.width / s.height)))
+  return s?.width ? Object.keys(RATIOS).sort((a, b) => gap(a) - gap(b))[0] : '16:9'
+}
+const secs = x => x.toFixed(2)
+const trackName = (t, tr) => {
+  const same = t.tracks.filter(x => x.kind === tr.kind)
+  return tr.kind === 'video' ? `V${same.length - same.indexOf(tr)}` : `A${same.indexOf(tr) + 1}`
+}
+// the edit in words, for video-editor (Copy prompt, EDIT.md, workspaces show): every clip's times, file and sound
+function editText(slug, file = c => c.path) {
+  const w = workspace(slug), t = w.timeline, clips = liveClips(t)
+  if (!clips.length) return null
+  const total = Math.max(...clips.map(c => c.at + c.len)), video = t.tracks.filter(x => x.kind === 'video' && !x.off)
+  const lines = [
+    `Make a video from my media-generator workspace "${w.name}", following its timeline exactly: ${ratioFor(t, clips)}, ${secs(total)} s.`,
+    'Times are seconds on the timeline; a clip\'s source range is in its own file\'s seconds. Every file is a clip (edit.json\'s media), there is no speech source to transcribe. Gaps are black and silent.',
+  ]
+  for (const tr of t.tracks.filter(x => !x.off)) {
+    const mine = clips.filter(c => c.track === tr.id)
+    if (!mine.length) continue
+    const under = video.indexOf(tr) < video.length - 1 ? `, over ${trackName(t, video.at(-1))}` : video.length > 1 ? ', the base' : ''
+    lines.push('', `${trackName(t, tr)} (${tr.kind}${tr.kind === 'video' ? under : ''}):`)
+    for (const c of mine) {
+      const vol = c.volume ?? 1, sound = c.still ? 'a still' : tr.kind === 'audio' ? `volume ${Math.round(vol * 100)} %` : !probe(c.path).audio ? 'no sound' : vol ? `its sound at ${Math.round(vol * 100)} %` : 'its sound muted'
+      lines.push(`- ${secs(c.at)}–${secs(c.at + c.len)}  ${file(c)}${c.still ? '' : `, source ${secs(c.in)}–${secs(c.out)}`}, ${sound}`)
+    }
+  }
+  lines.push('', 'Keep these cuts, their order and their timings; ask me before changing any.')
+  return lines.join('\n')
+}
+// the timeline as a video, 720p on its short side, a reference for the edit: the video tracks stacked from the bottom
+// up (each clip covers the tracks under it while it plays, letterboxed), every sound mixed at its volume
+async function renderMontage(slug) {
+  const t = workspace(slug).timeline, clips = liveClips(t)
+  if (!clips.length) throw userError('the timeline is empty')
+  const [W, H] = RATIOS[ratioFor(t, clips)], total = Math.max(...clips.map(c => c.at + c.len))
+  const argv = ['-f', 'lavfi', '-i', `color=black:s=${W}x${H}:r=30:d=${total}`, '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo'], graph = [], sounds = ['[1:a]']
+  let v = '[0:v]', n = 2
+  for (const c of clips.filter(c => c.kind === 'video').sort((a, b) => b.layer - a.layer || a.at - b.at)) {
+    argv.push(...(c.still ? ['-loop', '1', '-framerate', '30', '-t', `${c.len}`] : ['-ss', `${c.in}`, '-t', `${c.len}`]), '-i', c.path)
+    graph.push(`[${n}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:-1:-1:black,setsar=1,fps=30,format=yuv420p,setpts=PTS-STARTPTS+${c.at}/TB[c${n}]`, `${v}[c${n}]overlay=eof_action=pass[o${n}]`)
+    v = `[o${n}]`
+    if (!c.still && (c.volume ?? 1) > 0 && probe(c.path).audio) (graph.push(`[${n}:a]aresample=48000,volume=${c.volume ?? 1},adelay=${Math.round(c.at * 1000)}:all=1[s${n}]`), sounds.push(`[s${n}]`))
+    n++
+  }
+  for (const c of clips.filter(c => c.kind === 'audio' && kindOfFile(c.path) !== 'image')) {
+    argv.push('-ss', `${c.in}`, '-t', `${c.len}`, '-i', c.path)
+    graph.push(`[${n}:a]aresample=48000,volume=${c.volume ?? 1},adelay=${Math.round(c.at * 1000)}:all=1[s${n}]`)
+    sounds.push(`[s${n++}]`)
+  }
+  graph.push(`${sounds.join('')}amix=inputs=${sounds.length}:normalize=0:duration=longest[mix]`)
+  const out = at('.cache', 'montage', `${slug}.mp4`), tmp = `${out}.tmp.mp4`
+  fs.mkdirSync(path.dirname(out), { recursive: true })
+  await new Promise((ok, ko) => {
+    const p = spawn('ffmpeg', ['-y', '-v', 'error', ...argv, '-filter_complex', graph.join(';'), '-map', v, '-map', '[mix]', '-t', `${total}`,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', tmp], { stdio: ['ignore', 'ignore', 'pipe'] })
+    let err = ''
+    p.stderr.on('data', d => (err += d))
+    p.on('error', ko)
+    p.on('close', code => (code ? ko(new Error(`the montage did not render: ${err.trim().split('\n').pop()}`)) : ok()))
+  })
+  fs.renameSync(tmp, out)
+  return out
+}
+
+// a .zip of files as they are (stored: media are compressed already), streamed to the page
+// ponytail: no ZIP64, so 4 GB in all at most; add it when a workspace outgrows that
+async function sendZip(res, name, entries) {
+  const d = new Date(), dos = ((((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) << 16 | (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) >>> 0
+  res.writeHead(200, { 'content-type': 'application/zip', 'content-disposition': `attachment; filename="${encodeURIComponent(name)}.zip"` })
+  const write = b => new Promise(ok => (res.write(b) ? ok() : res.once('drain', ok)))
+  const central = []
+  let offset = 0
+  for (const e of entries) {
+    let crc = 0
+    if (e.data) crc = zlib.crc32(e.data)
+    else for await (const c of fs.createReadStream(e.file)) crc = zlib.crc32(c, crc)
+    const size = e.data ? e.data.length : fs.statSync(e.file).size, n = Buffer.from(e.name)
+    // the fields both headers share: version 2.0, UTF-8 names, stored, the time, the CRC, both sizes, the name's length
+    const common = Buffer.alloc(26)
+    common.writeUInt16LE(20, 0); common.writeUInt16LE(0x0800, 2); common.writeUInt32LE(dos, 6); common.writeUInt32LE(crc >>> 0, 10)
+    common.writeUInt32LE(size, 14); common.writeUInt32LE(size, 18); common.writeUInt16LE(n.length, 22)
+    const sig = x => { const b = Buffer.alloc(4); b.writeUInt32LE(x); return b }
+    await write(Buffer.concat([sig(0x04034b50), common, n]))
+    if (e.data) await write(e.data)
+    else for await (const c of fs.createReadStream(e.file)) await write(c)
+    // the central entry: made by 2.0, the same fields, then no extra, comment, disk or attributes, and where it starts
+    const where = Buffer.alloc(16)
+    where.writeUInt32LE(offset, 12)
+    central.push(Buffer.concat([sig(0x02014b50), Buffer.from([20, 0]), common.subarray(0, 24), where, n]))
+    offset += 30 + n.length + size
+  }
+  const cd = Buffer.concat(central), end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16)
+  await write(cd)
+  res.end(end)
+}
+// a workspace's files in the zip, under its name: its media by medium, its Elements, and with edit its timeline, the
+// edit in words and its render
+function zipEntries(slug, edit) {
+  const w = workspace(slug), root = w.name.replace(/[/\\:*?"<>|]/g, '-'), jobs = allJobs()
+  const DIRS = { image: 'images', video: 'videos', audio: 'audio' }, entries = [], named = new Map()
+  for (const j of jobs.filter(j => j.workspaces?.includes(slug) && j.status === 'done'))
+    for (const o of j.outputs) {
+      const k = kindOfFile(o), file = path.join(mediaDir(j.id), o)
+      if (DIRS[k] && fs.existsSync(file)) (named.set(file, `${DIRS[k]}/${j.id}-${o}`), entries.push({ name: `${root}/${DIRS[k]}/${j.id}-${o}`, file }))
+    }
+  for (const name of linkedElements(slug, jobs)) for (const f of fs.readdirSync(at('elements', name))) entries.push({ name: `${root}/elements/${name}/${f}`, file: at('elements', name, f) })
+  if (edit) {
+    const t = w.timeline, montage = at('.cache', 'montage', `${slug}.mp4`), rel = c => `../${named.get(c.path) ?? path.relative(HOME, c.path)}`
+    entries.push({ name: `${root}/edit/timeline.json`, data: Buffer.from(JSON.stringify({ ...t, clips: t.clips.map(c => ({ ...c, file: rel(c) })) }, null, 2) + '\n') })
+    const text = editText(slug, rel)
+    if (text) entries.push({ name: `${root}/edit/EDIT.md`, data: Buffer.from(`# ${w.name}: the edit\n\nThe files are named from this folder (edit/).\n\n${text}\n`) })
+    if (fs.existsSync(montage)) entries.push({ name: `${root}/edit/montage.mp4`, file: montage })
+  }
+  return { root, entries }
+}
 
 // the first value of a list the model accepts, preferring the wanted ones in order
 const pick = (list, ...wanted) => (list?.length ? wanted.find(w => w !== undefined && list.includes(w)) ?? list[0] : undefined)
@@ -578,6 +797,9 @@ function total(list) {
 
 async function create(spec, gateOpts) {
   ensureHome()
+  // the workspace it joins: the one asked for, else the current one
+  if (spec.workspace && !workspace(spec.workspace)) throw userError(`no workspace ${spec.workspace} (media.mjs workspaces)`)
+  const ws = spec.workspace ?? currentWorkspace()
   const list = await plans(spec)
   gate(total(list), gateOpts)
   let first = null
@@ -594,7 +816,7 @@ async function create(spec, gateOpts) {
       return name
     })
     const job = { id, kind: kept.kind, tool: p.tool.id, label: p.tool.label, provider: p.provider, model: p.model, name: p.name ?? p.model, prompt: p.prompt, spec: { ...kept, inputs },
-      estimate: p.estimate, actual: null, status: 'queued', by: gateOpts.by, created: new Date().toISOString(), outputs: [], ...(after ? { after: first } : {}) }
+      estimate: p.estimate, actual: null, status: 'queued', by: gateOpts.by, created: new Date().toISOString(), outputs: [], workspaces: [ws], ...(after ? { after: first } : {}) }
     saveJob(job)
     // what run needs and the folder does not keep: the request (data: URLs) and video.mjs's arguments; a batch's
     // seed goes up by one a job, or its takes would all be the same. A sheet after the first is planned when it runs
@@ -846,7 +1068,7 @@ function specFromArgs(kind) {
   const fields = Object.fromEntries((opt.field ?? []).map(x => { const i = x.indexOf('='); return [x.slice(0, i), x.slice(i + 1)] }))
   const params = clean({ n: num(opt.n), duration: num(opt.duration), aspect_ratio: opt.ratio, resolution: opt.resolution, quality: opt.quality,
     sound: opt.sound === undefined ? undefined : opt.sound !== 'off', seed: num(opt.seed), voice: opt.voice })
-  return { kind, tool: opt.tool ?? (kind === 'audio' ? 'voice' : 'free'), model: opt.model, prompt: opt.prompt ?? args.join(' '), raw: opt.raw, fields, inputs, params, batch: num(opt.batch) }
+  return { kind, tool: opt.tool ?? (kind === 'audio' ? 'voice' : 'free'), model: opt.model, prompt: opt.prompt ?? args.join(' '), raw: opt.raw, fields, inputs, params, batch: num(opt.batch), workspace: opt.workspace }
 }
 
 // image | video | audio: plan, ask (exit 2 without --spend), then run to the end
@@ -965,6 +1187,7 @@ function setup(sub, ...rest) {
   if (sub === 'set') {
     for (const kv of rest) {
       const [k, v] = [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)], [sec, key] = k.split('.')
+      if (sec === 'workspace') die('setup set: the workspace changes with media.mjs workspaces use <slug>')
       if (!SETTINGS[sec] || !(key in SETTINGS[sec])) die(`setup set: ${k} is not one of ${Object.entries(SETTINGS).flatMap(([a, o]) => Object.keys(o).map(b => `${a}.${b}`)).join(', ')}`)
       s[sec][key] = v === 'none' || v === '' ? null : sec === 'defaults' ? v
         : key === 'plan' ? (v in PLANS ? v : die(`setup set: elevenlabs.plan is one of ${Object.keys(PLANS).join(', ')}, or none`))
@@ -981,11 +1204,12 @@ function setup(sub, ...rest) {
 // --type, --words, --colors "#hex,#hex" and --font (a brand), --from <generation> (its results) and --drop <file>
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 function elements(sub, name, ...files) {
-  const usage = `usage: elements [add|set <name> [<files…>] [--type ${TYPES.join('|')}] [--words "…"] [--colors "#hex,#hex"] [--font "…"] [--from <generation>] [--drop <file>] | show <name> | remove <name> | elevenlabs <name>]`
+  const usage = `usage: elements [add|set <name> [<files…>] [--type ${TYPES.join('|')}] [--words "…"] [--colors "#hex,#hex"] [--font "…"] [--from <generation>] [--drop <file>] [--workspace <slug>|none] | show <name> | remove <name> | elevenlabs <name>]`
   try {
     if (sub === 'add' || sub === 'set') {
       if (sub === 'set' && !element(name)) throw userError(`no Element @${name}: elements add ${name} <files…>`)
-      saveElement(name, { type: opt.type, words: opt.words, colors: opt.colors?.split(/[,\s]+/).filter(Boolean), font: opt.font, files: files.map(f => path.resolve(f)), from: opt.from, drop: opt.drop })
+      saveElement(name, { type: opt.type, words: opt.words, colors: opt.colors?.split(/[,\s]+/).filter(Boolean), font: opt.font, files: files.map(f => path.resolve(f)), from: opt.from, drop: opt.drop,
+        workspace: opt.workspace === 'none' ? null : opt.workspace })
     } else if (sub === 'show') {
       const el = element(name)
       if (!el) throw userError(`no Element @${name}`)
@@ -1031,6 +1255,34 @@ function addStyle(name, files, words, drop = []) {
   writeJson(path.join(d, 'style.json'), { words: (words ?? savedStyle(name)?.words ?? '').trim() })
 }
 
+// workspaces [list | new <name> | use <slug> | rename <slug> <name> | add <slug> <generations…> | drop <slug>
+// <generations…> | show <slug> [--json] | remove <slug>]: a project's media, Elements and timeline. New generations
+// join the current one (--workspace <slug> picks another for one)
+function workspaces(sub, slug, ...rest) {
+  const usage = 'usage: workspaces [list | new <name> | use <slug> | rename <slug> <name> | add|drop <slug> <generations…> | show <slug> [--json] | remove <slug>]'
+  try {
+    ensureHome()
+    if (sub === 'new') return (useWorkspace(slug = newWorkspace([slug, ...rest].join(' '))), console.log(`workspace ${slug} made, and current`))
+    if (sub && sub !== 'list' && !workspace(slug)) throw userError(slug ? `no workspace ${slug}` : usage)
+    if (sub === 'use') useWorkspace(slug)
+    else if (sub === 'rename') saveWorkspace(slug, { name: rest.join(' ').trim() || die(usage) })
+    else if (sub === 'add' || sub === 'drop') member(slug, rest, sub === 'add')
+    else if (sub === 'remove') removeWorkspace(slug)
+    else if (sub === 'show') {
+      const w = workspace(slug), jobs = allJobs().filter(j => j.workspaces?.includes(slug) && j.status === 'done').sort((a, b) => a.id.localeCompare(b.id))
+      const files = jobs.flatMap(j => j.outputs.map(o => ({ id: j.id, label: j.label, file: path.join(mediaDir(j.id), o) })))
+      if (opt.json) return console.log(JSON.stringify({ ...w, linked: linkedElements(slug), files }, null, 2))
+      console.log(`${w.name} (${slug}${slug === currentWorkspace() ? ', current' : ''}): ${plural(files.length, 'file')}`)
+      for (const f of files) console.log(`  ${f.file}  ${f.label}`)
+      const linked = linkedElements(slug)
+      if (linked.length) console.log(`elements: ${linked.map(n => `@${n}`).join(' ')}`)
+      return console.log(editText(slug) ?? 'the timeline is empty')
+    } else if (sub && sub !== 'list') die(usage)
+  } catch (e) { die(e.message) }
+  const now = currentWorkspace(), jobs = allJobs()
+  for (const w of workspaceList()) console.log(`${w.slug === now ? '*' : ' '} ${w.slug}  ${w.name} · ${plural(jobs.filter(j => j.workspaces?.includes(w.slug)).length, 'generation')} · ${plural(w.timeline.clips.length, 'clip')} on its timeline`)
+}
+
 function doctor() {
   const has = bin => !spawnSync(bin, ['-version'], { stdio: 'ignore' }).error
   const checks = [['node 22 or later', +process.versions.node.split('.')[0] >= 22, 'brew install node'], ['ffmpeg and ffprobe', has('ffmpeg') && has('ffprobe'), 'brew install ffmpeg'],
@@ -1051,7 +1303,7 @@ function doctor() {
   console.log(`limits: ${['openrouter', 'elevenlabs'].map(p => `${p} threshold ${s[p].threshold ?? 'none'}, cap ${s[p].cap ?? 'none'}`).join(' · ')}`)
   console.log(`folder: ${HOME}`)
   if (fs.existsSync(at('media'))) {
-    const kept = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', 'media/x', 'elements/x', 'styles/x', 'ledger.jsonl', 'settings.json'], { encoding: 'utf8' })
+    const kept = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', 'media/x', 'elements/x', 'styles/x', 'workspaces/x', 'ledger.jsonl', 'settings.json'], { encoding: 'utf8' })
     if (kept.status === 0) console.log(`warning: git ignores ${kept.stdout.trim().split('\n').join(', ')}: the media and the ledger must stay versioned, fix ${at('.gitignore')}`)
   }
   if (checks.some(c => !c[1])) process.exit(1)
@@ -1076,6 +1328,24 @@ function sendFile(req, res, file) {
 // a generation started from the dashboard runs in its own process: it finishes even if the page or the server goes
 const startRun = id => spawn(process.execPath, [SELF, 'run', id], { cwd: HOME, env: { ...process.env, MEDIA_GENERATOR_DIR: HOME, MEDIA_GENERATOR_QUIET: '1' }, detached: true, stdio: 'ignore' }).unref()
 
+// what each result's files are, measured once: their size and length (the bin's filters, a clip's length)
+let metaCache = null
+function metaOf(job) {
+  const file = at('.cache', 'meta.json'), out = {}
+  metaCache ??= fs.existsSync(file) ? readJson(file) : {}
+  let changed = false
+  for (const o of job.outputs) {
+    const key = `${job.id}/${o}`
+    if (!(key in metaCache)) {
+      try { const s = probe(path.join(mediaDir(job.id), o)); metaCache[key] = clean({ w: s.width, h: s.height, dur: s.duration || undefined }) } catch { metaCache[key] = {} }
+      changed = true
+    }
+    out[o] = metaCache[key]
+  }
+  if (changed) writeJson(file, metaCache)
+  return out
+}
+
 function mediaList() {
   if (!fs.existsSync(at('media'))) return []
   return fs.readdirSync(at('media')).filter(d => fs.existsSync(path.join(mediaDir(d), 'job.json'))).sort().reverse().map(d => {
@@ -1083,7 +1353,8 @@ function mediaList() {
     // a run that stopped (machine asleep, process killed) is resumed: its video job id was kept
     if (j.status === 'running' && !alive(j.pid)) { j.status = 'queued'; saveJob(j); startRun(j.id) }
     const { spec, ...rest } = j
-    return { ...rest, fields: spec.fields, params: spec.params, inputs: spec.inputs, raw_prompt: spec.prompt, raw: !!spec.raw }
+    // place: where a Bridge shot or a take goes on its workspace's timeline once done
+    return { ...rest, fields: spec.fields, params: spec.params, inputs: spec.inputs, raw_prompt: spec.prompt, raw: !!spec.raw, place: spec.place, meta: j.status === 'done' ? metaOf(j) : undefined }
   })
 }
 
@@ -1108,7 +1379,8 @@ async function handle(req, res) {
     const drafts = fs.existsSync(at('.cache', 'drafts.json')) ? readJson(at('.cache', 'drafts.json')) : {}
     return reply(res, 200, { home: HOME, settings: settings(), keys: { openrouter: !!process.env.OPENROUTER_API_KEY, management: !!process.env.OPENROUTER_MANAGEMENT_KEY, elevenlabs: !!process.env.ELEVENLABS_API_KEY },
       fake: fakeState(),
-      media: mediaList(), drafts, styles: savedStyles(), elements: elementList(), plans: PLANS, month: Object.fromEntries(['openrouter', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
+      media: mediaList(), drafts, styles: savedStyles(), elements: elementList(), plans: PLANS,
+      workspaces: (jobs => workspaceList().map(w => ({ ...w, linked: linkedElements(w.slug, jobs) })))(allJobs()), month: Object.fromEntries(['openrouter', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
   }
   if (p === '/api/tools') return reply(res, 200, TOOLS)
   if (p === '/api/models') {
@@ -1154,7 +1426,11 @@ async function handle(req, res) {
     if (!src) return reply(res, 403, { error: 'outside the folder' })
     const out = at('.cache', 'uploads', `${Date.now()}-frame.png`)
     fs.mkdirSync(path.dirname(out), { recursive: true })
-    ffmpeg([...(last ? ['-sseof', '-0.1'] : t > 0 ? ['-ss', `${+t}`] : []), '-i', src, '-frames:v', '1', '-update', '1', out])
+    const grab = argv => (ffmpeg([...argv, '-update', '1', out]), fs.existsSync(out))
+    // the last frame: every frame of the last second written over the same file (a picture that stops before its sound
+    // has none at its end); a time past the picture's end takes it too
+    const lastFrame = () => grab(['-sseof', '-1', '-i', src])
+    if (!(last ? lastFrame() : grab([...(t > 0 ? ['-ss', `${+t}`] : []), '-i', src, '-frames:v', '1']) || lastFrame())) return reply(res, 400, { error: 'no frame in this file' })
     return reply(res, 200, { path: out })
   }
   // a video sent as an input, cut to the part and the area kept (Edit reference): a new file, the original stays.
@@ -1182,7 +1458,8 @@ async function handle(req, res) {
     fs.mkdirSync(mediaDir(id), { recursive: true })
     fs.renameSync(src, path.join(mediaDir(id), name))
     saveJob({ id, kind, tool: 'import', label: 'Imported', provider: 'local', model: 'file', name, prompt: '', spec: { kind, tool: 'import', prompt: '', fields: {}, inputs: {}, params: {} },
-      estimate: { amount: 0, unit: 'usd', known: true, detail: 'imported, free' }, actual: 0, actual_known: true, status: 'done', by: 'dashboard', created: now, finished: now, outputs: [name] })
+      estimate: { amount: 0, unit: 'usd', known: true, detail: 'imported, free' }, actual: 0, actual_known: true, status: 'done', by: 'dashboard', created: now, finished: now, outputs: [name],
+      workspaces: [currentWorkspace()] })
     return reply(res, 200, { id, kind })
   }
   if (p.startsWith('/api/media/') && post) {
@@ -1195,7 +1472,7 @@ async function handle(req, res) {
   }
   if (p === '/api/settings' && post) {
     const body = await readBody(req), s = settings()
-    for (const sec of Object.keys(SETTINGS)) for (const k of Object.keys(SETTINGS[sec])) if (body[sec] && k in body[sec]) {
+    for (const sec of Object.keys(SETTINGS).filter(x => x !== 'workspace')) for (const k of Object.keys(SETTINGS[sec])) if (body[sec] && k in body[sec]) {
       const v = body[sec][k]
       s[sec][k] = v === null || v === '' ? null : sec === 'defaults' ? String(v) : k === 'plan' ? (v in PLANS ? v : s[sec][k]) : Number.isFinite(+v) && +v >= 0 ? +v : s[sec][k]
     }
@@ -1223,12 +1500,12 @@ async function handle(req, res) {
   // voice put on the ElevenLabs account
   if (p === '/api/elements') {
     if (post) {
-      const { name, paths, remove, elevenlabs, type, words, colors, font, drop } = await readBody(req)
+      const { name, paths, remove, elevenlabs, type, words, colors, font, drop, workspace: ws } = await readBody(req)
       if (!NAME.test(name ?? '')) return reply(res, 400, { error: 'a name of letters, digits, - and _' })
       try {
         if (remove) fs.rmSync(at('elements', name), { recursive: true, force: true })
         else if (elevenlabs) voiceToEleven(name)
-        else saveElement(name, { type, words, colors, font, drop, files: (paths ?? []).map(f => inside(HOME, f)).filter(Boolean) })
+        else saveElement(name, { type, words, colors, font, drop, workspace: ws, files: (paths ?? []).map(f => inside(HOME, f)).filter(Boolean) })
       } catch (e) { return reply(res, 400, { error: e.message }) }
     }
     return reply(res, 200, elementList())
@@ -1244,6 +1521,63 @@ async function handle(req, res) {
     }
     return reply(res, 200, savedStyles())
   }
+  // the workspaces: made (it becomes the current one), picked, renamed, removed; media join or leave one, Elements are
+  // linked or unlinked, its timeline saved
+  if (p === '/api/workspaces' && post) {
+    const b = await readBody(req)
+    try {
+      if (b.new != null) useWorkspace(newWorkspace(b.new))
+      else {
+        if (!workspace(b.slug)) throw userError(`no workspace ${b.slug}`)
+        if (b.use) useWorkspace(b.slug)
+        if (b.name != null) { if (!String(b.name).trim()) throw userError('a workspace needs a name'); saveWorkspace(b.slug, { name: String(b.name).trim().slice(0, 60) }) }
+        if (b.add) member(b.slug, b.add, true)
+        if (b.drop) member(b.slug, b.drop, false)
+        if (b.link || b.unlink) saveWorkspace(b.slug, { elements: [...new Set([...workspace(b.slug).elements, ...(b.link ?? []).filter(n => element(n))])].filter(n => !(b.unlink ?? []).includes(n)) })
+        if (b.timeline) {
+          // a copy older than the saved one: the page takes the saved one instead
+          const now = workspace(b.slug).timeline
+          if (b.rev != null && b.rev !== now.rev) return reply(res, 409, { error: 'the timeline changed in another window', timeline: now })
+          saveWorkspace(b.slug, { timeline: { ...cleanTimeline(b.timeline), rev: now.rev + 1 } })
+        }
+        if (b.remove) removeWorkspace(b.slug)
+      }
+    } catch (e) { return reply(res, 400, { error: e.message }) }
+    return reply(res, 200, { current: currentWorkspace(), workspaces: workspaceList() })
+  }
+  // a workspace's edit in words (Copy prompt for video-editor), its render, and the whole of it as a .zip
+  const wsRoute = p.match(/^\/api\/workspaces\/([a-z0-9-]+)\/(edit|montage|zip)$/)
+  if (wsRoute) {
+    const [, slug, what] = wsRoute
+    if (!workspace(slug)) return reply(res, 404, { error: `no workspace ${slug}` })
+    try {
+      if (what === 'edit') {
+        const montage = at('.cache', 'montage', `${slug}.mp4`), text = editText(slug)
+        return reply(res, 200, { text: text && `${text}\nThe timeline as data: ${wsFile(slug)} (timeline).${fs.existsSync(montage) ? ` A 720p reference render of it: ${montage}.` : ''}` })
+      }
+      if (what === 'montage' && post) return reply(res, 200, { path: await renderMontage(slug) })
+      if (what === 'zip') {
+        const { root, entries } = zipEntries(slug, url.searchParams.has('edit'))
+        // once it streams, a failure can only cut it short
+        return await sendZip(res, root, entries).catch(() => res.destroy())
+      }
+    } catch (e) { return reply(res, 400, { error: e.message }) }
+  }
+  // a file's picture on the timeline, made once: a video's frames side by side (STRIP of them over its length), a
+  // sound's waveform (white, the page tints it)
+  if (p === '/api/strip' || p === '/api/wave') {
+    const src = inside(HOME, url.searchParams.get('path') ?? '')
+    if (!src || !fs.existsSync(src)) return reply(res, 404, { error: 'not found' })
+    const out = at('.cache', 'strips', `${createHash('sha1').update(`${p}${src}${fs.statSync(src).mtimeMs}`).digest('hex').slice(0, 16)}.png`)
+    if (!fs.existsSync(out)) {
+      fs.mkdirSync(path.dirname(out), { recursive: true })
+      try {
+        if (p === '/api/strip') ffmpeg(['-i', src, '-vf', `fps=${STRIP / (probe(src).duration || 1)},scale=-2:48,tile=${STRIP}x1`, '-frames:v', '1', out])
+        else ffmpeg(['-i', src, '-filter_complex', 'aformat=channel_layouts=mono,showwavespic=s=2000x120:colors=white', '-frames:v', '1', out])
+      } catch { return reply(res, 400, { error: 'no picture of this file' }) }
+    }
+    return sendFile(req, res, out)
+  }
   // the folder's files for the page: media, elements, styles, uploads
   if (p === '/files') {
     const f = inside(HOME, url.searchParams.get('path') ?? '')
@@ -1255,6 +1589,7 @@ async function handle(req, res) {
 }
 
 function serve() {
+  ensureHome()
   http.createServer((req, res) => handle(req, res).catch(e => reply(res, 500, { error: e.message })))
     .listen(PORT, '127.0.0.1', () => console.log(`media-generator server on http://127.0.0.1:${PORT}/ for ${HOME}`))
 }
@@ -1309,7 +1644,7 @@ async function studio() {
 }
 
 const commands = {
-  doctor, setup: () => setup(...args), studio, serve, draft, credits, jobs: () => jobs(args[0]), elements: () => elements(...args), styles: () => styles(...args),
+  doctor, setup: () => setup(...args), studio, serve, draft, credits, jobs: () => jobs(args[0]), elements: () => elements(...args), styles: () => styles(...args), workspaces: () => workspaces(...args),
   models: () => cmdModels(args[0]), tools: () => cmdTools(args[0]),
   image: () => generate('image'), video: () => generate('video'), audio: () => generate('audio'),
   run: async () => { const j = await run(args[0]); console.log(`${j.status}: ${j.outputs.join(', ') || j.error}`) },

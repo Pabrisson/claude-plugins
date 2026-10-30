@@ -492,6 +492,9 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   // a frame of a video at a moment, to paint a mask on
   const frame = await post('/api/frame', { path: at('talk.mp4'), t: 1.5 })
   assert.equal(probe(frame.body.path).streams[0].width, 320)
+  // past the picture's end (a sound longer than it), the last frame there is
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=160x90:r=25:d=1', '-f', 'lavfi', '-i', 'sine=d=1.5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', at('short-picture.mp4')])
+  for (const ask of [{ t: 1.4 }, { last: true }]) assert.equal(probe((await post('/api/frame', { path: at('short-picture.mp4'), ...ask })).body.path).streams[0].width, 160)
   // Edit reference: a sent video cut to 0.5–2 s and to its left half, as a new file with its sound; the original stays
   const cut = await post('/api/cut', { path: at('talk.mp4'), start: 0.5, end: 2, crop: { x: 0, y: 0, w: 0.5, h: 1 } }), c = probe(cut.body.path), v = c.streams.find(s => s.codec_type === 'video')
   assert.deepEqual([path.dirname(cut.body.path), v.width, v.height, c.streams.some(s => s.codec_type === 'audio')], [at('.cache', 'uploads'), 160, 180, true])
@@ -511,6 +514,93 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   await post(`/__media-generator/owner?pid=${claude.pid}`, {})
   const stopped = await new Promise(ok => { const t = setTimeout(() => ok(false), 8000); srv.on('exit', () => { clearTimeout(t); ok(true) }) })
   assert.ok(stopped, 'the server stops once its Claude has quit')
+})
+
+test('workspaces: the Default one from the start, new generations join the current one; a timeline in words, rendered, zipped', { timeout: 60000 }, async t => {
+  const port = 42500 + Math.floor(Math.random() * 400), url = `http://127.0.0.1:${port}`
+  const srv = spawn(process.execPath, [engine, 'serve'], { cwd: home, env: { ...env, MEDIA_GENERATOR_PORT: `${port}` } })
+  t.after(() => srv.kill())
+  for (let i = 0; i < 50; i++) { if (await fetch(url + '/__media-generator').then(r => r.ok).catch(() => false)) break; await new Promise(ok => setTimeout(ok, 100)) }
+  const post = (p, body) => fetch(url + p, { method: 'POST', body: JSON.stringify(body) }).then(async r => ({ code: r.status, body: await r.json() }))
+  const state = () => fetch(url + '/api/state').then(r => r.json())
+  const s0 = await state()
+  assert.deepEqual([s0.settings.workspace.current, s0.workspaces.find(w => w.slug === 'default').name], ['default', 'Default workspace'])
+  // a new one becomes the current one: Claude's generations and the page's imports join it, --workspace picks another
+  assert.match((await cli('workspaces', 'new', 'Pub', 'Lulu')).out, /workspace pub-lulu made, and current/)
+  const made = await cli('image', '--prompt', 'a red fox', '--model', 'fake/img', '--spend', '1')
+  const fox = made.out.match(/→ media\/(\S+)/)[1]
+  const other = (await cli('image', '--prompt', 'a cat', '--model', 'fake/img', '--spend', '1', '--workspace', 'default')).out.match(/→ media\/(\S+)/)[1]
+  assert.deepEqual([fox, other].map(id => JSON.parse(fs.readFileSync(at('media', id, 'job.json'))).workspaces), [['pub-lulu'], ['default']])
+  const imported = {}
+  fs.mkdirSync(at('.cache', 'uploads'), { recursive: true })
+  for (const f of ['talk.mp4', 'voice.mp3']) {
+    const sentFile = at('.cache', 'uploads', `9-${f}`)
+    fs.copyFileSync(at(f), sentFile)
+    imported[f] = (await post('/api/import', { path: sentFile })).body.id
+  }
+  const mine = (await state()).media.filter(j => j.workspaces?.includes('pub-lulu')).map(j => j.id)
+  assert.deepEqual(mine.toSorted(), [fox, ...Object.values(imported)].toSorted())
+  // a new Element is linked to it; an @name cited by one of its generations links its Element too
+  await post('/api/elements', { name: 'Fox', type: 'character', paths: [at('a.png')] })
+  // or to the one asked, or to none
+  await post('/api/elements', { name: 'Owl', type: 'character', paths: [at('a.png')], workspace: 'default' })
+  await post('/api/elements', { name: 'Elk', type: 'character', paths: [at('a.png')], workspace: null })
+  const linked = (await state()).workspaces
+  assert.deepEqual([linked.find(w => w.slug === 'pub-lulu').elements, linked.find(w => w.slug === 'default').elements.filter(n => ['Owl', 'Elk'].includes(n))], [['Fox'], ['Owl']])
+  // each result's files measured once: size and length
+  const talkJob = (await state()).media.find(j => j.id === imported['talk.mp4'])
+  assert.deepEqual([talkJob.meta['talk.mp4'].w, talkJob.meta['talk.mp4'].h, Math.round(talkJob.meta['talk.mp4'].dur)], [320, 180, 3])
+  // the timeline: kept as it should be (a file out of the folder, a clip on no track are dropped)
+  const talk = at('media', imported['talk.mp4'], 'talk.mp4'), voice = at('media', imported['voice.mp3'], 'voice.mp3'), still = at('media', fox, 'out-1.png')
+  const timeline = { ratio: null, tracks: [{ id: 'v2', kind: 'video' }, { id: 'v1', kind: 'video' }, { id: 'a1', kind: 'audio' }], clips: [
+    { id: 'c1', track: 'v1', path: talk, job: imported['talk.mp4'], at: 0, in: 0.5, out: 2.5, volume: 0.5 },
+    { id: 'c2', track: 'v2', path: still, job: fox, at: 1, in: 0, out: 1 },
+    { id: 'c3', track: 'a1', path: voice, job: imported['voice.mp3'], at: 0.5, in: 0, out: 1.5 },
+    { id: 'c4', track: 'v1', path: '/etc/hosts', job: 'x', at: 3, in: 0, out: 1 },
+    { id: 'c5', track: 'nope', path: talk, job: 'x', at: 3, in: 0, out: 1 },
+  ] }
+  const saved = await post('/api/workspaces', { slug: 'pub-lulu', timeline, rev: 0 })
+  const kept = saved.body.workspaces.find(w => w.slug === 'pub-lulu').timeline
+  assert.deepEqual([kept.clips.map(c => c.id), kept.rev], [['c1', 'c2', 'c3'], 1])
+  // a clip is kept as its generation and file, its path made again on reading (a moved folder keeps its timeline)
+  const stored = JSON.parse(fs.readFileSync(at('workspaces', 'pub-lulu', 'workspace.json'))).timeline.clips[0]
+  assert.deepEqual([stored.path, stored.file, kept.clips[0].path], [undefined, 'talk.mp4', talk])
+  // a page holding an older copy is told, and given the saved one
+  const stale = await post('/api/workspaces', { slug: 'pub-lulu', timeline: { ...timeline, clips: [] }, rev: 0 })
+  assert.deepEqual([stale.code, stale.body.timeline.rev, stale.body.timeline.clips.length], [409, 1, 3])
+  // the clips' pictures: a video's frames side by side, a sound's waveform
+  for (const [route, f, w] of [['strip', talk, 20 * 86], ['wave', voice, 2000]]) {
+    const r = await fetch(`${url}/api/${route}?path=${encodeURIComponent(f)}`)
+    const png = at(`${route}.png`)
+    fs.writeFileSync(png, Buffer.from(await r.arrayBuffer()))
+    assert.deepEqual([r.headers.get('content-type'), probe(png).streams[0].width], ['image/png', w])
+  }
+  // the edit in words: the format of its first video, each clip's times, file and sound, the tracks top to bottom
+  const edit = (await fetch(`${url}/api/workspaces/pub-lulu/edit`).then(r => r.json())).text
+  assert.match(edit, /"Pub Lulu", following its timeline exactly: 16:9, 2\.00 s\./)
+  assert.match(edit, /V2 \(video, over V1\):\n- 1\.00–2\.00 {2}.+out-1\.png, a still/)
+  assert.match(edit, /V1 \(video, the base\):\n- 0\.00–2\.00 {2}.+talk\.mp4, source 0\.50–2\.50, its sound at 50 %/)
+  assert.match(edit, /A1 \(audio\):\n- 0\.50–2\.00 {2}.+voice\.mp3, source 0\.00–1\.50, volume 100 %/)
+  // its render: 720p in its format, as long as the timeline, with its sound
+  const montage = (await post('/api/workspaces/pub-lulu/montage', {})).body.path, m = probe(montage)
+  assert.deepEqual([m.streams.find(s => s.codec_type === 'video').width, m.streams.some(s => s.codec_type === 'audio')], [1280, true])
+  assert.ok(Math.abs(m.format.duration - 2) < 0.15, `montage of ${m.format.duration} s`)
+  // the .zip: its media by medium, its Elements, and with the edit its timeline, the edit in words and the render
+  const zip = at('pub.zip')
+  fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip?edit`)).arrayBuffer()))
+  execFileSync('unzip', ['-tq', zip])
+  const names = execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).trim().split('\n')
+  for (const n of [`Pub Lulu/videos/${imported['talk.mp4']}-talk.mp4`, `Pub Lulu/audio/${imported['voice.mp3']}-voice.mp3`, `Pub Lulu/images/${fox}-out-1.png`, 'Pub Lulu/elements/Fox/element.json', 'Pub Lulu/edit/timeline.json', 'Pub Lulu/edit/EDIT.md', 'Pub Lulu/edit/montage.mp4'])
+    assert.ok(names.includes(n), `${n} in ${names.join(', ')}`)
+  assert.match(execFileSync('unzip', ['-p', zip, 'Pub Lulu/edit/EDIT.md'], { encoding: 'utf8' }), new RegExp(`\\.\\./videos/${imported['talk.mp4']}-talk\\.mp4, source 0\\.50`))
+  assert.equal(execFileSync('unzip', ['-Z1', fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip`)).arrayBuffer())) ?? zip], { encoding: 'utf8' }).includes('edit/'), false)
+  // the CLI shows it to Claude; removed, its media stay and leave it, the Default one is current again and stays
+  assert.match((await cli('workspaces', 'show', 'pub-lulu')).out, /Pub Lulu \(pub-lulu, current\): 3 files[\s\S]+elements: @Fox[\s\S]+V1 \(video/)
+  assert.equal((await post('/api/workspaces', { slug: 'default', remove: true })).code, 400)
+  await post('/api/workspaces', { slug: 'pub-lulu', remove: true })
+  const after = await state()
+  assert.deepEqual([after.settings.workspace.current, after.workspaces.map(w => w.slug), after.media.find(j => j.id === fox).workspaces], ['default', ['default'], []])
+  assert.match((await cli('workspaces')).out, /^\* default {2}Default workspace/m)
 })
 
 test('element fields: a Library name of the right type, cited like an @name; the words fold around what is left out', async () => {

@@ -110,7 +110,7 @@ export function ToolPicker({
                           ))}
                           <span className="ml-auto flex min-w-0 items-center gap-1.5">
                             {isLocal(t) ? (
-                              "On your Mac, free"
+                              "Local, free"
                             ) : t.provider === "elevenlabs" ? (
                               "ElevenLabs"
                             ) : m ? (

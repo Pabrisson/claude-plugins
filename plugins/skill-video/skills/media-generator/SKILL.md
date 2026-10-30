@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, face swap, inpaint, clean up, reframe, and on this machine for free: remove background, depth map, FPS boost, SDR to HDR), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
+description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, face swap, inpaint, clean up, reframe, and on this machine for free: remove background, depth map, FPS boost, SDR to HDR), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Gathers each project in a workspace, with a timeline to lay its shots and sounds on and hand to video-editor. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "crée un workspace", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -48,6 +48,7 @@ Run `media.mjs doctor` once per conversation.
 | A pasted "Copy prompt" from the dashboard | The model's prompt, as a draft (below) |
 | A pasted "Send to edit" from the dashboard | Hand the file to the video-editor skill |
 | An Element or a style to make, or a pasted "Ask Claude" | Elements and styles of the Library (below) |
+| A workspace ("crée un workspace", "travaille dans le projet …"), its files or its edit | Workspaces (below) |
 | Anything else | A generation (below) |
 
 ## A generation
@@ -178,6 +179,21 @@ and local: no estimate, no yes.
   references=<file>`), or both; a style is optional (`--field style=…`). To redo one sheet: the same tool with `--field
   sheets=<that one>` and `--in sheet=<the first sheet's image>`. A brand has no tool: a model redraws a logo wrong,
   the real file goes in.
+
+## Workspaces
+
+A workspace is a project: its media, its Elements and a timeline. « Default workspace » is there from the start.
+**Every new generation joins the current workspace**, yours and the dashboard's (`--workspace <slug>` on `image`,
+`video` or `audio` puts one in another); so does a new Element (`elements add … --workspace <slug>|none` for another
+or none). The dashboard's header switches it.
+
+- `media.mjs workspaces` lists them (`*` the current one); `workspaces new <name>` makes one and makes it current;
+  `workspaces use <slug>` switches; `workspaces add <slug> <generation ids…>` (and `drop`) puts results in or out.
+- `media.mjs workspaces show <slug>` gives its files, its Elements and its timeline in words (`--json` for all of
+  it). The user lays the timeline in the dashboard (Workspace › Timeline: the main track V1 holds the shots end to
+  end, numbered #1, #2…; the tracks above overlay it, the audio tracks mix); you only read it.
+- A pasted prompt that starts with `/skill-video:video-editor Make a video from my media-generator workspace` is
+  for the video-editor skill: its clips, their times and their sound are an exact edit, keep it.
 
 ## Voices, voice change, translation
 

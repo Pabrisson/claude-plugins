@@ -1,6 +1,6 @@
 // The engine's local API (media.mjs serve) and the shapes it answers with
 export type Kind = "image" | "video" | "audio"
-export type Page = Kind | "library" | "credits" | "settings"
+export type Page = Kind | "workspace" | "library" | "credits" | "settings"
 
 export type Input = {
   key: string
@@ -127,12 +127,20 @@ export type Job = {
   raw?: boolean
   // a References sheet made after the first of its set, matched to its image
   after?: string
+  // the workspaces it is in
+  workspaces?: string[]
+  // where it goes on a timeline once done: a Bridge shot into a cut, a take in place of a clip
+  place?: Place
+  // each file's size and length, measured once by the engine
+  meta?: Record<string, { w?: number; h?: number; dur?: number }>
 }
+export type Place = { workspace: string; track: string; at: number; replace?: string }
 export type Limits = { threshold: number | null; cap: number | null }
 export type Settings = {
   openrouter: Limits
   elevenlabs: Limits & { plan: string | null }
   defaults: Record<Kind, string | null>
+  workspace: { current: string }
 }
 export type Draft = {
   tool?: string
@@ -154,7 +162,19 @@ export type State = {
   // the fake APIs a dev or test server was started on (none for a real one), and whether it uses them now
   fake: { on: boolean; bases: string[] }
   month: { openrouter: number; elevenlabs: number }
+  workspaces: Workspace[]
 }
+// a workspace: a project's media (each job says which it is in), its Elements (linked by hand; linked adds the ones its
+// generations cite) and its timeline
+export type Workspace = { slug: string; name: string; created: string; elements: string[]; linked: string[]; timeline: Timeline }
+// tracks top to bottom: the first video track covers the ones under it, the last one is the main track (its shots end
+// to end); off hides a video track, mutes an audio one
+export type Track = { id: string; kind: "video" | "audio"; off?: boolean }
+// a clip plays a file of a generation (job, file; path: where it is, from the engine) from in to out (its own seconds)
+// at a time on the timeline; dur: the file's length (none for a still)
+export type Clip = { id: string; track: string; job: string; file: string; path: string; at: number; in: number; out: number; volume?: number; dur?: number }
+// rev: the saved copy's number, so an older copy never writes over a newer one
+export type Timeline = { ratio: string | null; tracks: Track[]; clips: Clip[]; placed: string[]; rev: number }
 export type Spec = {
   kind: Kind
   tool: string
@@ -167,6 +187,7 @@ export type Spec = {
   probe?: boolean
   // the same generation 1 to 4 times, a job each
   batch?: number
+  place?: Place
 }
 export type EstimateAnswer = {
   model: string
@@ -272,9 +293,27 @@ export const api = {
   voices: () => call<Voice[] | { voices: Voice[] }>("/api/voices"),
   clone: (name: string, paths: string[]) =>
     post<{ ok: true }>("/api/voice-clone", { name, paths }),
-  elements: (body: { name: string; type?: ElementType; words?: string; colors?: string[]; font?: string; paths?: string[]; drop?: string[]; remove?: boolean; elevenlabs?: boolean }) =>
+  elements: (body: { name: string; type?: ElementType; words?: string; colors?: string[]; font?: string; paths?: string[]; drop?: string[]; remove?: boolean; elevenlabs?: boolean; workspace?: string | null }) =>
     post<Element[]>("/api/elements", body),
   styles: (body: { name: string; paths?: string[]; words?: string; drop?: string[]; remove?: boolean }) => post<SavedStyle[]>("/api/styles", body),
+  workspaces: (body: { new?: string; slug?: string; use?: boolean; name?: string; add?: string[]; drop?: string[]; link?: string[]; unlink?: string[]; timeline?: Timeline; rev?: number; remove?: boolean }) =>
+    post<{ current: string; workspaces: Workspace[] }>("/api/workspaces", body),
+  edit: (slug: string) => call<{ text: string | null }>(`/api/workspaces/${slug}/edit`),
+  montage: (slug: string) => post<{ path: string }>(`/api/workspaces/${slug}/montage`, {}),
+}
+// a clip's pictures on the timeline: a video's frames side by side (STRIP of them), a sound's waveform
+export const STRIP = 20
+export const stripUrl = (path: string) => `/api/strip?path=${encodeURIComponent(path)}`
+export const waveUrl = (path: string) => `/api/wave?path=${encodeURIComponent(path)}`
+
+// the workspace new generations join, and what its views list
+export const currentOf = (s: State) => s.workspaces.find((w) => w.slug === s.settings.workspace.current) ?? s.workspaces[0]
+export const inWorkspace = (j: Job, slug: string) => !!j.workspaces?.includes(slug)
+// what a workspace's generations cost: dollars, and ElevenLabs credits apart
+export function spentIn(s: State, slug: string) {
+  const jobs = s.media.filter((j) => inWorkspace(j, slug) && j.provider !== "local" && j.status !== "queued" && j.status !== "running")
+  const of = (unit: "usd" | "credits") => jobs.filter((j) => j.estimate.unit === unit).reduce((a, j) => a + (j.actual ?? j.estimate.amount ?? 0), 0)
+  return { usd: of("usd"), credits: of("credits") }
 }
 
 export const fileUrl = (path: string) => `/files?path=${encodeURIComponent(path)}`

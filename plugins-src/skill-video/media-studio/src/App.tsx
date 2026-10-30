@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { AudioLinesIcon, DollarSignIcon, FolderIcon, ImageIcon, LibraryBigIcon, MoonIcon, SettingsIcon, SparklesIcon, SunIcon, VideoIcon } from "lucide-react"
+import { AudioLinesIcon, DollarSignIcon, FolderIcon, FolderKanbanIcon, ImageIcon, LibraryBigIcon, MoonIcon, SettingsIcon, SparklesIcon, SunIcon, VideoIcon } from "lucide-react"
 import { ThemeProvider, useTheme } from "next-themes"
 import { cn } from "cn"
 
@@ -8,20 +8,25 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Switch } from "@/components/ui/switch"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
-import { api, mediaKind, per1000, plain, type Balances, type Job, type Kind, type Model, type Page, type State, type Tool } from "@/lib/api"
+import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, type Balances, type Clip, type Job, type Kind, type Model, type Page, type Place, type State, type Tool } from "@/lib/api"
+import { endOf, lay, place, placeOf } from "@/lib/timeline"
+import { Chips } from "@/components/chips"
 import { blank, Composer, type Compose } from "@/components/composer"
 import { CutDialog } from "@/components/cut"
-import { upload } from "@/components/inputs"
+import { upload, Workspaces } from "@/components/inputs"
 import { Credits, Library } from "@/components/pages"
 import type { ElementDraft, Use } from "@/components/elements"
 import { SettingsPage } from "@/components/settings"
 import { isRunning, Results, type Bridge } from "@/components/results"
+import { lengthOf, useTimelines } from "@/components/timeline"
+import { WorkspaceMenu, WorkspacePage } from "@/components/workspace"
 
 const RAIL = [
   { page: "image", label: "Image", icon: ImageIcon },
   { page: "video", label: "Video", icon: VideoIcon },
   { page: "audio", label: "Audio", icon: AudioLinesIcon },
   null,
+  { page: "workspace", label: "Workspace", icon: FolderKanbanIcon },
   { page: "library", label: "Library", icon: LibraryBigIcon },
   { page: "credits", label: "Credits", icon: DollarSignIcon },
   { page: "settings", label: "Settings", icon: SettingsIcon },
@@ -40,6 +45,15 @@ const fromHash = (): Page => {
 
 // the prompts Claude wrote that the user already applied, per space (this browser only)
 const SEEN_KEY = "media-generator:drafts-seen"
+// what a space's results show: the current workspace's, or all (this browser only)
+const SCOPE_KEY = "media-generator:results-scope"
+const readScope = () => {
+  try {
+    return localStorage.getItem(SCOPE_KEY) === "all" ? "all" : "workspace"
+  } catch {
+    return "workspace"
+  }
+}
 const readSeen = (): Record<string, string> => {
   try {
     return JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}")
@@ -82,6 +96,10 @@ function Dashboard() {
     setPage(kind)
   }
   const [seen, setSeen] = useState<Record<string, string>>(readSeen)
+  const [scope, setScope] = useState<"workspace" | "all">(readScope)
+  const timelines = useTimelines(state?.workspaces)
+  // a result's file the timeline opens on (its « #2 » clicked)
+  const [focus, setFocus] = useState<string | null>(null)
 
   // the folder's state every 2 s: running jobs, results, drafts, settings
   const refresh = useCallback(() => api.state().then((s) => (setState(s), setError(null)), (e) => setError(e.message)), [])
@@ -114,6 +132,28 @@ function Dashboard() {
     was.current = Object.fromEntries(state.media.map((j) => [j.id, j.status]))
   }, [state, page])
 
+  // a Bridge shot or a take, once done, lands where it was asked on its workspace's timeline (once: placed keeps it)
+  const laid = useRef(new Set<string>())
+  useEffect(() => {
+    if (!state) return
+    for (const j of state.media) {
+      const p = j.place, t = p && timelines.get(p.workspace)
+      if (!p || !t || isRunning(j) || laid.current.has(j.id) || t.placed.includes(j.id)) continue
+      laid.current.add(j.id)
+      const out = j.status === "done" ? j.outputs.find((o) => mediaKind(o) !== "other" && !/\.mov$/i.test(o)) : undefined
+      if (!out) {
+        timelines.change(p.workspace, (x) => ({ ...x, placed: [...x.placed, j.id] }))
+        continue
+      }
+      const path = outputPath(state.home, j, out), name = state.workspaces.find((w) => w.slug === p.workspace)?.name
+      if (!inWorkspace(j, p.workspace)) api.workspaces({ slug: p.workspace, add: [j.id] }).catch(() => {})
+      lengthOf(path).then((dur) => {
+        timelines.change(p.workspace, (x) => ({ ...place(x, { path, job: j.id }, p, dur), placed: [...x.placed, j.id] }))
+        toast.success(p.replace ? "The new take is on the timeline" : "The Bridge shot is on the timeline", { description: name, action: { label: "Show", onClick: () => (window.location.hash = "workspace/timeline") } })
+      })
+    }
+  }, [state, timelines])
+
   // a draft older than an hour when the page opens counts as seen
   const first = useRef(true)
   useEffect(() => {
@@ -141,8 +181,16 @@ function Dashboard() {
   }, [page, models])
 
   // what a result leads to: its remix, or the next tool with it as input
-  const bridge = (b: Bridge, job: Job, file: string) => {
+  const bridge = (b: Bridge, job: Job, file: string, at?: Place) => {
     const home = state!.home
+    // on the current workspace's timeline, after its last shot; the result joins the workspace too
+    if (b === "shot") return (setFocus(file), (window.location.hash = "workspace/timeline"))
+    if (b === "timeline") {
+      const ws = currentOf(state!)
+      if (!inWorkspace(job, ws.slug)) api.workspaces({ slug: ws.slug, add: [job.id] }).then(refresh, () => {})
+      lengthOf(file).then((dur) => timelines.change(ws.slug, (t) => lay(t, { path: file, job: job.id }, dur)))
+      return toast.success("Added to the timeline", { description: ws.name, action: { label: "Show", onClick: () => (window.location.hash = "workspace/timeline") } })
+    }
     if (b === "remix") {
       const tool = tools?.[job.kind].find((t) => t.id === job.tool)
       const inputs = Object.fromEntries(Object.entries(job.inputs ?? {}).map(([k, list]) => [k, list.map((f) => `${home}/media/${job.id}/${f}`)]))
@@ -150,7 +198,7 @@ function Dashboard() {
       const raw = !!job.raw && tool?.template !== "{prompt}"
       setCompose((c) => ({
         ...c,
-        [job.kind]: { tool: job.tool, model: job.provider === "openrouter" ? `openrouter:${job.model}` : undefined, intent: raw ? "" : intent, raw, rawText: raw ? intent : "", fields: job.fields ?? {}, inputs, params: job.params ?? {} },
+        [job.kind]: { tool: job.tool, model: job.provider === "openrouter" ? `openrouter:${job.model}` : undefined, intent: raw ? "" : intent, raw, rawText: raw ? intent : "", fields: job.fields ?? {}, inputs, params: job.params ?? {}, place: at },
       }))
       return setPage(job.kind)
     }
@@ -169,7 +217,28 @@ function Dashboard() {
       return
     }
     const next = { animate: ["animate", "first_frame"], extend: ["extend", "video"], upscale: ["upscale", "video"], avatar: ["talking-avatar", "audio"] }[b]
-    setCompose((c) => ({ ...c, video: { ...blank("video", next[0]), inputs: { [next[1]]: [file] } } }))
+    setCompose((c) => ({ ...c, video: { ...blank("video", next[0]), inputs: { [next[1]]: [file] }, place: at } }))
+    setPage("video")
+  }
+
+  // a Bridge shot: First & last frame from the last frame of the clip before to the first frame of the one after,
+  // laid in the cut once done
+  async function bridgeShot(a: Clip, b: Clip, track: string) {
+    const ws = currentOf(state!)
+    try {
+      const still = (p: string) => /\.(png|jpe?g|webp|gif)$/i.test(p)
+      const [from, to] = await Promise.all([still(a.path) ? a.path : api.frame(a.path, false, Math.max(0, a.out - 0.05)).then((r) => r.path), still(b.path) ? b.path : api.frame(b.path, false, b.in).then((r) => r.path)])
+      setCompose((c) => ({ ...c, video: { ...blank("video", "first-last-frame"), inputs: { first_frame: [from], last_frame: [to] }, place: { workspace: ws.slug, track, at: endOf(a) } } }))
+      setPage("video")
+    } catch (e) {
+      toast.error(plain((e as Error).message))
+    }
+  }
+  // a new take of a clip (Extend, Remix), laid in its place once done
+  function take(how: "extend" | "remix", c: Clip) {
+    const ws = currentOf(state!), job = state!.media.find((j) => j.id === c.job), at: Place = { workspace: ws.slug, track: c.track, at: c.at, replace: c.id }
+    if (how === "remix") return job && bridge("remix", job, c.path, at)
+    setCompose((cs) => ({ ...cs, video: { ...blank("video", "extend"), inputs: { video: [c.path] }, place: at } }))
     setPage("video")
   }
 
@@ -181,11 +250,17 @@ function Dashboard() {
     )
 
   const space = SPACES.includes(page as Kind) ? (page as Kind) : null
+  const ws = currentOf(state)
+  // where each file is on the current workspace's timeline, the main track's shots first
+  const tl = timelines.get(ws.slug)
+  const shots: Record<string, string> = {}
+  for (const c of [...(tl?.clips ?? [])].sort((a, b) => Number(placeOf(tl!, b).startsWith("#")) - Number(placeOf(tl!, a).startsWith("#")) || a.at - b.at)) shots[c.path] ??= placeOf(tl!, c)
   const running = Object.fromEntries(SPACES.map((k) => [k, state.media.filter((j) => j.kind === k && isRunning(j)).length]))
 
   return (
+    <Workspaces.Provider value={{ list: state.workspaces, current: ws.slug, shots }}>
     <div className="grid h-screen grid-cols-[76px_minmax(340px,392px)_1fr] grid-rows-[48px_1fr]">
-      <Header state={state} balances={balances} />
+      <Header state={state} balances={balances} onChanged={refresh} />
       <nav className="flex flex-col items-center gap-1 border-r py-3" aria-label="Pages">
         {RAIL.map((r, i) =>
           r ? (
@@ -237,9 +312,26 @@ function Dashboard() {
               }
             }}
           />
-          <main className="flex min-h-0 flex-col overflow-auto bg-canvas px-6 py-5">
+          <main className="flex min-h-0 flex-col gap-4 overflow-auto bg-canvas px-6 py-5">
+            <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+              Show
+              <Chips
+                options={["workspace", "all"] as const}
+                value={scope}
+                label={(o) => (o === "workspace" ? ws.name : "All")}
+                onChange={(o) => {
+                  setScope(o)
+                  try {
+                    localStorage.setItem(SCOPE_KEY, o)
+                  } catch {
+                    /* a private window keeps it for the session */
+                  }
+                }}
+                className="[&>button]:max-w-56 [&>button]:truncate [&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs"
+              />
+            </div>
             <Results
-              jobs={state.media.filter((j) => j.kind === space)}
+              jobs={state.media.filter((j) => j.kind === space && (scope === "all" || inWorkspace(j, ws.slug)))}
               home={state.home}
               per1000={per1000(state)}
               onBridge={bridge}
@@ -252,7 +344,7 @@ function Dashboard() {
                         return <Icon />
                       })()}
                     </EmptyMedia>
-                    <EmptyTitle>No {space} yet</EmptyTitle>
+                    <EmptyTitle>No {space} {scope === "workspace" ? `in ${ws.name} ` : ""}yet</EmptyTitle>
                     <EmptyDescription>Pick a tool, fill it in, generate: the results land here, with what each one cost. <kbd>⌘V</kbd> pastes a file into the tool.</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -260,6 +352,8 @@ function Dashboard() {
             />
           </main>
         </>
+      ) : page === "workspace" ? (
+        <WorkspacePage state={state} tools={tools} engine={engine} onBridge={bridge} onUse={use} onChanged={refresh} timelines={timelines} focus={focus} onBridgeShot={bridgeShot} onTake={take} />
       ) : page === "library" ? (
         <Library state={state} tools={tools} engine={engine} onBridge={bridge} draft={elementDraft} onDraftUsed={draftUsed} onUse={use} onChanged={refresh} />
       ) : page === "credits" ? (
@@ -269,6 +363,7 @@ function Dashboard() {
       )}
       <DropToLibrary onAdded={refresh} />
     </div>
+    </Workspaces.Provider>
   )
 }
 
@@ -345,7 +440,7 @@ function DropToLibrary({ onAdded }: { onAdded: () => void }) {
   )
 }
 
-function Header({ state, balances }: { state: State; balances: Balances | null }) {
+function Header({ state, balances, onChanged }: { state: State; balances: Balances | null; onChanged: () => void }) {
   const { resolvedTheme, setTheme } = useTheme()
   const ob = balances?.openrouter, eb = balances?.elevenlabs
   const folder = state.home.split("/").filter(Boolean).pop()
@@ -364,6 +459,8 @@ function Header({ state, balances }: { state: State; balances: Balances | null }
         <FolderIcon className="size-3.5 shrink-0" />
         <span className="truncate">{folder}</span>
       </button>
+      <span className="text-muted-foreground/50" aria-hidden>/</span>
+      <WorkspaceMenu state={state} onChanged={onChanged} />
       <span className="flex-1" />
       <Balance name="OpenRouter">
         {!state.keys.openrouter ? <span className="text-muted-foreground">no key</span>

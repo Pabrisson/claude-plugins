@@ -1,8 +1,9 @@
-import { useRef, useState } from "react"
+import { useContext, useRef, useState } from "react"
 import {
   AudioLinesIcon,
   BookmarkPlusIcon,
   FastForwardIcon,
+  ListVideoIcon,
   LoaderCircleIcon,
   MaximizeIcon,
   MessageCircleIcon,
@@ -23,24 +24,32 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, elapsed, fileUrl, inputPath, mediaKind, money, outputPath, plain, type Job } from "@/lib/api"
 import { Viewer } from "@/components/viewer"
+import { Workspaces } from "@/components/inputs"
 
-export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar" | "element"
+// timeline: laid on the current workspace's timeline; shot: shown there, where it already is
+export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar" | "element" | "timeline" | "shot"
 
-// what a result leads to, by its medium: the next tool with it as input
+// what a result leads to, by its medium: the next tool with it as input, or the current workspace's timeline
+const TIMELINE = { b: "timeline" as const, label: "Add to timeline", icon: ListVideoIcon }
 export const BRIDGES: Record<string, { b: Bridge; label: string; icon: LucideIcon }[]> = {
   image: [
     { b: "animate", label: "Animate", icon: PlayIcon },
     { b: "element", label: "Make an element", icon: BookmarkPlusIcon },
+    TIMELINE,
   ],
   video: [
     { b: "extend", label: "Extend", icon: FastForwardIcon },
     { b: "upscale", label: "Upscale", icon: MaximizeIcon },
+    TIMELINE,
   ],
   audio: [
     { b: "avatar", label: "Talking avatar", icon: MessageCircleIcon },
     { b: "element", label: "Make a voice", icon: BookmarkPlusIcon },
+    TIMELINE,
   ],
 }
+// an action a page adds to its tiles (a workspace's « Remove from workspace »)
+export type Extra = { label: string; icon: LucideIcon; run: (job: Job) => void }
 export const REMIX = { label: "Remix", icon: RefreshCwIcon }
 export const SEND = { label: "Send to edit", icon: ScissorsIcon }
 
@@ -138,12 +147,14 @@ function Tile({
   per1000,
   onOpen,
   onBridge,
+  extra = [],
 }: {
   job: Job
   home: string
   per1000: number | null
   onOpen: () => void
   onBridge: (b: Bridge, job: Job, file: string) => void
+  extra?: Extra[]
 }) {
   const file = firstOutput(home, job)
   const k = file ? mediaKind(file) : null
@@ -151,6 +162,8 @@ function Tile({
   const [confirm, setConfirm] = useState(false)
   const video = useRef<HTMLVideoElement>(null)
   const failed = job.status === "failed"
+  // already on the current workspace's timeline: its place there (« #2 ») stands for « Add to timeline »
+  const shots = useContext(Workspaces).shots, shot = file ? shots[file] : undefined
   const measure = (w: number, h: number) => {
     if (!file || !w || !h) return
     MEASURED.set(file, w / h)
@@ -203,6 +216,11 @@ function Tile({
           <button type="button" aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"} title={job.favorite ? "Unfavorite" : "Favorite"} onClick={() => api.media(job.id, "favorite")} className={overlayButton}>
             <StarIcon className={cn("size-4", job.favorite && "fill-current text-cost")} />
           </button>
+          {extra.map((x) => (
+            <button key={x.label} type="button" aria-label={x.label} title={x.label} onClick={() => x.run(job)} className={overlayButton}>
+              <x.icon className="size-4" />
+            </button>
+          ))}
           <button type="button" aria-label="Delete" title="Delete" onClick={() => setConfirm(true)} className={overlayButton}>
             <Trash2Icon className="size-4" />
           </button>
@@ -213,11 +231,17 @@ function Tile({
             ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", job, file ?? "") }]),
             ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => ({ ...x, run: () => onBridge(x.b, job, file!) }))),
             ...(failed ? [] : [{ ...SEND, run: () => sendToEdit(file!) }]),
-          ].map((a) => (
-            <button key={a.label} type="button" aria-label={a.label} title={a.label} onClick={a.run} className={overlayButton}>
-              <a.icon className="size-4" />
-            </button>
-          ))}
+          ].map((a) =>
+            a.label === TIMELINE.label && shot ? (
+              <button key={a.label} type="button" aria-label={`${shot} on the timeline: show it`} title={`${shot} on the timeline: show it`} onClick={() => onBridge("shot", job, file!)} className={cn(overlayButton, "w-auto min-w-7 px-1.5 text-xs font-semibold tabular-nums")}>
+                {shot}
+              </button>
+            ) : (
+              <button key={a.label} type="button" aria-label={a.label} title={a.label} onClick={a.run} className={overlayButton}>
+                <a.icon className="size-4" />
+              </button>
+            )
+          )}
         </div>
       </div>
       <figcaption className="flex items-baseline justify-between gap-2 px-0.5 text-xs">
@@ -262,12 +286,14 @@ export function Results({
   per1000,
   onBridge,
   empty,
+  extra,
 }: {
   jobs: Job[]
   home: string
   per1000: number | null
   onBridge: (b: Bridge, job: Job, file: string) => void
   empty: React.ReactNode
+  extra?: Extra[]
 }) {
   const [open, setOpen] = useState<string | null>(null)
   if (!jobs.length) return <>{empty}</>
@@ -284,7 +310,7 @@ export function Results({
               isRunning(j) ? (
                 <Pending key={j.id} job={j} home={home} per1000={per1000} />
               ) : (
-                <Tile key={j.id} job={j} home={home} per1000={per1000} onOpen={() => setOpen(j.id)} onBridge={onBridge} />
+                <Tile key={j.id} job={j} home={home} per1000={per1000} onOpen={() => setOpen(j.id)} onBridge={onBridge} extra={extra} />
               )
             )}
             {/* takes the last row's spare room, so its tiles keep the row height */}

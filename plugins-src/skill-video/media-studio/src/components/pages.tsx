@@ -4,12 +4,14 @@ import { cn } from "cn"
 import { AudioLinesIcon, ImageIcon, SparklesIcon, VideoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { api, money, per1000, type Balances, type Job, type Kind, type LedgerLine, type State, type Tool } from "@/lib/api"
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { api, inWorkspace, money, per1000, type Balances, type Job, type Kind, type LedgerLine, type State, type Tool } from "@/lib/api"
 import { Chips, Label, MultiChips } from "@/components/chips"
 import { ElementsTab, type ElementDraft, type Use } from "@/components/elements"
 import { StylesTab } from "@/components/styles"
 import { isRunning, Results, type Bridge } from "@/components/results"
 import { Viewer } from "@/components/viewer"
+import { WorkspaceRows } from "@/components/workspace-list"
 
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
@@ -27,6 +29,27 @@ export function Main({ title, aside, children }: { title: string; aside?: React.
       </div>
       {children}
     </main>
+  )
+}
+
+// which workspace a page shows: all of them, or one
+function WorkspaceFilter({ state, value, onChange }: { state: State; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <Label>Workspace</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="w-full" aria-label="Workspace">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All workspaces</SelectItem>
+          <SelectSeparator />
+          {state.workspaces.map((w) => (
+            <SelectItem key={w.slug} value={w.slug}>{w.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   )
 }
 
@@ -65,8 +88,9 @@ export function Library({
   const [kind, setKind] = useState<"all" | Kind>("all")
   const [provider, setProvider] = useState("all")
   const [favorites, setFavorites] = useState(false)
+  const [ws, setWs] = useState("all")
   const jobs = state.media.filter(
-    (j) => (kind === "all" || j.kind === kind) && (provider === "all" || j.provider === provider) && (!favorites || j.favorite)
+    (j) => (kind === "all" || j.kind === kind) && (provider === "all" || j.provider === provider) && (!favorites || j.favorite) && (ws === "all" || inWorkspace(j, ws))
   )
   const tabs = (
     <Chips
@@ -84,8 +108,9 @@ export function Library({
     <>
       <Side>
         {tabs}
+        <WorkspaceRows state={state} value={ws} onPick={setWs} count={(slug) => state.media.filter((j) => slug === "all" || inWorkspace(j, slug)).length} unit="item" all />
         <div>
-          <Label>Medium</Label>
+          <Label>Media</Label>
           <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
         </div>
         <div>
@@ -170,6 +195,8 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
   const [provider, setProvider] = useState<"both" | "openrouter" | "elevenlabs">("both")
   const [kinds, setKinds] = useState<Kind[]>(KINDS)
   const [by, setBy] = useState<string[]>(["dashboard", "claude"])
+  const [ws, setWs] = useState("all")
+  const inWs = (id: string) => ws === "all" || !!state.media.find((j) => j.id === id)?.workspaces?.includes(ws)
   const [ledger, setLedger] = useState<LedgerLine[]>([])
   const finished = state.media.filter((j) => j.status === "done" || j.status === "failed").length
   useEffect(() => {
@@ -179,12 +206,12 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
   const usd = per1000(state), plan = state.settings.elevenlabs.plan
   const now = new Date(), month = now.toISOString().slice(0, 7)
   const since = period === "7d" ? new Date(now.getTime() - 6 * 864e5).toISOString().slice(0, 10) : period === "month" ? `${month}-01` : "0000"
-  const lines = ledger.filter((l) => l.at.slice(0, 10) >= since && kinds.includes(l.kind) && by.includes(l.by))
+  const lines = ledger.filter((l) => l.at.slice(0, 10) >= since && kinds.includes(l.kind) && by.includes(l.by) && inWs(l.id))
   const or = lines.filter((l) => l.provider === "openrouter"), el = lines.filter((l) => l.provider === "elevenlabs")
   const today = now.toISOString().slice(0, 10)
   const end = Date.parse(today), n = period === "7d" ? 7 : period === "month" ? new Date(end).getUTCDate() : 30
   const days = Array.from({ length: n }, (_, i) => new Date(end - (n - 1 - i) * 864e5).toISOString().slice(0, 10))
-  const running = state.media.filter((j) => (j.status === "running" || j.status === "queued") && j.provider !== "local")
+  const running = state.media.filter((j) => (j.status === "running" || j.status === "queued") && j.provider !== "local" && inWs(j.id))
   const rows = [
     ...running.map((j) => ({ key: j.id, at: j.created, label: j.label, model: j.name, unit: j.estimate.unit, estimate: j.estimate.amount, actual: null as number | null, known: false, status: "running", by: j.by, provider: j.provider, job: null as string | null })),
     ...[...lines].reverse().map((l) => {
@@ -210,13 +237,14 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
           <Chips options={["both", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => ({ both: "Both", openrouter: "OpenRouter", elevenlabs: "ElevenLabs" })[p]} onChange={setProvider} />
         </div>
         <div>
-          <Label>Medium</Label>
+          <Label>Media</Label>
           <MultiChips options={KINDS} value={kinds} label={cap} onChange={setKinds} />
         </div>
         <div>
           <Label>By</Label>
           <MultiChips options={["dashboard", "claude"]} value={by} label={(b) => (b === "claude" ? "Claude" : "Dashboard")} onChange={setBy} />
         </div>
+        <WorkspaceFilter state={state} value={ws} onChange={setWs} />
         <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
           {noLimits
             ? "No confirmation threshold and no monthly cap are set: every click on a paid button spends. Set them in Settings."

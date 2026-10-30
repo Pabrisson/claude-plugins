@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ChevronRightIcon, CopyIcon, MinusIcon, PlusIcon, RefreshCwIcon } from "lucide-react"
+import { ChevronRightIcon, CopyIcon, ListVideoIcon, MinusIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -16,6 +16,7 @@ import { Slider } from "@/components/ui/slider"
 import {
   api,
   cited,
+  currentOf,
   fill,
   imageInputs,
   isLocal,
@@ -27,6 +28,7 @@ import {
   type EstimateAnswer,
   type Kind,
   type Model,
+  type Place,
   type Spec,
   type State,
   type Tool,
@@ -59,6 +61,8 @@ export type Compose = {
   params: Record<string, unknown>
   // the same generation 1 to 4 times
   batch?: number
+  // where the result goes on a workspace's timeline once done (a Bridge shot, a take)
+  place?: Place
 }
 export const blank = (kind: Kind, tool = kind === "audio" ? "voice" : "free"): Compose => ({
   tool,
@@ -139,6 +143,8 @@ export function Composer({
   const filled = value.raw ? prompt : fill(tool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs, true)
   const shownPrompt = kind === "audio" ? filled : withMentions(filled, kind, mentionFrom(kind, tool, value.inputs), state)
   // what the words can cite with @name (a voice's text is read as written), and the images those bring
+  // the current workspace's Elements first in the @ list
+  const ws = currentOf(state)
   const items = kind === "audio" ? [] : mentionables(state)
   // (the words' own and an element field's: the prompt holds both)
   const mentioned = cited(prompt, items).reduce((n, i) => n + i.files.length, 0)
@@ -174,6 +180,7 @@ export function Composer({
       inputs: value.inputs,
       params: value.params,
       ...(value.batch && value.batch > 1 && !eleven && !local && !sheets ? { batch: value.batch } : {}),
+      ...(value.place ? { place: value.place } : {}),
     }),
     [kind, tool.id, modelId, value, eleven, local, prompt, sheets]
   )
@@ -266,6 +273,8 @@ export function Composer({
     try {
       await api.generate(spec, confirm)
       setAsk(null)
+      // one result takes the place on the timeline: the next generation is a plain one
+      if (value.place) onChange({ ...value, place: undefined })
       toast.success(sheetCount > 1 ? `${sheetCount} sheets started` : `${spec.batch ? `${spec.batch} × ` : ""}${tool.label} started`, {
         description: sheetCount > 1 ? "The first sets the look, the others follow it. They keep running if you close this page." : "It keeps running if you close this page.",
       })
@@ -363,6 +372,19 @@ export function Composer({
             <span className="flex-1">Claude wrote a prompt for this space.</span>
             <Button size="sm" onClick={applyDraft}>
               <RefreshCwIcon /> Reload
+            </Button>
+          </div>
+        )}
+
+        {value.place && (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
+            <ListVideoIcon className="size-4 shrink-0 text-space" aria-hidden />
+            <span className="flex-1">
+              {value.place.replace ? "The result takes its clip's place" : `The result goes into the cut at ${value.place.at.toFixed(1)} s`} on the timeline of{" "}
+              {state.workspaces.find((w) => w.slug === value.place!.workspace)?.name ?? "its workspace"}.
+            </span>
+            <Button size="icon-xs" variant="ghost" aria-label="Do not lay the result on the timeline" title="Do not lay it on the timeline" onClick={() => set({ place: undefined })}>
+              <XIcon />
             </Button>
           </div>
         )}
@@ -474,12 +496,15 @@ export function Composer({
             {!whole && (
               <div>
                 <Label hint={value.raw ? "written by Claude" : "built by the tool, with your words"}>Prompt</Label>
-                <Textarea
-                  readOnly
-                  value={shownPrompt}
-                  aria-label="Prompt sent to the model"
-                  className="max-h-60 min-h-16 resize-none border-dashed bg-muted/40 px-3 py-2 text-sm leading-relaxed text-foreground/80 focus-visible:ring-0 md:text-sm dark:bg-muted/30"
-                />
+                <div className="relative">
+                  <Textarea
+                    readOnly
+                    value={shownPrompt}
+                    aria-label="Prompt sent to the model"
+                    className="max-h-[calc(6lh+1rem)] min-h-16 resize-none border-dashed bg-muted/40 py-2 pr-10 pl-3 text-sm leading-relaxed text-foreground/80 focus-visible:ring-0 md:text-sm dark:bg-muted/30"
+                  />
+                  <CopyText text={shownPrompt} what="Prompt" />
+                </div>
                 {value.raw && (
                   <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => set({ raw: false })}>
                     Back to the tool's prompt
@@ -497,18 +522,21 @@ export function Composer({
                       value={value.intent}
                       aria-label="Text to speak"
                       placeholder="What the voice says"
-                      className={cn("max-h-80 px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
+                      className={cn("max-h-[calc(6lh+1.25rem)] py-2.5 pr-10 pl-3 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
                       onChange={(e) => set({ intent: e.target.value })}
                     />
                   )}
+                  {takesWords && <CopyText text={value.intent} what={kind === "audio" ? "Text" : "Prompt"} />}
                   {takesWords && kind !== "audio" && (
                     <MentionTextarea
                       value={value.intent}
                       items={items}
+                      first={ws?.linked}
+                      firstLabel={ws?.name}
                       blocked={maxRefs === 0 ? (framed ? "Not with a frame: with a first or last frame, the model takes no reference image." : `${model?.name ?? "This model"} takes no reference image: pick another model to cite one.`) : undefined}
                       aria-label={whole ? "Prompt" : "Your words"}
                       placeholder={`${whole ? tool.description : custom ? "What to change." : "Anything to add: details, style, what must not change."} Type @ to cite an element.`}
-                      className={cn("max-h-80 px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
+                      className={cn("max-h-[calc(6lh+1.25rem)] py-2.5 pr-10 pl-3 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
                       onChange={(intent) => set({ intent })}
                     />
                   )}
@@ -815,5 +843,23 @@ function DubModels({ spec, value, ready, onChange }: { spec: Spec; value: string
         ))}
       </div>
     </div>
+  )
+}
+
+// a box's words to the clipboard, from a button floating at its top right
+function CopyText({ text, what }: { text: string; what: string }) {
+  return (
+    <Button
+      type="button"
+      size="icon-xs"
+      variant="ghost"
+      aria-label={`Copy the ${what.toLowerCase()}`}
+      title={`Copy the ${what.toLowerCase()}`}
+      disabled={!text.trim()}
+      onClick={() => navigator.clipboard.writeText(text).then(() => toast.success(`${what} copied`), () => toast.error("The clipboard refused the copy"))}
+      className="absolute top-1.5 right-1.5 z-10 bg-background/70 text-muted-foreground backdrop-blur-sm hover:text-foreground"
+    >
+      <CopyIcon />
+    </Button>
   )
 }

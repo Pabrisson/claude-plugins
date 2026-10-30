@@ -31,11 +31,13 @@ import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
-import { api, ELEMENT_TYPES, fileUrl, mediaKind, outputPath, plain, typeLabel, type Element, type ElementType, type Kind, type State, type Tool } from "@/lib/api"
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { api, currentOf, ELEMENT_TYPES, fileUrl, mediaKind, outputPath, plain, typeLabel, type Element, type ElementType, type Kind, type State, type Tool } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
 import { LibraryList, Listen, upload, type Pick } from "@/components/inputs"
 import type { Compose } from "@/components/composer"
 import { Main, Side } from "@/components/pages"
+import { WorkspaceRows } from "@/components/workspace-list"
 
 // a new Element as a result leads to it: its type and files, the words its tool had
 export type ElementDraft = { type: ElementType; paths: string[]; words?: string }
@@ -112,12 +114,15 @@ export function ElementsTab({
   const stop = () => (setCreating(null), onDraftUsed())
   const all = state.elements ?? []
   const q = query.trim().toLowerCase()
-  const list = all.filter((e) => (type === "all" || e.type === type) && (!q || `${e.name} ${e.words}`.toLowerCase().includes(q)))
+  const [ws, setWs] = useState("all")
+  const inWs = (e: Element, slug: string) => slug === "all" || !!state.workspaces.find((w) => w.slug === slug)?.linked.includes(e.name)
+  const list = all.filter((e) => (type === "all" || e.type === type) && inWs(e, ws) && (!q || `${e.name} ${e.words}`.toLowerCase().includes(q)))
   const shown = all.find((e) => e.name === open)
   return (
     <>
       <Side>
         {tabs}
+        <WorkspaceRows state={state} value={ws} onPick={setWs} count={(slug) => all.filter((e) => inWs(e, slug)).length} unit="element" all />
         <Button variant="space" onClick={() => setCreating({ type: type === "all" ? "character" : type, paths: [] })}>
           <PlusIcon /> New element
         </Button>
@@ -128,7 +133,7 @@ export function ElementsTab({
         <nav aria-label="Types" className="-mx-1 flex flex-col gap-0.5">
           {[{ type: "all" as const, plural: "All" }, ...ELEMENT_TYPES].map((t) => {
             const Icon = t.type === "all" ? LayersIcon : TYPE_ICON[t.type]
-            const n = t.type === "all" ? all.length : all.filter((e) => e.type === t.type).length
+            const n = all.filter((e) => (t.type === "all" || e.type === t.type) && inWs(e, ws)).length
             if (t.type === "other" && !n) return null
             return (
               <button
@@ -239,13 +244,13 @@ function Cover({ el, className }: { el: Element; className?: string }) {
   )
 }
 
-function ElementCard({ el, onOpen }: { el: Element; onOpen: () => void }) {
+export function ElementCard({ el, onOpen, className }: { el: Element; onOpen: () => void; className?: string }) {
   const Icon = TYPE_ICON[el.type]
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group flex flex-col overflow-hidden rounded-xl border bg-card text-left transition-[border-color,box-shadow] duration-150 outline-none hover:border-foreground/30 focus-visible:ring-3 focus-visible:ring-ring/50"
+      className={cn("group flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card text-left transition-[border-color,box-shadow] duration-150 outline-none hover:border-foreground/30 focus-visible:ring-3 focus-visible:ring-ring/50", className)}
     >
       <Cover el={el} className="aspect-[4/3] w-full overflow-hidden" />
       <span className="flex min-w-0 items-center gap-2 px-3 py-2.5">
@@ -384,12 +389,12 @@ function Colors({ value, onChange }: { value: string[]; onChange: (v: string[]) 
 }
 
 // a deletion asked once more
-export function ConfirmDelete({ what, open, onCancel, onConfirm }: { what: string; open: boolean; onCancel: () => void; onConfirm: () => void }) {
+export function ConfirmDelete({ what, open, onCancel, onConfirm, text = "It leaves the Library for good. What you made with it stays." }: { what: string; open: boolean; onCancel: () => void; onConfirm: () => void; text?: string }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
       <DialogContent>
         <DialogTitle>Delete {what}?</DialogTitle>
-        <DialogDescription>It leaves the Library for good. What you made with it stays.</DialogDescription>
+        <DialogDescription>{text}</DialogDescription>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
           <Button variant="destructive" onClick={onConfirm}>Delete</Button>
@@ -400,7 +405,7 @@ export function ConfirmDelete({ what, open, onCancel, onConfirm }: { what: strin
 }
 
 // an Element, open: its files, type and words to change, what it leads to
-function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: { el: Element; state: State; tools: Tool[]; onClose: () => void; onUse: Use; onChanged: () => void }) {
+export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: { el: Element; state: State; tools: Tool[]; onClose: () => void; onUse: Use; onChanged: () => void }) {
   const [words, setWords] = useState(el.words)
   const [font, setFont] = useState(el.font)
   const [busy, setBusy] = useState(false)
@@ -517,13 +522,15 @@ function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: { el: El
 }
 
 // a new Element: its type, name, words and files; saved here, or made by Claude from the same (Ask Claude)
-function NewElement({ draft, state, tools, engine, onClose, onSaved }: { draft: ElementDraft; state: State; tools: Tool[]; engine: string; onClose: () => void; onSaved: (name: string) => void }) {
+export function NewElement({ draft, state, tools, engine, onClose, onSaved }: { draft: ElementDraft; state: State; tools: Tool[]; engine: string; onClose: () => void; onSaved: (name: string) => void }) {
   const [type, setType] = useState(draft.type)
   const [name, setName] = useState("")
   const [words, setWords] = useState(draft.words ?? "")
   const [paths, setPaths] = useState(draft.paths)
   const [colors, setColors] = useState<string[]>([])
   const [font, setFont] = useState("")
+  // the workspace it is linked to: the current one, another, or none
+  const [ws, setWs] = useState(currentOf(state)?.slug ?? "none")
   const [busy, setBusy] = useState(false)
   const kind = medium(type), files = paths.filter((p) => mediaKind(p) === kind)
   const taken = (state.elements ?? []).some((e) => e.name === name)
@@ -533,7 +540,7 @@ function NewElement({ draft, state, tools, engine, onClose, onSaved }: { draft: 
   async function save() {
     setBusy(true)
     try {
-      await api.elements({ name, type, words, paths: files, ...(type === "brand" ? { colors, font } : {}) })
+      await api.elements({ name, type, words, paths: files, workspace: ws === "none" ? null : ws, ...(type === "brand" ? { colors, font } : {}) })
       toast.success(`@${name} saved`, { description: type === "voice" ? "Pick it in Audio › Voice." : "Cite it in any image or video prompt." })
       onSaved(name)
     } catch (e) {
@@ -550,7 +557,7 @@ function NewElement({ draft, state, tools, engine, onClose, onSaved }: { draft: 
       words ? `What it is: ${words}.` : `Look at ${kind === "audio" ? "them" : "the images"} and write what it is in a few words (they go with every @name).`,
       type === "brand" && colors.length ? `Its colors: ${colors.join(", ")}.` : "",
       tool ? `If they are not clean reference sheets yet, make them first with ${tool.label} (media.mjs image --tool ${tool.id}; its estimate, then my yes before spending), and keep the best.` : "",
-      `Save it with: node "${engine}/media.mjs" elements add ${n} <files…> --type ${type} --words "…"${type === "brand" ? ' --colors "#hex,#hex"' : ""} (--from <generation> takes a result's ${kind === "audio" ? "clips" : "images"}).`,
+      `Save it with: node "${engine}/media.mjs" elements add ${n} <files…> --type ${type} --words "…"${type === "brand" ? ' --colors "#hex,#hex"' : ""} --workspace ${ws} (--from <generation> takes a result's ${kind === "audio" ? "clips" : "images"}).`,
       "Then tell me the @name to cite.",
     ].filter(Boolean).join("\n")
     copy(text, "Prompt", "Paste it in Claude Code: Claude makes the element.")
@@ -583,6 +590,24 @@ function NewElement({ draft, state, tools, engine, onClose, onSaved }: { draft: 
             <Label hint={type === "voice" ? "how it sounds" : "sent with every @name"}>What it is</Label>
             <Input value={words} placeholder={WORDS[type]} onChange={(e) => setWords(e.target.value)} />
           </div>
+        </div>
+        <div>
+          <Label hint="linked to it, cited first in its prompts">Workspace</Label>
+          <Select value={ws} onValueChange={setWs}>
+            <SelectTrigger className="w-full sm:w-72" aria-label="Workspace">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {state.workspaces.map((w) => (
+                <SelectItem key={w.slug} value={w.slug}>
+                  {w.name}
+                  {w.slug === currentOf(state)?.slug ? <span className="text-muted-foreground"> · current</span> : null}
+                </SelectItem>
+              ))}
+              <SelectSeparator />
+              <SelectItem value="none">No workspace</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         {type === "brand" && (
           <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
