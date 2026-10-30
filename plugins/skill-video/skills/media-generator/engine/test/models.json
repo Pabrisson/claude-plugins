@@ -1,0 +1,25 @@
+{
+  "about": "The tests' models, in the shape of providers/openrouter-models.json (MEDIA_GENERATOR_MODELS)",
+  "updated": "2026-10-30",
+  "image": [
+    { "id": "fake/img", "lab": "Fake", "name": "Image", "role": "both", "resolutions": ["1K", "2K"], "aspect_ratios": ["1:1", "16:9"], "max_images": 4, "references": 4, "quality": null, "background": null, "seed": false,
+      "pricing": [[{ "billable": "output_image", "unit": "image", "cost_usd": 0.04 }]] },
+    { "id": "fake/noprice", "lab": "Fake", "name": "No price", "role": "both", "resolutions": ["1K", "2K"], "aspect_ratios": ["1:1", "16:9"], "max_images": 4, "references": 4, "quality": null, "background": null, "seed": false,
+      "pricing": [[]] },
+    { "id": "fake/broke", "lab": "Fake", "name": "Broke", "role": "both", "resolutions": ["1K", "2K"], "aspect_ratios": ["1:1", "16:9"], "max_images": 4, "references": 4, "quality": null, "background": null, "seed": false,
+      "pricing": [[{ "billable": "output_image", "unit": "image", "cost_usd": 0.04 }]] }
+  ],
+  "video": [
+    { "id": "fake/vid", "lab": "Fake", "name": "Video", "role": "generate", "resolutions": ["720p", "1080p"], "aspect_ratios": ["9:16", "1:1", "16:9"], "durations": [5, 10],
+      "frames": ["first_frame", "last_frame"], "sound": true, "seed": true, "upscale": null, "pricing": { "duration_seconds_with_audio": 0.12, "duration_seconds_without_audio": 0.1 } },
+    { "id": "fake/avatar-iv", "lab": "Fake", "name": "Avatar", "role": "avatar", "resolutions": ["720p", "1080p"], "aspect_ratios": null, "durations": null,
+      "frames": [], "sound": false, "seed": false, "upscale": null, "pricing": { "duration_seconds": 0.05 } },
+    { "id": "fake/flux-video-upscale", "lab": "Fake", "name": "Upscale", "role": "upscale", "resolutions": null, "aspect_ratios": null, "durations": null,
+      "frames": [], "sound": false, "seed": false, "upscale": { "min": 1.5, "max": 3, "creativity": true },
+      "pricing": { "cents_per_megapixel_second_precise": 3.5, "cents_per_megapixel_second_creative": 5 } }
+  ],
+  "speech": [
+    { "id": "fake/tts", "lab": "Fake", "name": "TTS", "role": "speech", "voices": ["ava", "bo"], "pricing": { "prompt": 0.0001, "completion": 0 } },
+    { "id": "fake/pcm-tts", "lab": "Fake", "name": "PCM TTS", "role": "speech", "voices": ["ava", "bo"], "pricing": { "prompt": 0.0001, "completion": 0 } }
+  ]
+}

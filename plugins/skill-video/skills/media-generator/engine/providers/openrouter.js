@@ -1,14 +1,13 @@
 // OpenRouter: one key for the image, video and speech models of many labs, billed in USD.
 // $OPENROUTER_API_KEY (the plugin's secret), $OPENROUTER_MANAGEMENT_KEY for the account's balance, $OPENROUTER_BASE
 // for the tests' fake server
+import fs from 'node:fs'
 import { estimateImage, estimateSpeech, estimateVideo } from '../lib/cost.js'
 
 const base = () => (process.env.OPENROUTER_BASE ?? 'https://openrouter.ai/api/v1').replace(/\/$/, '')
 
-// the catalogs are public: they work before the key is set
-const PUBLIC = /^\/(images\/models|videos\/models|models\?)/
 async function api(route, init = {}, key = process.env.OPENROUTER_API_KEY) {
-  if (!key && !PUBLIC.test(route)) throw Object.assign(new Error('no OpenRouter key: /plugin configure skill-video@pabrisson, or OPENROUTER_API_KEY'), { status: 401 })
+  if (!key) throw Object.assign(new Error('no OpenRouter key: /plugin configure skill-video@pabrisson, or OPENROUTER_API_KEY'), { status: 401 })
   const r = await fetch(base() + route, {
     ...init,
     headers: { ...(key ? { authorization: `Bearer ${key}` } : {}), 'x-title': 'media-generator', ...(typeof init.body === 'string' ? { 'content-type': 'application/json' } : {}), ...init.headers },
@@ -21,11 +20,10 @@ async function api(route, init = {}, key = process.env.OPENROUTER_API_KEY) {
   return r
 }
 const json = async (route, init) => (await api(route, init)).json()
-const values = p => p?.values ?? null
-const range = p => (p?.type === 'range' ? { min: p.min, max: p.max } : null)
 
-// the video models' kind of work, from their name: OpenRouter lists them all as video generation
-const role = id => (/upscale/.test(id) ? 'upscale' : /video-edit|aleph/.test(id) ? 'edit' : /avatar/.test(id) ? 'avatar' : 'generate')
+// the models on offer: a normalized list kept by hand next to this file, never fetched (the tests' own in
+// $MEDIA_GENERATOR_MODELS)
+const list = () => JSON.parse(fs.readFileSync(process.env.MEDIA_GENERATOR_MODELS ?? new URL('./openrouter-models.json', import.meta.url), 'utf8'))
 
 export default {
   id: 'openrouter',
@@ -33,36 +31,19 @@ export default {
   unit: 'usd',
   key: () => !!process.env.OPENROUTER_API_KEY,
 
-  // the catalog of a kind, in one shape for the form: what each model accepts, and its raw prices for the estimates
+  // the list of a kind in the engine's shape: what each model accepts, and its raw prices for the estimates
   async models(kind) {
-    if (kind === 'image') {
-      const { data } = await json('/images/models')
-      // ponytail: one request per model for its endpoints' prices (60-odd, cached a day by the engine)
-      const endpoints = await Promise.all(data.map(m => json(`/images/models/${m.id}/endpoints`).then(e => e.endpoints ?? e.data?.endpoints ?? []).catch(() => [])))
-      return data.map((m, i) => {
-        const p = m.supported_parameters ?? {}
-        return {
-          model: m.id, name: m.name, kind, role: (m.architecture?.input_modalities ?? []).includes('image') ? 'both' : 'create', description: m.description,
-          params: { resolution: values(p.resolution), aspect_ratio: values(p.aspect_ratio), n: range(p.n), references: range(p.input_references)?.max ?? (p.input_references ? 4 : 0),
-            seed: !!p.seed, quality: values(p.quality), background: values(p.background) },
-          pricing: endpoints[i],
-        }
-      })
-    }
-    if (kind === 'video') {
-      const { data } = await json('/videos/models')
-      return data.map(m => ({
-        model: m.id, name: m.name, kind, role: role(m.id), description: m.description,
-        params: { resolution: m.supported_resolutions ?? null, aspect_ratio: m.supported_aspect_ratios ?? null, duration: m.supported_durations?.toSorted((a, b) => a - b) ?? null,
-          frames: m.supported_frame_images ?? [], audio: m.generate_audio ?? null, seed: !!m.seed, creativity: !!m.creativity, factor: !!m.upscale_factor },
-        pricing: m.pricing_skus ?? null,
-      }))
-    }
-    if (kind === 'speech') {
-      const { data } = await json('/models?output_modalities=speech')
-      return data.map(m => ({ model: m.id, name: m.name, kind, role: 'create', description: m.description, params: { voices: m.supported_voices ?? null }, pricing: m.pricing ?? null }))
-    }
-    throw new Error(`no ${kind} models on OpenRouter`)
+    const all = list()[kind]
+    if (!all) throw new Error(`no ${kind} models on OpenRouter`)
+    return all.map(m => ({
+      model: m.id, name: `${m.lab}: ${m.name}`, lab: m.lab, kind, role: m.role,
+      params: kind === 'image'
+        ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, n: { min: 1, max: m.max_images }, references: m.references, seed: m.seed, quality: m.quality, background: m.background }
+        : kind === 'video'
+          ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, duration: m.durations, frames: m.frames, audio: m.sound, seed: m.seed, creativity: !!m.upscale?.creativity, factor: !!m.upscale }
+          : { voices: m.voices },
+      pricing: kind === 'image' ? m.pricing.map(pricing => ({ pricing })) : m.pricing,
+    }))
   },
 
   estimate(kind, m, req) {

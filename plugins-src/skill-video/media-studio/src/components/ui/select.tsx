@@ -59,7 +59,8 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
+  // popper: the list opens under its field and scrolls in place ("item-aligned" grows the list instead of scrolling it)
+  position = "popper",
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {

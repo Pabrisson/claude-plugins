@@ -11,7 +11,7 @@ import { startFake } from './fake-api.js'
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'media-gen-'))
 const engine = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'media.mjs')
 const fake = await startFake(home)
-const env = { ...process.env, MEDIA_GENERATOR_DIR: home, OPENROUTER_BASE: `${fake.base}/api/v1`, OPENROUTER_API_KEY: 'k-test', OPENROUTER_MANAGEMENT_KEY: 'k-mgmt',
+const env = { ...process.env, MEDIA_GENERATOR_DIR: home, MEDIA_GENERATOR_MODELS: path.join(path.dirname(engine), 'test', 'models.json'), OPENROUTER_BASE: `${fake.base}/api/v1`, OPENROUTER_API_KEY: 'k-test', OPENROUTER_MANAGEMENT_KEY: 'k-mgmt',
   ELEVENLABS_BASE: `${fake.base}/el`, ELEVENLABS_API_KEY: 'k-el', MEDIA_GENERATOR_POLL: '20', VIDEO_EDITOR_POLL: '20',
   // the fake cloudflared first, and the fake public DNS
   PATH: `${fake.bin}${path.delimiter}${process.env.PATH}`, MEDIA_GENERATOR_DOH: `${fake.base}/dns-query` }
@@ -33,15 +33,38 @@ execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=3', '-f', 'lavfi', '-i', 'sine=d=3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', at('talk.mp4')])
 test.after(() => { fake.close(); fs.rmSync(home, { recursive: true, force: true }) })
 
-test('the catalogs: tools from the engine, models from the router in one shape, cached a day', async () => {
+test('the catalogs: tools from the engine, models from its own list in one shape, never fetched', async () => {
   const t = await cli('tools', 'video', '--search', 'dolly')
   assert.match(t.out, /video dolly-zoom-in \(create, Camera\)/)
   assert.match(t.out, /--field speed=slow\|steady\|fast/)
   const m = await cli('models', 'video')
-  assert.match(m.out, /openrouter:fake\/vid {2}Fake Video {2}\[5–10 s, 720p\/1080p, first_frame\+last_frame, audio\]/)
-  const before = fake.calls.length
-  await cli('models', 'video')
-  assert.equal(fake.calls.length, before)
+  assert.match(m.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s, 720p\/1080p, first_frame\+last_frame, audio\]/)
+  assert.ok(!fake.calls.some(c => c.path.includes('models')), 'no catalog request')
+})
+
+// the list is edited by hand: each model keeps its kind's keys, in order, and its lists sorted
+test('the shipped model list is normalized', () => {
+  const list = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'providers', 'openrouter-models.json'), 'utf8'))
+  const keys = {
+    image: ['id', 'lab', 'name', 'role', 'resolutions', 'aspect_ratios', 'max_images', 'references', 'quality', 'background', 'seed', 'pricing'],
+    video: ['id', 'lab', 'name', 'role', 'resolutions', 'aspect_ratios', 'durations', 'frames', 'sound', 'seed', 'upscale', 'pricing'],
+    speech: ['id', 'lab', 'name', 'role', 'voices', 'pricing'],
+  }
+  const roles = { image: ['create', 'both', 'edit'], video: ['generate', 'edit', 'upscale', 'avatar'], speech: ['speech'] }
+  const RES = ['360p', '432p', '480p', '540p', '720p', '768p', '1080p', '1440p', '512', '768', '1K', '1.5K', '2K', '4K']
+  const ratio = r => (r === 'auto' ? Infinity : r.split(':').reduce((a, b) => a / b))
+  const sorted = (l, by) => assert.deepEqual(l, l.toSorted((a, b) => by(a) - by(b)))
+  for (const kind of Object.keys(keys)) {
+    assert.ok(list[kind].length > 0, kind)
+    for (const m of list[kind]) {
+      assert.deepEqual(Object.keys(m), keys[kind], m.id)
+      assert.ok(roles[kind].includes(m.role), `${m.id}: role ${m.role}`)
+      if (m.resolutions) (assert.ok(m.resolutions.every(r => RES.includes(r)), `${m.id}: ${m.resolutions}`), sorted(m.resolutions, r => RES.indexOf(r)))
+      if (m.aspect_ratios) sorted(m.aspect_ratios, ratio)
+      if (m.durations) sorted(m.durations, d => d)
+    }
+    assert.equal(new Set(list[kind].map(m => m.id)).size, list[kind].length, `${kind}: an id twice`)
+  }
 })
 
 test('an image: the estimate and exit 2 before the yes, nothing made; then the image, its real cost in the ledger', async () => {
@@ -108,7 +131,7 @@ test('a video: a job submitted with its frames and settings (the ratio of its im
   const body = sent('/api/v1/videos').body
   assert.match(body.prompt, /^Dolly zoom \(vertigo effect\) on the dancer: the camera dollies in at a steady pace/)
   assert.deepEqual([body.duration, body.generate_audio, body.resolution, body.aspect_ratio, body.frame_images[0].frame_type], [10, false, '1080p', '1:1', 'first_frame'])
-  assert.match(r.out, /rendering on Fake Video/)
+  assert.match(r.out, /rendering on Fake: Video/)
   const line = ledger().at(-1)
   assert.deepEqual([line.estimate, line.actual], [1, 0.6])
   const id = media().find(d => d.includes('dolly'))
@@ -138,7 +161,7 @@ test('upscale: the video by a tunnel open for the job only, served whole with it
   // submitted once the tunnel's name answered on the public DNS, closed once the job ended
   const order = fake.calls.map(c => c.path.split('?')[0])
   assert.ok(order.lastIndexOf('/dns-query') < order.lastIndexOf('/api/v1/videos'))
-  assert.match(r.out, /opening a tunnel for Fake Upscale to fetch the video…[\s\S]*submitted[\s\S]*tunnel closed/)
+  assert.match(r.out, /opening a tunnel for Fake: Upscale to fetch the video…[\s\S]*submitted[\s\S]*tunnel closed/)
   assert.equal(await fetch(`http://127.0.0.1:${got.port}/`).then(() => 'open', () => 'closed'), 'closed')
   // without cloudflared: what to install, nothing sent
   const tools = fs.mkdtempSync(path.join(os.tmpdir(), 'no-cloudflared-'))
@@ -228,10 +251,8 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   const state = await fetch(url + '/api/state').then(r => r.json())
   assert.equal(state.home, home)
   assert.deepEqual(state.fake, { on: true, bases: [`${fake.base}/api/v1`, `${fake.base}/el`] }, 'the fake APIs, for the header\'s badge and toggle')
-  // the toggle: off, the real APIs (and the fake's catalogs dropped); on again, the fake
-  assert.ok(fs.readdirSync(at('.cache')).some(f => f.startsWith('models-')))
+  // the toggle: off, the real APIs; on again, the fake
   assert.deepEqual((await post('/api/fake', { on: false })).body, { on: false, bases: state.fake.bases })
-  assert.ok(!fs.readdirSync(at('.cache')).some(f => f.startsWith('models-')))
   assert.equal((await fetch(url + '/api/state').then(r => r.json())).fake.on, false)
   assert.equal((await post('/api/fake', { on: true })).body.on, true)
   assert.ok(state.media.length > 5)

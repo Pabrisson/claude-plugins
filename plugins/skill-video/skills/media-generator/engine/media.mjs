@@ -31,7 +31,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     n: { type: 'string' }, duration: { type: 'string' }, ratio: { type: 'string' }, resolution: { type: 'string' },
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
-    refresh: { type: 'boolean' }, search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' },
+    search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' },
   },
 })
 
@@ -133,18 +133,14 @@ function toolOf(kind, id) {
 // the router's kind for a tool kind: audio is speech
 const routerKind = kind => (kind === 'audio' ? 'speech' : kind)
 
-// every router's catalog of a kind, its ids prefixed with the router, cached a day
-async function models(kind, refresh = false) {
-  const rk = routerKind(kind), file = at('.cache', `models-${rk}.json`)
-  if (!refresh && fs.existsSync(file) && Date.now() - fs.statSync(file).mtimeMs < 864e5) return readJson(file)
+// every router's models of a kind, their ids prefixed with the router: lists kept by hand, nothing is fetched
+async function models(kind) {
   const all = []
-  for (const [name, p] of Object.entries(PROVIDERS)) for (const m of await p.models(rk)) all.push({ ...m, id: `${name}:${m.model}`, provider: name })
-  writeJson(file, all)
+  for (const [name, p] of Object.entries(PROVIDERS)) for (const m of await p.models(routerKind(kind))) all.push({ ...m, id: `${name}:${m.model}`, provider: name })
   return all
 }
 async function modelOf(kind, id) {
-  const { name, model } = routerOf(id), list = await models(kind)
-  const m = list.find(x => x.provider === name && x.model === model) ?? (await models(kind, true)).find(x => x.provider === name && x.model === model)
+  const { name, model } = routerOf(id), m = (await models(kind)).find(x => x.provider === name && x.model === model)
   if (!m) throw userError(`no ${kind} model ${id}: media.mjs models ${kind}`)
   return m
 }
@@ -495,14 +491,14 @@ async function generate(kind) {
 }
 
 async function cmdModels(kind = 'video') {
-  const list = (await models(kind, opt.refresh)).filter(m => !opt.search || `${m.id} ${m.name}`.toLowerCase().includes(opt.search.toLowerCase()))
+  const list = (await models(kind)).filter(m => !opt.search || `${m.id} ${m.name}`.toLowerCase().includes(opt.search.toLowerCase()))
   if (opt.json) return console.log(JSON.stringify(list.map(({ pricing, ...m }) => m)))
   for (const m of list) {
     const p = m.params, caps = [m.role !== 'create' && m.role !== 'generate' && m.role, p.duration && `${p.duration[0]}–${p.duration.at(-1)} s`, p.resolution?.join('/'),
       p.frames?.length && p.frames.join('+'), p.audio && 'audio', p.n && p.n.max > 1 && `up to ${p.n.max}`, p.references && `${p.references} refs`, p.voices && `${p.voices.length} voices`].filter(Boolean)
     console.log(`${m.id}  ${m.name}${caps.length ? `  [${caps.join(', ')}]` : ''}`)
   }
-  console.log(`${list.length} ${kind} models${opt.refresh ? ' (refreshed)' : ' (cached a day, --refresh)'}`)
+  console.log(`${list.length} ${kind} models (the engine's list, providers/openrouter-models.json)`)
 }
 
 function cmdTools(kind) {
@@ -649,8 +645,7 @@ const FAKE = Object.fromEntries(['OPENROUTER_BASE', 'ELEVENLABS_BASE'].filter(k 
 const fakeState = () => ({ on: Object.keys(FAKE).some(k => process.env[k]), bases: Object.values(FAKE) })
 function useFake(on) {
   for (const [k, v] of Object.entries(FAKE)) if (on) process.env[k] = v; else delete process.env[k]
-  // the catalogs and balances differ from one to the other
-  if (fs.existsSync(at('.cache'))) for (const f of fs.readdirSync(at('.cache')).filter(f => f.startsWith('models-'))) fs.rmSync(at('.cache', f))
+  // the balances differ from one to the other
   balanceCache = { at: 0, value: null }
 }
 
@@ -668,7 +663,7 @@ async function handle(req, res) {
   if (p === '/api/tools') return reply(res, 200, TOOLS)
   if (p === '/api/models') {
     const kind = url.searchParams.get('kind')
-    return reply(res, 200, (await models(kind, url.searchParams.has('refresh'))).map(({ pricing, ...m }) => m))
+    return reply(res, 200, (await models(kind)).map(({ pricing, ...m }) => m))
   }
   if (p === '/api/balances') {
     if (Date.now() - balanceCache.at > 60e3 || url.searchParams.has('refresh')) balanceCache = { at: Date.now(), value: await balances() }

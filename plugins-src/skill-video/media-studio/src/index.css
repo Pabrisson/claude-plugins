@@ -28,6 +28,9 @@
     --color-vid: var(--vid);
     --color-aud: var(--aud);
     --color-done: var(--done);
+    --color-canvas: var(--canvas);
+    --color-space: var(--space);
+    --color-space-foreground: var(--space-foreground);
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
@@ -65,6 +68,10 @@
     --highlight: oklch(0.623 0.214 259.815);
     /* resolved items and Claude's replies */
     --done: oklch(0.765 0.177 163.223);
+    /* where the results sit: a step off the panels, so the media stand out */
+    --canvas: oklch(0.97 0.002 286);
+    /* text on a medium's color */
+    --on-media: oklch(0.985 0 0);
     --background: oklch(1 0 0);
     --foreground: oklch(0.141 0.005 285.823);
     --card: oklch(1 0 0);
@@ -104,6 +111,8 @@
     --img: oklch(0.797 0.134 211);
     --vid: oklch(0.709 0.159 293);
     --aud: oklch(0.718 0.202 349);
+    --canvas: oklch(0.155 0.004 285.9);
+    --on-media: oklch(0.17 0.005 285.8);
     /* a very dark grey, not black; cards and popovers a step lighter */
     --background: oklch(0.185 0.004 285.9);
     --foreground: oklch(0.985 0 0);
@@ -139,6 +148,23 @@
     --sidebar-ring: oklch(0.552 0.016 285.938);
 }
 
+/* the space's accent: its medium's color (Generate, the chosen chips, the rail); neutral on the other pages */
+:root {
+    --space: var(--primary);
+    --space-foreground: var(--primary-foreground);
+}
+[data-space="image"] { --space: var(--img); --space-foreground: var(--on-media); }
+[data-space="video"] { --space: var(--vid); --space-foreground: var(--on-media); }
+[data-space="audio"] { --space: var(--aud); --space-foreground: var(--on-media); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -148,5 +174,14 @@
     }
   html {
     @apply font-sans;
+    /* Inter's open digits and single-storey a */
+    font-feature-settings: "ss01", "cv11";
+    }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    }
+  button:not(:disabled), [role="button"], [role="radio"], [role="option"], summary {
+    cursor: pointer;
     }
 }

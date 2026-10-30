@@ -49,13 +49,13 @@ Run `media.mjs doctor` once per conversation.
 ### 1. The tool
 
 Pick the kind (`image`, `video`, `audio`) and the tool that does what the user asks:
-`media.mjs tools <kind> --search "<words>"` lists them, with their inputs, fields and recommended models. "Free" is
-the user's own prompt; the others fill a prompt template from their fields.
+`media.mjs tools <kind> --search "<words>"` lists them, with their inputs, fields and recommended models. "Custom" (id `free`)
+is the user's own prompt; the others fill a prompt template from their fields.
 
 - Inputs are files: `--in <input>=<file>`, once per file (`--in references=a.png --in references=b.png`). Files the
   user gave keep their path. A result of an earlier generation is in `media/<id>/`.
 - Fields: `--field <key>=<value>`, a choice among its options or free text.
-- `--prompt "…"` adds the user's words to the template, or is the whole prompt with "Free". `--raw` sends the prompt
+- `--prompt "…"` adds the user's words to the template, or is the whole prompt with "Custom". `--raw` sends the prompt
   exactly as written, without the template.
 - `@name` in the prompt brings that Element's images as references. `media.mjs elements add <name> <images…>` makes
   one, when the user wants a character or a product to come back.

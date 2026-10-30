@@ -25,7 +25,7 @@ the same files: a new tool is a new entry, nothing else to code.
 |---|---|
 | `id` | Unique in its file, letters, digits and `-` |
 | `label`, `description` | What the dashboard shows, in English, sentence case |
-| `group` | The picker's group: Free, Camera, VFX, Frames, Characters, Light & color, Retouch, Voice |
+| `group` | The picker's group: Custom, Camera, VFX, Frames, Characters, Light & color, Retouch, Voice |
 | `mode` | `create` or `edit`: the composer's segmented control |
 | `icon` | A lucide icon name (kebab-case) |
 | `inputs` | The files it takes, in the order they are sent (below) |

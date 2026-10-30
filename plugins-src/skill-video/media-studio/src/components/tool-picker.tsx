@@ -1,10 +1,14 @@
 import { useState } from "react"
 import { ChevronDownIcon } from "lucide-react"
+import { cn } from "cn"
 
+import { Badge } from "@/components/ui/badge"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { fileUrl, mediaKind, outputPath, type Job, type Model, type Tool } from "@/lib/api"
-import { ToolIcon } from "@/components/chips"
+import { CHIP, CHIP_OFF, CHIP_ON, ToolIcon } from "@/components/chips"
+import { ModelLogo } from "@/components/model-logo"
+import { shortName } from "@/components/model-picker"
 
 const needs = (t: Tool) => {
   const req = t.inputs.filter((i) => !i.optional)
@@ -20,12 +24,13 @@ function lastOutput(tool: Tool, kind: string, media: Job[], home: string) {
   return j ? outputPath(home, j, j.outputs.find((o) => mediaKind(o) !== "other") ?? j.outputs[0]) : null
 }
 
+// a tool's picture: its last result, else its icon on the space's color
 function Tile({ tool, last }: { tool: Tool; last: string | null }) {
   const k = last ? mediaKind(last) : null
   return (
-    <span className="grid size-13 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+    <span className="grid size-13 shrink-0 place-items-center overflow-hidden rounded-lg border bg-linear-to-br from-space/20 to-space/5 text-space">
       {k === "image" ? (
-        <img src={fileUrl(last!)} alt="" className="size-full object-cover" />
+        <img src={fileUrl(last!)} alt="" loading="lazy" className="size-full object-cover" />
       ) : k === "video" ? (
         <video src={fileUrl(last!)} muted preload="metadata" className="size-full object-cover" />
       ) : (
@@ -35,7 +40,8 @@ function Tile({ tool, last }: { tool: Tool; last: string | null }) {
   )
 }
 
-// the tool button and its searchable list: groups on the side of each item, inputs, the model it suits, a price
+// the tool button and its list, beside the composer like the model's: search, a group at a time, each tool with its
+// picture, what it needs, the model it suits and its price
 export function ToolPicker({
   kind,
   tools,
@@ -58,9 +64,9 @@ export function ToolPicker({
   onOpen: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [group, setGroup] = useState<string | null>(null)
   const groups = [...new Set(tools.map((t) => t.group))]
-  const modelName = (id?: string) => (id ? (models.find((m) => m.model === id)?.name ?? id.split("/").pop()) : null)
-  const last = lastOutput(value, kind, media, home)
+  const modelOf = (id?: string) => (id ? models.find((m) => m.model === id) : undefined)
 
   return (
     <Popover
@@ -71,10 +77,8 @@ export function ToolPicker({
       }}
     >
       <PopoverTrigger asChild>
-        <button type="button" className="flex w-full items-center gap-3 rounded-xl border bg-card p-2.5 text-left hover:bg-muted/60" aria-label={`Tool: ${value.label}. Change the tool`}>
-          {last ? <Tile tool={value} last={last} /> : (
-            <span className="grid size-13 shrink-0 place-items-center rounded-lg border bg-muted"><ToolIcon name={value.icon} className="size-5" /></span>
-          )}
+        <button type="button" className="flex w-full items-center gap-3 rounded-xl border bg-card p-2.5 text-left transition-colors hover:border-space/40 hover:bg-muted/60" aria-label={`Tool: ${value.label}. Change the tool`}>
+          <Tile tool={value} last={lastOutput(value, kind, media, home)} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[15px] font-semibold">{value.label}</span>
             <span className="block truncate text-xs text-muted-foreground">
@@ -84,40 +88,63 @@ export function ToolPicker({
           <ChevronDownIcon className="size-4 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[min(640px,calc(100vw-2rem))] p-0">
-        <Command loop>
+      {/* beside the composer, where the room is, and never taller than the screen: the list scrolls */}
+      <PopoverContent side="right" align="start" sideOffset={8} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(520px,calc(100vw-2rem))] flex-col p-0">
+        <Command loop className="min-h-0 flex-1">
           <CommandInput placeholder="Search tools" aria-label="Search tools" />
-          <CommandList className="max-h-[min(520px,70vh)]">
+          {groups.length > 1 && (
+            <div className="flex flex-wrap gap-1.5 border-b p-2">
+              {groups.map((g) => (
+                <button key={g} type="button" aria-pressed={group === g} onClick={() => setGroup(group === g ? null : g)} className={cn(CHIP, "px-2.5 py-0.5 text-xs", group === g ? CHIP_ON : CHIP_OFF)}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          )}
+          <CommandList className="max-h-[min(620px,80vh)] min-h-0 flex-1">
             <CommandEmpty>No tool matches.</CommandEmpty>
-            {groups.map((g) => (
+            {groups.filter((g) => !group || g === group).map((g) => (
               <CommandGroup key={g} heading={g}>
-                {tools.filter((t) => t.group === g).map((t) => (
-                  <CommandItem
-                    key={t.id}
-                    value={`${t.label} ${t.group} ${t.description}`}
-                    onSelect={() => {
-                      onPick(t)
-                      setOpen(false)
-                    }}
-                    className="items-center gap-3 py-2"
-                    data-checked={t.id === value.id}
-                  >
-                    <Tile tool={t} last={lastOutput(t, kind, media, home)} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-semibold">{t.label}</span>
-                      <span className="block text-xs text-muted-foreground">{t.description}</span>
-                      <span className="mt-1 flex flex-wrap gap-1">
-                        {needs(t).map((n) => (
-                          <span key={n} className="rounded border px-1.5 text-[11px] text-muted-foreground">{n}</span>
-                        ))}
+                {tools.filter((t) => t.group === g).map((t) => {
+                  const m = modelOf(t.models?.[0])
+                  return (
+                    <CommandItem
+                      key={t.id}
+                      value={`${t.label} ${t.group} ${t.description}`}
+                      onSelect={() => (onPick(t), setOpen(false))}
+                      data-checked={t.id === value.id}
+                      className="items-start gap-3 py-2.5"
+                    >
+                      <Tile tool={t} last={lastOutput(t, kind, media, home)} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline gap-2">
+                          <span className="truncate font-semibold">{t.label}</span>
+                          {prices[t.id] && <span className="ml-auto text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{prices[t.id]}</span>}
+                        </span>
+                        <span className="line-clamp-2 text-xs text-muted-foreground">{t.description}</span>
+                        <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          {needs(t).map((n) => (
+                            <Badge key={n} variant="outline" className="font-normal text-muted-foreground">{n}</Badge>
+                          ))}
+                          <span className="ml-auto flex min-w-0 items-center gap-1.5">
+                            {t.local === "reframe" ? (
+                              "Local, ffmpeg"
+                            ) : t.provider === "elevenlabs" ? (
+                              "ElevenLabs"
+                            ) : m ? (
+                              <>
+                                <ModelLogo model={m.model} lab={m.lab} className="size-4 rounded-sm bg-transparent p-0" />
+                                <span className="truncate">{shortName(m)}</span>
+                              </>
+                            ) : (
+                              "Any model"
+                            )}
+                          </span>
+                        </span>
                       </span>
-                    </span>
-                    <span className="shrink-0 text-right text-xs text-muted-foreground">
-                      {t.local === "reframe" ? "local" : t.provider === "elevenlabs" ? "ElevenLabs" : (modelName(t.models?.[0]) ?? "any model")}
-                      {prices[t.id] && <span className="block text-[13px] font-semibold text-cost">{prices[t.id]}</span>}
-                    </span>
-                  </CommandItem>
-                ))}
+                    </CommandItem>
+                  )
+                })}
               </CommandGroup>
             ))}
           </CommandList>

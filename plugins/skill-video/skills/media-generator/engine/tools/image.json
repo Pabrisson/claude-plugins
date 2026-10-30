@@ -1,6 +1,6 @@
 [
   {
-    "id": "free", "label": "Free", "group": "Free", "mode": "create", "icon": "sparkles",
+    "id": "free", "label": "Custom", "group": "Custom", "mode": "create", "icon": "sparkles",
     "description": "Your own prompt, with optional reference images.",
     "inputs": [{ "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }],
     "fields": [],
@@ -40,7 +40,7 @@
     "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-3-pro-image"]
   },
   {
-    "id": "free-edit", "label": "Free edit", "group": "Free", "mode": "edit", "icon": "wand",
+    "id": "free-edit", "label": "Custom edit", "group": "Custom", "mode": "edit", "icon": "wand",
     "description": "Changes what you describe, the rest of the image stays.",
     "inputs": [
       { "key": "image", "kind": "image", "label": "Image" },

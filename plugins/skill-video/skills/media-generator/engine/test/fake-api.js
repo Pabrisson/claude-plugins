@@ -1,4 +1,4 @@
-// A fake OpenRouter (under /api/v1) and ElevenLabs (under /el) for the tests: tiny catalogs, generations that answer
+// A fake OpenRouter (under /api/v1) and ElevenLabs (under /el) for the tests (their models: test/models.json): generations that answer
 // files made by ffmpeg, the errors that matter, in the shapes the real APIs answered on 2026-10-29. Every request is
 // kept in calls
 import { execFileSync } from 'node:child_process'
@@ -26,8 +26,6 @@ setInterval(() => {}, 1e6)
 `, { mode: 0o755 })
   // ElevenLabs' count moves a few reads after the spend (10 to 20 s on 2026-10-29)
   let used = 1000, pending = 0, reads = 0
-  const imageModel = (id, extra = {}) => ({ id, name: id, architecture: { input_modalities: ['text', 'image'] },
-    supported_parameters: { resolution: { type: 'enum', values: ['1K', '2K'] }, aspect_ratio: { type: 'enum', values: ['1:1', '16:9'] }, n: { type: 'range', min: 1, max: 4 }, input_references: { type: 'range', min: 0, max: 4 } }, ...extra })
   const server = http.createServer(async (req, res) => {
     const chunks = []
     for await (const c of req) chunks.push(c)
@@ -37,20 +35,12 @@ setInterval(() => {}, 1e6)
     const json = (v, code = 200, headers = {}) => { res.writeHead(code, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(v)) }
     const bytes = (b, type, headers = {}) => { res.writeHead(200, { 'content-type': type, ...headers }); res.end(b) }
     // OpenRouter
-    if (p === '/api/v1/images/models') return json({ data: [imageModel('fake/img'), imageModel('fake/noprice'), imageModel('fake/broke')] })
-    if (p.startsWith('/api/v1/images/models/')) return json({ endpoints: p.includes('noprice') ? [{ pricing: [] }] : [{ pricing: [{ billable: 'output_image', unit: 'image', cost_usd: 0.04 }] }] })
     if (p === '/api/v1/images') {
       if (body.model === 'fake/broke') return json({ error: { message: 'Insufficient credits' } }, 402)
       if (body.model === 'fake/busy') return json({ error: { message: 'slow down' } }, 429)
       return json({ created: 1793306772, data: Array.from({ length: body.n ?? 1 }, () => ({ b64_json: png.toString('base64'), media_type: 'image/png' })),
         usage: { prompt_tokens: 17, completion_tokens: 272, total_tokens: 289, cost: 0.039 } })
     }
-    if (p === '/api/v1/videos/models') return json({ data: [{ id: 'fake/vid', name: 'Fake Video', supported_resolutions: ['720p', '1080p'], supported_aspect_ratios: ['16:9', '9:16', '1:1'], supported_durations: [10, 5],
-      supported_frame_images: ['first_frame', 'last_frame'], generate_audio: true, seed: true, pricing_skus: { duration_seconds_with_audio: '0.12', duration_seconds_without_audio: '0.10' } },
-      // the real avatar's shape: no durations, no frames
-      { id: 'fake/avatar-iv', name: 'Fake Avatar', supported_resolutions: ['720p', '1080p'], supported_durations: null, supported_frame_images: null, generate_audio: false, pricing_skus: { duration_seconds: '0.05' } },
-      { id: 'fake/flux-video-upscale', name: 'Fake Upscale', supported_resolutions: null, supported_durations: null, supported_frame_images: null, upscale_factor: { min: 1.5, max: 3 }, creativity: [0, 1],
-        generate_audio: false, pricing_skus: { cents_per_megapixel_second_precise: '3.5', cents_per_megapixel_second_creative: '5' } }] })
     if (p === '/api/v1/videos' && req.method === 'POST') {
       // the fields first (a number each, among the model's values), then the references: a video or a sound only by HTTPS
       for (const [k, name, ok, values] of [['creativity', 'Creativity', v => [0, 1].includes(v), '0, 1'], ['upscale_factor', 'Upscale factor', v => v >= 1.5 && v <= 3, '1.5-3']]) {
@@ -78,8 +68,6 @@ setInterval(() => {}, 1e6)
       const status = ['pending', 'in_progress'][polls[id]++] ?? 'completed'
       return json(status === 'completed' ? { ...job, status, unsigned_urls: [`${base}/api/v1/videos/${id}/content?index=0`], usage: { cost: 0.6, is_byok: false } } : { ...job, status })
     }
-    if (p === '/api/v1/models' && u.searchParams.get('output_modalities') === 'speech')
-      return json({ data: ['fake/tts', 'fake/pcm-tts'].map(id => ({ id, name: id, pricing: { prompt: '0.0001', completion: '0' }, supported_voices: ['ava', 'bo'] })) })
     if (p === '/api/v1/audio/speech') {
       if (body.model === 'fake/pcm-tts' && body.response_format !== 'pcm') return json({ error: { message: 'HeyGen Voice only supports response_format "pcm".', code: 400 } }, 400)
       return bytes(body.response_format === 'pcm' ? pcm : mp3, body.response_format === 'pcm' ? 'audio/pcm;rate=44100;channels=1' : 'audio/mpeg', { 'x-generation-id': `g${calls.length}` })

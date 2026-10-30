@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { CopyIcon, MicIcon, PlayIcon, RefreshCwIcon, SquareIcon, UploadIcon } from "lucide-react"
+import { ChevronRightIcon, CopyIcon, MicIcon, PlayIcon, RefreshCwIcon, SquareIcon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { InputGroup, InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group"
+import { Kbd } from "@/components/ui/kbd"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Slider } from "@/components/ui/slider"
-import { Textarea } from "@/components/ui/textarea"
 import {
   api,
   fill,
@@ -22,9 +26,10 @@ import {
   type Tool,
   type Voice,
 } from "@/lib/api"
-import { Chips, Label, Price } from "@/components/chips"
-import { InputSlots, upload } from "@/components/inputs"
+import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, Price } from "@/components/chips"
+import { InputSlots, slotFor, upload } from "@/components/inputs"
 import { ToolPicker } from "@/components/tool-picker"
+import { capsOf, ModelPicker, type Priced } from "@/components/model-picker"
 
 // what the composer of one space holds: kept per space, so switching spaces loses nothing
 export type Compose = {
@@ -61,7 +66,7 @@ export function modelsFor(tool: Tool, kind: Kind, models: Model[]) {
     kind === "video"
       ? m.role === "generate" && (tool.id !== "extend" || (m.params.frames?.length ?? 0) > 0)
       : kind === "image"
-        ? tool.mode === "create" || m.role === "both"
+        ? tool.mode === "create" || m.role !== "create"
         : true
   return { recommended, others: models.filter((m) => ok(m) && !recommended.includes(m)) }
 }
@@ -123,14 +128,15 @@ export function Composer({
   )
 
   // the estimate, again after every change (debounced)
+  // what is missing, as the button's words until it can run
   const blocker = missing
-    ? `Add ${missing.label.toLowerCase()} to see the price`
+    ? `Add ${missing.label.toLowerCase()}`
     : !eleven && !local && !prompt && tool.id !== "upscale"
-      ? "Write a prompt to see the price"
+      ? kind === "audio" ? "Write the text" : "Write a prompt"
       : tool.id === "translate" && !value.fields.to?.trim()
-        ? "Pick the languages to see the price"
+        ? "Pick the languages"
         : tool.id === "change-voice" && !value.params.voice
-          ? "Pick the new voice to see the price"
+          ? "Pick the new voice"
           : null
   const [est, setEst] = useState<{ answer?: EstimateAnswer; error?: string }>({})
   const specKey = JSON.stringify(spec)
@@ -145,6 +151,33 @@ export function Composer({
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [specKey, blocker])
+
+  // until it can run, the button shows this tool's price on this model and settings, before the inputs and words
+  // (not a voice's: it is priced by its text)
+  const probeSpec = (model?: string): Spec => ({ kind, tool: tool.id, model, prompt: "", fields: value.fields, inputs: {}, params: value.params, probe: true })
+  const probeKey = JSON.stringify(probeSpec(modelId))
+  const [probe, setProbe] = useState<{ key: string; label: string | null }>({ key: "", label: null })
+  useEffect(() => {
+    if (!blocker || (kind === "audio" && !eleven)) return
+    const t = setTimeout(() => api.estimate(probeSpec(modelId)).then((a) => setProbe({ key: probeKey, label: priceLabel(a) }), () => {}), 300)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probeKey, !!blocker])
+  // the model list's prices: each model on these settings, asked when the list opens (a voice's on its text, once written)
+  const [modelPrices, setModelPrices] = useState<{ key: string; prices: Record<string, Priced> }>({ key: "", prices: {} })
+  function priceModels() {
+    const speech = kind === "audio" && !eleven
+    if (speech && !prompt) return
+    const listSpec = (model?: string): Spec => ({ ...probeSpec(model), ...(speech ? { prompt } : {}) })
+    const key = JSON.stringify(listSpec())
+    if (modelPrices.key === key) return
+    setModelPrices({ key, prices: {} })
+    for (const m of fitting)
+      api.estimate(listSpec(m.id)).then(
+        (a) => setModelPrices((p) => (p.key === key ? { key, prices: { ...p.prices, [m.id]: { label: priceLabel(a), amount: a.estimate.amount } } } : p)),
+        () => {}
+      )
+  }
 
   // prices in the tool list: a probe estimate per tool on its recommended model, once a session
   const listed = tools.filter((t) => t.mode === mode)
@@ -212,12 +245,48 @@ export function Composer({
 
   const label = tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? "Reframe" : "Generate"
   const a = blocker ? undefined : est.answer
-  const note = blocker ?? est.error
-  const price = a ? priceLabel(a) : null
+  const price = a ? priceLabel(a) : blocker && probe.key === probeKey ? probe.label : null
+  const ready = !busy && !!a && (eleven ? state.keys.elevenlabs : local || state.keys.openrouter)
+
+  // a file pasted or dropped anywhere on the composer goes to the first input that takes it
+  async function take(files: File[]) {
+    let inputs = value.inputs
+    for (const f of files) {
+      const slot = slotFor(tool, inputs, f.name)
+      if (!slot) continue
+      try {
+        const path = await upload(f)
+        inputs = { ...inputs, [slot.key]: slot.multiple ? [...(inputs[slot.key] ?? []), path] : [path] }
+      } catch (e) {
+        toast.error(plain((e as Error).message))
+      }
+    }
+    if (inputs !== value.inputs) set({ inputs })
+    else if (files.length) toast.error(`${tool.label} takes no such file here`)
+  }
 
   return (
-    <aside className="flex min-h-0 flex-col border-r bg-card/40">
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+    <aside
+      className="flex min-h-0 flex-col border-r bg-background"
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || !ready) return
+        e.preventDefault()
+        go()
+      }}
+      onPaste={(e) => {
+        const files = [...e.clipboardData.files]
+        if (!files.length || !tool.inputs.length) return
+        e.preventDefault()
+        take(files)
+      }}
+      onDragOver={(e) => tool.inputs.length && e.dataTransfer.types.includes("Files") && e.preventDefault()}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return
+        e.preventDefault()
+        take([...e.dataTransfer.files])
+      }}
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
         {newDraft && (
           <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
             <span className="size-2 shrink-0 rounded-full bg-highlight" aria-hidden />
@@ -259,7 +328,7 @@ export function Composer({
           </>
         )}
 
-        <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} />
+        {!tool.template && <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} />}
 
         {tool.fields.map((f) =>
           tool.id === "translate" && f.key === "to" ? (
@@ -275,7 +344,7 @@ export function Composer({
                       type="button"
                       aria-pressed={on}
                       onClick={() => set({ fields: { ...value.fields, to: (on ? list.filter((x) => x !== l) : [...list, l]).join(", ") } })}
-                      className={cn("rounded-full border px-2.5 py-0.5 text-xs", on ? "border-foreground bg-foreground text-background" : "hover:bg-muted")}
+                      className={cn(CHIP, "px-2.5 py-0.5 text-xs", on ? CHIP_ON : CHIP_OFF)}
                     >
                       {l}
                     </button>
@@ -306,12 +375,20 @@ export function Composer({
               <Label hint={value.raw ? "edited by hand" : tool.template !== "{prompt}" ? "from the tool, edit freely" : undefined}>
                 {kind === "audio" ? "Text to speak" : "Prompt"}
               </Label>
-              <Textarea
-                value={prompt}
-                rows={5}
-                placeholder={kind === "audio" ? "What the voice says" : tool.description}
-                onChange={(e) => (tool.template === "{prompt}" ? set({ intent: e.target.value, raw: false }) : set({ raw: true, rawText: e.target.value }))}
-              />
+              <InputGroup className="rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
+                <InputGroupTextarea
+                  value={prompt}
+                  aria-label={kind === "audio" ? "Text to speak" : "Prompt"}
+                  placeholder={kind === "audio" ? "What the voice says" : tool.description}
+                  className="max-h-80 min-h-28 px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px]"
+                  onChange={(e) => (tool.template === "{prompt}" ? set({ intent: e.target.value, raw: false }) : set({ raw: true, rawText: e.target.value }))}
+                />
+                {tool.inputs.length > 0 && (
+                  <InputGroupAddon align="block-end" className="border-t px-3 pt-3 pb-3 font-normal">
+                    <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} />
+                  </InputGroupAddon>
+                )}
+              </InputGroup>
               {value.raw && (
                 <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => set({ raw: false })}>
                   Back to the tool's template
@@ -324,13 +401,14 @@ export function Composer({
         {model && (
           <ModelBlock
             kind={kind}
-            tool={tool}
             recommended={recommended}
             others={others}
             model={model}
             params={value.params}
             onModel={(id) => set({ model: id })}
             onParams={(params) => set({ params })}
+            prices={modelPrices.prices}
+            onOpenModels={priceModels}
             // the image a result can take its ratio from: any for an image, a first or last frame (an avatar's photo) for a video
             hasImageInput={kind === "video" ? ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0) : tool.inputs.some((i) => i.kind === "image" && (value.inputs[i.key]?.length ?? 0) > 0)}
             hasVideoInput={tool.inputs.some((i) => i.kind === "video")}
@@ -338,6 +416,11 @@ export function Composer({
           />
         )}
 
+        {!blocker && est.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{est.error}</AlertDescription>
+          </Alert>
+        )}
         {tool.id === "change-voice" && (
           <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
             Keeps the delivery: pauses, emotion and rhythm stay, only the timbre changes. Up to 5 min goes in one call; a longer clip is sent in pieces.
@@ -357,16 +440,31 @@ export function Composer({
       </div>
 
       <div className="border-t p-3">
-        {note && <p className="mb-2 text-xs text-muted-foreground">{note}</p>}
         <div className="flex gap-2">
           {!eleven && !local && (
-            <Button variant="outline" size="lg" onClick={copyPrompt} title="Claude writes the best prompt for this model here. Nothing is generated.">
-              <CopyIcon /> Copy prompt
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon-lg" className="size-11" onClick={copyPrompt} aria-label="Copy prompt">
+                  <CopyIcon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" align="start" className="max-w-72 p-3 text-left">
+                <div className="flex flex-col gap-1">
+                  <p className="font-semibold">Copy prompt</p>
+                  <p className="opacity-90">
+                    Copies a request for Claude with this tool, {model ? model.name : "the model"} and your inputs. Paste it in Claude Code: Claude writes the prompt this model handles best, here in the composer.
+                  </p>
+                  <p className="font-medium">Nothing is generated, nothing is spent.</p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
           )}
-          <Button size="lg" className="flex-1" disabled={busy || !a || (eleven ? !state.keys.elevenlabs : !local && !state.keys.openrouter)} onClick={() => go()}>
-            {label}
-            {price && <Price className="bg-cost text-background">{price}</Price>}
+          <Button variant="space" className="h-11 flex-1 justify-between px-4 text-[15px]" disabled={!ready} onClick={() => go()}>
+            <span className="flex items-center gap-2">
+              {blocker ?? label}
+              {!blocker && <Kbd className="bg-space-foreground/15 text-space-foreground/80">⌘↵</Kbd>}
+            </span>
+            {price && <Price className="bg-space-foreground/15 text-space-foreground">{price}</Price>}
           </Button>
         </div>
       </div>
@@ -421,7 +519,6 @@ function FieldInput({ field: f, value, onChange }: { field: Tool["fields"][numbe
 // the model and the settings it accepts: only what this model lists
 function ModelBlock({
   kind,
-  tool,
   recommended,
   others,
   model,
@@ -431,9 +528,10 @@ function ModelBlock({
   hasImageInput,
   hasVideoInput,
   cloning,
+  prices,
+  onOpenModels,
 }: {
   kind: Kind
-  tool: Tool
   recommended: Model[]
   others: Model[]
   model: Model
@@ -443,17 +541,11 @@ function ModelBlock({
   hasImageInput: boolean
   hasVideoInput: boolean
   cloning: boolean
+  prices: Record<string, Priced>
+  onOpenModels: () => void
 }) {
   const p = model.params, put = (k: string, v: unknown) => onParams({ ...params, [k]: v })
-  const caps = [
-    p.frames?.length ? p.frames.map((f) => f.replace("_frame", "")).join(" + ") + " frame" : null,
-    p.audio ? "audio" : null,
-    p.duration?.length ? `up to ${p.duration.at(-1)} s` : null,
-    p.resolution?.length ? p.resolution.join(" · ") : null,
-    p.references ? `${p.references} references` : null,
-    p.n && p.n.max > 1 ? `up to ${p.n.max} at once` : null,
-    p.voices?.length ? `${p.voices.length} voices` : null,
-  ].filter(Boolean)
+  const caps = capsOf(model)
   const durations = p.duration ?? []
   const ns = p.n && p.n.max > 1 ? Array.from({ length: Math.min(p.n.max, 4) - (p.n.min ?? 1) + 1 }, (_, i) => (p.n!.min ?? 1) + i) : []
   const edit = kind === "video" && hasVideoInput
@@ -462,28 +554,10 @@ function ModelBlock({
     <div className="flex flex-col gap-4">
       <div>
         <Label>Model</Label>
-        <Select value={model.id} onValueChange={onModel}>
-          <SelectTrigger className="w-full" aria-label="Model">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {recommended.length > 0 && (
-              <SelectGroup>
-                <SelectLabel>Recommended for {tool.label.toLowerCase()}</SelectLabel>
-                {recommended.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-              </SelectGroup>
-            )}
-            {others.length > 0 && (
-              <SelectGroup>
-                <SelectLabel>Other models</SelectLabel>
-                {others.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-              </SelectGroup>
-            )}
-          </SelectContent>
-        </Select>
+        <ModelPicker kind={kind} recommended={recommended} others={others} value={model.id} onChange={(id) => id && onModel(id)} prices={prices} onOpen={onOpenModels} />
         {caps.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {caps.map((c) => <span key={c} className="rounded border px-1.5 text-[11px] text-muted-foreground">{c}</span>)}
+          <div className="mt-2 flex flex-wrap gap-1">
+            {caps.map((c) => <Badge key={c} variant="outline" className="font-normal text-muted-foreground">{c}</Badge>)}
           </div>
         )}
       </div>
@@ -527,13 +601,13 @@ function ModelBlock({
           <Label>Resolution</Label>
           <Chips options={p.resolution} value={pick(p.resolution, params.resolution as string, kind === "image" ? "2K" : "1080p", kind === "image" ? "1K" : "720p")} onChange={(r) => put("resolution", r)} />
         </div>
-      ) : null}
-      {p.quality?.length ? (
+      ) : kind !== "audio" && model.role !== "upscale" && model.role !== "avatar" ? (
         <div>
-          <Label>Quality</Label>
-          <Chips options={p.quality} value={pick(p.quality, params.quality as string, "high")} onChange={(q) => put("quality", q)} />
+          <Label>Resolution</Label>
+          <p className="text-sm text-muted-foreground">{edit ? "Same as the source video" : "Set by the model"}</p>
         </div>
       ) : null}
+
       {kind === "video" && p.audio ? (
         <div>
           <Label>Sound</Label>
@@ -553,16 +627,31 @@ function ModelBlock({
           </Select>
         </div>
       ) : null}
-      {p.seed && (
-        <div>
-          <Label hint="the same seed gives the same result">Seed</Label>
-          <Input
-            inputMode="numeric"
-            placeholder="random"
-            value={(params.seed as number | undefined) ?? ""}
-            onChange={(e) => put("seed", e.target.value === "" ? undefined : Number(e.target.value.replace(/\D/g, "")))}
-          />
-        </div>
+      {(p.quality?.length || p.seed) && (
+        <details className="group/more" open={params.seed != null || (params.quality != null && params.quality !== "high") || undefined}>
+          <summary className="flex list-none items-center gap-1 text-xs font-semibold tracking-wider text-foreground/70 uppercase hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <ChevronRightIcon className="size-3.5 transition-transform group-open/more:rotate-90" /> More
+          </summary>
+          <div className="mt-3 flex flex-col gap-4">
+            {p.quality?.length ? (
+              <div>
+                <Label>Quality</Label>
+                <Chips options={p.quality} value={pick(p.quality, params.quality as string, "high")} onChange={(q) => put("quality", q)} />
+              </div>
+            ) : null}
+            {p.seed && (
+              <div>
+                <Label hint="the same seed gives the same result">Seed</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="random"
+                  value={(params.seed as number | undefined) ?? ""}
+                  onChange={(e) => put("seed", e.target.value === "" ? undefined : Number(e.target.value.replace(/\D/g, "")))}
+                />
+              </div>
+            )}
+          </div>
+        </details>
       )}
     </div>
   )
@@ -657,7 +746,7 @@ function ElevenVoices({ enabled, value, onChange }: { enabled: boolean; value?: 
               <span className="block truncate text-sm font-medium">{v.name}</span>
               {tags(v) && <span className="block truncate text-xs text-muted-foreground">{tags(v)}</span>}
             </span>
-            {v.category && <span className="rounded border px-1.5 text-[11px] text-muted-foreground">{v.category === "cloned" ? "cloned" : "account"}</span>}
+            {v.category && <Badge variant="outline" className="font-normal text-muted-foreground">{v.category === "cloned" ? "cloned" : "account"}</Badge>}
           </div>
         ))}
       </div>

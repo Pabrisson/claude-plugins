@@ -40,6 +40,7 @@ export type Model = {
   id: string
   model: string
   name: string
+  lab?: string
   kind: string
   role: string
   provider: string

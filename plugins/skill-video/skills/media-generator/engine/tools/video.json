@@ -1,6 +1,6 @@
 [
   {
-    "id": "free", "label": "Free", "group": "Free", "mode": "create", "icon": "sparkles",
+    "id": "free", "label": "Custom", "group": "Custom", "mode": "create", "icon": "sparkles",
     "description": "Your own prompt, with optional first and last frames or references.",
     "inputs": [
       { "key": "first_frame", "kind": "image", "label": "First frame", "optional": true },
@@ -148,7 +148,7 @@
     "models": ["heygen/avatar-iv"]
   },
   {
-    "id": "free-edit", "label": "Free edit", "group": "Free", "mode": "edit", "icon": "wand",
+    "id": "free-edit", "label": "Custom edit", "group": "Custom", "mode": "edit", "icon": "wand",
     "description": "Changes what you describe in a video, the rest stays. Draw on a frame to point at it.",
     "inputs": [
       { "key": "video", "kind": "video", "label": "Video" },
@@ -160,7 +160,7 @@
     "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.5"]
   },
   {
-    "id": "extend", "label": "Extend", "group": "Free", "mode": "edit", "icon": "fast-forward",
+    "id": "extend", "label": "Extend", "group": "Custom", "mode": "edit", "icon": "fast-forward",
     "description": "Continues a video after its end (sequel) or builds what came before (prequel).",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [

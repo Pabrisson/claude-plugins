@@ -81,6 +81,11 @@ export function ToolIcon({ name, className }: { name: string; className?: string
   return createElement(ICONS[name] ?? SparklesIcon, { className })
 }
 
+// a chip, and a chosen one: tinted with the space's color, not a white block that outshines the prompt
+export const CHIP = "rounded-full border px-3 py-1 text-sm transition-colors duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+export const CHIP_ON = "border-space/50 bg-space/15 font-medium text-space"
+export const CHIP_OFF = "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+
 // single-choice chips: the dashboard's control for every list of values
 export function Chips<T extends string | number>({
   options,
@@ -104,12 +109,7 @@ export function Chips<T extends string | number>({
           role="radio"
           aria-checked={o === value}
           onClick={() => onChange(o)}
-          className={cn(
-            "rounded-full border px-3 py-1 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-            o === value
-              ? "border-foreground bg-foreground text-background"
-              : "border-border hover:bg-muted"
-          )}
+          className={cn(CHIP, o === value ? CHIP_ON : CHIP_OFF)}
         >
           {label(o)}
         </button>
@@ -140,10 +140,7 @@ export function MultiChips<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(on ? value.filter((x) => x !== o) : [...value, o])}
-            className={cn(
-              "rounded-full border px-3 py-1 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              on ? "border-foreground bg-foreground text-background" : "border-border hover:bg-muted"
-            )}
+            className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
           >
             {label(o)}
           </button>
@@ -162,11 +159,12 @@ export function Price({ children, className }: { children: React.ReactNode; clas
   )
 }
 
+// a section's title: small capitals, its hint in plain words beside it
 export function Label({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) {
   return (
-    <div className="mb-1.5 text-xs text-muted-foreground">
-      {children}
-      {hint && <span className="ml-1 opacity-80">· {hint}</span>}
+    <div className="mb-2 flex items-baseline gap-1.5 text-xs text-muted-foreground">
+      <span className="font-semibold tracking-wider text-foreground/70 uppercase">{children}</span>
+      {hint && <span className="truncate">· {hint}</span>}
     </div>
   )
 }

@@ -5,12 +5,10 @@ import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   api,
   fileUrl,
   money,
-  outputPath,
   per1000,
   plain,
   type Balances,
@@ -18,25 +16,24 @@ import {
   type Job,
   type Kind,
   type LedgerLine,
-  type Model,
-  type Settings,
   type State,
 } from "@/lib/api"
 import { Chips, Label, MultiChips } from "@/components/chips"
 import { upload } from "@/components/inputs"
-import { Results, type Bridge } from "@/components/results"
+import { isRunning, Results, type Bridge } from "@/components/results"
+import { Viewer } from "@/components/viewer"
 
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 
-function Side({ children }: { children: React.ReactNode }) {
-  return <aside className="flex min-h-0 flex-col gap-4 overflow-auto border-r bg-card/40 p-4">{children}</aside>
+export function Side({ children }: { children: React.ReactNode }) {
+  return <aside className="flex min-h-0 flex-col gap-5 overflow-auto border-r bg-background p-4">{children}</aside>
 }
-function Main({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
+export function Main({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <main className="flex min-h-0 flex-col gap-4 overflow-auto px-5 py-4">
+    <main className="flex min-h-0 flex-col gap-5 overflow-auto bg-canvas px-6 py-5">
       <div className="flex items-center gap-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
+        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         <span className="flex-1" />
         {aside}
       </div>
@@ -177,7 +174,8 @@ function Bars({ days, lines, series }: { days: string[]; lines: LedgerLine[]; se
   )
 }
 
-export function Credits({ state, balances }: { state: State; balances: Balances | null }) {
+export function Credits({ state, balances, onBridge }: { state: State; balances: Balances | null; onBridge: (b: Bridge, job: Job, file: string) => void }) {
+  const [open, setOpen] = useState<string | null>(null)
   const [period, setPeriod] = useState<Period>("month")
   const [provider, setProvider] = useState<"both" | "openrouter" | "elevenlabs">("both")
   const [kinds, setKinds] = useState<Kind[]>(KINDS)
@@ -198,10 +196,10 @@ export function Credits({ state, balances }: { state: State; balances: Balances 
   const days = Array.from({ length: n }, (_, i) => new Date(end - (n - 1 - i) * 864e5).toISOString().slice(0, 10))
   const running = state.media.filter((j) => (j.status === "running" || j.status === "queued") && j.provider !== "local")
   const rows = [
-    ...running.map((j) => ({ key: j.id, at: j.created, label: j.label, model: j.name, unit: j.estimate.unit, estimate: j.estimate.amount, actual: null as number | null, known: false, status: "running", by: j.by, provider: j.provider, file: null as string | null })),
+    ...running.map((j) => ({ key: j.id, at: j.created, label: j.label, model: j.name, unit: j.estimate.unit, estimate: j.estimate.amount, actual: null as number | null, known: false, status: "running", by: j.by, provider: j.provider, job: null as string | null })),
     ...[...lines].reverse().map((l) => {
       const job = state.media.find((j) => j.id === l.id)
-      return { key: `${l.id}-${l.at}`, at: l.at, label: l.label, model: l.model, unit: l.unit, estimate: l.estimate, actual: l.actual, known: !!l.actual_known, status: l.status, by: l.by, provider: l.provider, file: job?.outputs[0] ? outputPath(state.home, job, job.outputs[0]) : null }
+      return { key: `${l.id}-${l.at}`, at: l.at, label: l.label, model: job?.name ?? l.model, unit: l.unit, estimate: l.estimate, actual: l.actual, known: !!l.actual_known, status: l.status, by: l.by, provider: l.provider, job: job && !isRunning(job) ? job.id : null }
     }),
   ].filter((r) => provider === "both" || r.provider === provider)
 
@@ -238,7 +236,7 @@ export function Credits({ state, balances }: { state: State; balances: Balances 
       <Main title="Credits" aside={<span className="text-sm text-muted-foreground">{now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>}>
         <div className="grid gap-3.5 lg:grid-cols-2">
           {provider !== "elevenlabs" && (
-            <div className="rounded-2xl border bg-card/60 p-4">
+            <div className="rounded-2xl border bg-card p-4">
               <div className="text-sm text-muted-foreground">OpenRouter, USD</div>
               <div className="mt-1 text-3xl font-semibold tabular-nums">
                 {money(orSpent, "usd")} <span className="text-sm font-normal text-muted-foreground">spent {period === "7d" ? "in 7 days" : period === "month" ? "this month" : "in all"}</span>
@@ -260,7 +258,7 @@ export function Credits({ state, balances }: { state: State; balances: Balances 
             </div>
           )}
           {provider !== "openrouter" && (
-            <div className="rounded-2xl border bg-card/60 p-4">
+            <div className="rounded-2xl border bg-card p-4">
               <div className="text-sm text-muted-foreground">ElevenLabs, credits</div>
               <div className="mt-1 text-3xl font-semibold tabular-nums">
                 {Math.round(elSpent).toLocaleString("en-US")} credits{" "}
@@ -297,19 +295,19 @@ export function Credits({ state, balances }: { state: State; balances: Balances 
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.key} className="border-b">
+              <tr key={r.key} className="border-b transition-colors hover:bg-muted/40">
                 <td className="p-2 whitespace-nowrap">
                   {r.status === "running" && <span className="mr-1.5 inline-block size-1.5 rounded-full bg-highlight align-middle" />}
                   {new Date(r.at).toLocaleString("en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </td>
-                <td className="p-2">{r.label}</td>
-                <td className="p-2 text-muted-foreground">{r.model}</td>
-                <td className="p-2 text-right tabular-nums">{money(r.estimate, r.unit, usd)}</td>
+                <td className="p-2 whitespace-nowrap">{r.label}</td>
+                <td className="max-w-64 truncate p-2 text-muted-foreground" title={r.model}>{r.model}</td>
+                <td className="p-2 text-right whitespace-nowrap tabular-nums">{money(r.estimate, r.unit, usd)}</td>
                 <td className={cn("p-2 text-right whitespace-nowrap tabular-nums", r.actual ? "font-semibold text-cost" : "text-muted-foreground")}>
                   {r.status === "running" ? "running" : `${money(r.actual, r.unit, usd)}${r.status === "failed" ? ", failed" : r.known ? "" : " (est.)"}`}
                 </td>
                 <td className="p-2 text-xs text-muted-foreground">{r.by === "claude" ? "Claude" : "dashboard"}</td>
-                <td className="p-2">{r.file && <a href={fileUrl(r.file)} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground underline-offset-2 hover:underline">Open</a>}</td>
+                <td className="p-2 text-right">{r.job && <Button size="xs" variant="ghost" onClick={() => setOpen(r.job)}>View</Button>}</td>
               </tr>
             ))}
             {!rows.length && (
@@ -319,118 +317,7 @@ export function Credits({ state, balances }: { state: State; balances: Balances 
             )}
           </tbody>
         </table>
-      </Main>
-    </>
-  )
-}
-
-// ---------- Settings ----------
-
-const NUMBERS = ["openrouter.threshold", "openrouter.cap", "elevenlabs.threshold", "elevenlabs.cap"]
-
-export function SettingsPage({ state, models, onSaved }: { state: State; models: Partial<Record<Kind, Model[]>>; onSaved: () => void }) {
-  const [form, setForm] = useState<Settings>(state.settings)
-  // the numbers as typed ("0." stays "0."), turned into numbers on save; empty is none
-  const [text, setText] = useState<Record<string, string>>(() =>
-    Object.fromEntries(NUMBERS.map((k) => { const [sec, key] = k.split("."); return [k, String((state.settings[sec as "openrouter"] as Record<string, number | null>)[key] ?? "")] }))
-  )
-  const [busy, setBusy] = useState(false)
-  const field = (sec: "openrouter" | "elevenlabs", key: string, label: string, unit: string) => (
-    <div>
-      <Label hint={unit}>{label}</Label>
-      <Input inputMode="decimal" placeholder="none" value={text[`${sec}.${key}`]} onChange={(e) => setText({ ...text, [`${sec}.${key}`]: e.target.value.replace(/[^\d.]/g, "") })} />
-    </div>
-  )
-  const key = (on: boolean, what: string) => (
-    <div className="flex items-center gap-2 text-sm">
-      <span className={cn("size-2 rounded-full", on ? "bg-done" : "bg-muted-foreground/40")} />
-      {what}: {on ? "set" : "not set"}
-    </div>
-  )
-  return (
-    <>
-      <Side>
-        <p className="text-sm text-muted-foreground">
-          The keys stay in Claude Code: set them with /plugin configure skill-video@pabrisson, then restart Claude Code. The rest is saved in this folder's settings.json.
-        </p>
-        <div className="flex flex-col gap-2">
-          {key(state.keys.openrouter, "OpenRouter key")}
-          {key(state.keys.management, "OpenRouter management key (optional)")}
-          {key(state.keys.elevenlabs, "ElevenLabs key")}
-        </div>
-      </Side>
-      <Main title="Settings">
-        <div className="grid max-w-3xl gap-3.5">
-          <section className="rounded-2xl border bg-card/60 p-4">
-            <h3 className="mb-1 font-semibold">OpenRouter</h3>
-            <p className="mb-3 text-sm text-muted-foreground">Images, videos and voices, priced in USD. Empty means none: no confirmation, no cap.</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {field("openrouter", "threshold", "Ask before spending more than", "USD per generation")}
-              {field("openrouter", "cap", "Monthly cap", "USD")}
-            </div>
-          </section>
-          <section className="rounded-2xl border bg-card/60 p-4">
-            <h3 className="mb-1 font-semibold">ElevenLabs</h3>
-            <p className="mb-3 text-sm text-muted-foreground">Change voice and Translate, priced in credits. A paid plan adds their price in USD everywhere.</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {field("elevenlabs", "threshold", "Ask before spending more than", "credits")}
-              {field("elevenlabs", "cap", "Monthly cap", "credits")}
-            </div>
-            <div className="mt-3">
-              <Label hint="USD per 1,000 credits">Plan</Label>
-              <Chips
-                options={["none", ...Object.keys(state.plans)]}
-                value={form.elevenlabs.plan ?? "none"}
-                label={(p) => (p === "none" ? "Not set" : `${cap(p)}${state.plans[p] ? ` · $${state.plans[p]}` : ""}`)}
-                onChange={(p) => setForm({ ...form, elevenlabs: { ...form.elevenlabs, plan: p === "none" ? null : p } })}
-              />
-            </div>
-          </section>
-          <section className="rounded-2xl border bg-card/60 p-4">
-            <h3 className="mb-1 font-semibold">Default models</h3>
-            <p className="mb-3 text-sm text-muted-foreground">Used when a tool recommends none, and by Claude.</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {KINDS.map((k) => (
-                <div key={k}>
-                  <Label>{cap(k)}</Label>
-                  <Select value={form.defaults[k] ?? "none"} onValueChange={(v) => setForm({ ...form, defaults: { ...form.defaults, [k]: v === "none" ? null : v } })}>
-                    <SelectTrigger className="w-full" aria-label={`Default ${k} model`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">The tool's choice</SelectItem>
-                      {(models[k] ?? []).filter((m) => k !== "video" || m.role === "generate").map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-          </section>
-          <div>
-            <Button
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                try {
-                  const next = structuredClone(form) as unknown as Record<string, Record<string, number | null>>
-                  for (const k of NUMBERS) {
-                    const [sec, key] = k.split("."), v = text[k].trim()
-                    next[sec][key] = v === "" || !Number.isFinite(+v) ? null : +v
-                  }
-                  setForm(await api.settings(next as unknown as Settings))
-                  toast.success("Settings saved")
-                  onSaved()
-                } catch (e) {
-                  toast.error(plain((e as Error).message))
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              Save settings
-            </Button>
-          </div>
-        </div>
+        <Viewer jobs={state.media.filter((j) => !isRunning(j))} id={open} onId={setOpen} home={state.home} per1000={usd} onBridge={onBridge} />
       </Main>
     </>
   )
