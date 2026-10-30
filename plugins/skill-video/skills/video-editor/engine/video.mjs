@@ -813,7 +813,9 @@ async function voiceOver() {
 async function voices(search) {
   const j = await eleven(`/v2/voices?page_size=100${search ? `&search=${encodeURIComponent(search)}` : ''}`)
   if (opt.json) return console.log(JSON.stringify(j.voices.map(v => ({ voice_id: v.voice_id, name: v.name, category: v.category, labels: v.labels ?? {},
-    languages: [...new Set((v.verified_languages ?? []).map(l => l.language))], description: v.description ?? null, preview_url: v.preview_url ?? null }))))
+    languages: [...new Set((v.verified_languages ?? []).map(l => l.language))], description: v.description ?? null, preview_url: v.preview_url ?? null,
+    // a sample in each language the voice was verified in (the first of its models)
+    previews: Object.fromEntries((v.verified_languages ?? []).filter(l => l.preview_url).reverse().map(l => [l.language, l.preview_url])) }))))
   for (const v of j.voices) {
     const langs = [...new Set((v.verified_languages ?? []).map(l => l.language))]
     console.log(`${v.voice_id}  ${v.name} [${v.category}] ${Object.values(v.labels ?? {}).join(', ')}${langs.length ? ` · ${langs.join('/')}` : ''}${v.description ? ` — ${v.description}` : ''}`)

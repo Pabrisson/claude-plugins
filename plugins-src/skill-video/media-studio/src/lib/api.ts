@@ -4,22 +4,29 @@ export type Page = Kind | "library" | "credits" | "settings"
 
 export type Input = {
   key: string
-  kind: "image" | "video" | "audio" | "sketch" | "mask" | "media"
+  kind: "image" | "video" | "audio" | "sketch" | "mask" | "matte" | "media"
   label: string
   optional?: boolean
   multiple?: boolean
+  // a mask: the field the paint dialog shows under the picture (what goes there), and the matte input that keeps the
+  // painted area in black and white, never sent (an inpaint lays the result back on the original with it)
+  field?: string
+  matte?: string
   // how the prompt names its images, {} their place (« images 2 to 3 »): nothing without a file
   phrase?: string
 }
 // an option: its value, or the value with what the dashboard shows of it (a preset light carries its lights, a style
 // the palette of its card, a References sheet its ratio)
-export type Option = string | { value: string; label?: string; group?: string; note?: string; rig?: Light[]; swatch?: string[]; ratio?: string }
+export type Option = string | { value: string; label?: string; group?: string; note?: string; rig?: Light[]; cam?: Cam; swatch?: string[]; ratio?: string }
 // one light around the subject: azimuth (0 front, 90 right, 180 behind) and elevation in degrees, 0–100 levels
 export type Light = { az: number; el: number; color: string; brightness: number; diffuse: number }
+// where New angle's camera goes: around the subject and up in degrees from where the picture was taken, closer (1) or
+// farther (-1)
+export type Cam = { az: number; el: number; zoom: number }
 export type Field = {
   key: string
   label: string
-  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin" | "style" | "sheets"
+  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin" | "style" | "sheets" | "element" | "camera" | "recolors"
   options?: Option[]
   // how a value reads in the template ("shot on {}"): an empty one leaves nothing
   phrase?: string
@@ -27,9 +34,16 @@ export type Field = {
   section?: string
   // a light field: how many lights the user may place
   lights?: number
+  // an element field: the Library's types it takes
+  types?: ElementType[]
+  // may stay empty: the read-only prompt shows no {key} for it
+  optional?: boolean
+  // the tool cannot go without it (Object swap's element)
+  required?: boolean
   default?: string | number
   placeholder?: string
   min?: number
+  // a number's top, a recolors field's items at most
   max?: number
   step?: number
   unit?: string
@@ -45,11 +59,13 @@ export type Tool = {
   fields: Field[]
   template: string
   models?: string[]
+  // other models it runs on, not recommended: a restricted tool's « Other models »
+  also?: string[]
   params?: Record<string, unknown>
   local?: string
   provider?: string
   // setups that fill several fields at once
-  presets?: { label: string; fields: Record<string, string> }[]
+  presets?: { label: string; group?: string; note?: string; fields: Record<string, string> }[]
   // a References tool: the Element its sheets make, and the field or input it needs one of (words or photos)
   element?: ElementType
   one_of?: string[]
@@ -194,6 +210,8 @@ export type Voice = {
   languages?: string[]
   description?: string | null
   preview_url?: string | null
+  // a sample in each language the voice was verified in
+  previews?: Record<string, string>
 }
 // an Element of the Library: what its images are to the model (a voice holds clips), its words, a brand's colors and
 // typeface, a voice's ElevenLabs id once it is on the account
@@ -283,6 +301,9 @@ export function shown(f: Field, v: string) {
 // a label's first letter up, an aperture as written (f/2.8)
 export const sentence = (s: string) => (!s || /^f\//.test(s) ? s : s[0].toUpperCase() + s.slice(1))
 
+// the tools done on this machine, free and without a model (media.mjs's LOCAL)
+export const isLocal = (tool: Tool) => ["reframe", "fps", "hdr", "depth", "matte"].includes(tool.local ?? "")
+
 // the user writes the whole prompt (Custom, speech): its template is their words, a style at most after them
 export const ownPrompt = (tool: Tool) => tool.template.replace(" {style}", "") === "{prompt}"
 
@@ -356,7 +377,7 @@ export function fill(tool: Tool, fields: Record<string, string>, prompt: string,
     let v = String(fields[f.key] ?? f.default ?? "")
     // a References tool's sheets: the first one's words, as its job sends them (the others follow it)
     if (f.type === "sheets") v = f.options?.map(opt).find((o) => v.split(",").some((x) => x.trim().toLowerCase() === o.label.toLowerCase()))?.value ?? ""
-    const auto = f.options?.some((o) => opt(o).value === "") || (f.type === "style" && f.default == null)
+    const auto = f.options?.some((o) => opt(o).value === "") || (f.type === "style" && f.default == null) || f.optional || (f.type === "element" && !f.required)
     text = text.replaceAll(`{${f.key}}`, v ? (f.phrase ? f.phrase.replace("{}", v) : v) : auto ? "" : hole(f.key))
   }
   const at = places(kind, tool, inputs)
@@ -365,6 +386,7 @@ export function fill(tool: Tool, fields: Record<string, string>, prompt: string,
     .replaceAll("{prompt}", prompt ?? "")
     .replace(/\s+/g, " ")
     .replace(/\(\s*\)/g, "")
+    .replace(/ {2,}/g, " ")
     .replace(/\s+([.,:;)])/g, "$1")
     .replace(/[.,:;]{2,}/g, (m) => (m.includes(".") ? "." : m[0]))
     .replace(/^[\s.,:;]+|[\s,:;]+$/g, "")

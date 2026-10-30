@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import { cn } from "cn"
 
+import { AudioLinesIcon, ImageIcon, SparklesIcon, VideoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { api, money, per1000, type Balances, type Job, type Kind, type LedgerLine, type State, type Tool } from "@/lib/api"
 import { Chips, Label, MultiChips } from "@/components/chips"
 import { ElementsTab, type ElementDraft, type Use } from "@/components/elements"
@@ -101,9 +103,45 @@ export function Library({
         </div>
       </Side>
       <Main title="Library" aside={<span className="text-sm text-muted-foreground">{jobs.length} items</span>}>
-        <Results jobs={jobs} home={state.home} per1000={per1000(state)} onBridge={onBridge} empty={<p className="text-sm text-muted-foreground">Nothing here yet: what you generate lands here, by you or by Claude.</p>} />
+        <Results
+          jobs={jobs}
+          home={state.home}
+          per1000={per1000(state)}
+          onBridge={onBridge}
+          empty={
+            state.media.length ? (
+              <p className="text-sm text-muted-foreground">Nothing matches these filters.</p>
+            ) : (
+              <NoGenerations what="What you make in Image, Video and Audio lands here, by you or by Claude; a file dropped on the page is imported here, free." />
+            )
+          }
+        />
       </Main>
     </>
+  )
+}
+
+// nothing generated in this folder yet: what lands on the page once there is, and the spaces to start in
+function NoGenerations({ what }: { what: string }) {
+  return (
+    <Empty className="border border-dashed">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <SparklesIcon />
+        </EmptyMedia>
+        <EmptyTitle>No generation yet</EmptyTitle>
+        <EmptyDescription>{what}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent className="flex-row justify-center">
+        {([["image", "Image", ImageIcon], ["video", "Video", VideoIcon], ["audio", "Audio", AudioLinesIcon]] as const).map(([hash, label, Icon]) => (
+          <Button key={hash} variant="outline" size="sm" asChild>
+            <a href={`#${hash}`}>
+              <Icon data-icon="inline-start" /> {label}
+            </a>
+          </Button>
+        ))}
+      </EmptyContent>
+    </Empty>
   )
 }
 
@@ -264,7 +302,7 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={7} className="p-6 text-center text-muted-foreground">Nothing spent in this period.</td>
+                <td colSpan={7} className="p-6 text-center text-muted-foreground">{ledger.length ? "Nothing spent in this period." : <NoGenerations what="Each paid generation lands here with its estimate and its real cost, by you or by Claude." />}</td>
               </tr>
             )}
           </tbody>

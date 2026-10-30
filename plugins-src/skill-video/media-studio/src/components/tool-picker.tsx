@@ -5,10 +5,11 @@ import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { fileUrl, mediaKind, outputPath, type Job, type Model, type Tool } from "@/lib/api"
+import { type Model, type Tool } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, ToolIcon } from "@/components/chips"
 import { ModelLogo } from "@/components/model-logo"
 import { shortName } from "@/components/model-picker"
+import { isLocal } from "@/lib/api"
 
 const needs = (t: Tool) => {
   const req = t.inputs.filter((i) => !i.optional)
@@ -18,24 +19,11 @@ const needs = (t: Tool) => {
   return [...counts].map(([k, n]) => (k === "sketch" ? "a sketch" : `${n} ${k === "media" ? "clip" : k}${n > 1 ? "s" : ""}`))
 }
 
-// the user's last result with a tool, as its picture in the list
-function lastOutput(tool: Tool, kind: string, media: Job[], home: string) {
-  const j = media.find((x) => x.kind === kind && x.tool === tool.id && x.status === "done" && x.outputs.length)
-  return j ? outputPath(home, j, j.outputs.find((o) => mediaKind(o) !== "other") ?? j.outputs[0]) : null
-}
-
-// a tool's picture: its last result, else its icon on the space's color
-function Tile({ tool, last }: { tool: Tool; last: string | null }) {
-  const k = last ? mediaKind(last) : null
+// a tool's picture: its icon on the space's color, always (a last result made the list hard to read)
+function Tile({ tool }: { tool: Tool }) {
   return (
-    <span className="grid size-13 shrink-0 place-items-center overflow-hidden rounded-lg border bg-linear-to-br from-space/20 to-space/5 text-space">
-      {k === "image" ? (
-        <img src={fileUrl(last!)} alt="" loading="lazy" className="size-full object-cover" />
-      ) : k === "video" ? (
-        <video src={fileUrl(last!)} muted preload="metadata" className="size-full object-cover" />
-      ) : (
-        <ToolIcon name={tool.icon} className="size-5" />
-      )}
+    <span className="grid size-13 shrink-0 place-items-center rounded-lg border bg-linear-to-br from-space/20 to-space/5 text-space">
+      <ToolIcon name={tool.icon} className="size-5" />
     </span>
   )
 }
@@ -43,22 +31,16 @@ function Tile({ tool, last }: { tool: Tool; last: string | null }) {
 // the tool button and its list, beside the composer like the model's: search, a group at a time, each tool with its
 // picture, what it needs, the model it suits and its price
 export function ToolPicker({
-  kind,
   tools,
   value,
   onPick,
-  media,
-  home,
   models,
   prices,
   onOpen,
 }: {
-  kind: string
   tools: Tool[]
   value: Tool
   onPick: (t: Tool) => void
-  media: Job[]
-  home: string
   models: Model[]
   prices: Record<string, string>
   onOpen: () => void
@@ -78,7 +60,7 @@ export function ToolPicker({
     >
       <PopoverTrigger asChild>
         <button type="button" className="flex w-full items-center gap-3 rounded-xl border bg-card p-2.5 text-left transition-colors hover:border-space/40 hover:bg-muted/60" aria-label={`Tool: ${value.label}. Change the tool`}>
-          <Tile tool={value} last={lastOutput(value, kind, media, home)} />
+          <Tile tool={value} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[15px] font-semibold">{value.label}</span>
             <span className="block truncate text-xs text-muted-foreground">
@@ -115,7 +97,7 @@ export function ToolPicker({
                       data-checked={t.id === value.id}
                       className="items-start gap-3 py-2.5"
                     >
-                      <Tile tool={t} last={lastOutput(t, kind, media, home)} />
+                      <Tile tool={t} />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-baseline gap-2">
                           <span className="truncate font-semibold">{t.label}</span>
@@ -127,8 +109,8 @@ export function ToolPicker({
                             <Badge key={n} variant="outline" className="font-normal text-muted-foreground">{n}</Badge>
                           ))}
                           <span className="ml-auto flex min-w-0 items-center gap-1.5">
-                            {t.local === "reframe" ? (
-                              "Local, ffmpeg"
+                            {isLocal(t) ? (
+                              "On your Mac, free"
                             ) : t.provider === "elevenlabs" ? (
                               "ElevenLabs"
                             ) : m ? (

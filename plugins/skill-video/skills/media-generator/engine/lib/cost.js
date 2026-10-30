@@ -42,7 +42,8 @@ export function estimateVideo(skus, req) {
   // a price that names the sound wins: a per-resolution price without it would drop the sound's surcharge
   const score = s => (s.audio !== null ? 10 : 0) + [s.res, s.input, s.creativity].filter(x => x !== null).length
   const main = all.filter(s => ['second', 'token', 'mp_second'].includes(s.unit) && fits(s)).sort((a, b) => score(b) - score(a))[0]
-  if (!main) return { amount: null, unit: 'usd', known: false, detail: 'no price for these settings' }
+  // a note in place of the prices: a model whose bill does not follow them, said as it is
+  if (!main) return { amount: null, unit: 'usd', known: false, detail: skus?.note ?? 'no price for these settings' }
   const duration = Number(req.duration) || 5
   let amount, detail
   if (main.unit === 'second') [amount, detail] = [main.rate * duration, `${duration} s × $${main.rate}/s`]
@@ -60,7 +61,7 @@ export function estimateVideo(skus, req) {
   const perImage = all.find(s => s.unit === 'per_image' && fits(s))
   if (perImage && req.images) amount += perImage.rate * req.images
   const min = all.find(s => s.unit === 'minimum')
-  if (min) amount = Math.max(amount, min.rate)
+  if (min && min.rate > amount) [amount, detail] = [min.rate, `the $${min.rate.toFixed(2)} minimum (${detail})`]
   return { amount: round(amount), unit: 'usd', known: true, detail }
 }
 

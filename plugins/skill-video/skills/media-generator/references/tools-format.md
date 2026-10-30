@@ -30,11 +30,12 @@ the same files: a new tool is a new entry, nothing else to code.
 | `icon` | A lucide icon name (kebab-case) |
 | `inputs` | The files it takes, in the order they are sent (below) |
 | `fields` | The settings the template uses (below) |
-| `presets` | Setups that fill several fields at once: `[{ "label": "Noir", "fields": { "lens": "…", "grade": "…" } }]`, chips above the fields |
+| `presets` | Setups that fill several fields at once: `[{ "label": "Noir", "group": "Genre", "note": "Black and white, hard shadows", "fields": { "lens": "…", "grade": "…" } }]`, a searchable list above the fields, grouped, a line each; a pick sets every field the setups touch (those it leaves out back to their default) |
 | `template` | The prompt: `{key}` is a field's value (or its default), `{prompt}` the user's own words |
 | `models` | Router model ids, recommended first; without it, any model of the kind |
+| `also` | Other models it runs on, not recommended: the dashboard lists them under « Other models » (a video edit tool offers no other) |
 | `params` | Settings forced for this tool, such as `{ "resolution": "4K" }` or `{ "background": "transparent" }` |
-| `local` | Done on the machine: `reframe` (ffmpeg, free), `extend` (a frame of the source, then the new shot joined), `expand` (the image padded with gray margins from its `margin` fields, sent at the model's closest ratio) |
+| `local` | Done on the machine: `reframe`, `fps` (frames made by motion, ffmpeg's minterpolate), `hdr` (HDR10 from SDR) with ffmpeg, `depth` and `matte` (`vision.py`, ONNX models fetched once), all free and without a model; `extend` (a frame of the source, then the new shot joined), `expand` (the image padded with gray margins from its `margin` fields, sent at the model's closest ratio), `paste` (an inpaint's result laid back on the original inside its `matte` input, unless the field `outside` is `model`) |
 | `provider` | `elevenlabs` for the tools video-editor's engine does (change voice, translate) |
 | `element` | A References tool: the Element type its sheets make (`character`, `outfit`…), for the dashboard's « Make an element » |
 | `one_of` | Keys of which one at least must be given, a field or an input (`["who", "references"]`: words or photos) |
@@ -44,8 +45,18 @@ Fields (`type`):
   line on each). **multi**: several options in the order picked, joined by `, then ` (camera moves).
 - **text**, **number** (min, max, step, unit: a slider), **color**.
 - **light**: the lights around the subject, placed on a stage (`lights`: how many at most); its value is the light in
-  words. With `options` (presets, each with its `rig` of lights), the dashboard offers Preset, Custom and Describe.
+  words. With `options` (presets, each with its `rig` of lights), the dashboard offers Preset and Custom.
 - **margin**: Expand's share of the image added on one side (0 to 2), set by the dashboard's frame editor.
+- **element**: an Element of the Library, picked in the dashboard (`types`: the Element types it takes); its value is
+  `@name` (a name without its @ works on the command line), cited like the words' own: its images join the
+  references, the prompt says what and where they are.
+- **camera**: New angle's camera, dragged around the subject (seen from above) and up or down (seen from the side),
+  closer or farther; its value is words. Its `options` are quick angles, each with its `cam` (`az`, `el`, `zoom`), their
+  value written with the dashboard's own words (camera-rig.tsx `camWords`).
+- **recolors**: items and their new colors, as rows (`max` of them); the value is « the jacket becomes pale yellow
+  (#f5e663); … ».
+- `optional: true` on a text field that may stay empty (the read-only prompt then shows no `{key}`); `required: true` on a
+  field the tool cannot go without (Object swap's element): the engine and the dashboard stop until it is given.
 - **sheets**: a References tool's sheets, as cards to tick; the value is their labels joined by commas (the `default`
   too). Each option adds `ratio`. A generation makes one job per sheet, at its ratio, the first alone, the others
   after it with its image in the `sheet` input (an optional image input the template names with its `phrase`), so a
@@ -70,7 +81,9 @@ Inputs (`kind`):
 - **sketch**: a picture the user drew on (a frame with marks), sent as an image reference. The template says what
   the marks mean.
 - **mask**: the image (or a frame of the video, picked along it) with an area the user painted in translucent magenta
-  (brush, eraser, lasso), sent as an image reference. The template names the magenta area.
+  (brush, eraser, lasso), sent as an image reference. The template names the magenta area. `field`: the field the paint
+  dialog shows under the picture (Put there); `matte`: the input that keeps the painted area in black and white.
+- **matte**: the painted area, white on black, kept on the machine and never sent (an inpaint with `local: "paste"`).
 - **media**: an audio or a video file (ElevenLabs tools).
 - `optional: true` when it may be left out, `multiple: true` when it takes several files (the dashboard caps them at
   what the chosen model takes, « 2 / 13 »).

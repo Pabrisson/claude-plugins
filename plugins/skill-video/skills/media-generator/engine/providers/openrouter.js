@@ -40,7 +40,7 @@ export default {
       params: kind === 'image'
         ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, n: { min: 1, max: m.max_images }, references: m.references, seed: m.seed, quality: m.quality, background: m.background }
         : kind === 'video'
-          ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, duration: m.durations, frames: m.frames, references: m.references, audio: m.sound, seed: m.seed, creativity: !!m.upscale?.creativity, factor: !!m.upscale }
+          ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, duration: m.durations, frames: m.frames, references: m.references, audio: m.sound, seed: m.seed, creativity: !!m.upscale?.creativity, factor: !!m.upscale, min_pixels: m.min_pixels }
           : { voices: m.voices },
       pricing: kind === 'image' ? m.pricing.map(pricing => ({ pricing })) : m.pricing,
     }))

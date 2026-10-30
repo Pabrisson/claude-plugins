@@ -14,6 +14,10 @@
       "frames": ["first_frame", "last_frame"], "references": 3, "sound": true, "seed": true, "upscale": null, "pricing": { "duration_seconds_with_audio": 0.12, "duration_seconds_without_audio": 0.1 } },
     { "id": "fake/avatar-iv", "lab": "Fake", "name": "Avatar", "role": "avatar", "resolutions": ["720p", "1080p"], "aspect_ratios": null, "durations": null,
       "frames": [], "references": 1, "sound": false, "seed": false, "upscale": null, "pricing": { "duration_seconds": 0.05 } },
+    { "id": "black-forest-labs/flux-video-edit", "lab": "Fake", "name": "Video Edit", "role": "edit", "resolutions": null, "aspect_ratios": null, "durations": null,
+      "frames": [], "references": 0, "sound": false, "seed": false, "upscale": null, "pricing": { "cents_per_second_output": 3 } },
+    { "id": "bytedance/seedance-2.5", "lab": "Fake", "name": "Seedance", "role": "generate", "resolutions": ["480p", "720p"], "aspect_ratios": ["9:16", "16:9"], "durations": [4, 5],
+      "frames": ["first_frame", "last_frame"], "references": 30, "sound": true, "seed": true, "upscale": null, "min_pixels": 100000, "pricing": { "video_tokens": 0.0000107, "video_tokens_with_video_input": 0.0000064 } },
     { "id": "fake/flux-video-upscale", "lab": "Fake", "name": "Upscale", "role": "upscale", "resolutions": null, "aspect_ratios": null, "durations": null,
       "frames": [], "references": 0, "sound": false, "seed": false, "upscale": { "min": 1.5, "max": 3, "creativity": true },
       "pricing": { "cents_per_megapixel_second_precise": 3.5, "cents_per_megapixel_second_creative": 5 } }

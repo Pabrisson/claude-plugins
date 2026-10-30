@@ -96,9 +96,9 @@ async function tunnel(files) {
 }
 
 function probe(file) {
-  const j = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height', '-of', 'json', file], { encoding: 'utf8' }))
-  const v = j.streams.find(s => s.codec_type === 'video')
-  return { duration: +(+j.format.duration || 0).toFixed(2), width: v?.width ?? null, height: v?.height ?? null, audio: j.streams.some(s => s.codec_type === 'audio') }
+  const j = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height,avg_frame_rate', '-of', 'json', file], { encoding: 'utf8' }))
+  const v = j.streams.find(s => s.codec_type === 'video'), [a, b] = String(v?.avg_frame_rate ?? '0/1').split('/').map(Number)
+  return { duration: +(+j.format.duration || 0).toFixed(2), width: v?.width ?? null, height: v?.height ?? null, fps: b ? +(a / b).toFixed(3) : null, audio: j.streams.some(s => s.codec_type === 'audio') }
 }
 const ffmpeg = argv => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { stdio: ['ignore', 'ignore', 'pipe'] })
 
@@ -137,6 +137,9 @@ function toolOf(kind, id) {
   if (!t) throw userError(`no ${kind} tool ${id}: media.mjs tools ${kind}`)
   return t
 }
+// the tools done on this machine, by their local, and what does the work: free, no router
+const LOCAL = { reframe: 'ffmpeg', fps: 'ffmpeg', hdr: 'ffmpeg', depth: 'Depth Anything V2 Small', matte: 'BiRefNet lite' }
+const hasBin = bin => !spawnSync(bin, [bin === 'uv' ? '--version' : '-version'], { stdio: 'ignore' }).error
 // the tools whose prompt is the user's words (a style at most after them): never sent without them
 const CUSTOM = ['free', 'free-edit']
 // the router's kind for a tool kind: audio is speech
@@ -188,7 +191,7 @@ function fill(tool, spec) {
   }
   const at = places(spec.kind, tool, spec.inputs)
   for (const i of tool.inputs) if (i.phrase) text = text.replaceAll(`{${i.key}}`, at[i.key] ? i.phrase.replace('{}', at[i.key]) : '')
-  return text.replaceAll('{prompt}', spec.prompt ?? '').replace(/\s+/g, ' ').replace(/\(\s*\)/g, '').replace(/\s+([.,:;)])/g, '$1')
+  return text.replaceAll('{prompt}', spec.prompt ?? '').replace(/\s+/g, ' ').replace(/\(\s*\)/g, '').replace(/ {2,}/g, ' ').replace(/\s+([.,:;)])/g, '$1')
     .replace(/[.,:;]{2,}/g, m => (m.includes('.') ? '.' : m[0])).replace(/^[\s.,:;]+|[\s,:;]+$/g, '').trim()
 }
 // an option is a value, or { value, label, group, note }; a label given for a value stands for it (light=Silhouette)
@@ -295,6 +298,15 @@ function mentions(text, kind, from) {
   return { text: out, refs }
 }
 
+// an element field's value: a name of the Library (with or without its @), of a type the field takes, written @name so
+// the prompt cites it like the user's own words
+function elementField(f, v) {
+  const name = String(v).trim().replace(/^@/, ''), el = element(name)
+  if (!el || el.type === 'voice' || !el.files.length) throw userError(`${f.label}: no element @${name} in the Library (media.mjs elements)`)
+  if (f.types && !f.types.includes(el.type)) throw userError(`${f.label}: @${name} is ${el.type === 'other' ? 'untyped' : `${/^[aeiou]/.test(el.type) ? 'an' : 'a'} ${el.type}`}, this takes ${f.types.join(' or ')}`)
+  return `@${name}`
+}
+
 // a style of the Library (styles/<name>/): its images go last among the references, and the prompt cites them by
 // their place with the words on its look. A name, never a preset's value (those are sentences)
 function savedStyle(name) {
@@ -314,6 +326,17 @@ const pick = (list, ...wanted) => (list?.length ? wanted.find(w => w !== undefin
 function ratioOf(list, file) {
   const s = probe(file), gap = x => { const [a, b] = x.split(':'); return Math.abs(Math.log(a / b / (s.width / s.height))) }
   return (list ?? []).filter(x => /^\d+:\d+$/.test(x)).sort((x, y) => gap(x) - gap(y))[0]
+}
+
+// a source video the model would refuse as too small (Seedance 2.5 wants 407,696 pixels: a 848×480 480p has 407,040,
+// 2026-10-30), scaled up just enough, its ratio kept
+function atLeast(file, pixels) {
+  const s = probe(file)
+  if (!pixels || !s.width || s.width * s.height >= pixels) return file
+  const k = Math.sqrt(pixels / (s.width * s.height)), even = x => Math.ceil((x * k) / 2) * 2
+  const out = at('.cache', `min-${createHash('sha1').update(JSON.stringify([file, fs.statSync(file).mtimeMs, pixels])).digest('hex').slice(0, 12)}.mp4`)
+  if (!fs.existsSync(out)) (fs.mkdirSync(path.dirname(out), { recursive: true }), ffmpeg(['-i', file, '-vf', `scale=${even(s.width)}:${even(s.height)}:flags=lanczos`, '-c:v', 'libx264', '-crf', '16', '-pix_fmt', 'yuv420p', '-c:a', 'copy', out]))
+  return out
 }
 
 // expand's canvas: the image with margins (top, right, bottom, left: a share of its height or width, the frame up to 3
@@ -337,12 +360,13 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
   const files = key => spec.inputs?.[key] ?? []
   const p = { ...tool.params, ...spec.params }
   if (kind === 'image') {
-    const refs = [...tool.inputs.flatMap(i => files(i.key)), ...refsFromMentions]
+    const refs = [...tool.inputs.filter(i => i.kind !== 'matte').flatMap(i => files(i.key)), ...refsFromMentions]
     const params = clean({
       n: m.params.n ? Math.min(Math.max(+p.n || 1, m.params.n.min ?? 1), m.params.n.max ?? 1) : undefined,
       resolution: pick(m.params.resolution, p.resolution, '2K', '1K'),
-      // an edit keeps its image's ratio unless one is asked
-      aspect_ratio: p.aspect_ratio ? pick(m.params.aspect_ratio, p.aspect_ratio) : refs.length ? undefined : pick(m.params.aspect_ratio, '1:1'),
+      // an edit asks its image's ratio (the closest the model takes) unless another is asked: left to itself, Nano Banana
+      // Pro answered a 16:9 frame in a 1:1 crop (2026-10-30)
+      aspect_ratio: p.aspect_ratio ? pick(m.params.aspect_ratio, p.aspect_ratio) : files('image')[0] ? ratioOf(m.params.aspect_ratio, files('image')[0]) : refs.length ? undefined : pick(m.params.aspect_ratio, '1:1'),
       quality: pick(m.params.quality, p.quality, 'high'), background: p.background ? pick(m.params.background, p.background) : undefined, seed: m.params.seed ? p.seed : undefined,
     })
     if (refs.length > (m.params.references ?? 0)) throw userError(`${m.name} takes ${m.params.references ?? 0} reference images, this asks for ${refs.length}`)
@@ -358,7 +382,7 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
     if (m.params.references != null && images.length > m.params.references) throw userError(`${m.name} takes ${m.params.references} reference images, this asks for ${images.length}`)
     // with a frame, OpenRouter keeps the frames and drops the reference images: never sent for nothing
     if (!avatar && images.length && Object.keys(frames).length) throw userError('a first or last frame and reference images do not go together (OpenRouter keeps the frames, drops the references): remove one or the other; a Library style\'s images are references too')
-    const refs = [...images.map(f => ({ kind: 'image', file: f })), ...(video ? [{ kind: 'video', file: video }] : []), ...files('audio').map(f => ({ kind: 'audio', file: f }))]
+    const refs = [...images.map(f => ({ kind: 'image', file: f })), ...(video ? [{ kind: 'video', file: atLeast(video, m.params.min_pixels) }] : []), ...files('audio').map(f => ({ kind: 'audio', file: f }))]
     if (refs.some(r => r.kind !== 'image') && spawnSync('cloudflared', ['--version'], { stdio: 'ignore' }).error) throw userError('a video or a voice reaches OpenRouter through a Cloudflare tunnel: brew install cloudflared (no account)')
     const upscale = m.role === 'upscale', edit = !!video, still = files('first_frame')[0] ?? files('last_frame')[0]
     const params = clean({
@@ -391,8 +415,14 @@ function elevenArgs(tool, spec) {
   const clip = spec.inputs?.clip?.[0]
   if (!clip) throw userError(`${tool.label} needs a clip (--in clip=<file>)`)
   if (tool.id === 'change-voice') {
-    const voice = spec.params?.voice ?? spec.fields?.voice
-    if (!voice) throw userError('pick the new voice (--voice <voice_id>, video.mjs voices lists them)')
+    let voice = spec.params?.voice ?? spec.fields?.voice
+    if (!voice) throw userError('pick the new voice (--voice <voice_id>, media.mjs voices lists them, or --voice @<a voice of the Library>)')
+    // a voice of the Library: its ElevenLabs id once it is on the account, else it goes there when the job runs
+    if (String(voice).startsWith('@')) {
+      const v = element(voice.slice(1))
+      if (v?.type !== 'voice' || !v.files.length) throw userError(`no voice ${voice} in the Library (media.mjs elements)`)
+      voice = v.voice_id ?? voice
+    }
     return ['voice-change', clip, '--voice', voice, ...(spec.fields?.denoise === 'remove' ? ['--denoise'] : [])]
   }
   const to = String(spec.fields?.to ?? '').split(/[,\s]+/).filter(Boolean)
@@ -417,7 +447,7 @@ function elevenEstimate(argv) {
 async function plan(spec) {
   const tool = toolOf(spec.kind, spec.tool), probing = !!spec.probe
   // a voice of the Library (--voice @name): its clips are cloned, its words say how it sounds
-  if (spec.kind === 'audio' && String(spec.params?.voice ?? '').startsWith('@')) {
+  if (spec.kind === 'audio' && spec.tool === 'voice' && String(spec.params?.voice ?? '').startsWith('@')) {
     const v = element(spec.params.voice.slice(1)), { voice, ...params } = spec.params
     if (v?.type !== 'voice' || !v.files.length) throw userError(`no voice ${voice} in the Library (media.mjs elements)`)
     spec = { ...spec, params, inputs: { ...spec.inputs, voice_clips: v.files.slice(0, 3) }, fields: { ...spec.fields, instructions: spec.fields?.instructions || v.words || undefined } }
@@ -427,13 +457,17 @@ async function plan(spec) {
     const [f, i] = [tool.fields.find(x => tool.one_of.includes(x.key)), tool.inputs.find(x => tool.one_of.includes(x.key))]
     throw userError(`${tool.label}: describe it (--field ${f.key}="…") or add ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
   }
+  // a field the tool cannot go without (Object swap's element)
+  for (const f of tool.fields) if (f.required && !probing && !String(spec.fields?.[f.key] ?? f.default ?? '').trim())
+    throw userError(`${tool.label} needs ${f.label.toLowerCase()} (${f.type === 'element' ? `--field ${f.key}=@<element>, media.mjs elements` : `--field ${f.key}=…`})`)
   // the fields left out take their defaults (upscale's creativity, extend's direction…)
   const fields = { ...Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)])), ...spec.fields }
   // a style of the Library: its words in the prompt, its images after the other references
   const looks = []
   for (const f of tool.fields) {
     const s = f.type === 'style' && savedStyle(fields[f.key])
-    if (s) { looks.push(...s.files); fields[f.key] = s.text } else if (fields[f.key] != null) fields[f.key] = optionValue(f, fields[f.key])
+    if (s) { looks.push(...s.files); fields[f.key] = s.text } else if (f.type === 'element' && String(fields[f.key] ?? '').trim()) fields[f.key] = elementField(f, fields[f.key])
+    else if (fields[f.key] != null) fields[f.key] = optionValue(f, fields[f.key])
   }
   spec = { ...spec, fields }
   if (!probing) for (const i of tool.inputs) if (!i.optional && !spec.inputs?.[i.key]?.length) throw userError(`${tool.label} needs ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
@@ -444,7 +478,10 @@ async function plan(spec) {
     : mentions(filled, spec.kind, 1 + counted(spec.kind, tool).reduce((n, i) => n + (spec.inputs?.[i.key]?.length ?? 0), 0))
   // a probe prices the tool before its files: a style's images would only trip the model's count
   if (!probing) refs.push(...looks)
-  if (tool.local === 'reframe') return { tool, prompt: '', provider: 'local', model: 'ffmpeg', estimate: { amount: 0, unit: 'usd', known: true, detail: 'local, free' } }
+  if (LOCAL[tool.local]) {
+    if (['depth', 'matte'].includes(tool.local) && !probing && !hasBin('uv')) throw userError(`${tool.label} runs a model on this machine with uv: brew install uv, then media.mjs setup vision`)
+    return { tool, prompt: '', provider: 'local', model: LOCAL[tool.local], estimate: { amount: 0, unit: 'usd', known: true, detail: 'local, free' } }
+  }
   if (tool.provider === 'elevenlabs') {
     if (probing && !spec.inputs?.clip?.length) return { tool, prompt: '', provider: 'elevenlabs', model: tool.id, estimate: { amount: null, unit: 'credits', known: false, detail: 'per minute of the clip' } }
     const argv = elevenArgs(tool, spec)
@@ -456,18 +493,26 @@ async function plan(spec) {
   const id = spec.model ?? tool.models?.find(Boolean) ?? settings().defaults[spec.kind]
   const m = id ? await modelOf(spec.kind, id.includes(':') ? id : `openrouter:${id}`) : (await models(spec.kind)).find(x => x.role !== 'edit' && x.role !== 'upscale' && x.role !== 'avatar')
   let request
-  // extend: the source's last frame starts the new shot (sequel), or its first frame ends it (prequel)
-  if (tool.local === 'extend' && spec.inputs?.video?.length) {
-    const prequel = spec.fields?.direction === 'prequel', frame = at('.cache', `frame-${Date.now()}.png`), src = spec.inputs.video[0]
-    ffmpeg([...(prequel ? [] : ['-sseof', '-0.1']), '-i', src, '-frames:v', '1', '-update', '1', frame])
-    const key = prequel ? 'last_frame' : 'first_frame'
-    if (!m.params.frames.includes(key)) throw userError(`${m.name} cannot ${prequel ? 'end on' : 'start from'} a frame: pick another model`)
-    request = routerRequest('video', { ...tool, inputs: [] }, { ...spec, inputs: { [key]: [frame] } }, m, prompt, refs)
-  } else if (tool.local === 'expand' && spec.inputs?.image?.length) {
-    // expand: the image on its larger frame, the margins flat gray for the model to fill, at its closest ratio
-    const canvas = expandCanvas(spec.inputs.image[0], spec.fields)
-    request = routerRequest('image', tool, { ...spec, inputs: { ...spec.inputs, image: [canvas] }, params: { ...spec.params, aspect_ratio: spec.params?.aspect_ratio ?? ratioOf(m.params.aspect_ratio, canvas) } }, m, prompt, refs)
-  } else request = routerRequest(spec.kind, tool.local === 'extend' ? { ...tool, inputs: [] } : tool, spec, m, prompt, refs)
+  try {
+    // extend: the source's last frame starts the new shot (sequel), or its first frame ends it (prequel)
+    if (tool.local === 'extend' && spec.inputs?.video?.length) {
+      const prequel = spec.fields?.direction === 'prequel', frame = at('.cache', `frame-${Date.now()}.png`), src = spec.inputs.video[0]
+      ffmpeg([...(prequel ? [] : ['-sseof', '-0.1']), '-i', src, '-frames:v', '1', '-update', '1', frame])
+      const key = prequel ? 'last_frame' : 'first_frame'
+      if (!m.params.frames.includes(key)) throw userError(`${m.name} cannot ${prequel ? 'end on' : 'start from'} a frame: pick another model`)
+      request = routerRequest('video', { ...tool, inputs: [] }, { ...spec, inputs: { [key]: [frame] } }, m, prompt, refs)
+    } else if (tool.local === 'expand' && spec.inputs?.image?.length) {
+      // expand: the image on its larger frame, the margins flat gray for the model to fill, at its closest ratio
+      const canvas = expandCanvas(spec.inputs.image[0], spec.fields)
+      request = routerRequest('image', tool, { ...spec, inputs: { ...spec.inputs, image: [canvas] }, params: { ...spec.params, aspect_ratio: spec.params?.aspect_ratio ?? ratioOf(m.params.aspect_ratio, canvas) } }, m, prompt, refs)
+    } else request = routerRequest(spec.kind, tool.local === 'extend' ? { ...tool, inputs: [] } : tool, spec, m, prompt, refs)
+  } catch (e) {
+    // too many images for this model: the tool's model that takes them (a painted frame on Clean up goes to Seedance)
+    const want = +e.message.match(/this asks for (\d+)/)?.[1]
+    const fit = want && (await models(spec.kind)).find(x => tool.models?.includes(x.model) && x.model !== m.model && (x.params.references ?? Infinity) >= want)
+    if (fit) e.message += `: ${fit.name} takes them (--model ${fit.model})`
+    throw e
+  }
   const { provider } = routerOf(m.id)
   return { tool, prompt, provider: m.provider, model: m.model, name: m.name, request, estimate: provider.estimate(routerKind(spec.kind), m, request.estimate) }
 }
@@ -568,7 +613,7 @@ async function run(id) {
   saveJob(job)
   try {
     if (job.after) request = await matchFirst(dir, job)
-    if (job.provider === 'local') runReframe(dir, job)
+    if (job.provider === 'local') await runLocal(dir, job)
     else if (job.provider === 'elevenlabs') runEleven(dir, job, argv)
     else await runRouter(dir, job, request)
     Object.assign(job, { status: 'done', note: null, finished: new Date().toISOString() })
@@ -620,6 +665,17 @@ async function runRouter(dir, job, request) {
       return name
     })
     if (r.cost != null) Object.assign(job, { actual: r.cost, actual_known: true })
+    // an inpaint keeps the original outside the painted area: the model's own image stays beside as model-1.png
+    const matte = job.spec.inputs?.matte?.[0]
+    if (toolOf(job.kind, job.tool).local === 'paste' && matte && job.spec.fields?.outside !== 'model') {
+      progress(job, 'laying the painted area on the original…')
+      job.outputs = job.outputs.map((name, i) => {
+        const made = `model-${i + 1}${path.extname(name)}`
+        fs.renameSync(path.join(dir, name), path.join(dir, made))
+        paste(path.join(dir, job.spec.inputs.image[0]), path.join(dir, made), path.join(dir, matte), path.join(dir, `out-${i + 1}.png`))
+        return `out-${i + 1}.png`
+      })
+    }
     return
   }
   if (job.kind === 'audio') {
@@ -685,6 +741,68 @@ async function runRouter(dir, job, request) {
   }
 }
 
+// a tool done on this machine: reframe, FPS boost, SDR to HDR (ffmpeg), depth map and background removal (vision.py)
+async function runLocal(dir, job) {
+  const local = toolOf(job.kind, job.tool).local, f = job.spec.fields ?? {}
+  if (local === 'reframe') return runReframe(dir, job)
+  const src = path.join(dir, job.spec.inputs.video[0]), s = probe(src), out = path.join(dir, 'out.mp4')
+  if (local === 'fps') {
+    // frames made between the existing ones by motion; a slow motion plays them at the source's rate, without its sound
+    const fps = s.fps || 30, slow = +(/^slow(\d)$/.exec(f.target ?? '')?.[1] ?? 0), to = slow ? fps * slow : +(f.target ?? 60)
+    if (!slow && to <= fps) throw new Error(`the video is already ${fps} fps`)
+    progress(job, slow ? `making a ×${slow} slow motion…` : `making ${to} fps from ${fps}…`)
+    // the last frame held a second more: minterpolate drops the tail it has nothing to interpolate towards; cut back to
+    // the length it must have
+    const mi = `tpad=stop_mode=clone:stop_duration=1,minterpolate=fps=${to}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1`
+    ffmpeg(['-i', src, '-vf', slow ? `${mi},setpts=${slow}*PTS,fps=${fps}` : mi, '-t', String(s.duration * (slow || 1)), ...(slow ? ['-an'] : ['-c:a', 'aac']), '-c:v', 'libx264', '-crf', '17', '-pix_fmt', 'yuv420p', out])
+  } else if (local === 'hdr') {
+    // HDR10: the SDR picture in BT.2020, its white at 203 nits (BT.2408) and its highlights stretched up to the peak by
+    // a curve from half its light up, PQ-encoded. ponytail: one curve per channel, a model's inverse tone mapping if
+    // highlights' colors matter
+    const peak = Math.min(4000, Math.max(400, +f.peak || 1000)), L = 'pow(val/65535,2.4)', N = `(203*${L}+${peak - 203}*pow(max(0,(${L}-0.5)/0.5),2))/10000`
+    const pq = `pow((0.8359375+18.8515625*pow(${N},0.1593017578125))/(1+18.6875*pow(${N},0.1593017578125)),78.84375)*65535`
+    progress(job, `making an HDR10 video, highlights up to ${peak} nits…`)
+    ffmpeg(['-i', src, '-vf', `zscale=pin=bt709:p=bt2020:tin=bt709:t=bt709:min=bt709:rin=tv:r=pc,format=gbrp16le,lutrgb=r='${pq}':g='${pq}':b='${pq}',zscale=pin=bt2020:p=bt2020:tin=smpte2084:t=smpte2084:min=gbr:m=bt2020nc:rin=pc:r=tv,format=yuv420p10le`,
+      '-c:v', 'libx265', '-crf', '18', '-preset', 'medium', '-tag:v', 'hvc1', '-x265-params',
+      `log-level=error:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:hdr10=1:repeat-headers=1:max-cll=${peak},203:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)`,
+      '-color_primaries', 'bt2020', '-color_trc', 'smpte2084', '-colorspace', 'bt2020nc', '-c:a', 'aac', out])
+  } else {
+    const bg = f.background ?? 'transparent', base = path.join(dir, 'out')
+    await vision(job, local === 'depth' ? ['depth', src, out, '--near', f.near ?? 'white'] : ['matte', src, base, '--background', bg])
+    job.outputs = local === 'matte' && bg === 'transparent' ? ['out.webm', 'out.mov'] : ['out.mp4']
+    return
+  }
+  job.outputs = ['out.mp4']
+}
+
+// vision.py (uv, ONNX models fetched once into ~/.cache/media-generator): its « frame 12/96 » lines become the job's note
+const VISION = path.join(ENGINE, 'vision.py')
+const VISION_DIR = process.env.MEDIA_GENERATOR_VISION_DIR ?? path.join(process.env.HOME ?? '', '.cache/media-generator/models')
+function vision(job, argv) {
+  return new Promise((ok, ko) => {
+    const p = spawn('uv', ['run', '--quiet', VISION, ...argv], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let err = '', last = 0
+    p.stdout.on('data', d => {
+      const line = String(d).trim().split('\n').pop()
+      if (Date.now() - last > 1000 || /^(fetch|load)/.test(line)) { last = Date.now(); progress(job, line) }
+    })
+    p.stderr.on('data', d => { err += d })
+    p.on('error', e => ko(e.code === 'ENOENT' ? new Error('uv is missing: brew install uv') : e))
+    p.on('exit', code => (code === 0 ? ok() : ko(new Error(err.trim().split('\n').pop() || `vision.py stopped (${code})`))))
+  })
+}
+
+// inpaint: the model's image (asked at the original's closest ratio, so it holds the whole picture) brought to the
+// original's size and laid on it only inside the painted area (the matte, white where painted, never sent), its edge
+// feathered and grown a little so the seam falls outside it: the rest keeps the original's pixels
+function paste(original, made, matte, out) {
+  const s = probe(original), soft = Math.max(2, Math.round(Math.max(s.width, s.height) / 150))
+  ffmpeg(['-i', original, '-i', made, '-i', matte, '-filter_complex',
+    `[1:v]scale=${s.width}:${s.height},format=rgba[m];` +
+    `[2:v]scale=${s.width}:${s.height},format=gray,gblur=sigma=${soft},lut=y='min(255,val*2.5)'[a];[m][a]alphamerge[p];[0:v]format=rgba[o];[o][p]overlay=format=rgb`,
+    '-frames:v', '1', '-update', '1', out])
+}
+
 // reframe: a fixed crop to the new ratio, centered on the point the user picked (0 left … 1 right, or top … bottom)
 // ponytail: no subject tracking; video-editor's face framing when moving subjects need it
 function runReframe(dir, job) {
@@ -700,6 +818,12 @@ function runReframe(dir, job) {
 
 // voice change and dubbing: video.mjs does the work and says what it spent
 function runEleven(dir, job, argv) {
+  // a Library voice not on the account yet: cloned there first (ElevenLabs' paid plans), its id kept with it
+  const v = argv.indexOf('--voice')
+  if (v > 0 && argv[v + 1].startsWith('@')) {
+    progress(job, `putting ${argv[v + 1]} on ElevenLabs…`)
+    argv = argv.with(v + 1, voiceToEleven(argv[v + 1].slice(1)).voice_id)
+  }
   progress(job, argv[0] === 'dub' ? 'dubbing with ElevenLabs…' : 'changing the voice with ElevenLabs…')
   const clip = path.join(dir, job.spec.inputs.clip[0]), out = argv[0] === 'dub' ? dir : path.join(dir, `out${path.extname(clip)}`)
   const r = videoMjs([argv[0], clip, ...argv.slice(2), '--out', out, '--spend', String(job.estimate.amount)])
@@ -739,7 +863,7 @@ async function generate(kind) {
     const all = await Promise.all(jobs.map(j => run(j.id)))
     for (const done of all.filter(j => j.status === 'done')) {
       console.log(`done: ${done.outputs.map(f => path.join(mediaDir(done.id), f)).join(', ')}`)
-      console.log(`cost: ${money(done.actual, done.estimate.unit, per1000())}${done.actual_known ? '' : ' (estimated)'}`)
+      console.log(done.provider === 'local' ? 'cost: free (done here)' : `cost: ${money(done.actual, done.estimate.unit, per1000())}${done.actual_known ? '' : ' (estimated)'}`)
     }
     const failed = all.filter(j => j.status === 'failed')
     if (failed.length) die(failed.map(f => `${f.error} (media/${f.id}, ${money(f.actual, f.estimate.unit)} spent)`).join('\n'), failed.some(f => /402|no credits|key/i.test(f.error)) ? 3 : 1)
@@ -768,6 +892,9 @@ function fieldHelp(f) {
   if (f.type === 'light') return `--field ${f.key}=<the light in words>${list ? `|${list}` : ''}`
   if (f.type === 'margin') return `--field ${f.key}=<0–2, a share of the image>`
   if (f.type === 'style') return `--field ${f.key}=${list}|<a style of the Library>`
+  if (f.type === 'element') return `--field ${f.key}=@<element: ${(f.types ?? TYPES).join('|')}>`
+  if (f.type === 'camera') return `--field ${f.key}=<where the camera goes, in words>|${list}`
+  if (f.type === 'recolors') return `--field ${f.key}="<item> becomes <color>; …" (up to ${f.max ?? 3})`
   return `--field ${f.key}=${list || `<${f.type}>`}`
 }
 
@@ -777,7 +904,7 @@ function cmdTools(kind) {
     if (opt.json) { console.log(JSON.stringify(list)); continue }
     for (const t of list) {
       const ins = t.inputs.map(i => `--in ${i.key}=<${i.kind}>${i.optional ? '?' : ''}`).join(' '), fields = t.fields.map(fieldHelp).join(' ')
-      console.log(`${k} ${t.id} (${t.mode}, ${t.group}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${t.models ? `\n    models: ${t.models.join(', ')}` : ''}`)
+      console.log(`${k} ${t.id} (${t.mode}, ${t.group}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${t.models ? `\n    models: ${t.models.join(', ')}` : ''}${t.also ? `\n    also: ${t.also.join(', ')}` : ''}`)
     }
   }
 }
@@ -829,6 +956,12 @@ async function credits() {
 // setup [set <section>.<key>=<value|none>…]: the thresholds, caps, ElevenLabs' price and default models
 function setup(sub, ...rest) {
   const s = settings()
+  if (sub === 'vision') {
+    if (!hasBin('uv')) die('uv is missing: brew install uv')
+    const r = spawnSync('uv', ['run', '--quiet', VISION, 'fetch'], { stdio: 'inherit' })
+    if (r.status !== 0) die('the vision models could not be fetched')
+    return
+  }
   if (sub === 'set') {
     for (const kv of rest) {
       const [k, v] = [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)], [sec, key] = k.split('.')
@@ -839,7 +972,7 @@ function setup(sub, ...rest) {
     }
     ensureHome()
     writeJson(at('settings.json'), s)
-  } else if (sub) die('usage: setup [set openrouter.threshold=<usd> openrouter.cap=<usd> elevenlabs.threshold=<credits> elevenlabs.cap=<credits> elevenlabs.plan=<${Object.keys(PLANS).join('|')}> defaults.video=<model>…]')
+  } else if (sub) die('usage: setup [vision | set openrouter.threshold=<usd> openrouter.cap=<usd> elevenlabs.threshold=<credits> elevenlabs.cap=<credits> elevenlabs.plan=<${Object.keys(PLANS).join('|')}> defaults.video=<model>…]')
   for (const [sec, o] of Object.entries(s)) console.log(`${sec}: ${Object.entries(o).map(([k, v]) => `${k} ${v ?? 'not set'}`).join(' · ')}`)
 }
 
@@ -906,6 +1039,11 @@ function doctor() {
   // optional: only a video or a voice sent to OpenRouter needs it, the rest works without
   console.log(has('cloudflared') ? 'ok      cloudflared (videos and voices sent to OpenRouter by a tunnel)'
     : 'missing cloudflared: brew install cloudflared (no account), for a video or a voice sent to OpenRouter (video edits, upscale, talking avatar); everything else works')
+  // optional too: Depth map and Remove background run ONNX models here, fetched once (vision.py)
+  const fetched = fs.existsSync(path.join(VISION_DIR, 'depth-anything-v2-small.onnx')) && fs.existsSync(path.join(VISION_DIR, 'birefnet-lite.onnx'))
+  console.log(!has('uv') ? 'missing uv: brew install uv, for Depth map and Remove background (run here, free); everything else works'
+    : fetched ? 'ok      uv and the vision models (Depth map, Remove background)'
+      : 'ok      uv; the vision models are not fetched yet: media.mjs setup vision (330 MB, once), or at their first use')
   console.log(process.env.OPENROUTER_API_KEY ? 'openrouter: key set' : 'openrouter: no key, nothing can be generated; the plugin\'s secret: /plugin configure skill-video@pabrisson')
   console.log(process.env.OPENROUTER_MANAGEMENT_KEY ? 'openrouter management key: set (the account\'s balance)' : 'openrouter management key: not set (the key\'s own limit only)')
   console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (change voice, translate)' : 'elevenlabs: no key, no voice change or translation')

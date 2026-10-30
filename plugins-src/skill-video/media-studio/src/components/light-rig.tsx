@@ -3,14 +3,13 @@ import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, Plus
 import { cn } from "cn"
 
 import { Slider } from "@/components/ui/slider"
-import { Textarea } from "@/components/ui/textarea"
 import { opt, type Field, type Light } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label } from "@/components/chips"
 
 // the lights a relight field places around the subject (Higgsfield's relight): a stage to drag them on, six quick
 // directions, their softness, brightness and color. The field's value stays words, so the CLI's --field light="…" and
 // a remix keep working; the stage's own state rides along in fields["<key>:rig"]
-type Mode = "preset" | "custom" | "describe"
+type Mode = "preset" | "custom"
 type Rig = { mode: Mode; lights: Light[]; active: number }
 
 const QUICK = [
@@ -36,9 +35,9 @@ const MORE: Light[] = [
   { az: 160, el: 30, color: "#ffffff", brightness: 60, diffuse: 35 },
 ]
 
-const rad = Math.PI / 180
-const wrap = (az: number) => ((((az + 180) % 360) + 360) % 360) - 180
-const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
+export const rad = Math.PI / 180
+export const wrap = (az: number) => ((((az + 180) % 360) + 360) % 360) - 180
+export const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
 
 // where a light sits in words: eight sides around, then above, below or level
 function direction(az: number, el: number) {
@@ -49,7 +48,7 @@ function direction(az: number, el: number) {
 }
 
 // a color in words a model reads, with its hex: white, warm white, orange (#ffb15c)…
-function colorWords(hex: string) {
+export function colorWords(hex: string) {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
   const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min
   const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
@@ -70,8 +69,8 @@ function words(l: Light, video: boolean) {
 }
 
 // a light on the screen: the camera a little above the subject, so the lights in front sink and the top leans back
-const PITCH = 18 * rad
-function project(az: number, el: number, c: number, r: number) {
+export const PITCH = 18 * rad
+export function project(az: number, el: number, c: number, r: number) {
   const x = Math.sin(az * rad) * Math.cos(el * rad), y = Math.sin(el * rad), z = Math.cos(az * rad) * Math.cos(el * rad)
   return { x: c + x * r, y: c - (y * Math.cos(PITCH) - z * Math.sin(PITCH)) * r, depth: z * Math.cos(PITCH) + y * Math.sin(PITCH) }
 }
@@ -134,17 +133,19 @@ function Stage({ lights, active }: { lights: Light[]; active?: number }) {
 function readRig(field: Field, fields: Record<string, string>): Rig {
   try {
     const r = JSON.parse(fields[`${field.key}:rig`] ?? "")
-    if (r?.lights?.length) return r
+    // a stage saved when the field had a Describe tab: its lights
+    if (r?.lights?.length) return { ...r, mode: r.mode === "preset" ? "preset" : "custom" }
   } catch {
     /* no stage saved: from the value below */
   }
   const value = fields[field.key] ?? String(field.default ?? "")
   const preset = field.options?.map(opt).find((o) => o.value === value)
   if (preset?.rig) return { mode: "preset", lights: preset.rig, active: 0 }
-  return { mode: field.options?.length && value !== field.default ? "describe" : "custom", lights: [LIGHT], active: 0 }
+  return { mode: "custom", lights: [LIGHT], active: 0 }
 }
 
-// the field: Preset, Custom (the stage) or Describe when it has presets (a video's); the stage alone otherwise. Up to
+// the field: Preset or Custom (the stage) when it has presets; the stage alone otherwise (the user's own words go in the
+// prompt's box, a Describe tab said the same twice). Up to
 // field.lights lights, each added and removed by its chip; a video's say their diffusion, an image's soft or hard
 export function LightRig({ field, fields, video, onChange }: { field: Field; fields: Record<string, string>; video: boolean; onChange: (patch: Record<string, string>) => void }) {
   const rig = readRig(field, fields)
@@ -183,11 +184,11 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
     <div className="flex flex-col gap-4">
       {presets.length > 0 && (
         <Chips
-          className="grid grid-cols-3 [&>button]:px-1"
-          options={["preset", "custom", "describe"] as const}
+          className="grid grid-cols-2"
+          options={["preset", "custom"] as const}
           value={rig.mode}
-          label={(m) => ({ preset: "Preset", custom: "Custom", describe: "Describe" })[m]}
-          onChange={(mode) => save({ ...rig, mode }, mode === "preset" ? (presets.find((p) => p.value === value)?.value ?? presets[0].value) : mode === "describe" ? value : undefined)}
+          label={(m) => (m === "preset" ? "Preset" : "Custom")}
+          onChange={(mode) => save({ ...rig, mode }, mode === "preset" ? (presets.find((p) => p.value === value)?.value ?? presets[0].value) : undefined)}
         />
       )}
 
@@ -206,13 +207,6 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
               <span className={cn("truncate px-2 py-1.5 text-xs", p.value === value ? "font-medium text-space" : "text-muted-foreground")}>{p.label}</span>
             </button>
           ))}
-        </div>
-      )}
-
-      {rig.mode === "describe" && (
-        <div>
-          <Label>Describe the light</Label>
-          <Textarea value={value} placeholder={`Where each light is, its color, brightness and softness (up to ${max})`} onChange={(e) => onChange({ [field.key]: e.target.value, [`${field.key}:rig`]: JSON.stringify(rig) })} className="min-h-24" />
         </div>
       )}
 

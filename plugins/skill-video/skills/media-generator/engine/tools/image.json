@@ -128,13 +128,32 @@
       ] }
     ],
     "presets": [
-      { "label": "Portrait 85", "fields": { "body": "ARRI Alexa 35", "lens": "Cooke S4 spherical prime", "focal": "85mm", "aperture": "f/1.4", "shot": "close-up", "angle": "eye-level camera" } },
-      { "label": "Epic anamorphic", "fields": { "body": "ARRI Alexa 65", "lens": "Panavision C-series anamorphic", "focal": "24mm", "aperture": "f/4", "shot": "extreme wide shot", "angle": "low angle looking up" } },
-      { "label": "70s film", "fields": { "body": "Panavision 35mm film camera", "lens": "1970s Canon K35 vintage prime", "focal": "50mm", "aperture": "f/2", "grade": "warm Kodak Portra tones", "era": "1970s" } },
-      { "label": "Noir", "fields": { "body": "ARRI Alexa 35", "lens": "Zeiss Master Prime", "focal": "35mm", "aperture": "f/2.8", "lighting": "low-key chiaroscuro lighting, deep shadows", "grade": "black and white, rich contrast", "genre": "noir" } },
-      { "label": "Neon night", "fields": { "body": "Sony Venice 2", "lens": "vintage anamorphic", "focal": "35mm", "aperture": "f/1.4", "lighting": "magenta and cyan neon light at night", "grade": "teal and orange grade" } },
-      { "label": "Macro detail", "fields": { "body": "Sony Venice 2", "lens": "macro", "focal": "85mm", "aperture": "f/5.6", "shot": "extreme close-up" } },
-      { "label": "16mm documentary", "fields": { "body": "Arriflex 416 16mm film camera", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "angle": "eye-level camera", "genre": "documentary" } }
+      { "label": "Portrait 85", "group": "Portrait & drama", "note": "Close on a face, creamy background", "fields": { "body": "ARRI Alexa 35", "lens": "Cooke S4 spherical prime", "focal": "85mm", "aperture": "f/1.4", "shot": "close-up", "angle": "eye-level camera" } },
+      { "label": "Intimate drama", "group": "Portrait & drama", "note": "Soft window light, a quiet moment", "fields": { "body": "ARRI Alexa 35", "lens": "Cooke S4 spherical prime", "focal": "50mm", "aperture": "f/1.4", "shot": "medium close-up", "angle": "eye-level camera", "lighting": "soft window light from the side", "grade": "natural film colors, gentle contrast", "genre": "drama" } },
+      { "label": "Dialogue", "group": "Portrait & drama", "note": "Over the shoulder, lamps in the room", "fields": { "body": "ARRI Alexa 35", "lens": "premium modern spherical prime", "focal": "50mm", "aperture": "f/2.8", "shot": "over-the-shoulder shot", "angle": "eye-level camera", "lighting": "lit by practical lamps in the scene", "genre": "drama" } },
+      { "label": "Romance", "group": "Portrait & drama", "note": "Warm low sun, glowing skin", "fields": { "body": "ARRI Alexa 35", "lens": "halation diffusion (Pro-Mist filter)", "focal": "85mm", "aperture": "f/1.4", "shot": "close-up", "lighting": "golden hour sunlight, long warm shadows", "grade": "warm Kodak Portra tones", "genre": "romance" } },
+      { "label": "Epic anamorphic", "group": "Epic & action", "note": "Huge place, small hero, low angle", "fields": { "body": "ARRI Alexa 65", "lens": "Panavision C-series anamorphic", "focal": "24mm", "aperture": "f/4", "shot": "extreme wide shot", "angle": "low angle looking up" } },
+      { "label": "Blockbuster action", "group": "Epic & action", "note": "Punchy, teal and orange, low angle", "fields": { "body": "RED V-Raptor 8K", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "shot": "wide shot", "angle": "low angle looking up", "lighting": "golden hour sunlight, long warm shadows", "grade": "teal and orange grade", "genre": "action" } },
+      { "label": "Desert western", "group": "Epic & action", "note": "Wide, dusty, sun-baked", "fields": { "body": "Panavision 35mm film camera", "lens": "vintage anamorphic", "focal": "35mm", "aperture": "f/8", "shot": "extreme wide shot", "lighting": "golden hour sunlight, long warm shadows", "grade": "warm Kodak Portra tones", "genre": "western" } },
+      { "label": "Fantasy epic", "group": "Epic & action", "note": "Majestic scale, rich color", "fields": { "body": "ARRI Alexa 65", "lens": "Panavision C-series anamorphic", "focal": "18mm", "aperture": "f/5.6", "shot": "extreme wide shot", "angle": "high angle looking down", "lighting": "golden hour sunlight, long warm shadows", "grade": "three-strip Technicolor look", "genre": "fantasy epic" } },
+      { "label": "Noir", "group": "Genre", "note": "Black and white, hard shadows", "fields": { "body": "ARRI Alexa 35", "lens": "Zeiss Master Prime", "focal": "35mm", "aperture": "f/2.8", "lighting": "low-key chiaroscuro lighting, deep shadows", "grade": "black and white, rich contrast", "genre": "noir" } },
+      { "label": "Thriller", "group": "Genre", "note": "Tilted, tense, silvery", "fields": { "body": "ARRI Alexa 35", "lens": "Zeiss Master Prime", "focal": "35mm", "aperture": "f/2.8", "shot": "close-up", "angle": "Dutch angle, tilted horizon", "lighting": "low-key chiaroscuro lighting, deep shadows", "grade": "bleach bypass, desaturated and contrasty", "genre": "thriller" } },
+      { "label": "Horror", "group": "Genre", "note": "Wide lens, top light, dread", "fields": { "body": "ARRI Alexa 35", "lens": "premium modern spherical prime", "focal": "18mm", "aperture": "f/4", "shot": "medium shot", "angle": "low angle looking up", "lighting": "hard overhead light from directly above", "grade": "soft muted palette", "genre": "horror" } },
+      { "label": "Sci-fi", "group": "Genre", "note": "Cool dusk, clean anamorphic", "fields": { "body": "Sony Venice 2", "lens": "compact modern anamorphic", "focal": "35mm", "aperture": "f/2.8", "shot": "wide shot", "lighting": "blue hour, cool ambient dusk light", "grade": "nostalgic faded blue palette", "genre": "science fiction" } },
+      { "label": "Neon night", "group": "Night", "note": "Magenta and cyan, wet streets", "fields": { "body": "Sony Venice 2", "lens": "vintage anamorphic", "focal": "35mm", "aperture": "f/1.4", "lighting": "magenta and cyan neon light at night", "grade": "teal and orange grade" } },
+      { "label": "Candlelit", "group": "Night", "note": "Warm flicker, faces in the dark", "fields": { "body": "Sony Venice 2", "lens": "1970s Canon K35 vintage prime", "focal": "50mm", "aperture": "f/1.2", "shot": "close-up", "lighting": "warm flickering candlelight", "grade": "warm Kodak Portra tones" } },
+      { "label": "Product hero", "group": "Commercial", "note": "Clean, bright, every detail sharp", "fields": { "body": "Sony Venice 2", "lens": "Zeiss Master Prime", "focal": "85mm", "aperture": "f/8", "shot": "insert shot of a detail", "angle": "eye-level camera", "lighting": "bright high-key lighting", "grade": "natural film colors, gentle contrast" } },
+      { "label": "Fashion editorial", "group": "Commercial", "note": "Full look, bright and bold", "fields": { "body": "ARRI Alexa 65", "lens": "premium modern spherical prime", "focal": "85mm", "aperture": "f/2.8", "shot": "full shot", "angle": "low angle looking up", "lighting": "bright high-key lighting", "grade": "saturated Fuji Velvia colors" } },
+      { "label": "Food close-up", "group": "Commercial", "note": "Side light, warm, shallow", "fields": { "body": "Sony Venice 2", "lens": "macro", "focal": "85mm", "aperture": "f/2.8", "shot": "extreme close-up", "angle": "high angle looking down", "lighting": "soft window light from the side", "grade": "warm Kodak Portra tones" } },
+      { "label": "Macro detail", "group": "Commercial", "note": "Tiny details, thin focus", "fields": { "body": "Sony Venice 2", "lens": "macro", "focal": "85mm", "aperture": "f/5.6", "shot": "extreme close-up" } },
+      { "label": "16mm documentary", "group": "Documentary & vintage", "note": "Grain, natural light, true moments", "fields": { "body": "Arriflex 416 16mm film camera", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "angle": "eye-level camera", "genre": "documentary" } },
+      { "label": "70s film", "group": "Documentary & vintage", "note": "Warm grain, soft vintage glass", "fields": { "body": "Panavision 35mm film camera", "lens": "1970s Canon K35 vintage prime", "focal": "50mm", "aperture": "f/2", "grade": "warm Kodak Portra tones", "era": "1970s" } },
+      { "label": "Super 8 memory", "group": "Documentary & vintage", "note": "Home movie, faded and warm", "fields": { "body": "Super 8 film camera", "focal": "24mm", "aperture": "f/5.6", "lighting": "golden hour sunlight, long warm shadows", "grade": "warm Kodak Portra tones", "era": "1970s" } },
+      { "label": "90s camcorder", "group": "Documentary & vintage", "note": "Tape noise, flat color", "fields": { "body": "VHS camcorder", "focal": "24mm", "aperture": "f/8", "angle": "eye-level camera", "era": "1990s" } },
+      { "label": "Flash snapshot", "group": "Documentary & vintage", "note": "Disposable camera, direct flash", "fields": { "body": "disposable 35mm camera with direct flash", "focal": "35mm", "aperture": "f/8", "shot": "medium shot", "era": "2000s" } },
+      { "label": "Silent film", "group": "Documentary & vintage", "note": "1920s black and white", "fields": { "body": "Panavision 35mm film camera", "focal": "50mm", "aperture": "f/4", "grade": "black and white, rich contrast", "era": "1920s silent film" } },
+      { "label": "Wildlife telephoto", "group": "Nature", "note": "Long lens, the animal isolated", "fields": { "body": "Sony Venice 2", "lens": "premium modern spherical prime", "focal": "200mm", "aperture": "f/4", "shot": "medium shot", "angle": "eye-level camera", "lighting": "golden hour sunlight, long warm shadows", "genre": "documentary" } },
+      { "label": "Landscape from above", "group": "Nature", "note": "Top down, everything sharp", "fields": { "body": "ARRI Alexa 65", "lens": "premium modern spherical prime", "focal": "18mm", "aperture": "f/11", "shot": "extreme wide shot", "angle": "bird's-eye view from directly above", "lighting": "golden hour sunlight, long warm shadows", "grade": "saturated Fuji Velvia colors" } }
     ],
     "template": "{prompt}. {body}, {lens}, {focal}, {aperture}: matching depth of field, perspective and lens rendering. {shot}, {angle}. {lighting}. {grade}. {era}. {genre}. A cinematic, photorealistic film still.",
     "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
@@ -268,10 +287,26 @@
   },
   {
     "id": "relight", "label": "Relight", "group": "Light & color", "mode": "edit", "icon": "sun",
-    "description": "Moves the light: drag one to three lights around the subject, set their softness, brightness and color.",
+    "description": "Moves the light: a preset, or one to three lights dragged around the subject with their softness, brightness and color.",
     "inputs": [{ "key": "image", "kind": "image", "label": "Image" }, { "key": "references", "kind": "image", "label": "Light references", "optional": true, "multiple": true, "phrase": "Match the light, color and mood of {}." }],
     "fields": [
-      { "key": "light", "label": "Light", "type": "light", "lights": 3, "default": "a soft white light coming from the left, at eye level, at 50% brightness" }
+      { "key": "light", "label": "Light", "type": "light", "lights": 3, "default": "a soft white light coming from the left, at eye level, at 50% brightness", "options": [
+        { "value": "a large soft white key light from the front-left and above, a dim soft fill from the right, clean studio portrait light", "label": "Softbox studio", "rig": [{ "az": -45, "el": 30, "color": "#ffffff", "brightness": 75, "diffuse": 85 }, { "az": 60, "el": 5, "color": "#ffffff", "brightness": 30, "diffuse": 90 }] },
+        { "value": "Rembrandt lighting: a warm key from the front-left and high, a small triangle of light on the shadow cheek, deep falloff", "label": "Rembrandt", "rig": [{ "az": -45, "el": 40, "color": "#ffe4c4", "brightness": 80, "diffuse": 45 }] },
+        { "value": "butterfly lighting: a key light straight in front and high above, a small shadow under the nose, glamorous and even", "label": "Butterfly", "rig": [{ "az": 0, "el": 50, "color": "#ffffff", "brightness": 85, "diffuse": 60 }] },
+        { "value": "split lighting: a hard light from the left side, half the face lit and the other half in shadow", "label": "Split", "rig": [{ "az": -90, "el": 0, "color": "#ffffff", "brightness": 80, "diffuse": 25 }] },
+        { "value": "clamshell beauty lighting: a soft light above the face and a soft fill from below, almost no shadows, bright catchlights", "label": "Clamshell beauty", "rig": [{ "az": 0, "el": 35, "color": "#ffffff", "brightness": 80, "diffuse": 90 }, { "az": 0, "el": -30, "color": "#ffffff", "brightness": 40, "diffuse": 95 }] },
+        { "value": "two bright rim lights from behind on both sides outlining the subject, a dim soft fill on the front", "label": "Rim light", "rig": [{ "az": 150, "el": 20, "color": "#ffffff", "brightness": 85, "diffuse": 30 }, { "az": -150, "el": 20, "color": "#ffffff", "brightness": 85, "diffuse": 30 }, { "az": 0, "el": 10, "color": "#c9e2ff", "brightness": 20, "diffuse": 90 }] },
+        { "value": "a low warm sun from behind the subject's right, long soft shadows, warm orange rim on the edges, gentle haze", "label": "Golden hour", "rig": [{ "az": 120, "el": 10, "color": "#ffb15c", "brightness": 80, "diffuse": 40 }] },
+        { "value": "soft daylight from a large window on the left, gentle falloff across the face, the far side in soft shadow", "label": "Window", "rig": [{ "az": -80, "el": 20, "color": "#e8f0ff", "brightness": 75, "diffuse": 70 }] },
+        { "value": "soft overcast skylight from above, even and shadowless, muted contrast", "label": "Overcast", "rig": [{ "az": 0, "el": 70, "color": "#eef3ff", "brightness": 60, "diffuse": 100 }] },
+        { "value": "harsh midday sun from high above, short hard shadows, bright highlights", "label": "Noon sun", "rig": [{ "az": 20, "el": 75, "color": "#fff8e8", "brightness": 100, "diffuse": 10 }] },
+        { "value": "a large soft light above the product, a smooth gradient on its surfaces, a crisp rim from behind separating it from the background", "label": "Product top light", "rig": [{ "az": 0, "el": 75, "color": "#ffffff", "brightness": 85, "diffuse": 90 }, { "az": 180, "el": 20, "color": "#ffffff", "brightness": 60, "diffuse": 30 }] },
+        { "value": "saturated magenta neon from the left and cyan neon from the right, colored reflections, dark surroundings", "label": "Neon", "rig": [{ "az": -90, "el": 0, "color": "#ff3fb4", "brightness": 70, "diffuse": 50 }, { "az": 90, "el": 0, "color": "#2fd6ff", "brightness": 70, "diffuse": 50 }] },
+        { "value": "a dim cool blue moonlight from high on the left, deep shadows, a night mood", "label": "Moonlight", "rig": [{ "az": -60, "el": 35, "color": "#7fa6ff", "brightness": 40, "diffuse": 60 }] },
+        { "value": "warm flickering candlelight from low in front, soft orange glow on the face, the rest falling into darkness", "label": "Candlelight", "rig": [{ "az": 30, "el": -10, "color": "#ff9329", "brightness": 55, "diffuse": 60 }] },
+        { "value": "a strong bright backlight behind the subject, the subject reads as a dark silhouette against the glowing background", "label": "Silhouette", "rig": [{ "az": 180, "el": 5, "color": "#ffd9a0", "brightness": 100, "diffuse": 30 }] }
+      ] }
     ],
     "template": "Relight the first image with {light}. {references} Shadows, highlights and reflections follow the new light; subject, pose, framing and background stay identical. {prompt}",
     "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"]
@@ -281,12 +316,22 @@
     "description": "Paint over an area, say what goes there.",
     "inputs": [
       { "key": "image", "kind": "image", "label": "Image" },
-      { "key": "sketch", "kind": "mask", "label": "Paint the area" },
+      { "key": "sketch", "kind": "mask", "label": "Paint the area", "field": "change", "matte": "matte" },
+      { "key": "matte", "kind": "matte", "label": "Mask", "optional": true },
       { "key": "references", "kind": "image", "label": "What to paint", "optional": true, "multiple": true, "phrase": "Paint it as shown in {}." }
     ],
-    "fields": [{ "key": "change", "label": "Put there", "type": "text", "placeholder": "a vase of white tulips" }],
-    "template": "The second image is the first with an area painted over in translucent magenta. Change only that area: {change}. {references} No magenta in the result; everything outside the area stays identical. {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"]
+    "fields": [
+      { "key": "change", "label": "Put there", "type": "text", "placeholder": "a vase of white tulips" },
+      { "key": "element", "label": "Or an element", "type": "element", "types": ["object", "character", "outfit", "brand", "other"], "phrase": "{}" },
+      { "key": "outside", "label": "Outside the area", "type": "choice", "default": "exact", "options": [
+        { "value": "exact", "label": "Kept pixel-exact" },
+        { "value": "model", "label": "As the model made it" }
+      ] }
+    ],
+    "one_of": ["change", "element", "references"],
+    "template": "The second image is the first with an area painted over in translucent magenta. Change only that area: {change} {element}. {references} No magenta in the result; everything outside the area stays identical. {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"],
+    "local": "paste"
   },
   {
     "id": "upscale", "label": "Upscale", "group": "Retouch", "mode": "edit", "icon": "maximize",
@@ -294,7 +339,7 @@
     "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
     "fields": [],
     "template": "Upscale this image to high resolution: same content, composition and colors, sharper detail and texture, no new elements. {prompt}",
-    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"],
+    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-lite"],
     "params": { "resolution": "4K" }
   },
   {
@@ -310,13 +355,13 @@
   },
   {
     "id": "character-swap", "label": "Character swap", "group": "Characters", "mode": "edit", "icon": "users",
-    "description": "Replaces the whole person with one of your characters.",
-    "inputs": [
-      { "key": "image", "kind": "image", "label": "Target" },
-      { "key": "references", "kind": "image", "label": "Character", "multiple": true }
+    "description": "Replaces the whole person with a character of your Library.",
+    "inputs": [{ "key": "image", "kind": "image", "label": "Target" }],
+    "fields": [
+      { "key": "character", "label": "Character", "type": "element", "types": ["character"], "required": true, "phrase": "{}" },
+      { "key": "who", "label": "Which person", "type": "text", "optional": true, "phrase": "({})", "placeholder": "the woman on the left" }
     ],
-    "fields": [],
-    "template": "Replace the person in the first image with the character of the other images (face, hair, body, outfit), in the same pose, place and lighting. {prompt}",
+    "template": "Replace the person {who} in the first image with {character}: their face, hair, body and outfit, in the same pose, place and lighting. {prompt}",
     "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"]
   },
   {
@@ -336,10 +381,20 @@
   },
   {
     "id": "new-angle", "label": "New angle", "group": "Camera", "mode": "edit", "icon": "rotate-3d",
-    "description": "The same scene seen from another camera angle.",
+    "description": "The same scene from another camera position: drag the camera around the subject, higher or lower, closer or farther.",
     "inputs": [{ "key": "image", "kind": "image", "label": "Image" }, { "key": "references", "kind": "image", "label": "Other views", "optional": true, "multiple": true, "phrase": "Use {} as other views of the subject." }],
-    "fields": [{ "key": "angle", "label": "Angle", "type": "choice", "options": ["from the left", "from the right", "from above", "low angle", "close-up", "wide shot", "from behind"], "default": "from the left" }],
-    "template": "The same scene, same subject and moment, seen {angle}. {references} Consistent identity, outfit, lighting and place. {prompt}",
+    "fields": [{ "key": "angle", "label": "Camera", "type": "camera", "default": "the camera moved 45° to the left around the subject, at eye level", "options": [
+        { "value": "the camera facing the subject, at eye level", "label": "Front", "cam": { "az": 0, "el": 0, "zoom": 0 } },
+        { "value": "the camera moved 45° to the left around the subject, at eye level", "label": "Left ¾", "cam": { "az": -45, "el": 0, "zoom": 0 } },
+        { "value": "the camera moved 90° to the left around the subject, at eye level", "label": "Left profile", "cam": { "az": -90, "el": 0, "zoom": 0 } },
+        { "value": "the camera moved 45° to the right around the subject, at eye level", "label": "Right ¾", "cam": { "az": 45, "el": 0, "zoom": 0 } },
+        { "value": "the camera moved 90° to the right around the subject, at eye level", "label": "Right profile", "cam": { "az": 90, "el": 0, "zoom": 0 } },
+        { "value": "the camera moved all the way around, behind the subject, at eye level", "label": "Behind", "cam": { "az": 180, "el": 0, "zoom": 0 } },
+        { "value": "the camera facing the subject, raised 40° above eye level, looking down", "label": "High angle", "cam": { "az": 0, "el": 40, "zoom": 0 } },
+        { "value": "the camera facing the subject, looking straight down from above", "label": "Top down", "cam": { "az": 0, "el": 85, "zoom": 0 } },
+        { "value": "the camera facing the subject, lowered 35° below eye level, looking up", "label": "Low angle", "cam": { "az": 0, "el": -35, "zoom": 0 } }
+      ] }],
+    "template": "The same scene, same subject and moment, from a new camera position: {angle}. {references} Consistent identity, outfit, lighting and place. {prompt}",
     "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"]
   },
   {
@@ -359,7 +414,7 @@
     "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
     "fields": [],
     "template": "Cut out the main subject of the image on a fully transparent background, clean edges, the subject unchanged. {prompt}",
-    "models": ["openai/gpt-image-2.5-sunburst", "openai/gpt-image-2"],
+    "models": ["openai/gpt-image-2.5-sunburst", "openai/gpt-image-2.5-flare"],
     "params": { "background": "transparent" }
   }
 ]

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronRightIcon, CopyIcon, MicIcon, MinusIcon, PlayIcon, PlusIcon, RefreshCwIcon, SquareIcon, UploadIcon } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { ChevronRightIcon, CopyIcon, MinusIcon, PlusIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -11,7 +11,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group"
 import { Kbd } from "@/components/ui/kbd"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Slider } from "@/components/ui/slider"
 import {
@@ -19,31 +18,33 @@ import {
   cited,
   fill,
   imageInputs,
+  isLocal,
   mentionables,
   mentionFrom,
   ownPrompt,
   plain,
   priceLabel,
-  type Element,
   type EstimateAnswer,
   type Kind,
   type Model,
   type Spec,
   type State,
   type Tool,
-  type Voice,
   withLooks,
   withMentions,
 } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, Price } from "@/components/chips"
-import { FieldInput, sections, Setups } from "@/components/fields"
+import { FieldInput, Recolors, sections, Setups } from "@/components/fields"
 import { LightRig } from "@/components/light-rig"
+import { CameraRig } from "@/components/camera-rig"
+import { ElementField } from "@/components/element-field"
 import { StyleField } from "@/components/style-picker"
 import { ExpandPreview, marginsOf } from "@/components/expand"
 import { ExtendPanel } from "@/components/extend"
-import { InputSlots, Listen, slotFor, upload } from "@/components/inputs"
+import { InputSlots, slotFor, upload } from "@/components/inputs"
 import { MentionTextarea } from "@/components/mention"
 import { ToolPicker } from "@/components/tool-picker"
+import { LibraryVoices, ModelVoices, VoicePicker } from "@/components/voice-picker"
 import { capsOf, ModelPicker, type Priced } from "@/components/model-picker"
 
 // what the composer of one space holds: kept per space, so switching spaces loses nothing
@@ -74,18 +75,23 @@ const pick = <T,>(list: T[] | null | undefined, ...want: (T | undefined)[]) =>
 
 // the models a tool can run on: its recommended ones first, then the rest of the kind that fits
 export function modelsFor(tool: Tool, kind: Kind, models: Model[]) {
-  if (tool.local === "reframe" || tool.provider === "elevenlabs") return { recommended: [], others: [] }
-  const recommended = (tool.models ?? []).map((id) => models.find((m) => m.model === id)).filter((m): m is Model => !!m)
-  // edits, upscales and avatars run only on the models made for them
+  if (isLocal(tool) || tool.provider === "elevenlabs") return { recommended: [], others: [] }
+  const listed = (ids?: string[]) => (ids ?? []).map((id) => models.find((m) => m.model === id)).filter((m): m is Model => !!m)
+  const recommended = listed(tool.models), also = listed(tool.also)
+  // edits, upscales and avatars run only on the models made for them, and the ones the tool also names
   if (kind === "video" && (tool.mode === "edit" ? tool.id !== "extend" : recommended.length > 0 && recommended.every((m) => m.role !== "generate")))
-    return { recommended, others: [] }
+    return { recommended, others: also }
+  // an image tool's forced settings (Remove background's transparency, Upscale's 4K) only on the models that have them
+  const can = (m: Model) =>
+    (!tool.params?.background || (m.params.background ?? []).includes(String(tool.params.background))) &&
+    (!tool.params?.resolution || (m.params.resolution ?? []).includes(String(tool.params.resolution)))
   const ok = (m: Model) =>
     kind === "video"
       ? m.role === "generate" && (tool.id !== "extend" || (m.params.frames?.length ?? 0) > 0)
       : kind === "image"
-        ? tool.mode === "create" || m.role !== "create"
+        ? (tool.mode === "create" || m.role !== "create") && can(m)
         : true
-  return { recommended, others: models.filter((m) => ok(m) && !recommended.includes(m)) }
+  return { recommended, others: [...also, ...models.filter((m) => ok(m) && !recommended.includes(m) && !also.includes(m))] }
 }
 
 const COMMON_LANGS = ["en", "fr", "es", "de", "it", "pt", "ja", "zh"]
@@ -117,7 +123,7 @@ export function Composer({
   const tool = tools.find((t) => t.id === value.tool) ?? tools[0]
   const mode = tool.mode
   const set = (patch: Partial<Compose>) => onChange({ ...value, ...patch })
-  const eleven = tool.provider === "elevenlabs", local = tool.local === "reframe"
+  const eleven = tool.provider === "elevenlabs", local = isLocal(tool)
 
   // the model: the user's pick, else the folder's default when it fits, else the tool's first
   const { recommended, others } = useMemo(() => modelsFor(tool, kind, models), [tool, kind, models])
@@ -134,12 +140,14 @@ export function Composer({
   const shownPrompt = kind === "audio" ? filled : withMentions(filled, kind, mentionFrom(kind, tool, value.inputs), state)
   // what the words can cite with @name (a voice's text is read as written), and the images those bring
   const items = kind === "audio" ? [] : mentionables(state)
-  const mentioned = cited(value.raw ? prompt : value.intent, items).reduce((n, i) => n + i.files.length, 0)
+  // (the words' own and an element field's: the prompt holds both)
+  const mentioned = cited(prompt, items).reduce((n, i) => n + i.files.length, 0)
   // the user writes the whole prompt (Custom, speech), or adds words to the one the tool builds; those are needed on
   // Custom and Custom edit (no prompt of their own), optional beside a tool's
   const whole = ownPrompt(tool), takesWords = tool.template.includes("{prompt}")
   const custom = tool.id === "free" || tool.id === "free-edit"
   const missing = tool.inputs.find((i) => !i.optional && !value.inputs[i.key]?.length)
+  const unpicked = tool.fields.find((f) => f.required && !String(value.fields[f.key] ?? f.default ?? "").trim())
   // a References tool: a job a sheet, so no batch; it needs words or photos
   const sheets = tool.fields.find((f) => f.type === "sheets")
   const sheetCount = sheets ? String(value.fields[sheets.key] ?? sheets.default ?? "").split(",").filter((x) => x.trim()).length : 0
@@ -175,10 +183,12 @@ export function Composer({
   const expand = tool.local === "expand", extend = tool.local === "extend"
   const blocker = missing
     ? missing.kind === "mask" || missing.kind === "sketch" ? missing.label : `Add ${missing.label.toLowerCase()}`
+    : unpicked
+      ? unpicked.type === "element" ? `Pick ${unpicked.label === "With" ? "an element" : `a ${unpicked.label.toLowerCase()}`}` : `Fill ${unpicked.label.toLowerCase()}`
     : overRefs > 0 && model
       ? usedRefs === styleImages
         ? framed ? "Frames or your style, not both" : "Pick a model for your style"
-        : framed ? "Frames or references, not both" : `Remove ${overRefs} image${overRefs > 1 ? "s" : ""}`
+        : framed ? "Frames or references, not both" : maxRefs === 0 ? "Pick a model that takes images" : `Remove ${overRefs} image${overRefs > 1 ? "s" : ""}`
     : expand && !Object.values(marginsOf(value.fields)).some(Boolean)
       ? "Set the frame"
     : sheets && !sheetCount
@@ -234,7 +244,7 @@ export function Composer({
   }
 
   // prices in the tool list: a probe estimate per tool on its recommended model, once a session
-  const listed = tools.filter((t) => t.mode === mode)
+  const listed = kind === "audio" ? tools : tools.filter((t) => t.mode === mode)
   const priceKey = (t: Tool) => `${kind}:${t.id}:${t.models?.[0] ?? ""}`
   const [, setPriced] = useState(0)
   const prices = Object.fromEntries(listed.flatMap((t) => (PRICES.has(priceKey(t)) ? [[t.id, PRICES.get(priceKey(t))!]] : [])))
@@ -303,7 +313,7 @@ export function Composer({
     onDraftSeen(draft.at)
   }
 
-  const label = tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? "Reframe" : "Generate"
+  const label = tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? tool.label : "Generate"
   const a = blocker ? undefined : est.answer
   const price = a ? priceLabel(a) : blocker && probe.key === probeKey ? probe.label : null
   const ready = !busy && !!a && (eleven ? state.keys.elevenlabs : local || state.keys.openrouter)
@@ -358,13 +368,8 @@ export function Composer({
         )}
 
         {kind === "audio" ? (
-          <Chips
-            className="grid grid-cols-3 [&>button]:px-1"
-            options={tools.map((t) => t.id)}
-            value={tool.id}
-            label={(id) => tools.find((t) => t.id === id)!.label}
-            onChange={(id) => onChange({ ...blank(kind, id), inputs: value.inputs.clip ? { clip: value.inputs.clip } : {} })}
-          />
+          // three tools: the picker alone, a clip kept from one voice tool to the other
+          <ToolPicker tools={tools} value={tool} models={models} prices={prices} onOpen={priceTools} onPick={(t) => onChange({ ...blank(kind, t.id), inputs: value.inputs.clip ? { clip: value.inputs.clip } : {} })} />
         ) : (
           <>
             <Chips
@@ -375,11 +380,8 @@ export function Composer({
               onChange={(m) => onChange({ ...blank(kind, m === "create" ? "free" : "free-edit"), batch: value.batch })}
             />
             <ToolPicker
-              kind={kind}
               tools={tools.filter((t) => t.mode === mode)}
               value={tool}
-              media={state.media}
-              home={state.home}
               models={models}
               prices={prices}
               onOpen={priceTools}
@@ -388,7 +390,7 @@ export function Composer({
           </>
         )}
 
-        {!tool.template && <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={limits} none={framed ? "Not with a frame" : undefined} />}
+        {!tool.template && <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={limits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />}
 
         {tool.presets && <Setups tool={tool} fields={value.fields} onPick={(fields) => set({ fields: { ...value.fields, ...fields }, raw: false })} />}
 
@@ -439,6 +441,12 @@ export function Composer({
                 <StyleField key={f.key} field={f} value={value.fields[f.key]} kind={kind} styles={state.styles ?? []} media={state.media} home={state.home} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               ) : f.type === "light" ? (
                 <LightRig key={`${f.key}-${i}`} field={f} fields={value.fields} video={kind === "video"} onChange={(patch) => set({ fields: { ...value.fields, ...patch }, raw: false })} />
+              ) : f.type === "camera" ? (
+                <CameraRig key={f.key} field={f} fields={value.fields} onChange={(patch) => set({ fields: { ...value.fields, ...patch }, raw: false })} />
+              ) : f.type === "recolors" ? (
+                <Recolors key={f.key} field={f} fields={value.fields} onChange={(patch) => set({ fields: { ...value.fields, ...patch }, raw: false })} />
+              ) : f.type === "element" ? (
+                <ElementField key={f.key} field={f} value={value.fields[f.key]} items={items} blocked={maxRefs === 0 ? (framed ? "not with a frame" : "not on this model") : undefined} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               ) : (
                 <FieldInput key={f.key} field={f} value={value.fields[f.key]} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               )
@@ -447,7 +455,7 @@ export function Composer({
         )}
 
         {tool.id === "change-voice" && (
-          <ElevenVoices enabled={state.keys.elevenlabs} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
+          <VoicePicker enabled={state.keys.elevenlabs} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
         )}
         {tool.id === "voice" && (
           <LibraryVoices
@@ -506,7 +514,7 @@ export function Composer({
                   )}
                   {tool.inputs.length > 0 && (
                     <InputGroupAddon align="block-end" className={cn("px-3 pt-3 pb-3 font-normal", takesWords && "border-t")}>
-                      <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} limits={limits} none={framed ? "Not with a frame" : undefined} />
+                      <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} limits={limits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />
                     </InputGroupAddon>
                   )}
                 </InputGroup>
@@ -545,6 +553,7 @@ export function Composer({
             // settings a tool's own panel sets: Extend's length and ratio (its source's), Expand's ratio (its frame's)
             own={extend ? ["duration", "aspect_ratio"] : expand || sheets ? ["aspect_ratio"] : []}
             cloning={(value.inputs.voice_clips?.length ?? 0) > 0 || String(value.params.voice ?? "").startsWith("@")}
+            elevenlabs={state.keys.elevenlabs}
           />
         )}
 
@@ -651,6 +660,7 @@ function ModelBlock({
   hasImageInput,
   hasVideoInput,
   cloning,
+  elevenlabs,
   prices,
   onOpenModels,
   own = [],
@@ -665,6 +675,8 @@ function ModelBlock({
   hasImageInput: boolean
   hasVideoInput: boolean
   cloning: boolean
+  // an ElevenLabs key: its voices' samples to listen to
+  elevenlabs: boolean
   prices: Record<string, Priced>
   onOpenModels: () => void
   own?: string[]
@@ -733,17 +745,7 @@ function ModelBlock({
         </div>
       ) : null}
       {kind === "audio" && p.voices?.length && !cloning ? (
-        <div>
-          <Label>Voice</Label>
-          <Select value={(params.voice as string) ?? p.voices[0]} onValueChange={(v) => put("voice", v)}>
-            <SelectTrigger className="w-full" aria-label="Voice">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {p.voices.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+        <ModelVoices model={model.model} voices={p.voices} value={(params.voice as string) ?? p.voices[0]} onChange={(v) => put("voice", v)} elevenlabs={elevenlabs} />
       ) : null}
       {(p.quality?.length || p.seed) && (
         <details className="group/more" open={params.seed != null || (params.quality != null && params.quality !== "high") || undefined}>
@@ -771,160 +773,6 @@ function ModelBlock({
           </div>
         </details>
       )}
-    </div>
-  )
-}
-
-// the Library's voices for the speech tool: one picked sends its clips to be cloned and says how it sounds
-function LibraryVoices({ voices, value, onChange }: { voices: Element[]; value: string | null; onChange: (name: string | null) => void }) {
-  return (
-    <div>
-      <Label hint="cloned from its clips">Your voices</Label>
-      {!voices.length ? (
-        <p className="text-xs text-muted-foreground">
-          No voice in the Library yet: a Voice element is 1 to 3 clean clips. <a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">Make one</a>, or use the model's voices below.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Your voices">
-          {[null, ...voices].map((v) => {
-            const on = (v?.name ?? null) === value
-            return (
-              <div key={v?.name ?? ""} className={cn("flex items-center gap-2.5 rounded-lg border bg-background px-2.5 py-2", on && "border-space/60 bg-space/10")}>
-                {v ? <Listen path={v.files[0]} /> : <span className="size-8 shrink-0" />}
-                <button type="button" role="radio" aria-checked={on} onClick={() => onChange(v?.name ?? null)} className="min-w-0 flex-1 text-left outline-none focus-visible:underline">
-                  <span className="block truncate text-sm font-medium">{v ? `@${v.name}` : "The model's voices"}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{v ? v.words || `${v.files.length} clip${v.files.length > 1 ? "s" : ""}` : "A preset voice, or clips to clone below"}</span>
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// the ElevenLabs account's voices, and the two ways to add one: record it, or clone it from a file; one put there from
-// the Library says its @name
-function ElevenVoices({ enabled, value, onChange, library }: { enabled: boolean; value?: string; onChange: (id: string) => void; library: Element[] }) {
-  const [voices, setVoices] = useState<Voice[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [name, setName] = useState("My voice")
-  const [rec, setRec] = useState<MediaRecorder | null>(null)
-  const [busy, setBusy] = useState(false)
-  const file = useRef<HTMLInputElement>(null)
-  const playing = useRef<HTMLAudioElement | null>(null)
-
-  const load = () =>
-    api.voices().then(
-      (v) => setVoices(Array.isArray(v) ? v : v.voices),
-      (e) => setError(plain(e.message))
-    )
-  useEffect(() => {
-    if (enabled) load()
-  }, [enabled])
-
-  async function clone(paths: string[]) {
-    setBusy(true)
-    try {
-      await api.clone(name.trim() || "My voice", paths)
-      toast.success(`Voice "${name}" cloned`)
-      await load()
-    } catch (e) {
-      toast.error(plain((e as Error).message))
-    } finally {
-      setBusy(false)
-    }
-  }
-  async function record() {
-    if (rec) return rec.stop()
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const r = new MediaRecorder(stream), chunks: Blob[] = []
-      r.ondataavailable = (e) => chunks.push(e.data)
-      r.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop())
-        setRec(null)
-        const { path } = await api.upload(new Blob(chunks, { type: "audio/webm" }), "voice.webm")
-        await clone([path])
-      }
-      r.start()
-      setRec(r)
-    } catch {
-      toast.error("The microphone is not available")
-    }
-  }
-
-  if (!enabled) return null
-  const tags = (v: Voice) => [...(Array.isArray(v.labels) ? v.labels : Object.values(v.labels ?? {})).slice(0, 3), ...(v.languages ?? []).slice(0, 3)].join(" · ")
-  return (
-    <div>
-      <Label>New voice</Label>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      {!voices && !error && <p className="text-xs text-muted-foreground">Loading the account's voices…</p>}
-      <div className="flex max-h-64 flex-col gap-1.5 overflow-auto">
-        {voices?.map((v) => (
-          <div
-            key={v.voice_id}
-            role="radio"
-            aria-checked={v.voice_id === value}
-            tabIndex={0}
-            onClick={() => onChange(v.voice_id)}
-            onKeyDown={(e) => e.key === "Enter" && onChange(v.voice_id)}
-            className={cn("flex cursor-pointer items-center gap-2.5 rounded-lg border bg-background px-2.5 py-2", v.voice_id === value && "border-foreground")}
-          >
-            {v.preview_url ? (
-              <button
-                type="button"
-                aria-label={`Listen to ${v.name}`}
-                className="grid size-7 shrink-0 place-items-center rounded-full border hover:bg-muted"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  playing.current?.pause()
-                  playing.current = new Audio(v.preview_url!)
-                  playing.current.play()
-                }}
-              >
-                <PlayIcon className="size-3" />
-              </button>
-            ) : (
-              <span className="size-7 shrink-0" />
-            )}
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium">{v.name}</span>
-              {tags(v) && <span className="block truncate text-xs text-muted-foreground">{tags(v)}</span>}
-            </span>
-            {library.some((e) => e.voice_id === v.voice_id) ? (
-              <Badge variant="outline" className="font-normal text-space">@{library.find((e) => e.voice_id === v.voice_id)!.name}</Badge>
-            ) : (
-              v.category && <Badge variant="outline" className="font-normal text-muted-foreground">{v.category === "cloned" ? "cloned" : "account"}</Badge>
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 flex flex-col gap-2 rounded-lg border p-2.5">
-        <Input value={name} onChange={(e) => setName(e.target.value)} aria-label="Name of a new voice" />
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="outline" disabled={busy} onClick={record}>
-            {rec ? <SquareIcon /> : <MicIcon />} {rec ? "Stop and clone" : "Record a voice"}
-          </Button>
-          <Button variant="outline" disabled={busy || !!rec} onClick={() => file.current?.click()}>
-            <UploadIcon /> Clone from a file
-          </Button>
-        </div>
-        <input
-          ref={file}
-          type="file"
-          hidden
-          multiple
-          accept="audio/*"
-          onChange={async (e) => {
-            if (!e.target.files?.length) return
-            const paths = await Promise.all([...e.target.files].map(upload))
-            await clone(paths)
-          }}
-        />
-      </div>
     </div>
   )
 }

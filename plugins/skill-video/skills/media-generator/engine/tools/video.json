@@ -202,12 +202,31 @@
       ] }
     ],
     "presets": [
-      { "label": "Epic reveal", "fields": { "body": "ARRI Alexa 65", "lens": "Panavision C-series anamorphic", "focal": "24mm", "aperture": "f/4", "movement": "crane up, then aerial pullback", "shot": "extreme wide shot", "tempo": "calm, slow pacing" }},
-      { "label": "Intimate drama", "fields": { "body": "ARRI Alexa 35", "lens": "Cooke S4 spherical prime", "focal": "50mm", "aperture": "f/1.4", "movement": "dolly in", "shot": "close-up", "tempo": "calm, slow pacing", "genre": "drama" }},
-      { "label": "Action chase", "fields": { "body": "RED V-Raptor 8K", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "movement": "handheld, then whip pan", "tempo": "chaotic, frenetic pacing", "genre": "action" }},
-      { "label": "Music video", "fields": { "body": "Sony Venice 2", "lens": "vintage anamorphic", "focal": "35mm", "aperture": "f/2", "movement": "orbit around the subject", "lighting": "magenta and cyan neon light at night", "tempo": "dynamic, energetic pacing" }},
-      { "label": "Thriller", "fields": { "body": "ARRI Alexa 35", "lens": "Zeiss Master Prime", "focal": "35mm", "aperture": "f/2.8", "movement": "slow zoom in", "lighting": "low-key chiaroscuro lighting, deep shadows", "genre": "thriller" }},
-      { "label": "16mm documentary", "fields": { "body": "Arriflex 416 16mm film camera", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "movement": "handheld", "genre": "documentary" }}
+      { "label": "Intimate drama", "group": "Drama", "note": "A slow push in on a face", "fields": { "body": "ARRI Alexa 35", "lens": "Cooke S4 spherical prime", "focal": "50mm", "aperture": "f/1.4", "movement": "dolly in", "shot": "close-up", "tempo": "calm, slow pacing", "genre": "drama" } },
+      { "label": "Walk and talk", "group": "Drama", "note": "Steadicam ahead of two people", "fields": { "body": "ARRI Alexa 35", "lens": "premium modern spherical prime", "focal": "35mm", "aperture": "f/2.8", "movement": "Steadicam follow", "shot": "medium shot", "tempo": "one single continuous take", "genre": "drama" } },
+      { "label": "Emotional reveal", "group": "Drama", "note": "Rack focus, then a slow push", "fields": { "body": "ARRI Alexa 35", "lens": "halation diffusion (Pro-Mist filter)", "focal": "85mm", "aperture": "f/1.4", "movement": "rack focus, then slow zoom in", "shot": "medium close-up", "lighting": "soft window light from the side", "tempo": "calm, slow pacing" } },
+      { "label": "Epic reveal", "group": "Epic & action", "note": "Crane up into a huge pullback", "fields": { "body": "ARRI Alexa 65", "lens": "Panavision C-series anamorphic", "focal": "24mm", "aperture": "f/4", "movement": "crane up, then aerial pullback", "shot": "extreme wide shot", "tempo": "calm, slow pacing" } },
+      { "label": "Action chase", "group": "Epic & action", "note": "Handheld, whip pans, frantic", "fields": { "body": "RED V-Raptor 8K", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "movement": "handheld, then whip pan", "tempo": "chaotic, frenetic pacing", "genre": "action" } },
+      { "label": "Car chase", "group": "Epic & action", "note": "Side tracking at speed", "fields": { "body": "RED V-Raptor 8K", "lens": "compact modern anamorphic", "focal": "35mm", "aperture": "f/4", "movement": "side tracking, then whip pan", "shot": "wide shot", "grade": "teal and orange grade", "tempo": "dynamic, energetic pacing", "genre": "action" } },
+      { "label": "Hero moment", "group": "Epic & action", "note": "Bullet time around the subject", "fields": { "body": "ARRI Alexa 65", "lens": "Panavision C-series anamorphic", "focal": "35mm", "aperture": "f/2.8", "movement": "bullet time", "shot": "full shot", "lighting": "golden hour sunlight, long warm shadows", "tempo": "dynamic, energetic pacing", "genre": "action" } },
+      { "label": "Drone flyover", "group": "Epic & action", "note": "A helicopter glide over the land", "fields": { "body": "ARRI Alexa 65", "lens": "premium modern spherical prime", "focal": "18mm", "aperture": "f/8", "movement": "helicopter shot", "shot": "extreme wide shot", "lighting": "golden hour sunlight, long warm shadows", "tempo": "calm, slow pacing" } },
+      { "label": "Thriller", "group": "Genre", "note": "A creeping zoom in the shadows", "fields": { "body": "ARRI Alexa 35", "lens": "Zeiss Master Prime", "focal": "35mm", "aperture": "f/2.8", "movement": "slow zoom in", "lighting": "low-key chiaroscuro lighting, deep shadows", "genre": "thriller" } },
+      { "label": "Vertigo", "group": "Genre", "note": "A dolly zoom: the world stretches", "fields": { "body": "ARRI Alexa 35", "lens": "Zeiss Master Prime", "focal": "35mm", "aperture": "f/4", "movement": "dolly zoom", "shot": "medium close-up", "lighting": "low-key chiaroscuro lighting, deep shadows", "genre": "thriller" } },
+      { "label": "Noir", "group": "Genre", "note": "Black and white, a slow dolly", "fields": { "body": "ARRI Alexa 35", "lens": "Zeiss Master Prime", "focal": "35mm", "aperture": "f/2.8", "movement": "dolly in", "lighting": "low-key chiaroscuro lighting, deep shadows", "grade": "black and white, rich contrast", "genre": "noir" } },
+      { "label": "Horror creep", "group": "Genre", "note": "Something is behind the door", "fields": { "body": "ARRI Alexa 35", "lens": "premium modern spherical prime", "focal": "18mm", "aperture": "f/4", "movement": "dolly in", "shot": "wide shot", "lighting": "hard overhead light from directly above", "grade": "soft muted palette", "tempo": "calm, slow pacing", "genre": "horror" } },
+      { "label": "Sci-fi", "group": "Genre", "note": "A precise robotic arc at dusk", "fields": { "body": "Sony Venice 2", "lens": "compact modern anamorphic", "focal": "35mm", "aperture": "f/2.8", "movement": "robot arm move", "lighting": "blue hour, cool ambient dusk light", "grade": "nostalgic faded blue palette", "genre": "science fiction" } },
+      { "label": "Western standoff", "group": "Genre", "note": "Locked off, then a slow zoom", "fields": { "body": "Panavision 35mm film camera", "lens": "vintage anamorphic", "focal": "50mm", "aperture": "f/8", "movement": "static shot, then slow zoom in", "shot": "wide shot", "lighting": "golden hour sunlight, long warm shadows", "grade": "warm Kodak Portra tones", "genre": "western" } },
+      { "label": "Music video", "group": "Music & fashion", "note": "Orbit under neon", "fields": { "body": "Sony Venice 2", "lens": "vintage anamorphic", "focal": "35mm", "aperture": "f/2", "movement": "orbit around the subject", "lighting": "magenta and cyan neon light at night", "tempo": "dynamic, energetic pacing" } },
+      { "label": "Runway", "group": "Music & fashion", "note": "Tracking the model, bright and bold", "fields": { "body": "ARRI Alexa 65", "lens": "premium modern spherical prime", "focal": "85mm", "aperture": "f/2.8", "movement": "tracking shot following the subject", "shot": "full shot", "lighting": "bright high-key lighting", "grade": "saturated Fuji Velvia colors" } },
+      { "label": "Dance", "group": "Music & fashion", "note": "Handheld energy around a dancer", "fields": { "body": "Sony Venice 2", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/2.8", "movement": "handheld, then arc right", "shot": "full shot", "tempo": "dynamic, energetic pacing" } },
+      { "label": "Product orbit", "group": "Commercial", "note": "A clean turn around the product", "fields": { "body": "Sony Venice 2", "lens": "Zeiss Master Prime", "focal": "85mm", "aperture": "f/5.6", "movement": "orbit around the subject", "shot": "insert shot of a detail", "lighting": "bright high-key lighting", "tempo": "calm, slow pacing" } },
+      { "label": "Food macro", "group": "Commercial", "note": "A slow push over the dish", "fields": { "body": "Sony Venice 2", "lens": "macro", "focal": "85mm", "aperture": "f/2.8", "movement": "dolly in", "shot": "extreme close-up", "lighting": "soft window light from the side", "grade": "warm Kodak Portra tones", "tempo": "calm, slow pacing" } },
+      { "label": "Car commercial", "group": "Commercial", "note": "Tracking alongside at golden hour", "fields": { "body": "ARRI Alexa 65", "lens": "compact modern anamorphic", "focal": "35mm", "aperture": "f/4", "movement": "side tracking", "shot": "wide shot", "lighting": "golden hour sunlight, long warm shadows", "grade": "teal and orange grade", "tempo": "dynamic, energetic pacing" } },
+      { "label": "16mm documentary", "group": "Documentary & vintage", "note": "Handheld grain, true moments", "fields": { "body": "Arriflex 416 16mm film camera", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/5.6", "movement": "handheld", "genre": "documentary" } },
+      { "label": "Interview", "group": "Documentary & vintage", "note": "Locked off, soft window light", "fields": { "body": "Sony Venice 2", "lens": "Cooke S4 spherical prime", "focal": "50mm", "aperture": "f/2.8", "movement": "static shot", "shot": "medium close-up", "lighting": "soft window light from the side", "genre": "documentary" } },
+      { "label": "Super 8 memory", "group": "Documentary & vintage", "note": "Home movie, warm and shaky", "fields": { "body": "Super 8 film camera", "focal": "24mm", "aperture": "f/5.6", "movement": "handheld", "lighting": "golden hour sunlight, long warm shadows", "grade": "warm Kodak Portra tones", "era": "1970s" } },
+      { "label": "90s camcorder", "group": "Documentary & vintage", "note": "Tape, zooms and flat color", "fields": { "body": "VHS camcorder", "focal": "24mm", "aperture": "f/8", "movement": "handheld, then slow zoom in", "era": "1990s" } },
+      { "label": "Panic", "group": "Documentary & vintage", "note": "Snorricam on a running actor", "fields": { "body": "ARRI Alexa 35", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/4", "movement": "snorricam on the actor", "shot": "medium close-up", "tempo": "chaotic, frenetic pacing", "genre": "thriller" } }
     ],
     "template": "{prompt}. {body}, {lens}, {focal}, {aperture}. {movement}. {tempo}. {shot}. {lighting}. {grade}. {era}. {genre}. Cinematic, photorealistic.",
     "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
@@ -381,7 +400,7 @@
   },
   {
     "id": "relight-atmosphere", "label": "Relight & atmosphere", "group": "Light & color", "mode": "edit", "icon": "sun",
-    "description": "Changes the lighting: a preset, up to three lights you place, or your own words; shadows follow.",
+    "description": "Changes the lighting: a preset, or up to three lights you place; shadows follow.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [
       { "key": "light", "label": "Light", "type": "light", "lights": 3, "default": "a low warm sun from behind the subject's right, long soft shadows, warm orange rim on the edges, gentle haze", "options": [
@@ -401,36 +420,141 @@
   },
   {
     "id": "recolor", "label": "Recolor", "group": "Light & color", "mode": "edit", "icon": "palette",
-    "description": "A new grade or new colors for an item, motion kept.",
+    "description": "A new grade, warmer or cooler, more or less color and contrast, and new colors for up to three items. Motion kept.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
-    "fields": [{ "key": "look", "label": "New look", "type": "text", "placeholder": "teal and orange grade, the jacket becomes yellow" }],
-    "template": "Restyle the video: {look}. Keep the motion, framing and timing identical. {prompt}",
+    "fields": [
+      { "key": "grade", "label": "Grade", "type": "select", "phrase": "a {}", "default": "", "options": [
+        { "value": "", "label": "Keep", "note": "The video's own grade" },
+        { "value": "natural film colors, gentle contrast", "label": "Film colors", "group": "Film", "note": "Kodak-like, true" },
+        { "value": "warm Kodak Portra tones", "label": "Portra warm", "group": "Film", "note": "Soft warm skin" },
+        { "value": "saturated Fuji Velvia colors", "label": "Velvia vivid", "group": "Film", "note": "Rich, saturated" },
+        { "value": "three-strip Technicolor look", "label": "Technicolor", "group": "Film", "note": "1950s saturated color" },
+        { "value": "bleach bypass, desaturated and contrasty", "label": "Bleach bypass", "group": "Film", "note": "Gritty, silvery" },
+        { "value": "cross-processed look, shifted greens and yellows", "label": "Cross-process", "group": "Film", "note": "Odd, punchy colors" },
+        { "value": "teal and orange grade", "label": "Teal & orange", "group": "Cinema", "note": "Blockbuster contrast" },
+        { "value": "day-for-night grade, dark blue night with moonlit highlights", "label": "Day for night", "group": "Cinema", "note": "Daylight made into night" },
+        { "value": "cold steel-blue grade", "label": "Cold steel", "group": "Cinema", "note": "Thriller blue, cool skin" },
+        { "value": "golden warm grade", "label": "Golden", "group": "Cinema", "note": "Sunny, nostalgic warmth" },
+        { "value": "green-tinted matrix-like grade", "label": "Green tint", "group": "Cinema", "note": "Sickly, digital" },
+        { "value": "black and white, rich contrast", "label": "Black & white", "group": "Mono", "note": "Monochrome" },
+        { "value": "sepia tone", "label": "Sepia", "group": "Mono", "note": "Old brown photo" },
+        { "value": "candy pink pastel palette", "label": "Candy pink", "group": "Pastel & faded", "note": "Pastel, pop" },
+        { "value": "nostalgic faded blue palette", "label": "Nostalgic blue", "group": "Pastel & faded", "note": "Cool, faded" },
+        { "value": "matte faded look with lifted blacks", "label": "Matte faded", "group": "Pastel & faded", "note": "Milky shadows, soft" },
+        { "value": "soft muted palette", "label": "Soft muted", "group": "Pastel & faded", "note": "Low saturation, calm" },
+        { "value": "neon cyberpunk palette of magenta and cyan", "label": "Cyberpunk", "group": "Bold", "note": "Neon colors" }
+      ] },
+      { "key": "temperature", "label": "Temperature", "type": "choice", "default": "", "options": [
+        { "value": "a cooler, bluer white balance", "label": "Cooler" }, { "value": "", "label": "Same" }, { "value": "a warmer, more golden white balance", "label": "Warmer" }
+      ] },
+      { "key": "saturation", "label": "Saturation", "type": "choice", "default": "", "options": [
+        { "value": "muted, desaturated colors", "label": "Muted" }, { "value": "", "label": "Same" }, { "value": "vivid, saturated colors", "label": "Vivid" }
+      ] },
+      { "key": "contrast", "label": "Contrast", "type": "choice", "default": "", "options": [
+        { "value": "a soft, low contrast", "label": "Softer" }, { "value": "", "label": "Same" }, { "value": "a punchy, high contrast", "label": "Punchier" }
+      ] },
+      { "key": "exposure", "label": "Exposure", "type": "choice", "default": "", "options": [
+        { "value": "darker overall", "label": "Darker" }, { "value": "", "label": "Same" }, { "value": "brighter overall", "label": "Brighter" }
+      ] },
+      { "key": "items", "label": "New colors", "type": "recolors", "max": 3, "optional": true, "phrase": "{}" }
+    ],
+    "template": "Recolor the video: {grade}, {temperature}, {saturation}, {contrast}, {exposure}, {items}. Keep the motion, framing, timing, light direction and everything else identical. {prompt}",
     "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2"]
   },
   {
     "id": "object-swap", "label": "Object swap", "group": "Characters", "mode": "edit", "icon": "replace",
-    "description": "Replaces a subject or object, the action stays.",
+    "description": "Replaces a subject or object with an element of your Library; the action stays. Paint it on a frame to point at it.",
     "inputs": [
       { "key": "video", "kind": "video", "label": "Video" },
-      { "key": "references", "kind": "image", "label": "New object", "optional": true, "multiple": true, "phrase": "(as shown in {})" }
+      { "key": "sketch", "kind": "mask", "label": "Paint what goes", "optional": true, "field": "old", "phrase": "the area painted in translucent magenta on {}" }
     ],
     "fields": [
       { "key": "old", "label": "Replace", "type": "text", "placeholder": "the red mug" },
-      { "key": "new", "label": "With", "type": "text", "placeholder": "a glass of orange juice" }
+      { "key": "element", "label": "With", "type": "element", "types": ["object", "character", "outfit", "brand", "other"], "required": true, "phrase": "{}" }
     ],
-    "template": "Replace {old} with {new} {references}, keeping its position, motion and the lighting. Everything else stays identical. {prompt}",
-    "models": ["bytedance/seedance-2.5", "runway/aleph-2", "black-forest-labs/flux-video-edit"]
+    "template": "Replace {old} ({sketch}) with {element}, keeping its position, motion and the lighting. Everything else stays identical. {prompt}",
+    "models": ["bytedance/seedance-2.5"],
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini"]
   },
   {
     "id": "clean-up", "label": "Clean up", "group": "Retouch", "mode": "edit", "icon": "eraser",
     "description": "Removes objects, wires or people you name or paint over on a frame.",
     "inputs": [
       { "key": "video", "kind": "video", "label": "Video" },
-      { "key": "sketch", "kind": "mask", "label": "Paint what goes", "optional": true }
+      { "key": "sketch", "kind": "mask", "label": "Paint what goes", "optional": true, "field": "what", "phrase": "The area painted in translucent magenta on {} marks what goes." }
     ],
     "fields": [{ "key": "what", "label": "Remove", "type": "text", "placeholder": "the boom mic at the top and the man in the background" }],
-    "template": "Remove {what} from the whole video and fill the background naturally; a reference frame with an area painted in translucent magenta marks what goes. Nothing else changes. {prompt}",
-    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2"]
+    "template": "Remove {what} from the whole video and fill the background naturally. {sketch} Nothing else changes. {prompt}",
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.5"]
+  },
+  {
+    "id": "inpaint", "label": "Inpaint", "group": "Retouch", "mode": "edit", "icon": "brush",
+    "description": "Paint over an area on a frame, say what goes there: it changes through the whole shot.",
+    "inputs": [
+      { "key": "video", "kind": "video", "label": "Video" },
+      { "key": "sketch", "kind": "mask", "label": "Paint the area", "field": "change", "phrase": "the area painted in translucent magenta on {}" },
+      { "key": "references", "kind": "image", "label": "What to paint", "optional": true, "multiple": true, "phrase": "(as shown in {})" }
+    ],
+    "fields": [
+      { "key": "change", "label": "Put there", "type": "text", "optional": true, "placeholder": "a vase of white tulips" },
+      { "key": "element", "label": "Or an element", "type": "element", "types": ["object", "character", "outfit", "brand", "other"], "phrase": "{}" }
+    ],
+    "one_of": ["change", "element", "references"],
+    "template": "In the video, change only {sketch}: put {change} {element} {references} there, following the camera and the motion through the whole shot, in the scene's light. No magenta in the result; everything outside that area stays identical. {prompt}",
+    "models": ["bytedance/seedance-2.5"]
+  },
+  {
+    "id": "face-swap", "label": "Face swap", "group": "Characters", "mode": "edit", "icon": "scan-face",
+    "description": "Puts a face from photos or a character of your Library onto a person of the video; expressions and lip movements stay. Seedance 2.5 refuses photos of real-looking people.",
+    "inputs": [
+      { "key": "video", "kind": "video", "label": "Video" },
+      { "key": "references", "kind": "image", "label": "Face", "optional": true, "multiple": true, "phrase": "the person in {}" }
+    ],
+    "fields": [
+      { "key": "character", "label": "Character from the Library", "type": "element", "types": ["character"], "phrase": "{}" },
+      { "key": "who", "label": "Which person", "type": "text", "optional": true, "phrase": "({})", "placeholder": "the man in the blue shirt" }
+    ],
+    "one_of": ["character", "references"],
+    "template": "Replace the face of the person {who} in the video with the face of {character} {references}. Keep the head movements, expressions, eye direction, lip movements, lighting and skin tone match; hair, body, clothes and background stay identical. {prompt}",
+    "models": ["bytedance/seedance-2.5"]
+  },
+  {
+    "id": "remove-background", "label": "Remove background", "group": "Retouch", "mode": "edit", "icon": "scissors",
+    "description": "Cuts the subject out of every frame: transparent (ProRes 4444 and WebM), or on a flat color. Local and free, about 4 s a frame.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [{ "key": "background", "label": "Background", "type": "choice", "default": "transparent", "options": [
+      { "value": "transparent", "label": "Transparent" }, { "value": "green", "label": "Green screen" }, { "value": "black", "label": "Black" }, { "value": "white", "label": "White" }
+    ] }],
+    "template": "",
+    "local": "matte"
+  },
+  {
+    "id": "depth-map", "label": "Depth map", "group": "Retouch", "mode": "edit", "icon": "layers",
+    "description": "A grayscale depth video, near in white and far in black, for compositing, fog or a 3D effect. Local and free, about 0.3 s a frame.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [{ "key": "near", "label": "Near is", "type": "choice", "default": "white", "options": [{ "value": "white", "label": "White" }, { "value": "black", "label": "Black" }] }],
+    "template": "",
+    "local": "depth"
+  },
+  {
+    "id": "fps-boost", "label": "FPS boost", "group": "Retouch", "mode": "edit", "icon": "gauge",
+    "description": "More frames, made between the existing ones: smoother motion, or a slow motion. Local and free.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [{ "key": "target", "label": "Make it", "type": "choice", "default": "60", "options": [
+      { "value": "30", "label": "30 fps" }, { "value": "60", "label": "60 fps" }, { "value": "120", "label": "120 fps" }, { "value": "slow2", "label": "Slow motion ×2" }, { "value": "slow4", "label": "Slow motion ×4" }
+    ] }],
+    "template": "",
+    "local": "fps"
+  },
+  {
+    "id": "sdr-to-hdr", "label": "SDR to HDR", "group": "Light & color", "mode": "edit", "icon": "sun-medium",
+    "description": "An HDR10 video (HEVC 10-bit, BT.2020 PQ) from an SDR one: highlights stretched up to the peak you pick. A conversion, it adds no detail. Local and free.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [{ "key": "peak", "label": "Highlights", "type": "choice", "default": "1000", "options": [
+      { "value": "600", "label": "Subtle" }, { "value": "1000", "label": "Bright" }, { "value": "1600", "label": "Vivid" }
+    ] }],
+    "template": "",
+    "local": "hdr"
   },
   {
     "id": "reframe", "label": "Reframe", "group": "Retouch", "mode": "edit", "icon": "crop",

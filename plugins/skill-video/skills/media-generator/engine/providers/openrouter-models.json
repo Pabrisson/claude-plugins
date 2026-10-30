@@ -1,5 +1,5 @@
 {
-  "about": "OpenRouter's image, video and speech models as media-generator offers them. Kept by hand: add, remove or fix a model here, nothing is fetched. Resolutions low to high, ratios tall to wide, durations in seconds; null means the model sets it itself. role: image create (words only), both (words and optional images), edit (needs an image); video generate, edit, upscale, avatar. references: the reference images it takes (a video model's apart from its frames, from the providers' docs on 2026-10-30; null when unknown). pricing: OpenRouter's own lines, for the estimates",
+  "about": "OpenRouter's image, video and speech models as media-generator offers them. Kept by hand: add, remove or fix a model here, nothing is fetched. Resolutions low to high, ratios tall to wide, durations in seconds; null means the model sets it itself. role: image create (words only), both (words and optional images), edit (needs an image); video generate, edit, upscale, avatar. references: the reference images it takes (a video model's apart from its frames, from the providers' docs on 2026-10-30; null when unknown). min_pixels: the smallest video it takes as a source, in pixels (null when unknown); a smaller one is scaled up before it goes. Aleph 2's minimum is 140 c, not the 56 c OpenRouter lists: 2 s and 4 s edits were both billed $1.40 on 2026-10-30. pricing: OpenRouter's own lines, for the estimates",
   "updated": "2026-10-30",
   "image": [
     {
@@ -998,6 +998,7 @@
       "sound": false,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds_720p":0.0988,"duration_seconds_1080p":0.1694}
     },
     {
@@ -1013,6 +1014,7 @@
       "sound": false,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds_720p":0.0988,"duration_seconds_1080p":0.1278}
     },
     {
@@ -1028,6 +1030,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"text_to_video_duration_seconds_480p":0.04,"text_to_video_duration_seconds_720p":0.08,"image_to_video_duration_seconds_720p":0.1,"text_to_video_duration_seconds_1080p":0.12,"image_to_video_duration_seconds_1080p":0.15}
     },
     {
@@ -1043,6 +1046,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds":0.1}
     },
     {
@@ -1058,6 +1062,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds_480p":0.05,"duration_seconds_720p":0.1,"duration_seconds_1080p":0.2}
     },
     {
@@ -1073,6 +1078,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds_480p":0.068,"duration_seconds_720p":0.14,"duration_seconds_1080p":0.28}
     },
     {
@@ -1088,6 +1094,7 @@
       "sound": true,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"cents_per_second_output":17,"cents_per_second_output_2k":28,"cents_per_second_output_4k":41,"cents_per_second_output_720p":17,"cents_per_second_output_1080p":29,"cents_per_second_video_continuation_2k":31,"cents_per_second_video_continuation_4k":45,"cents_per_second_video_continuation_720p":41,"cents_per_second_video_continuation_1080p":53}
     },
     {
@@ -1103,6 +1110,7 @@
       "sound": false,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"cents_per_second_output":3}
     },
     {
@@ -1118,6 +1126,7 @@
       "sound": false,
       "seed": false,
       "upscale": {"min":1.5,"max":3,"creativity":true},
+      "min_pixels": null,
       "pricing": {"cents_per_megapixel_second_precise":3.5,"cents_per_megapixel_second_creative":5}
     },
     {
@@ -1133,6 +1142,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"video_tokens":0.0000024,"video_tokens_without_audio":0.0000012}
     },
     {
@@ -1148,6 +1158,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"video_tokens":0.000007,"video_tokens_4k":0.000004,"video_tokens_1080p":0.0000077,"video_tokens_without_audio":0.000007,"video_tokens_with_video_input":0.0000043,"video_tokens_4k_with_video_input":0.0000024,"video_tokens_1080p_with_video_input":0.0000047}
     },
     {
@@ -1163,6 +1174,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"video_tokens":0.0000042,"video_tokens_without_audio":0.0000042,"video_tokens_with_video_input":0.000002475}
     },
     {
@@ -1178,6 +1190,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"video_tokens":0.0000035,"video_tokens_without_audio":0.0000035,"video_tokens_with_video_input":0.0000021}
     },
     {
@@ -1193,6 +1206,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": 407696,
       "pricing": {"video_tokens":0.0000107,"video_tokens_without_audio":0.0000107,"video_tokens_with_video_input":0.0000064}
     },
     {
@@ -1208,6 +1222,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds_with_audio":0.4,"duration_seconds_with_audio_4k":0.6,"duration_seconds_without_audio":0.2,"duration_seconds_without_audio_4k":0.4}
     },
     {
@@ -1223,6 +1238,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds_with_audio":0.12,"duration_seconds_with_audio_4k":0.3,"duration_seconds_without_audio":0.1,"duration_seconds_with_audio_720p":0.1,"duration_seconds_without_audio_4k":0.25,"duration_seconds_without_audio_720p":0.08}
     },
     {
@@ -1238,6 +1254,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds_with_audio":0.08,"duration_seconds_without_audio":0.05,"duration_seconds_with_audio_720p":0.05,"duration_seconds_without_audio_720p":0.03}
     },
     {
@@ -1253,6 +1270,7 @@
       "sound": false,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds":0.05}
     },
     {
@@ -1268,6 +1286,7 @@
       "sound": false,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds_2k":0.1,"duration_seconds_480p":0.02,"duration_seconds_768p":0.036,"reference_input_images":0.04,"reference_duration_seconds_2k":0.18,"reference_duration_seconds_480p":0.07,"reference_duration_seconds_768p":0.1}
     },
     {
@@ -1283,6 +1302,7 @@
       "sound": true,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds":0.112}
     },
     {
@@ -1298,6 +1318,7 @@
       "sound": true,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds":0.112,"duration_seconds_with_audio":0.168,"text_to_video_duration_seconds_480p":0.112,"text_to_video_duration_seconds_720p":0.112,"image_to_video_duration_seconds_720p":0.112,"text_to_video_duration_seconds_1080p":0.112,"image_to_video_duration_seconds_1080p":0.112}
     },
     {
@@ -1313,6 +1334,7 @@
       "sound": true,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds":0.084,"duration_seconds_with_audio":0.126,"text_to_video_duration_seconds_480p":0.084,"text_to_video_duration_seconds_720p":0.084,"image_to_video_duration_seconds_720p":0.084,"text_to_video_duration_seconds_1080p":0.084,"image_to_video_duration_seconds_1080p":0.084}
     },
     {
@@ -1328,6 +1350,7 @@
       "sound": true,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds":0.13,"reference_images":0.04}
     },
     {
@@ -1343,6 +1366,7 @@
       "sound": false,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds":0.08,"duration_seconds_480p":0.05,"duration_seconds_768p":0.08}
     },
     {
@@ -1358,6 +1382,7 @@
       "sound": false,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"duration_seconds":0.0817}
     },
     {
@@ -1373,7 +1398,8 @@
       "sound": false,
       "seed": true,
       "upscale": null,
-      "pricing": {"cents_per_second_output":28,"minimum_cents_per_generation":56}
+      "min_pixels": null,
+      "pricing": {"cents_per_second_output":28,"minimum_cents_per_generation":140}
     },
     {
       "id": "runway/gen-4.5",
@@ -1388,6 +1414,7 @@
       "sound": false,
       "seed": true,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"cents_per_second_output":12}
     },
     {
@@ -1403,6 +1430,7 @@
       "sound": false,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"cents_per_image_input":0.2,"cents_per_video_output_second_480p":5,"cents_per_video_output_second_720p":7}
     },
     {
@@ -1418,6 +1446,7 @@
       "sound": false,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"cents_per_image_input":1,"cents_per_video_output_second_480p":8,"cents_per_video_output_second_720p":14,"cents_per_video_output_second_1080p":25}
     },
     {
@@ -1433,6 +1462,7 @@
       "sound": false,
       "seed": false,
       "upscale": null,
+      "min_pixels": null,
       "pricing": {"cents_per_image_input":1,"cents_per_video_output_second_480p":2,"cents_per_video_output_second_720p":3,"cents_per_video_output_second_1080p":14}
     }
   ],

@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, clean up, reframe), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
+description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, face swap, inpaint, clean up, reframe, and on this machine for free: remove background, depth map, FPS boost, SDR to HDR), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -34,6 +34,9 @@ Run `media.mjs doctor` once per conversation.
 - `elevenlabs: no key`: no voice change and no translation. Everything else works.
 - `missing cloudflared`: a video or a voice cannot reach OpenRouter (video edits, upscale, talking avatar). Give
   `brew install cloudflared` (no account needed). Everything else works.
+- `missing uv`: no Depth map and no Remove background for videos (they run models on this machine). Give `brew install
+  uv`. Everything else works. With uv, the models download by themselves at their first use (330 MB, once), or ahead
+  with `media.mjs setup vision`.
 
 ## Modes
 
@@ -72,6 +75,23 @@ is the user's own prompt; the others fill a prompt template from their fields. C
 - `--prompt "…"` adds the user's words to the template, or is the whole prompt with "Custom". `--raw` sends the prompt
   exactly as written, without the template.
 - `@name` in the prompt cites an Element or a style of the Library: see « Elements and styles of the Library ».
+  Some tools take one in a field of their own: Character swap (`--field character=@Max`) and Object swap (`--field
+  element=@Mug`) need one, it is their only way to say the new person or thing; video Face swap and both Inpaints
+  take one if wanted. The Element must be of a type the field takes (`media.mjs tools` lists them): make it first when
+  there is none (« Elements and styles of the Library »).
+- **A painted area** (image Inpaint, video Inpaint, Object swap, Clean up): the image or a frame with the area in
+  translucent magenta (`--in sketch=<file>`). For an image Inpaint, `--in matte=<file>` (white where painted, black
+  elsewhere) lays the model's result back on the original inside that area only, so the rest keeps its pixels (the
+  dashboard makes both files; the matte is never sent; `--field outside=model` keeps the model's whole image). A
+  painted frame is an image beside the video: of the video models, only Seedance 2.5 takes one (the command names it
+  when the chosen model cannot). Seedance 2.5 refuses, free, any image that may show a real person
+  (`PrivacyInformation`): a painted frame with someone in it, a face photo for video Face swap. Say so and offer FLUX
+  Video Edit or Aleph 2 with words only (no painted frame), or an illustrated face.
+- **Done here, free** (`provider: local`, no estimate to approve): Reframe, FPS boost (`--field target=60|120|slow2|slow4`),
+  SDR to HDR (an HDR10 conversion, it adds no detail; `--field peak=600|1000|1600`), Depth map (about 0.3 s a frame)
+  and Remove background (about 4 s a frame: a 5 s clip takes some minutes; `--field background=transparent|green|black|white`,
+  transparent gives a WebM to preview and a ProRes 4444 `.mov` for editing software). Run the long ones in the
+  background.
 - **Styles.** Restyle (`--tool restyle`, image and video) redraws the source in a style, what is in it and its motion
   kept; Custom takes one too, optional. `--field style=<style>`: a preset's label (`media.mjs tools image --search
   restyle` lists the 24) or the name of a style of the user's own. `media.mjs styles add <name> <images…> --words
@@ -165,9 +185,11 @@ and local: no estimate, no yes.
   `media.mjs models audio`), a voice of the Library (`--voice @name`), or a voice cloned from 1 to 3 clips (`--in
   voice_clips=<file>`). `--field instructions="…"` says how it sounds.
 - **Change voice** (`audio --tool change-voice --in clip=<audio or video> --voice <voice_id>`): the same delivery
-  (pauses, emotion, rhythm) in another voice, put back on the video. `media.mjs voices` lists the account's voices,
-  and `media.mjs voice-clone <name> <recordings…>` makes one from the user's recordings (a minute or more of clean
-  speech). `--field denoise=remove` drops the background noise.
+  (pauses, emotion, rhythm) in another voice, put back on the video. `media.mjs voices` lists the ElevenLabs voices
+  (its default ones and the account's own). `--voice @name` takes a voice of the Library: one not on the account
+  yet is put there when the job runs (ElevenLabs needs a paid plan for that), then kept. A new voice of the user's
+  own is a Library voice Element (`elements add <name> <clips…> --type voice`, a minute or more of clean speech).
+  `--field denoise=remove` drops the background noise.
 - **Translate** (`audio --tool translate --in clip=<file> --field to=en,es`): a dubbed file per language in the
   speakers' own voices, with its subtitles (`.vtt`). `--field quality=dubbing_v1` (default, 3,000 credits a minute
   per language) or `dubbing_v2` (better voices and emotion, 13,500 a minute). **No lip-sync**: say so.

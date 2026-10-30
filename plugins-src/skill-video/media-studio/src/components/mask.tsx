@@ -3,6 +3,7 @@ import { BrushIcon, EraserIcon, FlipHorizontal2Icon, LassoIcon, LoaderCircleIcon
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
 import { Separator } from "@/components/ui/separator"
@@ -12,7 +13,8 @@ import { api, fileUrl, plain } from "@/lib/api"
 
 // a mask painted over an image (inpaint) or a frame of a video (clean up). The strokes keep fractions of the picture,
 // so the screen shows them at its size and the file at the picture's; what is sent is the picture with the painted
-// area in translucent magenta, which the tools' templates name
+// area in translucent magenta, which the tools' templates name. An image inpaint also keeps the area in black and
+// white (the matte), never sent: the engine lays the model's result back on the original inside it
 type Tool = "brush" | "eraser" | "lasso"
 type Op = { tool: Tool | "invert"; size: number; points: [number, number][] }
 const TOOLS = [
@@ -59,19 +61,24 @@ function paint(ctx: CanvasRenderingContext2D, ops: Op[], w: number, h: number, c
   ctx.globalCompositeOperation = "source-over"
 }
 
-export function MaskDialog({ src, video, onClose, onSave }: { src: string | null; video?: string; onClose: () => void; onSave: (png: Blob) => void }) {
+// the tool's words beside the mask (Put there, Remove): written here too, the same field as the composer's
+export type MaskWords = { label: string; placeholder?: string; value: string; onChange: (v: string) => void }
+
+export function MaskDialog({ src, video, matte, words, onClose, onSave }: { src: string | null; video?: string; matte?: boolean; words?: MaskWords; onClose: () => void; onSave: (png: Blob, matte?: Blob) => void }) {
   return (
     <Dialog open={!!src} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-[min(1100px,calc(100%-2rem))] sm:max-w-[min(1100px,calc(100%-2rem))]">
         <DialogTitle>Paint the area</DialogTitle>
-        <DialogDescription>Paint over what should change. The painted area goes with the image; the model works there only.</DialogDescription>
-        {src && <Painter key={src} start={src} video={video} onSave={onSave} />}
+        <DialogDescription>
+          Paint over what should change, a little wider than the new thing will be{words ? `, then say it below` : ""}. The model works there only{matte ? "; the rest of the image is kept pixel for pixel" : ""}.
+        </DialogDescription>
+        {src && <Painter key={src} start={src} video={video} matte={matte} words={words} onSave={onSave} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function Painter({ start, video, onSave }: { start: string; video?: string; onSave: (png: Blob) => void }) {
+function Painter({ start, video, matte, words, onSave }: { start: string; video?: string; matte?: boolean; words?: MaskWords; onSave: (png: Blob, matte?: Blob) => void }) {
   const img = useRef<HTMLImageElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const [src, setSrc] = useState(start)
@@ -164,7 +171,20 @@ function Painter({ start, video, onSave }: { start: string; video?: string; onSa
     const ctx = out.getContext("2d")!
     ctx.drawImage(i, 0, 0)
     ctx.drawImage(mask, 0, 0)
-    out.toBlob((png) => png && onSave(png), "image/png")
+    const blob = (c: HTMLCanvasElement) => new Promise<Blob | null>((ok) => c.toBlob(ok, "image/png"))
+    const png = await blob(out)
+    if (!png) return
+    if (!matte) return onSave(png)
+    // the matte: white where painted, black elsewhere, at the picture's size
+    const bw = document.createElement("canvas")
+    bw.width = mask.width
+    bw.height = mask.height
+    paint(mask.getContext("2d")!, ops, mask.width, mask.height, "white")
+    const b = bw.getContext("2d")!
+    b.fillStyle = "black"
+    b.fillRect(0, 0, bw.width, bw.height)
+    b.drawImage(mask, 0, 0)
+    onSave(png, (await blob(bw)) ?? undefined)
   }
 
   const brushPx = (size / 1000) * Math.max(box.w, box.h)
@@ -248,8 +268,15 @@ function Painter({ start, video, onSave }: { start: string; video?: string; onSa
         </div>
       )}
 
-      <div className="flex items-center justify-end gap-3">
-        <span className="mr-auto text-xs text-muted-foreground">B brush · E eraser · L lasso · [ ] size · ⌘Z undo</span>
+      <div className="flex flex-wrap items-end justify-end gap-3">
+        {words ? (
+          <label className="mr-auto flex min-w-64 flex-1 flex-col gap-1.5">
+            <span className="text-xs font-semibold tracking-wider text-foreground/70 uppercase">{words.label}</span>
+            <Input value={words.value} placeholder={words.placeholder} onChange={(e) => words.onChange(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ops.some((o) => o.tool !== "eraser") && save()} />
+          </label>
+        ) : (
+          <span className="mr-auto self-center text-xs text-muted-foreground">B brush · E eraser · L lasso · [ ] size · ⌘Z undo</span>
+        )}
         <Button onClick={save} disabled={!ops.some((o) => o.tool !== "eraser")}>Use this mask</Button>
       </div>
     </>

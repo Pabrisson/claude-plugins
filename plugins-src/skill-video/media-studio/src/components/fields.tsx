@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Slider } from "@/components/ui/slider"
 import { opt, sentence, shown, type Field, type Tool } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label } from "@/components/chips"
+import { colorWords } from "@/components/light-rig"
 
 // a multi field's value: its moves in order, joined the way the prompt says them
 const THEN = ", then "
@@ -110,7 +111,7 @@ function Sheets({ field: f, value, onChange }: { field: Field; value: string; on
 
 // a long list of values as a button that opens beside the composer: searchable, grouped, a line on what each does.
 // In a section it is a tile (its label, its value, its group), alone a full-width row
-function RichSelect({ field: f, value, onChange, tile }: { field: Field; value: string; onChange: (v: string) => void; tile?: boolean }) {
+function RichSelect({ field: f, value, onChange, tile, hint }: { field: Field; value: string; onChange: (v: string) => void; tile?: boolean; hint?: string }) {
   const [open, setOpen] = useState(false)
   const [anchor, offset, measure] = useBeside()
   const options = (f.options ?? []).map(opt)
@@ -133,7 +134,7 @@ function RichSelect({ field: f, value, onChange, tile }: { field: Field; value: 
   )
   return (
     <div className="min-w-0">
-      {!tile && <Label>{f.label}</Label>}
+      {!tile && <Label hint={hint}>{f.label}</Label>}
       <Popover open={open} onOpenChange={(o) => (o && measure(), setOpen(o))}>
         <PopoverTrigger asChild>{button}</PopoverTrigger>
         <PopoverContent side="right" align="start" sideOffset={offset} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-80 flex-col p-0">
@@ -216,21 +217,69 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
   )
 }
 
-// a tool's setups: one click fills several fields; the one the fields match is lit
+// a tool's setups, a searchable list grouped by genre: one pick sets every field a setup can touch (those it leaves
+// out back to their default), so the one the fields match shows as picked; any change after makes it « Your own »
 export function Setups({ tool, fields, onPick }: { tool: Tool; fields: Record<string, string>; onPick: (f: Record<string, string>) => void }) {
+  const presets = tool.presets!
+  const keys = [...new Set(presets.flatMap((p) => Object.keys(p.fields)))]
+  const all = (p: (typeof presets)[number]) => Object.fromEntries(keys.map((k) => [k, p.fields[k] ?? String(tool.fields.find((f) => f.key === k)?.default ?? "")]))
   const value = (k: string) => fields[k] ?? String(tool.fields.find((f) => f.key === k)?.default ?? "")
+  const on = presets.find((p) => Object.entries(all(p)).every(([k, v]) => value(k) === v))
+  const field: Field = {
+    key: "setup",
+    label: "Setup",
+    type: "select",
+    options: [{ value: "", label: "Your own", note: "The fields below, as you set them" }, ...presets.map((p) => ({ value: p.label, label: p.label, group: p.group, note: p.note }))],
+  }
+  return (
+    <RichSelect
+      field={field}
+      hint="sets the whole rig at once"
+      value={on?.label ?? ""}
+      onChange={(label) => {
+        const p = presets.find((x) => x.label === label)
+        if (p) onPick(all(p))
+      }}
+    />
+  )
+}
+
+// Recolor's items, each a thing of the video and its new color: « the jacket becomes pale yellow (#f5e663) »; the rows
+// themselves ride along in fields["<key>:rows"]
+type Row = { item: string; color: string }
+export function Recolors({ field: f, fields, onChange }: { field: Field; fields: Record<string, string>; onChange: (patch: Record<string, string>) => void }) {
+  let rows: Row[] = []
+  try {
+    rows = JSON.parse(fields[`${f.key}:rows`] ?? "[]")
+  } catch {
+    /* none yet */
+  }
+  const save = (next: Row[]) =>
+    onChange({ [f.key]: next.filter((r) => r.item.trim()).map((r) => `${r.item.trim()} becomes ${colorWords(r.color)}`).join("; "), [`${f.key}:rows`]: JSON.stringify(next) })
+  const put = (i: number, patch: Partial<Row>) => save(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   return (
     <div>
-      <Label hint="one click sets the rig">Setups</Label>
-      <div className="flex flex-wrap gap-1.5">
-        {tool.presets!.map((p) => {
-          const on = Object.entries(p.fields).every(([k, v]) => value(k) === v)
-          return (
-            <button key={p.label} type="button" aria-pressed={on} onClick={() => onPick(p.fields)} className={cn(CHIP, "px-2.5 py-0.5 text-xs", on ? CHIP_ON : CHIP_OFF)}>
-              {p.label}
+      <Label hint={`up to ${f.max ?? 3}`}>{f.label}</Label>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <Input value={r.item} placeholder={["the jacket", "the car", "the walls"][i] ?? "the item"} aria-label={`Item ${i + 1}`} onChange={(e) => put(i, { item: e.target.value })} className="min-w-0 flex-1" />
+            <span className="shrink-0 text-xs text-muted-foreground">becomes</span>
+            <label className="relative flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs text-muted-foreground tabular-nums hover:bg-muted">
+              <span className="size-4 rounded-full ring-1 ring-foreground/20" style={{ background: r.color }} />
+              {colorWords(r.color).replace(/ \(.*/, "")}
+              <input type="color" value={r.color} onChange={(e) => put(i, { color: e.target.value })} aria-label={`Color of item ${i + 1}`} className="absolute inset-0 cursor-pointer opacity-0" />
+            </label>
+            <button type="button" aria-label={`Remove item ${i + 1}`} onClick={() => save(rows.filter((_, j) => j !== i))} className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+              <XIcon className="size-4" />
             </button>
-          )
-        })}
+          </div>
+        ))}
+        {rows.length < (f.max ?? 3) && (
+          <button type="button" onClick={() => save([...rows, { item: "", color: ["#f5c518", "#e63946", "#2a9d8f"][rows.length] ?? "#ffffff" }])} className={cn(CHIP, CHIP_OFF, "flex w-fit items-center gap-1 border-dashed")}>
+            <PlusIcon className="size-3.5" /> {rows.length ? "Another item" : "Recolor an item"}
+          </button>
+        )}
       </div>
     </div>
   )

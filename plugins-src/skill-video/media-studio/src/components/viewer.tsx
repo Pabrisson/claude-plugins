@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { AudioLinesIcon, ChevronLeftIcon, ChevronRightIcon, Columns2Icon, CopyIcon, DownloadIcon, StarIcon, Trash2Icon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { AudioLinesIcon, ChevronLeftIcon, ChevronRightIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, StarIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -9,6 +9,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job } from "@/lib/api"
 import { Label } from "@/components/chips"
 import { Thumb } from "@/components/inputs"
+import { ModelLogo } from "@/components/model-logo"
 import { BRIDGES, costOf, DeleteDialog, REMIX, SEND, sendToEdit, type Bridge } from "@/components/results"
 import { CompareDialog } from "@/components/compare"
 
@@ -24,6 +25,24 @@ const PARAMS: Record<string, [string, (v: unknown) => string]> = {
   seed: ["Seed", String],
 }
 const words = (k: string) => (k[0].toUpperCase() + k.slice(1)).replaceAll("_", " ")
+// an input's role, as the tools name them
+const ROLES: Record<string, string> = { sketch: "Painted", matte: "Mask (kept here)", first_frame: "First frame", last_frame: "Last frame", voice_clips: "Voice", sheet: "Sheet" }
+// what each next step does, under its name
+const HINTS: Record<string, string> = {
+  Remix: "Same settings, open in the composer",
+  Animate: "Make it a video",
+  "Make an element": "Keep it in the Library",
+  "Make a voice": "Keep it in the Library",
+  Extend: "Continue the shot",
+  Upscale: "Sharper and larger",
+  "Talking avatar": "A face speaks it",
+  "Send to edit": "A rush in video-editor",
+}
+const bytes = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`)
+const span = (a?: string, b?: string) => {
+  const s = a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 1000) : NaN
+  return Number.isFinite(s) && s >= 0 ? (s < 90 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`) : null
+}
 
 // a result in full: its media, how it was made, what it cost, and every next step; ← and → walk the list
 export function Viewer({
@@ -84,34 +103,86 @@ function Body({
   const [out, setOut] = useState(0)
   const [confirm, setConfirm] = useState(false)
   const [comparing, setComparing] = useState(false)
+  // what the file itself says: its size on screen, its length, its weight; a video the browser cannot play (ProRes)
+  const [known, setKnown] = useState<Record<string, { w?: number; h?: number; length?: number; size?: number; unplayable?: boolean }>>({})
   const file = job.outputs[out] ? outputPath(home, job, job.outputs[out]) : null
+  const facts = (file && known[file]) || {}
+  const setFacts = (patch: (typeof known)[string]) => file && setKnown((all) => ({ ...all, [file]: { ...all[file], ...patch } }))
   const k = file ? mediaKind(file) : null
   const failed = job.status === "failed"
+  useEffect(() => {
+    if (!file) return
+    fetch(fileUrl(file), { method: "HEAD" })
+      .then((r) => +(r.headers.get("content-length") ?? 0))
+      .then((size) => size && setKnown((all) => ({ ...all, [file]: { ...all[file], size } })), () => {})
+  }, [file])
   const params = Object.entries(job.params ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "")
   // a field's words, not the dashboard's own state beside it (a light's stage: "light:rig") nor an untouched margin
   const fields = Object.entries(job.fields ?? {}).filter(([k, v]) => v && v !== "0" && !k.includes(":"))
-  const inputs = Object.values(job.inputs ?? {}).flat()
+  const inputs = Object.entries(job.inputs ?? {}).flatMap(([key, list]) => list.map((f) => ({ key, f })))
+  const [lab, model] = job.name.includes(": ") ? [job.name.slice(0, job.name.indexOf(": ")), job.name.slice(job.name.indexOf(": ") + 2)] : [job.provider === "local" ? "On this machine" : job.provider, job.name]
+  const made = span(job.started ?? job.created, job.finished)
   const actions = [
     ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) }]),
     ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => ({ ...x, run: () => onBridge(x.b, file!) }))),
     ...(failed || !file ? [] : [{ ...SEND, run: () => sendToEdit(file) }]),
-    ...(failed || !file ? [] : [{ label: "Compare", icon: Columns2Icon, run: () => setComparing(true) }]),
   ]
+  const ext = file?.split(".").pop()?.toUpperCase()
+  const stats = [
+    { label: "Cost", value: costOf(job, per1000), cost: job.provider !== "local" && !failed },
+    facts.w ? { label: k === "video" ? "Frame" : "Size", value: `${facts.w} × ${facts.h}` } : null,
+    facts.length ? { label: "Length", value: `${facts.length.toFixed(1)} s` } : null,
+    ext ? { label: "File", value: `${ext}${facts.size ? ` · ${bytes(facts.size)}` : ""}` } : null,
+    made ? { label: "Made in", value: made } : null,
+  ].filter((x): x is { label: string; value: string; cost?: boolean } => !!x)
 
   return (
     <>
       <div className="relative flex min-w-0 flex-1 flex-col bg-black">
-        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-2 p-3">
+          {(prev || next) && (
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/80 tabular-nums ring-1 ring-white/15 backdrop-blur-sm">
+              {jobs.indexOf(job) + 1} / {jobs.length}
+            </span>
+          )}
+          <span className="flex-1" />
+          {file && !failed && (
+            <span className="pointer-events-auto flex gap-1.5">
+              <Button variant="secondary" size="sm" onClick={() => setComparing(true)} className="bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-white/20">
+                <Columns2Icon data-icon="inline-start" /> Compare
+              </Button>
+              <Button variant="secondary" size="icon-sm" asChild className="bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-white/20">
+                <a href={fileUrl(file)} target="_blank" rel="noreferrer" aria-label="Open in a new tab" title="Open in a new tab">
+                  <ExternalLinkIcon />
+                </a>
+              </Button>
+            </span>
+          )}
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6 pt-14">
           {failed ? (
             <p className="max-w-md text-center text-sm text-destructive">{plain(job.error ?? "Failed")}</p>
           ) : k === "image" ? (
-            <img src={fileUrl(file!)} alt={job.prompt} className="max-h-full max-w-full rounded-lg object-contain" />
+            <img src={fileUrl(file!)} alt={job.prompt} onLoad={(e) => setFacts({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} className="max-h-full max-w-full rounded-lg object-contain" />
+          ) : k === "video" && facts.unplayable ? (
+            <p className="max-w-sm text-center text-sm text-white/70">
+              The browser cannot show this {ext} file (ProRes keeps the transparency for editing software). Download it, or pick the other result to preview it.
+            </p>
           ) : k === "video" ? (
-            <video src={fileUrl(file!)} controls autoPlay loop playsInline className="max-h-full max-w-full rounded-lg" />
+            <video
+              src={fileUrl(file!)}
+              controls
+              autoPlay
+              loop
+              playsInline
+              onLoadedMetadata={(e) => setFacts({ w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight, length: e.currentTarget.duration })}
+              onError={() => setFacts({ unplayable: true })}
+              className="max-h-full max-w-full rounded-lg bg-[repeating-conic-gradient(#222_0_25%,#2c2c2c_0_50%)] bg-size-[24px_24px]"
+            />
           ) : k === "audio" ? (
             <div className="flex w-full max-w-lg flex-col items-center gap-6">
               <AudioLinesIcon className="size-16 text-aud" aria-hidden />
-              <audio src={fileUrl(file!)} controls autoPlay className="w-full" />
+              <audio src={fileUrl(file!)} controls autoPlay onLoadedMetadata={(e) => setFacts({ length: e.currentTarget.duration })} className="w-full" />
             </div>
           ) : null}
         </div>
@@ -121,12 +192,13 @@ function Body({
               <button
                 key={o}
                 type="button"
-                aria-label={`Result ${n + 1}`}
+                aria-label={`Result ${n + 1}: ${o}`}
+                title={o}
                 aria-current={n === out}
                 onClick={() => setOut(n)}
                 className={cn("size-14 overflow-hidden rounded-md opacity-60 ring-2 ring-transparent transition hover:opacity-100", n === out && "opacity-100 ring-white")}
               >
-                <Thumb path={outputPath(home, job, o)} />
+                {/\.mov$/i.test(o) ? <span className="grid size-full place-items-center bg-white/10 text-[11px] font-semibold text-white">MOV</span> : <Thumb path={outputPath(home, job, o)} />}
               </button>
             ))}
           </div>
@@ -143,80 +215,111 @@ function Body({
         )}
       </div>
 
-      <aside className="flex w-80 shrink-0 flex-col gap-5 overflow-auto border-l p-5">
-        <div className="pr-8">
-          <DialogTitle className="text-base font-semibold">{job.label}</DialogTitle>
-          <DialogDescription className="mt-1">
-            {job.name} · {when(job.created)}
-            {job.by === "claude" ? " · by Claude" : ""}
-          </DialogDescription>
-        </div>
-
-        <div className="flex items-baseline justify-between rounded-lg bg-muted/50 px-3 py-2">
-          <span className="text-xs text-muted-foreground">Cost</span>
-          <span className={cn("font-semibold tabular-nums", job.provider === "local" || failed ? "text-muted-foreground" : "text-cost")}>{costOf(job, per1000)}</span>
-        </div>
-
-        {job.prompt && (
-          <div>
-            <Label>{job.kind === "audio" && k === "audio" ? "Text" : "Prompt"}</Label>
-            <p className="max-h-48 overflow-auto rounded-lg bg-muted/50 p-3 text-sm leading-relaxed whitespace-pre-wrap">{job.prompt}</p>
-            <Button
-              variant="ghost"
-              size="xs"
-              className="mt-1"
-              onClick={() => navigator.clipboard.writeText(job.prompt).then(() => toast.success("Prompt copied"))}
-            >
-              <CopyIcon data-icon="inline-start" /> Copy
-            </Button>
-          </div>
-        )}
-
-        {(params.length > 0 || fields.length > 0) && (
-          <div>
-            <Label>Settings</Label>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              {[
-                ...params.map(([key, v]) => [PARAMS[key]?.[0] ?? words(key), PARAMS[key]?.[1](v) ?? String(v)]),
-                ...fields.map(([key, v]) => [words(key), v]),
-              ].map(([l, v]) => (
-                <div key={l} className="contents">
-                  <dt className="text-muted-foreground">{l}</dt>
-                  <dd className="truncate">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        )}
-
-        {inputs.length > 0 && (
-          <div>
-            <Label>Inputs</Label>
-            <div className="flex flex-wrap gap-2">
-              {inputs.map((f) => (
-                <a key={f} href={fileUrl(inputPath(home, job, f))} target="_blank" rel="noreferrer" className="size-14 overflow-hidden rounded-md border" title={f}>
-                  <Thumb path={inputPath(home, job, f)} />
-                </a>
-              ))}
+      <aside className="flex w-96 shrink-0 flex-col border-l">
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-5">
+          <div className="flex items-start gap-3 pr-8">
+            <ModelLogo model={job.model} lab={lab} className="size-10 rounded-lg p-2" />
+            <div className="min-w-0">
+              <DialogTitle className="truncate text-base font-semibold">{job.label}</DialogTitle>
+              <DialogDescription className="truncate" title={job.name}>
+                {model} · {lab}
+              </DialogDescription>
+              <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                {when(job.created)}
+                {job.by === "claude" && <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">by Claude</span>}
+              </p>
             </div>
           </div>
-        )}
 
-        <span className="flex-1" />
-
-        <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-2 gap-2">
-            {actions.map((a) => (
-              <Button key={a.label} variant="secondary" onClick={a.run}>
-                <a.icon data-icon="inline-start" /> {a.label}
-              </Button>
+          <dl className="grid grid-cols-2 gap-2">
+            {stats.map((x) => (
+              <div key={x.label} className="min-w-0 rounded-lg bg-muted/50 px-3 py-2">
+                <dt className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{x.label}</dt>
+                <dd className={cn("truncate text-sm font-medium tabular-nums", x.cost && "text-cost")} title={x.value}>
+                  {x.value}
+                </dd>
+              </div>
             ))}
-          </div>
+          </dl>
+
+          {job.prompt && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <Label>{job.kind === "audio" && k === "audio" ? "Text" : "Prompt"}</Label>
+                <Button variant="ghost" size="xs" className="-mt-2" onClick={() => navigator.clipboard.writeText(job.prompt).then(() => toast.success("Prompt copied"))}>
+                  <CopyIcon data-icon="inline-start" /> Copy
+                </Button>
+              </div>
+              <p className="max-h-40 overflow-auto rounded-lg bg-muted/50 p-3 text-sm leading-relaxed whitespace-pre-wrap">{job.prompt}</p>
+            </div>
+          )}
+
+          {(params.length > 0 || fields.length > 0) && (
+            <div>
+              <Label>Settings</Label>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                {[
+                  ...params.map(([key, v]) => [PARAMS[key]?.[0] ?? words(key), PARAMS[key]?.[1](v) ?? String(v)]),
+                  ...fields.map(([key, v]) => [words(key), v]),
+                ].map(([l, v]) => (
+                  <div key={l} className="contents">
+                    <dt className="text-muted-foreground">{l}</dt>
+                    <dd className="line-clamp-3 break-words" title={v}>
+                      {v}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+
+          {inputs.length > 0 && (
+            <div>
+              <Label>Inputs</Label>
+              <div className="flex flex-wrap gap-2">
+                {inputs.map(({ key, f }) => (
+                  <a key={f} href={fileUrl(inputPath(home, job, f))} target="_blank" rel="noreferrer" className="flex w-16 flex-col gap-1" title={f}>
+                    <span className="size-16 overflow-hidden rounded-md border">
+                      <Thumb path={inputPath(home, job, f)} />
+                    </span>
+                    <span className="truncate text-center text-[11px] text-muted-foreground">{ROLES[key] ?? words(key)}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {actions.length > 0 && (
+            <div>
+              <Label>Next</Label>
+              <div className="flex flex-col gap-1">
+                {actions.map((a) => (
+                  <button
+                    key={a.label}
+                    type="button"
+                    onClick={a.run}
+                    className="flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted">
+                      <a.icon className="size-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{a.label}</span>
+                      {HINTS[a.label] && <span className="block truncate text-xs text-muted-foreground">{HINTS[a.label]}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 border-t p-4">
           <div className="flex gap-2">
             {file && (
-              <Button variant="outline" className="flex-1" asChild>
+              <Button className="flex-1" asChild>
                 <a href={fileUrl(file)} download={file.split("/").pop()}>
-                  <DownloadIcon data-icon="inline-start" /> Download
+                  <DownloadIcon data-icon="inline-start" /> Download{job.outputs.length > 1 ? ` ${ext}` : ""}
                 </a>
               </Button>
             )}

@@ -10,7 +10,7 @@ import { SketchDialog } from "@/components/sketch"
 import { MaskDialog } from "@/components/mask"
 import { CutDialog } from "@/components/cut"
 
-const ACCEPT = { image: "image/*", sketch: "image/*", mask: "image/*", video: "video/*", audio: "audio/*", media: "audio/*,video/*" }
+const ACCEPT = { image: "image/*", sketch: "image/*", mask: "image/*", matte: "image/*", video: "video/*", audio: "audio/*", media: "audio/*,video/*" }
 // an input drawn in the dashboard: a sketch (marks) or a mask (a painted area)
 const drawn = (input: Input) => input.kind === "sketch" || input.kind === "mask"
 const fits = (input: Input, file: string) => {
@@ -52,6 +52,8 @@ export function InputSlots({
   label = true,
   limits = {},
   none,
+  fields,
+  onField,
 }: {
   tool: Tool
   value: Record<string, string[]>
@@ -62,6 +64,9 @@ export function InputSlots({
   // how many files an input of several may hold on the chosen model, and why none when so
   limits?: Record<string, number>
   none?: string
+  // the tool's words, for the field a mask shows under its picture (Put there)
+  fields?: Record<string, string>
+  onField?: (key: string, v: string) => void
 }) {
   const [sketch, setSketch] = useState<{ key: string; src: string; mask: boolean; video?: string } | null>(null)
   const [cut, setCut] = useState<{ key: string; path: string } | null>(null)
@@ -90,12 +95,16 @@ export function InputSlots({
     setSketch({ key, src: fileUrl(base), mask, video: mask && !value.image?.[0] && !value.first_frame?.[0] ? video : undefined })
   }
 
+  // the mask being painted: the field it shows and whether it keeps a matte
+  const painting = sketch?.mask ? tool.inputs.find((i) => i.key === sketch.key) : undefined
+  const wordsField = painting?.field ? tool.fields.find((f) => f.key === painting.field) : undefined
+
   if (!tool.inputs.length) return null
   return (
     <div className="w-full">
       {label && <Label>Inputs</Label>}
       <div className="flex flex-wrap gap-2">
-        {tool.inputs.map((input) => (
+        {tool.inputs.filter((i) => i.kind !== "matte").map((input) => (
           <Slot
             key={input.key}
             input={input}
@@ -112,12 +121,16 @@ export function InputSlots({
       <MaskDialog
         src={sketch?.mask ? sketch.src : null}
         video={sketch?.video}
+        matte={!!painting?.matte}
+        words={wordsField && fields && onField ? { label: wordsField.label, placeholder: wordsField.placeholder, value: fields[wordsField.key] ?? "", onChange: (v) => onField(wordsField.key, v) } : undefined}
         onClose={() => setSketch(null)}
-        onSave={async (png) => {
-          const key = sketch!.key
+        onSave={async (png, matte) => {
+          const key = sketch!.key, keep = painting?.matte
           setSketch(null)
           const { path } = await api.upload(png, "mask.png")
-          set(key, [path])
+          // the matte stays here: the engine lays the result back inside it, it is never sent
+          const kept = matte && keep ? { [keep]: [(await api.upload(matte, "matte.png")).path] } : {}
+          onChange({ ...value, [key]: [path], ...kept })
         }}
       />
       <SketchDialog
@@ -273,12 +286,13 @@ function Count({ files, limit }: { files: number; limit: number }) {
 }
 
 // a voice in the list: its own play button
-export function Listen({ path }: { path: string }) {
+// a sound to listen to: a file of the folder, or a URL (an ElevenLabs voice's preview)
+export function Listen({ path, src }: { path: string; src?: string }) {
   const [playing, setPlaying] = useState(false)
   const audio = useRef<HTMLAudioElement>(null)
   return (
     <>
-      <audio ref={audio} src={fileUrl(path)} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
+      <audio ref={audio} src={src ?? fileUrl(path)} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
       <button
         type="button"
         aria-label={playing ? "Pause" : "Listen"}
