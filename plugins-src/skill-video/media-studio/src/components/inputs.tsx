@@ -22,9 +22,11 @@ export async function upload(file: File) {
   return (await api.upload(file, file.name)).path
 }
 
-// where a pasted or dropped file goes: the first of the tool's inputs that takes its kind and has room
-export function slotFor(tool: Tool, value: Record<string, string[]>, name: string) {
-  return tool.inputs.find((i) => !drawn(i) && fits(i, name) && (i.multiple || !value[i.key]?.length))
+// where a pasted or dropped file goes: the first of the tool's inputs that takes its kind and has room (an input of
+// several up to what the model takes)
+export function slotFor(tool: Tool, value: Record<string, string[]>, name: string, limits: Record<string, number> = {}) {
+  const n = (i: Input) => value[i.key]?.length ?? 0
+  return tool.inputs.find((i) => !drawn(i) && fits(i, name) && (i.multiple ? limits[i.key] == null || n(i) < limits[i.key] : !n(i)))
 }
 
 // a file as a small tile: its picture, its first frame, or a sound icon
@@ -48,6 +50,8 @@ export function InputSlots({
   home,
   media,
   label = true,
+  limits = {},
+  none,
 }: {
   tool: Tool
   value: Record<string, string[]>
@@ -55,6 +59,9 @@ export function InputSlots({
   home: string
   media: Job[]
   label?: boolean
+  // how many files an input of several may hold on the chosen model, and why none when so
+  limits?: Record<string, number>
+  none?: string
 }) {
   const [sketch, setSketch] = useState<{ key: string; src: string; mask: boolean; video?: string } | null>(null)
   const [cut, setCut] = useState<{ key: string; path: string } | null>(null)
@@ -96,6 +103,8 @@ export function InputSlots({
             onFiles={(f) => set(input.key, f)}
             onDraw={() => openSketch(input.key)}
             onCut={(path) => setCut({ key: input.key, path })}
+            limit={limits[input.key]}
+            none={none}
             library={media.flatMap((j) => (j.status === "done" ? j.outputs.map((o) => ({ path: outputPath(home, j, o), job: j })) : [])).filter((x) => fits(input, x.path))}
           />
         ))}
@@ -141,6 +150,8 @@ function Slot({
   onDraw,
   onCut,
   library,
+  limit,
+  none = "Not on this model",
 }: {
   input: Input
   files: string[]
@@ -148,17 +159,27 @@ function Slot({
   onDraw: () => void
   onCut: (path: string) => void
   library: Pick[]
+  limit?: number
+  none?: string
 }) {
   const picker = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
   const [busy, setBusy] = useState(false)
-  const room = input.multiple ? true : files.length === 0
+  const room = input.multiple ? limit == null || files.length < limit : files.length === 0
+  // the files that still fit; those beyond the model's count are left out, said once
+  const fit = <T,>(more: T[]) => {
+    const left = limit == null ? more.length : Math.max(0, limit - files.length)
+    if (more.length > left) toast.warning(`${more.length - left} left out`, { description: `The model takes ${limit} here: remove one to swap it.` })
+    return more.slice(0, left)
+  }
 
   async function add(list: FileList | File[]) {
+    const take = input.multiple ? fit([...list]) : [...list].slice(0, 1)
+    if (!take.length) return
     setBusy(true)
     try {
-      const paths = await Promise.all([...list].map(upload))
-      onFiles(input.multiple ? [...files, ...paths] : paths.slice(0, 1))
+      const paths = await Promise.all(take.map(upload))
+      onFiles(input.multiple ? [...files, ...paths] : paths)
     } catch (e) {
       toast.error(plain((e as Error).message))
     } finally {
@@ -195,6 +216,15 @@ function Slot({
           <span className="line-clamp-2 text-center text-xs leading-tight" title={input.label}>{input.label}</span>
         </div>
       ))}
+      {!room && input.multiple && limit != null && (
+        <div className="flex w-18 flex-col gap-1">
+          <div className="grid size-18 place-items-center rounded-lg border border-dashed p-1 text-center text-xs leading-tight text-muted-foreground" title={limit === 0 ? none : `The model takes ${limit} here`}>
+            {limit === 0 && !files.length ? none : "Full"}
+          </div>
+          <span className="line-clamp-2 text-center text-xs leading-tight text-muted-foreground">{input.label}</span>
+          {(files.length > 0 || limit > 0) && <Count files={files.length} limit={limit} />}
+        </div>
+      )}
       {room && (
         <div className="flex w-18 flex-col gap-1">
           <div
@@ -221,14 +251,14 @@ function Slot({
               </button>
             )}
             {!drawn(input) && library.length > 0 && (
-              <LibraryPicker input={input} items={library} picked={files} onPick={(f) => onFiles(input.multiple ? (files.includes(f) ? files.filter((x) => x !== f) : [...files, f]) : [f])} />
+              <LibraryPicker input={input} items={library} picked={files} onPick={(f) => onFiles(input.multiple ? (files.includes(f) ? files.filter((x) => x !== f) : [...files, ...fit([f])]) : [f])} />
             )}
             <input ref={picker} type="file" hidden multiple={input.multiple} accept={ACCEPT[input.kind]} onChange={(e) => e.target.files && add(e.target.files)} />
           </div>
           <span className={cn("line-clamp-2 text-center text-xs leading-tight", input.optional ? "text-muted-foreground" : "text-foreground")} title={input.label}>
             {input.label}
           </span>
-          {input.optional && <span className="text-center text-xs text-muted-foreground/70">optional</span>}
+          {input.multiple && limit != null ? <Count files={files.length} limit={limit} /> : input.optional && <span className="text-center text-xs text-muted-foreground/70">optional</span>}
         </div>
       )}
     </>
@@ -236,6 +266,11 @@ function Slot({
 }
 
 type Pick = { path: string; job: Job }
+
+// how many files an input of several holds, of what the model takes here: red when it holds too many
+function Count({ files, limit }: { files: number; limit: number }) {
+  return <span className={cn("text-center text-xs tabular-nums", files > limit ? "font-medium text-destructive" : "text-muted-foreground/70")}>{files} / {limit}</span>
+}
 
 // a voice in the list: its own play button
 export function Listen({ path }: { path: string }) {

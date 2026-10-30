@@ -38,7 +38,7 @@ test('the catalogs: tools from the engine, models from its own list in one shape
   assert.match(t.out, /video dolly-zoom-in \(create, Camera\)/)
   assert.match(t.out, /--field speed=slow\|steady\|fast/)
   const m = await cli('models', 'video')
-  assert.match(m.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s, 720p\/1080p, first_frame\+last_frame, audio\]/)
+  assert.match(m.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s, 720p\/1080p, first_frame\+last_frame, audio, 3 refs\]/)
   assert.ok(!fake.calls.some(c => c.path.includes('models')), 'no catalog request')
 })
 
@@ -47,7 +47,7 @@ test('the shipped model list is normalized', () => {
   const list = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'providers', 'openrouter-models.json'), 'utf8'))
   const keys = {
     image: ['id', 'lab', 'name', 'role', 'resolutions', 'aspect_ratios', 'max_images', 'references', 'quality', 'background', 'seed', 'pricing'],
-    video: ['id', 'lab', 'name', 'role', 'resolutions', 'aspect_ratios', 'durations', 'frames', 'sound', 'seed', 'upscale', 'pricing'],
+    video: ['id', 'lab', 'name', 'role', 'resolutions', 'aspect_ratios', 'durations', 'frames', 'references', 'sound', 'seed', 'upscale', 'pricing'],
     speech: ['id', 'lab', 'name', 'role', 'voices', 'pricing'],
   }
   const roles = { image: ['create', 'both', 'edit'], video: ['generate', 'edit', 'upscale', 'avatar'], speech: ['speech'] }
@@ -62,6 +62,8 @@ test('the shipped model list is normalized', () => {
       if (m.resolutions) (assert.ok(m.resolutions.every(r => RES.includes(r)), `${m.id}: ${m.resolutions}`), sorted(m.resolutions, r => RES.indexOf(r)))
       if (m.aspect_ratios) sorted(m.aspect_ratios, ratio)
       if (m.durations) sorted(m.durations, d => d)
+      // reference images apart from the frames: a count, or null when unknown (no cap)
+      if (kind === 'video') assert.ok(m.references === null || Number.isInteger(m.references), `${m.id}: references ${m.references}`)
     }
     assert.equal(new Set(list[kind].map(m => m.id)).size, list[kind].length, `${kind}: an id twice`)
   }
@@ -100,6 +102,10 @@ test('a tool: its template filled from the fields, its inputs sent in order', as
   assert.match((await cli('elements', 'add', 'Lulu', at('a.png'))).out, /@Lulu: 1 images/)
   const e = await cli('image', '--prompt', '@Lulu in a café', '--model', 'fake/img', '--estimate')
   assert.equal(JSON.parse(e.out).prompt, 'Lulu in a café')
+  // the user's words are optional on a tool with its own prompt, needed on Custom and Custom edit (only a style is not enough)
+  assert.equal((await cli('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--estimate')).code, 0)
+  for (const argv of [['--tool', 'free-edit', '--in', `image=${at('a.png')}`], ['--field', 'style=Watercolor']])
+    assert.match((await cli('image', ...argv, '--model', 'fake/img', '--estimate')).err, /write a prompt \(--prompt "…"\): Custom has no prompt of its own/)
 })
 
 test('an unknown price needs its own yes; a refused payment (402) fails with exit 3, logged at no cost', async () => {
@@ -203,6 +209,79 @@ test('rich fields: an Auto option leaves nothing in the prompt, a label stands f
   assert.match(t.out, /--field body=Auto\|ARRI Alexa 35\|/)
 })
 
+// the styles are edited by hand: each keeps its keys, a group of the gallery, a palette for its card
+test('the shipped styles: one list for the Restyle tools and Custom, each with its group, its line and its palette', async () => {
+  const styles = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'tools', 'styles.json'), 'utf8'))
+  const groups = ['2D animation', '3D', 'Handmade', 'Painting & illustration', 'Pixel & retro']
+  for (const s of styles) {
+    assert.deepEqual(Object.keys(s), ['value', 'label', 'group', 'note', 'swatch'], s.label)
+    assert.ok(groups.includes(s.group), `${s.label}: group ${s.group}`)
+    assert.ok(s.swatch.length >= 3 && s.swatch.every(c => /^#[0-9a-f]{6}$/.test(c)), `${s.label}: swatch`)
+    // a value is never taken for the name of a Library style
+    assert.ok(!/^[\w-]+$/.test(s.value), s.label)
+  }
+  assert.equal(new Set(styles.map(s => s.label.toLowerCase())).size, styles.length, 'a label twice')
+  for (const kind of ['image', 'video']) {
+    const tools = JSON.parse((await cli('tools', kind, '--json')).out)
+    for (const id of ['restyle', 'free']) assert.deepEqual(tools.find(t => t.id === id).fields.find(f => f.key === 'style').options, styles, `${kind} ${id}`)
+  }
+})
+
+test('styles: Restyle redraws in a style, Custom adds one if asked; a Library style sends its images last and says so', async () => {
+  const est = async (...argv) => JSON.parse((await cli(...argv, '--estimate')).out)
+  const t = await cli('tools', 'image', '--search', 'restyle')
+  assert.match(t.out, /image restyle \(edit, Style\)/)
+  assert.match(t.out, /--field style=Hand-painted cel\|.*\|Knitted yarn world\|.*\|<a style of the Library>/)
+  const i = await est('image', '--tool', 'restyle', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'style=Knitted yarn world')
+  assert.match(i.prompt, /^Redraw the first image in the style of a knitted yarn world: .+ Keep its composition/)
+  const v = await est('video', '--tool', 'restyle', '--model', 'fake/vid', '--in', `video=${at('talk.mp4')}`, '--field', 'style=claymation')
+  assert.match(v.prompt, /^Redraw every frame of the video in the style of claymation: .+ Keep the motion/)
+  // Custom: no style, the user's words alone; a style, after them
+  assert.equal((await est('image', '--model', 'fake/img', '--prompt', 'a fox on a hill')).prompt, 'a fox on a hill')
+  assert.match((await est('video', '--model', 'fake/vid', '--prompt', 'a fox runs.', '--field', 'style=16-bit pixel art')).prompt, /^a fox runs\. Rendered in the style of 16-bit pixel art: /)
+  // a Library style: its images after the others, the prompt names them and adds its words
+  assert.match((await cli('styles', 'add', 'Ink', at('a.png'), '--words', 'thick brush ink')).out, /^Ink: 1 image · thick brush ink$/m)
+  const r = await cli('image', '--tool', 'restyle', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'style=Ink', '--spend', '1')
+  assert.equal(r.code, 0, r.err)
+  const body = sent('/api/v1/images').body
+  assert.match(body.prompt, /^Redraw the first image in the style of the last reference image: its medium, palette, line work, texture and light, never its subject or content \(thick brush ink\)\. Keep/)
+  assert.equal(body.input_references.length, 2)
+  // the job keeps the style's name: the dashboard finds its results by it
+  const job = JSON.parse(fs.readFileSync(at('media', media().find(d => d.includes('-restyle-')), 'job.json'), 'utf8'))
+  assert.equal(job.spec.fields.style, 'Ink')
+  const c = await est('video', '--model', 'fake/vid', '--prompt', 'a fox runs', '--field', 'style=Ink')
+  assert.match(c.prompt, /^a fox runs\. Rendered in the style of the last reference image: /)
+  assert.match((await cli('styles', 'remove', 'Ink')).out, /no style yet/)
+})
+
+test('references: the prompt says where an input\'s images are; the model\'s count caps them, frames apart', async () => {
+  const est = async (...argv) => JSON.parse((await cli(...argv, '--estimate')).out)
+  const r = await est('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--in', `references=${at('a.png')}`, '--in', `references=${at('a.png')}`)
+  assert.match(r.prompt, /^Relight the first image with .+\. Match the light, color and mood of images 2 to 3\. Shadows/)
+  assert.doesNotMatch((await est('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`)).prompt, /Match the light/)
+  const f = await est('image', '--tool', 'face-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--in', `face=${at('a.png')}`, '--in', `face=${at('a.png')}`)
+  assert.match(f.prompt, /^Replace the face of the person in the first image with the face of the person in images 2 to 3\./)
+  // Fake: Image takes 4: the source and 4 references are one too many, said before anything is sent
+  const over = await cli('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`, ...Array(4).fill(['--in', `references=${at('a.png')}`]).flat(), '--estimate')
+  assert.match(over.err, /Fake: Image takes 4 reference images, this asks for 5/)
+  // expand keeps them beside its canvas
+  const x = await cli('image', '--tool', 'expand', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--in', `references=${at('a.png')}`, '--field', 'left=0.5', '--spend', '1')
+  assert.equal(x.code, 0, x.err)
+  assert.equal(sent('/api/v1/images').body.input_references.length, 2)
+  // a video model: its references counted apart from its frames, a Library style's images last
+  await cli('styles', 'add', 'Chalk', at('a.png'))
+  const v = await est('video', '--tool', 'restyle', '--model', 'fake/vid', '--in', `video=${at('talk.mp4')}`, '--in', `references=${at('a.png')}`, '--in', `references=${at('a.png')}`, '--field', 'style=Chalk')
+  assert.match(v.prompt, /in the style of the last reference image: .+ The people, products and clothes of reference images 1 to 2 keep their exact identity/)
+  const tooMany = await cli('video', '--tool', 'restyle', '--model', 'fake/vid', '--in', `video=${at('talk.mp4')}`, ...Array(3).fill(['--in', `references=${at('a.png')}`]).flat(), '--field', 'style=Chalk', '--estimate')
+  assert.match(tooMany.err, /Fake: Video takes 3 reference images, this asks for 4/)
+  assert.match((await est('video', '--tool', 'object-swap', '--model', 'fake/vid', '--in', `video=${at('talk.mp4')}`, '--in', `references=${at('a.png')}`, '--field', 'old=a mug', '--field', 'new=a cup')).prompt,
+    /^Replace a mug with a cup \(as shown in the first reference image\), keeping/)
+  // a frame and references: OpenRouter would keep the frame and drop the references, so nothing goes
+  const both = await cli('video', '--model', 'fake/vid', '--prompt', 'a fox', '--in', `first_frame=${at('a.png')}`, '--in', `references=${at('a.png')}`, '--estimate')
+  assert.match(both.err, /a first or last frame and reference images do not go together/)
+  await cli('styles', 'remove', 'Chalk')
+})
+
 test('a batch: one yes for the total, as many jobs as asked, side by side; a seed goes up by one a job', async () => {
   const no = await cli('image', '--prompt', 'a kite', '--model', 'fake/img', '--batch', '3')
   assert.equal(no.code, 2)
@@ -278,12 +357,12 @@ test('draft: Claude\'s prompt for the composer, nothing generated; credits: bala
   assert.match(c.out, /openrouter this month here: \$\d+\.\d+/)
 })
 
-test('the folder\'s .gitignore keeps the media, elements, ledger and settings, and drops the cache', () => {
+test('the folder\'s .gitignore keeps the media, elements, styles, ledger and settings, and drops the cache', () => {
   const gi = fs.readFileSync(at('.gitignore'), 'utf8')
   assert.match(gi, /^\.cache\/$/m)
   execFileSync('git', ['init', '-q'], { cwd: home })
   const ignored = f => { try { execFileSync('git', ['check-ignore', '-q', f], { cwd: home }); return true } catch { return false } }
-  assert.deepEqual(['media/x/out.png', 'elements/Lulu/a.png', 'ledger.jsonl', 'settings.json', '.cache/models-video.json'].map(ignored), [false, false, false, false, true])
+  assert.deepEqual(['media/x/out.png', 'elements/Lulu/a.png', 'styles/Ink/a.png', 'ledger.jsonl', 'settings.json', '.cache/models-video.json'].map(ignored), [false, false, false, false, false, true])
 })
 
 test('the server: state, estimate, a threshold asks first (409), a confirmed click runs to the end; it stops with its Claude', { timeout: 30000 }, async t => {
@@ -301,6 +380,13 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.equal((await post('/api/fake', { on: true })).body.on, true)
   assert.ok(state.media.length > 5)
   assert.equal(state.drafts.video.tool, 'orbit')
+  // the Library's styles: made from the page with their words, in the state with how a prompt cites them, removed
+  const added = await post('/api/styles', { name: 'Pen', paths: [at('a.png'), at('a.png')], words: 'fine pen' })
+  assert.deepEqual(added.body.map(s => [s.name, s.files.length, s.words]), [['Pen', 1, 'fine pen']])
+  const pen = (await fetch(url + '/api/state').then(r => r.json())).styles[0]
+  assert.match(pen.text, /^the last reference image: .+ \(fine pen\)$/)
+  assert.equal((await post('/api/styles', { name: '../x', paths: [] })).code, 400)
+  assert.deepEqual((await post('/api/styles', { name: 'Pen', remove: true })).body, [])
   const spec = { kind: 'image', tool: 'free', model: 'openrouter:fake/img', prompt: 'a lighthouse', inputs: {}, params: { n: 2 } }
   const est = await post('/api/estimate', spec)
   assert.deepEqual([est.body.estimate.amount, est.body.shown, est.body.needs], [0.08, '$0.08', null])

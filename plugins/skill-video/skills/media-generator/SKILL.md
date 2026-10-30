@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, restyle, object swap, clean up, reframe), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit").
+description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, clean up, reframe), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -17,6 +17,7 @@ variable holding `node …` does not run under zsh). Everything lives in the fol
 - `media/<id>/`: one folder per generation, with its outputs (`out-1.png`, `out.mp4`, `out.mp3`, `dub-en.mp4`…), its
   inputs (`in-*`) and its `job.json`;
 - `elements/<name>/`: the people, products and places a prompt cites with `@name`;
+- `styles/<name>/`: the user's own styles, a few images of a look and its words (`style.json`);
 - `ledger.jsonl`: every paid action, in the provider's unit;
 - `settings.json`: the confirmation thresholds, the monthly caps, the ElevenLabs plan and the default models.
 
@@ -50,10 +51,18 @@ Run `media.mjs doctor` once per conversation.
 
 Pick the kind (`image`, `video`, `audio`) and the tool that does what the user asks:
 `media.mjs tools <kind> --search "<words>"` lists them, with their inputs, fields and recommended models. "Custom" (id `free`)
-is the user's own prompt; the others fill a prompt template from their fields.
+is the user's own prompt; the others fill a prompt template from their fields. Custom and Custom edit
+(`free-edit`) need the user's words (`--prompt`); on the other tools they are optional, added to the tool's prompt.
 
 - Inputs are files: `--in <input>=<file>`, once per file (`--in references=a.png --in references=b.png`). Files the
-  user gave keep their path. A result of an earlier generation is in `media/<id>/`.
+  user gave keep their path. A result of an earlier generation is in `media/<id>/`. Most edit tools take optional
+  references (Restyle's characters, the light to match, what to paint, other views, the lettering, what lies beyond
+  the frame; several face photos for Face swap): the prompt names them by their place. A model takes so many
+  reference images (`media.mjs models <kind>`: `N refs`; a video model's apart from its frames), a Library style's
+  images included: past that, the command stops before anything is sent; pick fewer or another model. A video
+  with a first or last frame takes no reference image (OpenRouter keeps the frames and drops them): the command
+  refuses both, keep one or the other. FLUX Video Edit and Aleph 2 take none besides their video: Restyle with
+  characters or a style of the user's own goes to Seedance 2.5.
 - Fields: `--field <key>=<value>`, one of its options (its label works too: `--field light=Silhouette`, `Auto` leaves it
   out) or free text. Camera moves go in order: `--field movement="dolly in, then pan left"`. A relight's `light` is
   words: where each light is, its color, brightness and softness. Expand's frame is four margins, a share of the image
@@ -62,6 +71,14 @@ is the user's own prompt; the others fill a prompt template from their fields.
   exactly as written, without the template.
 - `@name` in the prompt brings that Element's images as references. `media.mjs elements add <name> <images…>` makes
   one, when the user wants a character or a product to come back.
+- **Styles.** Restyle (`--tool restyle`, image and video) redraws the source in a style, what is in it and its motion
+  kept; Custom takes one too, optional. `--field style=<style>`: a preset's label (`media.mjs tools image --search
+  restyle` lists the 24) or the name of a style of the user's own. `media.mjs styles add <name> <images…> --words
+  "<the look in words>"` makes one from 1 to 5 images that share a look (the dashboard's Library › Styles does the
+  same); its images go last among the references and the prompt names them, `media.mjs styles` lists them. With
+  such a style in Custom image, Recraft V4 Styles (`recraft/recraft-v4-styles`, Pro for more detail, about 1K) is
+  made for it: it draws the prompt in the look of the references. Not for Restyle: it makes a new image, the
+  source is not kept.
 
 ### 2. The model
 
@@ -157,6 +174,7 @@ rush, or a B-roll clip in the project the prompt names.
   Images are inlined (up to 50 MB a file). A video or a voice for OpenRouter is served from this machine at a random
   address through a Cloudflare quick tunnel, opened when the job is submitted (about 20 s) and closed when it ends.
   Nothing else.
-- **Git.** The engine writes the folder's `.gitignore`: git keeps `media/`, `elements/`, `ledger.jsonl` and
+- **Git.** The engine writes the folder's `.gitignore`: git keeps `media/`, `elements/`, `styles/`, `ledger.jsonl` and
   `settings.json`, and leaves out `.cache/` and `.trash/` (what the dashboard deleted).
-- **A new tool** is an entry in `engine/tools/<kind>.json`: read `references/tools-format.md`.
+- **A new tool** is an entry in `engine/tools/<kind>.json`: read `references/tools-format.md`. A new preset style
+  is an entry in `engine/tools/styles.json`.

@@ -1,11 +1,11 @@
 [
   {
     "id": "free", "label": "Custom", "group": "Custom", "mode": "create", "icon": "sparkles",
-    "description": "Your own prompt, with optional reference images.",
+    "description": "Your own prompt, with optional reference images and style.",
     "inputs": [{ "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }],
-    "fields": [],
-    "template": "{prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image"]
+    "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": ". Rendered in the style of {}" }],
+    "template": "{prompt} {style}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image", "recraft/recraft-v4-styles", "recraft/recraft-v4-styles-pro"]
   },
   {
     "id": "cinematic-camera", "label": "Cinematic camera", "group": "Camera", "mode": "create", "icon": "camera",
@@ -170,13 +170,21 @@
     "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image"]
   },
   {
+    "id": "restyle", "label": "Restyle", "group": "Style", "mode": "edit", "icon": "paintbrush",
+    "description": "Redraws the image in a style, or in the look of a style of your Library. What is in it stays.",
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }, { "key": "references", "kind": "image", "label": "Characters", "optional": true, "multiple": true, "phrase": "The people, products and clothes of {} keep their exact identity, redrawn in the same style." }],
+    "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "styles", "default": "Hand-painted cel" }],
+    "template": "Redraw the first image in the style of {style}. Keep its composition, framing, poses, expressions and every element in place; only the look changes. {references} {prompt}",
+    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image"]
+  },
+  {
     "id": "relight", "label": "Relight", "group": "Light & color", "mode": "edit", "icon": "sun",
     "description": "Moves the light: drag one to three lights around the subject, set their softness, brightness and color.",
-    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }, { "key": "references", "kind": "image", "label": "Light references", "optional": true, "multiple": true, "phrase": "Match the light, color and mood of {}." }],
     "fields": [
       { "key": "light", "label": "Light", "type": "light", "lights": 3, "default": "a soft white light coming from the left, at eye level, at 50% brightness" }
     ],
-    "template": "Relight the image with {light}. Shadows, highlights and reflections follow the new light; subject, pose, framing and background stay identical. {prompt}",
+    "template": "Relight the first image with {light}. {references} Shadows, highlights and reflections follow the new light; subject, pose, framing and background stay identical. {prompt}",
     "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"]
   },
   {
@@ -184,10 +192,11 @@
     "description": "Paint over an area, say what goes there.",
     "inputs": [
       { "key": "image", "kind": "image", "label": "Image" },
-      { "key": "sketch", "kind": "mask", "label": "Paint the area" }
+      { "key": "sketch", "kind": "mask", "label": "Paint the area" },
+      { "key": "references", "kind": "image", "label": "What to paint", "optional": true, "multiple": true, "phrase": "Paint it as shown in {}." }
     ],
     "fields": [{ "key": "change", "label": "Put there", "type": "text", "placeholder": "a vase of white tulips" }],
-    "template": "The second image is the first with an area painted over in translucent magenta. Change only that area: {change}. No magenta in the result; everything outside the area stays identical. {prompt}",
+    "template": "The second image is the first with an area painted over in translucent magenta. Change only that area: {change}. {references} No magenta in the result; everything outside the area stays identical. {prompt}",
     "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"]
   },
   {
@@ -204,10 +213,10 @@
     "description": "Puts a face from one photo onto the person of another.",
     "inputs": [
       { "key": "image", "kind": "image", "label": "Target" },
-      { "key": "face", "kind": "image", "label": "Face" }
+      { "key": "face", "kind": "image", "label": "Face", "multiple": true, "phrase": "the face of the person in {}" }
     ],
     "fields": [],
-    "template": "Replace the face of the person in the first image with the face of the person in the second image. Keep the first image's pose, expression, lighting, skin tone match, hair and background. {prompt}",
+    "template": "Replace the face of the person in the first image with {face}. Keep the first image's pose, expression, lighting, skin tone match, hair and background. {prompt}",
     "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro", "openai/gpt-image-2.5-sunburst"]
   },
   {
@@ -224,7 +233,7 @@
   {
     "id": "expand", "label": "Expand", "group": "Retouch", "mode": "edit", "icon": "expand",
     "description": "Extends the image beyond its edges: drag its frame wider or taller.",
-    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }, { "key": "references", "kind": "image", "label": "Beyond the frame", "optional": true, "multiple": true, "phrase": "Take what lies beyond the frame from {}." }],
     "fields": [
       { "key": "top", "label": "Top", "type": "margin", "default": 0 },
       { "key": "right", "label": "Right", "type": "margin", "default": 0 },
@@ -232,27 +241,27 @@
       { "key": "left", "label": "Left", "type": "margin", "default": 0 },
       { "key": "beyond", "label": "What's beyond", "type": "text", "placeholder": "more of the beach and the sky" }
     ],
-    "template": "The image sits on a larger canvas with flat gray margins. Fill the gray margins by continuing the scene naturally ({beyond}), with the same perspective, light, grain and colors. The original picture stays untouched where it is; no gray, border or seam is left. {prompt}",
+    "template": "The image sits on a larger canvas with flat gray margins. Fill the gray margins by continuing the scene naturally ({beyond}), with the same perspective, light, grain and colors. {references} The original picture stays untouched where it is; no gray, border or seam is left. {prompt}",
     "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"],
     "local": "expand"
   },
   {
     "id": "new-angle", "label": "New angle", "group": "Camera", "mode": "edit", "icon": "rotate-3d",
     "description": "The same scene seen from another camera angle.",
-    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }, { "key": "references", "kind": "image", "label": "Other views", "optional": true, "multiple": true, "phrase": "Use {} as other views of the subject." }],
     "fields": [{ "key": "angle", "label": "Angle", "type": "choice", "options": ["from the left", "from the right", "from above", "low angle", "close-up", "wide shot", "from behind"], "default": "from the left" }],
-    "template": "The same scene, same subject and moment, seen {angle}. Consistent identity, outfit, lighting and place. {prompt}",
+    "template": "The same scene, same subject and moment, seen {angle}. {references} Consistent identity, outfit, lighting and place. {prompt}",
     "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "edit-text", "label": "Edit text", "group": "Retouch", "mode": "edit", "icon": "type",
     "description": "Changes a text in the image, same font and place.",
-    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
+    "inputs": [{ "key": "image", "kind": "image", "label": "Image" }, { "key": "references", "kind": "image", "label": "Lettering", "optional": true, "multiple": true, "phrase": "Match the lettering shown in {}." }],
     "fields": [
       { "key": "old", "label": "Text now", "type": "text", "placeholder": "SUMMER SALE" },
       { "key": "new", "label": "New text", "type": "text", "placeholder": "WINTER SALE" }
     ],
-    "template": "Replace the text \"{old}\" with \"{new}\" in the same font, size, color, perspective and place. Nothing else changes. {prompt}",
+    "template": "Replace the text \"{old}\" with \"{new}\" in the same font, size, color, perspective and place. {references} Nothing else changes. {prompt}",
     "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-3-pro-image"]
   },
   {

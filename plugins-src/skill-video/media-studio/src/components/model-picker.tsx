@@ -26,7 +26,7 @@ export function capsOf(m: Model) {
     p.resolution?.length ? (p.resolution.length > 1 ? `${p.resolution[0]}–${p.resolution.at(-1)}` : p.resolution[0]) : null,
     p.audio ? "sound" : null,
     p.frames?.includes("last_frame") ? "first + last frame" : p.frames?.length ? "first frame" : null,
-    p.references ? `${p.references} references` : null,
+    p.references ? `${p.references} reference${p.references > 1 ? "s" : ""}` : null,
     p.n && p.n.max > 1 ? `up to ${p.n.max} at once` : null,
     p.voices?.length ? `${p.voices.length} voices` : null,
   ].filter((c): c is string => !!c)

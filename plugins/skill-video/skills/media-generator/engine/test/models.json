@@ -11,11 +11,11 @@
   ],
   "video": [
     { "id": "fake/vid", "lab": "Fake", "name": "Video", "role": "generate", "resolutions": ["720p", "1080p"], "aspect_ratios": ["9:16", "1:1", "16:9"], "durations": [5, 10],
-      "frames": ["first_frame", "last_frame"], "sound": true, "seed": true, "upscale": null, "pricing": { "duration_seconds_with_audio": 0.12, "duration_seconds_without_audio": 0.1 } },
+      "frames": ["first_frame", "last_frame"], "references": 3, "sound": true, "seed": true, "upscale": null, "pricing": { "duration_seconds_with_audio": 0.12, "duration_seconds_without_audio": 0.1 } },
     { "id": "fake/avatar-iv", "lab": "Fake", "name": "Avatar", "role": "avatar", "resolutions": ["720p", "1080p"], "aspect_ratios": null, "durations": null,
-      "frames": [], "sound": false, "seed": false, "upscale": null, "pricing": { "duration_seconds": 0.05 } },
+      "frames": [], "references": 1, "sound": false, "seed": false, "upscale": null, "pricing": { "duration_seconds": 0.05 } },
     { "id": "fake/flux-video-upscale", "lab": "Fake", "name": "Upscale", "role": "upscale", "resolutions": null, "aspect_ratios": null, "durations": null,
-      "frames": [], "sound": false, "seed": false, "upscale": { "min": 1.5, "max": 3, "creativity": true },
+      "frames": [], "references": 0, "sound": false, "seed": false, "upscale": { "min": 1.5, "max": 3, "creativity": true },
       "pricing": { "cents_per_megapixel_second_precise": 3.5, "cents_per_megapixel_second_creative": 5 } }
   ],
   "speech": [

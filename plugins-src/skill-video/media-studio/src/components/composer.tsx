@@ -17,6 +17,8 @@ import { Slider } from "@/components/ui/slider"
 import {
   api,
   fill,
+  imageInputs,
+  ownPrompt,
   plain,
   priceLabel,
   type EstimateAnswer,
@@ -26,10 +28,12 @@ import {
   type State,
   type Tool,
   type Voice,
+  withLooks,
 } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, Price } from "@/components/chips"
 import { FieldInput, sections, Setups } from "@/components/fields"
 import { LightRig } from "@/components/light-rig"
+import { StyleField } from "@/components/style-picker"
 import { ExpandPreview, marginsOf } from "@/components/expand"
 import { ExtendPanel } from "@/components/extend"
 import { InputSlots, slotFor, upload } from "@/components/inputs"
@@ -118,10 +122,24 @@ export function Composer({
 
   // the prompt sent: the tool's template filled with its fields and the user's words, or Claude's prompt (a draft)
   // with the user's words after it
-  const prompt = value.raw ? [value.rawText, value.intent].filter(Boolean).join(" ").trim() : fill(tool, value.fields, value.intent)
-  // the user writes the whole prompt (Custom, speech), or adds words to the one the tool builds
-  const whole = tool.template === "{prompt}", takesWords = tool.template.includes("{prompt}")
+  const prompt = value.raw ? [value.rawText, value.intent].filter(Boolean).join(" ").trim() : fill(tool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs)
+  // the same, read only, with what is still to fill as {key}
+  const shownPrompt = value.raw ? prompt : fill(tool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs, true)
+  // the user writes the whole prompt (Custom, speech), or adds words to the one the tool builds; those are needed on
+  // Custom and Custom edit (no prompt of their own), optional beside a tool's
+  const whole = ownPrompt(tool), takesWords = tool.template.includes("{prompt}")
+  const custom = tool.id === "free" || tool.id === "free-edit"
   const missing = tool.inputs.find((i) => !i.optional && !value.inputs[i.key]?.length)
+  // the reference images the model takes, and those this sends: the tool's image inputs and a Library style's; an
+  // input of several takes what is left (« 2 / 13 »)
+  // with a frame, OpenRouter keeps a video's frames and drops its reference images: none then
+  const framed = kind === "video" && model?.role !== "avatar" && ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0)
+  const maxRefs = framed ? 0 : model?.params.references
+  const styleField = tool.fields.find((f) => f.type === "style")
+  const styleImages = (styleField && state.styles?.find((s) => s.name === (value.fields[styleField.key] ?? styleField.default))?.files.length) || 0
+  const usedRefs = imageInputs(kind, tool).reduce((n, i) => n + (value.inputs[i.key]?.length ?? 0), 0) + styleImages
+  const overRefs = maxRefs != null ? usedRefs - maxRefs : 0
+  const limits = maxRefs == null ? {} : Object.fromEntries(imageInputs(kind, tool).filter((i) => i.multiple).map((i) => [i.key, Math.max(0, (value.inputs[i.key]?.length ?? 0) + maxRefs - usedRefs)]))
 
   const spec: Spec = useMemo(
     () => ({
@@ -143,9 +161,13 @@ export function Composer({
   const expand = tool.local === "expand", extend = tool.local === "extend"
   const blocker = missing
     ? missing.kind === "mask" || missing.kind === "sketch" ? missing.label : `Add ${missing.label.toLowerCase()}`
+    : overRefs > 0 && model
+      ? usedRefs === styleImages
+        ? framed ? "Frames or your style, not both" : "Pick a model for your style"
+        : framed ? "Frames or references, not both" : `Remove ${overRefs} image${overRefs > 1 ? "s" : ""}`
     : expand && !Object.values(marginsOf(value.fields)).some(Boolean)
       ? "Set the frame"
-      : !eleven && !local && !prompt && tool.id !== "upscale"
+      : !eleven && !local && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale"
       ? kind === "audio" ? "Write the text" : "Write a prompt"
       : tool.id === "translate" && !value.fields.to?.trim()
         ? "Pick the languages"
@@ -255,7 +277,7 @@ export function Composer({
     const t = tools.find((x) => x.id === draft.tool) ?? tool
     // Claude's prompt replaces the tool's (shown read-only, the user's words still go after it); for a tool whose
     // prompt is the user's own, it is those words
-    const own = t.template === "{prompt}" && !!draft.prompt
+    const own = ownPrompt(t) && !!draft.prompt
     onChange({ ...value, tool: t.id, model: draft.model ?? value.model, fields: { ...value.fields, ...draft.fields }, raw: !!draft.prompt && !own,
       rawText: draft.prompt ?? value.rawText, intent: draft.prompt ? (own ? draft.prompt : "") : value.intent })
     onDraftSeen(draft.at)
@@ -270,7 +292,7 @@ export function Composer({
   async function take(files: File[]) {
     let inputs = value.inputs
     for (const f of files) {
-      const slot = slotFor(tool, inputs, f.name)
+      const slot = slotFor(tool, inputs, f.name, limits)
       if (!slot) continue
       try {
         const path = await upload(f)
@@ -346,7 +368,7 @@ export function Composer({
           </>
         )}
 
-        {!tool.template && <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} />}
+        {!tool.template && <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={limits} none={framed ? "Not with a frame" : undefined} />}
 
         {tool.presets && <Setups tool={tool} fields={value.fields} onPick={(fields) => set({ fields: { ...value.fields, ...fields }, raw: false })} />}
 
@@ -393,6 +415,8 @@ export function Composer({
                 </div>
               ) : tool.id === "translate" && f.key === "quality" ? (
                 <DubModels key={f.key} spec={spec} value={value.fields.quality ?? "dubbing_v1"} ready={!missing && !!value.fields.to} onChange={(q) => set({ fields: { ...value.fields, quality: q } })} />
+              ) : f.type === "style" ? (
+                <StyleField key={f.key} field={f} value={value.fields[f.key]} kind={kind} styles={state.styles ?? []} media={state.media} home={state.home} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               ) : f.type === "light" ? (
                 <LightRig key={`${f.key}-${i}`} field={f} fields={value.fields} video={kind === "video"} onChange={(patch) => set({ fields: { ...value.fields, ...patch }, raw: false })} />
               ) : (
@@ -414,7 +438,7 @@ export function Composer({
                 <Label hint={value.raw ? "written by Claude" : "built by the tool, with your words"}>Prompt</Label>
                 <Textarea
                   readOnly
-                  value={prompt}
+                  value={shownPrompt}
                   aria-label="Prompt sent to the model"
                   className="max-h-60 min-h-16 resize-none border-dashed bg-muted/40 px-3 py-2 text-sm leading-relaxed text-foreground/80 focus-visible:ring-0 md:text-sm dark:bg-muted/30"
                 />
@@ -428,20 +452,20 @@ export function Composer({
             {/* the user's own words, with the tool's files */}
             {(takesWords || tool.inputs.length > 0) && (
               <div>
-                <Label hint={whole ? undefined : "added to the tool's prompt"}>{kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}</Label>
+                <Label hint={whole ? undefined : custom ? "added to the tool's prompt" : "optional, added to the tool's prompt"}>{kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}</Label>
                 <InputGroup className="rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
                   {takesWords && (
                     <InputGroupTextarea
                       value={value.intent}
                       aria-label={kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}
-                      placeholder={kind === "audio" ? "What the voice says" : whole ? tool.description : "Anything to add: details, style, what must not change"}
+                      placeholder={kind === "audio" ? "What the voice says" : whole ? tool.description : custom ? "What to change" : "Anything to add: details, style, what must not change"}
                       className={cn("max-h-80 px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
                       onChange={(e) => set({ intent: e.target.value })}
                     />
                   )}
                   {tool.inputs.length > 0 && (
                     <InputGroupAddon align="block-end" className={cn("px-3 pt-3 pb-3 font-normal", takesWords && "border-t")}>
-                      <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} />
+                      <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} limits={limits} none={framed ? "Not with a frame" : undefined} />
                     </InputGroupAddon>
                   )}
                 </InputGroup>

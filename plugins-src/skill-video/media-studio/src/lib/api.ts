@@ -8,15 +8,18 @@ export type Input = {
   label: string
   optional?: boolean
   multiple?: boolean
+  // how the prompt names its images, {} their place (« images 2 to 3 »): nothing without a file
+  phrase?: string
 }
-// an option: its value, or the value with what the dashboard shows of it (a preset light carries its lights)
-export type Option = string | { value: string; label?: string; group?: string; note?: string; rig?: Light[] }
+// an option: its value, or the value with what the dashboard shows of it (a preset light carries its lights, a style
+// the palette of its card)
+export type Option = string | { value: string; label?: string; group?: string; note?: string; rig?: Light[]; swatch?: string[] }
 // one light around the subject: azimuth (0 front, 90 right, 180 behind) and elevation in degrees, 0–100 levels
 export type Light = { az: number; el: number; color: string; brightness: number; diffuse: number }
 export type Field = {
   key: string
   label: string
-  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin"
+  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin" | "style"
   options?: Option[]
   // how a value reads in the template ("shot on {}"): an empty one leaves nothing
   phrase?: string
@@ -64,7 +67,8 @@ export type Model = {
     audio?: boolean | null
     seed?: boolean
     n?: { min: number; max: number } | null
-    references?: number
+    // the reference images it takes (a video model's apart from its frames); null when unknown
+    references?: number | null
     quality?: string[] | null
     background?: string[] | null
     voices?: string[] | null
@@ -122,6 +126,7 @@ export type State = {
   keys: { openrouter: boolean; management: boolean; elevenlabs: boolean }
   media: Job[]
   drafts: Partial<Record<Kind, Draft>>
+  styles: SavedStyle[]
   // ElevenLabs' plans: USD per 1,000 credits
   plans: Record<string, number>
   // the fake APIs a dev or test server was started on (none for a real one), and whether it uses them now
@@ -185,6 +190,8 @@ export type Voice = {
   preview_url?: string | null
 }
 export type Element = { name: string; files: string[] }
+// a style of the Library: its images, the words on its look, and how a prompt cites it (media.mjs writes it)
+export type SavedStyle = { name: string; files: string[]; words: string; text: string }
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, init)
@@ -229,6 +236,7 @@ export const api = {
     post<{ ok: true }>("/api/voice-clone", { name, paths }),
   elements: (body?: { name: string; paths?: string[]; remove?: boolean }) =>
     body ? post<Element[]>("/api/elements", body) : call<Element[]>("/api/elements"),
+  styles: (body: { name: string; paths?: string[]; words?: string; remove?: boolean }) => post<SavedStyle[]>("/api/styles", body),
 }
 
 export const fileUrl = (path: string) => `/files?path=${encodeURIComponent(path)}`
@@ -255,13 +263,44 @@ export function shown(f: Field, v: string) {
 // a label's first letter up, an aperture as written (f/2.8)
 export const sentence = (s: string) => (!s || /^f\//.test(s) ? s : s[0].toUpperCase() + s.slice(1))
 
-// the tool's template with its fields and the user's words: the same as media.mjs's fill
-export function fill(tool: Tool, fields: Record<string, string>, prompt: string) {
+// the user writes the whole prompt (Custom, speech): its template is their words, a style at most after them
+export const ownPrompt = (tool: Tool) => tool.template.replace(" {style}", "") === "{prompt}"
+
+// a style of the Library stands for its words in the prompt, as media.mjs sends it
+export const withLooks = (tool: Tool, fields: Record<string, string>, styles: SavedStyle[]) =>
+  Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, (tool.fields.find((f) => f.key === k)?.type === "style" && styles.find((s) => s.name === v)?.text) || v]))
+
+// the inputs whose images count as references: every image of an image model, a video model's references and sketch
+// (its frames go apart)
+export const imageInputs = (kind: Kind, tool: Tool) =>
+  tool.inputs.filter((i) => (kind === "image" ? ["image", "sketch", "mask"].includes(i.kind) : ["references", "sketch"].includes(i.key)))
+
+// where an input's images reach the model, as the prompt names them: the same as media.mjs's places
+const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"]
+export function places(kind: Kind, tool: Tool, inputs: Record<string, string[]>) {
+  const noun = kind === "image" ? "image" : "reference image", out: Record<string, string> = {}
+  let at = 1
+  for (const i of imageInputs(kind, tool)) {
+    const n = inputs[i.key]?.length ?? 0
+    if (n) out[i.key] = n === 1 ? `the ${ORDINALS[at - 1] ?? `#${at}`} ${noun}` : `${noun}s ${at} to ${at + n - 1}`
+    at += n
+  }
+  return out
+}
+
+// the tool's template with its fields, its inputs' places and the user's words: the same as media.mjs's fill. holes
+// (the read-only prompt) keeps a placeholder not filled yet as {key}, the user's words aside; an Auto picked on purpose
+// still leaves nothing
+export function fill(tool: Tool, fields: Record<string, string>, prompt: string, kind: Kind, inputs: Record<string, string[]>, holes = false) {
+  const hole = (key: string) => (holes ? `{${key}}` : "")
   let text = tool.template || "{prompt}"
   for (const f of tool.fields) {
     const v = String(fields[f.key] ?? f.default ?? "")
-    text = text.replaceAll(`{${f.key}}`, v && f.phrase ? f.phrase.replace("{}", v) : v)
+    const auto = f.options?.some((o) => opt(o).value === "")
+    text = text.replaceAll(`{${f.key}}`, v ? (f.phrase ? f.phrase.replace("{}", v) : v) : auto ? "" : hole(f.key))
   }
+  const at = places(kind, tool, inputs)
+  for (const i of tool.inputs) if (i.phrase) text = text.replaceAll(`{${i.key}}`, at[i.key] ? i.phrase.replace("{}", at[i.key]) : hole(i.key))
   return text
     .replaceAll("{prompt}", prompt ?? "")
     .replace(/\s+/g, " ")

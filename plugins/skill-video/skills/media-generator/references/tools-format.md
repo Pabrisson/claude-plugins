@@ -25,7 +25,7 @@ the same files: a new tool is a new entry, nothing else to code.
 |---|---|
 | `id` | Unique in its file, letters, digits and `-` |
 | `label`, `description` | What the dashboard shows, in English, sentence case |
-| `group` | The picker's group: Custom, Camera, VFX, Frames, Characters, Light & color, Retouch, Voice |
+| `group` | The picker's group: Custom, Style, Camera, VFX, Frames, Characters, Light & color, Retouch, Voice |
 | `mode` | `create` or `edit`: the composer's segmented control |
 | `icon` | A lucide icon name (kebab-case) |
 | `inputs` | The files it takes, in the order they are sent (below) |
@@ -44,7 +44,13 @@ Fields (`type`):
 - **light**: the lights around the subject, placed on a stage (`lights`: how many at most); its value is the light in
   words. With `options` (presets, each with its `rig` of lights), the dashboard offers Preset, Custom and Describe.
 - **margin**: Expand's share of the image added on one side (0 to 2), set by the dashboard's frame editor.
-- An option is a value, or `{ "value", "label", "group", "note" }`; `"value": ""` with `"label": "Auto"` leaves the field
+- **style**: a look, picked in the dashboard's style gallery (a card per preset, the user's own from the Library under
+  « Yours »). `"options": "styles"` takes the shared list of `tools/styles.json` (Restyle and Custom use it; a
+  `default` may be one of its labels); without a `default` the field is optional (Custom: a × clears it). A style of
+  the Library (`styles/<name>/`, its value is its name) stands for « the last reference image(s): their medium,
+  palette… (its words) » in the prompt, and its images go last among the references.
+- An option is a value, or `{ "value", "label", "group", "note" }` (a style adds `swatch`: 3 or 4 colors for its
+  card until the user has a result in it, then the card shows that result); `"value": ""` with `"label": "Auto"` leaves the field
   out of the prompt. On the command line, a label stands for its value (`--field light=Silhouette`).
 - `phrase` wraps a field's value in the template (`"Shot on {}"`), so an empty one leaves nothing behind.
 - `section` puts fields under one heading, the selects as tiles two a row.
@@ -60,9 +66,15 @@ Inputs (`kind`):
 - **mask**: the image (or a frame of the video, picked along it) with an area the user painted in translucent magenta
   (brush, eraser, lasso), sent as an image reference. The template names the magenta area.
 - **media**: an audio or a video file (ElevenLabs tools).
-- `optional: true` when it may be left out, `multiple: true` when it takes several files.
+- `optional: true` when it may be left out, `multiple: true` when it takes several files (the dashboard caps them at
+  what the chosen model takes, « 2 / 13 »).
+- `phrase`: how the prompt names the input's images, `{}` their place, put where the template says `{key}`:
+  `"Match the light of {}."` gives « Match the light of images 2 to 3. », nothing without a file. An image model gets
+  every input in order (« the second image »); a video model its `references` and `sketch` apart from its frames
+  (« the first reference image »).
 
 A template reads well with any field left empty: the engine drops empty parentheses and folds the punctuation left by
-empty fields into one mark (the dashboard's `fill` does the same). Test a
+empty fields into one mark (the dashboard's `fill` does the same; its read-only prompt shows a placeholder not filled
+yet as `{key}`, never sent). Test a
 new tool with `media.mjs <kind> --tool <id> … --estimate`: it prints the filled prompt and the price without
 spending.

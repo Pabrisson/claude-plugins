@@ -50,6 +50,29 @@
         "Never runs `media.mjs video` and never passes --spend",
         "Tells the user to use the Reload bar in the dashboard"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Redessine cette photo en style laine tricotée : ../video-editor/engine/test/assets/photo.png",
+      "expected_output": "The image tool restyle with the photo as its image and the style Knitted yarn world, the estimate asked first.",
+      "files": ["../video-editor/engine/test/assets/photo.png"],
+      "expectations": [
+        "Finds the tool with `media.mjs tools image --search` (restyle or style)",
+        "Passes the photo as `--in image=<path>` and `--field style=` Knitted yarn world (its label or value)",
+        "Asks before spending, with the price in USD",
+        "Never passes --spend before the user's yes"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Crée un style « encre » à partir de ces deux images, puis fais-moi un renard dans ce style : ../video-editor/engine/test/assets/a.png ../video-editor/engine/test/assets/b.png",
+      "expected_output": "A Library style made with `media.mjs styles add`, then a Custom image with `--field style=<its name>`, the estimate asked first.",
+      "files": ["../video-editor/engine/test/assets/a.png", "../video-editor/engine/test/assets/b.png"],
+      "expectations": [
+        "Runs `media.mjs styles add <name> <images…>` (with --words when the user describes the look)",
+        "Generates with the image tool free and `--field style=<the style name>`",
+        "Asks before spending, with the price in USD"
+      ]
     }
   ]
 }

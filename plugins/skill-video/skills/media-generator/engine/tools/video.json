@@ -1,14 +1,14 @@
 [
   {
     "id": "free", "label": "Custom", "group": "Custom", "mode": "create", "icon": "sparkles",
-    "description": "Your own prompt, with optional first and last frames or references.",
+    "description": "Your own prompt, with optional first and last frames, references and style.",
     "inputs": [
       { "key": "first_frame", "kind": "image", "label": "First frame", "optional": true },
       { "key": "last_frame", "kind": "image", "label": "Last frame", "optional": true },
       { "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }
     ],
-    "fields": [],
-    "template": "{prompt}",
+    "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": ". Rendered in the style of {}" }],
+    "template": "{prompt} {style}",
     "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
   },
   {
@@ -342,6 +342,17 @@
     "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.5"]
   },
   {
+    "id": "restyle", "label": "Restyle", "group": "Style", "mode": "edit", "icon": "paintbrush",
+    "description": "Redraws every frame in a style, or in the look of a style of your Library. Motion, camera and framing stay as filmed.",
+    "inputs": [
+      { "key": "video", "kind": "video", "label": "Video" },
+      { "key": "references", "kind": "image", "label": "Characters", "optional": true, "multiple": true, "phrase": "The people, products and clothes of {} keep their exact identity, redrawn in the same style." }
+    ],
+    "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "styles", "default": "Hand-painted cel" }],
+    "template": "Redraw every frame of the video in the style of {style}. Keep the motion, camera move, framing, timing, poses and expressions exactly as filmed; only the look changes. {references} {prompt}",
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.5"]
+  },
+  {
     "id": "extend", "label": "Extend", "group": "Custom", "mode": "edit", "icon": "fast-forward",
     "description": "Continues a video after its end (sequel) or builds what came before (prequel).",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
@@ -389,8 +400,8 @@
     "models": ["runway/aleph-2", "black-forest-labs/flux-video-edit"]
   },
   {
-    "id": "recolor", "label": "Recolor & restyle", "group": "Light & color", "mode": "edit", "icon": "palette",
-    "description": "A new grade, new colors for an item, or an artistic style, motion kept.",
+    "id": "recolor", "label": "Recolor", "group": "Light & color", "mode": "edit", "icon": "palette",
+    "description": "A new grade or new colors for an item, motion kept.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [{ "key": "look", "label": "New look", "type": "text", "placeholder": "teal and orange grade, the jacket becomes yellow" }],
     "template": "Restyle the video: {look}. Keep the motion, framing and timing identical. {prompt}",
@@ -401,14 +412,14 @@
     "description": "Replaces a subject or object, the action stays.",
     "inputs": [
       { "key": "video", "kind": "video", "label": "Video" },
-      { "key": "references", "kind": "image", "label": "New object", "optional": true }
+      { "key": "references", "kind": "image", "label": "New object", "optional": true, "multiple": true, "phrase": "(as shown in {})" }
     ],
     "fields": [
       { "key": "old", "label": "Replace", "type": "text", "placeholder": "the red mug" },
       { "key": "new", "label": "With", "type": "text", "placeholder": "a glass of orange juice" }
     ],
-    "template": "Replace {old} with {new} (the reference image if given), keeping its position, motion and the lighting. Everything else stays identical. {prompt}",
-    "models": ["runway/aleph-2", "black-forest-labs/flux-video-edit", "bytedance/seedance-2.5"]
+    "template": "Replace {old} with {new} {references}, keeping its position, motion and the lighting. Everything else stays identical. {prompt}",
+    "models": ["bytedance/seedance-2.5", "runway/aleph-2", "black-forest-labs/flux-video-edit"]
   },
   {
     "id": "clean-up", "label": "Clean up", "group": "Retouch", "mode": "edit", "icon": "eraser",

@@ -2,7 +2,8 @@
 // media-generator CLI and the dashboard's server. Images, videos and speech through the model routers of providers/,
 // voice changes and dubbing through ElevenLabs by video-editor's engine. Everything lives in the folder Claude Code
 // runs in ($MEDIA_GENERATOR_DIR overrides it): media/ (one folder per generation), elements/ (the @ references),
-// ledger.jsonl (what was spent), settings.json (thresholds, caps, defaults), .cache/ (catalogs, uploads, drafts)
+// styles/ (the Library's styles), ledger.jsonl (what was spent), settings.json (thresholds, caps, defaults), .cache/
+// (catalogs, uploads, drafts)
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import fs from 'node:fs'
@@ -31,7 +32,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     n: { type: 'string' }, batch: { type: 'string' }, duration: { type: 'string' }, ratio: { type: 'string' }, resolution: { type: 'string' },
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
-    search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' },
+    search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' },
   },
 })
 
@@ -115,8 +116,8 @@ const settings = () => {
 // the USD price of 1,000 ElevenLabs credits on the user's plan, null without a paid one
 const per1000 = () => PLANS[settings().elevenlabs.plan] || null
 
-// git keeps what the user made and cannot make again (media, elements, the ledger, the settings), not the cache
-const IGNORE = '# media-generator: the cache is remade, the media, elements, ledger and settings stay\n.cache/\n.trash/\n'
+// git keeps what the user made and cannot make again (media, elements, styles, the ledger, the settings), not the cache
+const IGNORE = '# media-generator: the cache is remade, the media, elements, styles, ledger and settings stay\n.cache/\n.trash/\n'
 function ensureHome() {
   for (const d of ['media', 'elements', '.cache']) fs.mkdirSync(at(d), { recursive: true })
   const gi = at('.gitignore'), now = fs.existsSync(gi) ? fs.readFileSync(gi, 'utf8') : ''
@@ -124,12 +125,19 @@ function ensureHome() {
 }
 
 const TOOLS = Object.fromEntries(KINDS.map(k => [k, JSON.parse(fs.readFileSync(path.join(ENGINE, `tools/${k}.json`), 'utf8'))]))
+// a field's options may name a list of tools/ shared by several tools (the styles), and its default one of its labels
+for (const f of Object.values(TOOLS).flat().flatMap(t => t.fields)) if (typeof f.options === 'string') {
+  f.options = JSON.parse(fs.readFileSync(path.join(ENGINE, `tools/${f.options}.json`), 'utf8'))
+  f.default = f.options.find(o => o.label === f.default)?.value ?? f.default
+}
 function toolOf(kind, id) {
   if (!KINDS.includes(kind)) throw userError(`the kinds are ${KINDS.join(', ')}`)
   const t = TOOLS[kind].find(x => x.id === id)
   if (!t) throw userError(`no ${kind} tool ${id}: media.mjs tools ${kind}`)
   return t
 }
+// the tools whose prompt is the user's words (a style at most after them): never sent without them
+const CUSTOM = ['free', 'free-edit']
 // the router's kind for a tool kind: audio is speech
 const routerKind = kind => (kind === 'audio' ? 'speech' : kind)
 
@@ -147,9 +155,25 @@ async function modelOf(kind, id) {
 
 // ---------- a request: the tool's prompt, its inputs, the model's settings ----------
 
-// the tool's template with its fields and the user's words; raw takes the prompt as written (edited in the dashboard).
-// A field's phrase wraps a value ("shot on {}"), so an empty one (Auto) leaves nothing; the punctuation left by empty
-// fields folds into one mark (the dashboard's fill does the same)
+// where an input's images reach the model, as the prompt names them: an image model gets every input in order (« the
+// second image », « images 2 to 4 »), a video model its references and sketch apart from its frames (« reference
+// images 1 to 2 »). The dashboard's places does the same
+const ORDINALS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth']
+function places(kind, tool, inputs) {
+  const noun = kind === 'image' ? 'image' : 'reference image', out = {}
+  let at = 1
+  for (const i of tool.inputs) {
+    if (kind === 'image' ? !['image', 'sketch', 'mask'].includes(i.kind) : !['references', 'sketch'].includes(i.key)) continue
+    const n = inputs?.[i.key]?.length ?? 0
+    if (n) out[i.key] = n === 1 ? `the ${ORDINALS[at - 1] ?? `#${at}`} ${noun}` : `${noun}s ${at} to ${at + n - 1}`
+    at += n
+  }
+  return out
+}
+
+// the tool's template with its fields, its inputs' places and the user's words; raw takes the prompt as written (edited
+// in the dashboard). A field's phrase wraps a value ("shot on {}"), an input's its place, so an empty one (Auto, no
+// file) leaves nothing; the punctuation left by empty ones folds into one mark (the dashboard's fill does the same)
 function fill(tool, spec) {
   if (spec.raw) return String(spec.prompt ?? '').trim()
   let text = tool.template || '{prompt}'
@@ -157,6 +181,8 @@ function fill(tool, spec) {
     const v = String(spec.fields?.[f.key] ?? f.default ?? '')
     text = text.replaceAll(`{${f.key}}`, v && f.phrase ? f.phrase.replace('{}', v) : v)
   }
+  const at = places(spec.kind, tool, spec.inputs)
+  for (const i of tool.inputs) if (i.phrase) text = text.replaceAll(`{${i.key}}`, at[i.key] ? i.phrase.replace('{}', at[i.key]) : '')
   return text.replaceAll('{prompt}', spec.prompt ?? '').replace(/\s+/g, ' ').replace(/\(\s*\)/g, '').replace(/\s+([.,:;)])/g, '$1')
     .replace(/[.,:;]{2,}/g, m => (m.includes('.') ? '.' : m[0])).replace(/^[\s.,:;]+|[\s,:;]+$/g, '').trim()
 }
@@ -174,6 +200,18 @@ function mentions(text) {
   })
   return { text: out, refs }
 }
+
+// a style of the Library (styles/<name>/): its images go last among the references, and the prompt cites them by
+// their place with the words on its look. A name, never a preset's value (those are sentences)
+function savedStyle(name) {
+  const d = at('styles', String(name ?? ''))
+  if (!/^[\w-]+$/.test(name ?? '') || !fs.existsSync(d)) return null
+  const files = fs.readdirSync(d).filter(f => kindOfFile(f) === 'image').sort().map(f => path.join(d, f))
+  const words = fs.existsSync(path.join(d, 'style.json')) ? readJson(path.join(d, 'style.json')).words ?? '' : ''
+  const [its, img] = files.length === 1 ? ['its', 'reference image'] : ['their', `${files.length} reference images`]
+  return { name, files, words, text: `the last ${img}: ${its} medium, palette, line work, texture and light, never ${its} subject or content${words ? ` (${words})` : ''}` }
+}
+const savedStyles = () => (fs.existsSync(at('styles')) ? fs.readdirSync(at('styles')).sort().map(savedStyle).filter(s => s?.files.length) : [])
 
 // the first value of a list the model accepts, preferring the wanted ones in order
 const pick = (list, ...wanted) => (list?.length ? wanted.find(w => w !== undefined && list.includes(w)) ?? list[0] : undefined)
@@ -223,6 +261,9 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
     const frames = clean({ first_frame: avatar ? undefined : files('first_frame')[0], last_frame: files('last_frame')[0] })
     for (const f of Object.keys(frames)) if (!m.params.frames.includes(f)) throw userError(`${m.name} takes no ${f.replace('_', ' ')}: pick another model`)
     const images = [...(avatar ? files('first_frame') : []), ...files('references'), ...files('sketch'), ...refsFromMentions]
+    if (m.params.references != null && images.length > m.params.references) throw userError(`${m.name} takes ${m.params.references} reference images, this asks for ${images.length}`)
+    // with a frame, OpenRouter keeps the frames and drops the reference images: never sent for nothing
+    if (!avatar && images.length && Object.keys(frames).length) throw userError('a first or last frame and reference images do not go together (OpenRouter keeps the frames, drops the references): remove one or the other; a Library style\'s images are references too')
     const refs = [...images.map(f => ({ kind: 'image', file: f })), ...(video ? [{ kind: 'video', file: video }] : []), ...files('audio').map(f => ({ kind: 'audio', file: f }))]
     if (refs.some(r => r.kind !== 'image') && spawnSync('cloudflared', ['--version'], { stdio: 'ignore' }).error) throw userError('a video or a voice reaches OpenRouter through a Cloudflare tunnel: brew install cloudflared (no account)')
     const upscale = m.role === 'upscale', edit = !!video, still = files('first_frame')[0] ?? files('last_frame')[0]
@@ -283,11 +324,18 @@ async function plan(spec) {
   const tool = toolOf(spec.kind, spec.tool), probing = !!spec.probe
   // the fields left out take their defaults (upscale's creativity, extend's direction…)
   const fields = { ...Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)])), ...spec.fields }
-  for (const f of tool.fields) if (fields[f.key] != null) fields[f.key] = optionValue(f, fields[f.key])
+  // a style of the Library: its words in the prompt, its images after the other references
+  const looks = []
+  for (const f of tool.fields) {
+    const s = f.type === 'style' && savedStyle(fields[f.key])
+    if (s) { looks.push(...s.files); fields[f.key] = s.text } else if (fields[f.key] != null) fields[f.key] = optionValue(f, fields[f.key])
+  }
   spec = { ...spec, fields }
   if (!probing) for (const i of tool.inputs) if (!i.optional && !spec.inputs?.[i.key]?.length) throw userError(`${tool.label} needs ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
   for (const f of Object.values(spec.inputs ?? {}).flat()) if (!fs.existsSync(f)) throw userError(`no such file: ${f}`)
   const { text: prompt, refs } = mentions(fill(tool, spec))
+  // a probe prices the tool before its files: a style's images would only trip the model's count
+  if (!probing) refs.push(...looks)
   if (tool.local === 'reframe') return { tool, prompt: '', provider: 'local', model: 'ffmpeg', estimate: { amount: 0, unit: 'usd', known: true, detail: 'local, free' } }
   if (tool.provider === 'elevenlabs') {
     if (probing && !spec.inputs?.clip?.length) return { tool, prompt: '', provider: 'elevenlabs', model: tool.id, estimate: { amount: null, unit: 'credits', known: false, detail: 'per minute of the clip' } }
@@ -295,6 +343,8 @@ async function plan(spec) {
     return { tool, prompt: '', provider: 'elevenlabs', model: argv[0] === 'dub' ? argv[argv.indexOf('--model') + 1] : 'eleven_multilingual_sts_v2', argv, estimate: elevenEstimate(argv) }
   }
   if (!prompt && !probing && !['upscale'].includes(tool.id)) throw userError('write a prompt (--prompt "…"), or fill the tool\'s fields (--field key=value)')
+  // the user's words are optional beside a tool's own prompt, the whole prompt of Custom and Custom edit
+  if (CUSTOM.includes(tool.id) && !spec.raw && !String(spec.prompt ?? '').trim() && !probing) throw userError('write a prompt (--prompt "…"): Custom has no prompt of its own')
   const id = spec.model ?? tool.models?.find(Boolean) ?? settings().defaults[spec.kind]
   const m = id ? await modelOf(spec.kind, id.includes(':') ? id : `openrouter:${id}`) : (await models(spec.kind)).find(x => x.role !== 'edit' && x.role !== 'upscale' && x.role !== 'avatar')
   let request
@@ -308,7 +358,7 @@ async function plan(spec) {
   } else if (tool.local === 'expand' && spec.inputs?.image?.length) {
     // expand: the image on its larger frame, the margins flat gray for the model to fill, at its closest ratio
     const canvas = expandCanvas(spec.inputs.image[0], spec.fields)
-    request = routerRequest('image', tool, { ...spec, inputs: { image: [canvas] }, params: { ...spec.params, aspect_ratio: spec.params?.aspect_ratio ?? ratioOf(m.params.aspect_ratio, canvas) } }, m, prompt, refs)
+    request = routerRequest('image', tool, { ...spec, inputs: { ...spec.inputs, image: [canvas] }, params: { ...spec.params, aspect_ratio: spec.params?.aspect_ratio ?? ratioOf(m.params.aspect_ratio, canvas) } }, m, prompt, refs)
   } else request = routerRequest(spec.kind, tool.local === 'extend' ? { ...tool, inputs: [] } : tool, spec, m, prompt, refs)
   const { provider } = routerOf(m.id)
   return { tool, prompt, provider: m.provider, model: m.model, name: m.name, request, estimate: provider.estimate(routerKind(spec.kind), m, request.estimate) }
@@ -549,6 +599,7 @@ function fieldHelp(f) {
   if (f.type === 'multi') return `--field ${f.key}="<one>, then <another>" (${list})`
   if (f.type === 'light') return `--field ${f.key}=<the light in words>${list ? `|${list}` : ''}`
   if (f.type === 'margin') return `--field ${f.key}=<0–2, a share of the image>`
+  if (f.type === 'style') return `--field ${f.key}=${list}|<a style of the Library>`
   return `--field ${f.key}=${list || `<${f.type}>`}`
 }
 
@@ -637,6 +688,24 @@ function elements(sub, name, ...files) {
   if (!list.length) console.log('no element yet: elements add <name> <images…>')
 }
 
+// styles [add <name> <images…> [--words "…"] | remove <name>]: the Library's styles, their look taken from images
+function styles(sub, name, ...files) {
+  if (sub === 'add') {
+    if (!/^[\w-]+$/.test(name ?? '') || !files.length) die('usage: styles add <name> <images…> [--words "the look in words"] (letters, digits, - and _)')
+    addStyle(name, files, opt.words)
+  } else if (sub === 'remove') fs.rmSync(at('styles', name ?? '-'), { recursive: true, force: true })
+  const list = savedStyles()
+  for (const s of list) console.log(`${s.name}: ${s.files.length} image${s.files.length > 1 ? 's' : ''}${s.words ? ` · ${s.words}` : ''}`)
+  if (!list.length) console.log('no style yet: styles add <name> <images…> [--words "…"]')
+}
+function addStyle(name, files, words) {
+  ensureHome()
+  fs.mkdirSync(at('styles', name), { recursive: true })
+  for (const f of files) fs.copyFileSync(f, at('styles', name, path.basename(f).replace(/^\d+-/, '')))
+  // more images keep the words already written, unless new ones come
+  writeJson(at('styles', name, 'style.json'), { words: (words ?? savedStyle(name)?.words ?? '').trim() })
+}
+
 function doctor() {
   const has = bin => !spawnSync(bin, ['-version'], { stdio: 'ignore' }).error
   const checks = [['node 22 or later', +process.versions.node.split('.')[0] >= 22, 'brew install node'], ['ffmpeg and ffprobe', has('ffmpeg') && has('ffprobe'), 'brew install ffmpeg'],
@@ -652,7 +721,7 @@ function doctor() {
   console.log(`limits: ${['openrouter', 'elevenlabs'].map(p => `${p} threshold ${s[p].threshold ?? 'none'}, cap ${s[p].cap ?? 'none'}`).join(' · ')}`)
   console.log(`folder: ${HOME}`)
   if (fs.existsSync(at('media'))) {
-    const kept = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', 'media/x', 'elements/x', 'ledger.jsonl', 'settings.json'], { encoding: 'utf8' })
+    const kept = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', 'media/x', 'elements/x', 'styles/x', 'ledger.jsonl', 'settings.json'], { encoding: 'utf8' })
     if (kept.status === 0) console.log(`warning: git ignores ${kept.stdout.trim().split('\n').join(', ')}: the media and the ledger must stay versioned, fix ${at('.gitignore')}`)
   }
   if (checks.some(c => !c[1])) process.exit(1)
@@ -709,7 +778,7 @@ async function handle(req, res) {
     const drafts = fs.existsSync(at('.cache', 'drafts.json')) ? readJson(at('.cache', 'drafts.json')) : {}
     return reply(res, 200, { home: HOME, settings: settings(), keys: { openrouter: !!process.env.OPENROUTER_API_KEY, management: !!process.env.OPENROUTER_MANAGEMENT_KEY, elevenlabs: !!process.env.ELEVENLABS_API_KEY },
       fake: fakeState(),
-      media: mediaList(), drafts, plans: PLANS, month: Object.fromEntries(['openrouter', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
+      media: mediaList(), drafts, styles: savedStyles(), plans: PLANS, month: Object.fromEntries(['openrouter', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
   }
   if (p === '/api/tools') return reply(res, 200, TOOLS)
   if (p === '/api/models') {
@@ -834,7 +903,18 @@ async function handle(req, res) {
     const list = fs.existsSync(at('elements')) ? fs.readdirSync(at('elements')).filter(d => fs.statSync(at('elements', d)).isDirectory()) : []
     return reply(res, 200, list.map(name => ({ name, files: fs.readdirSync(at('elements', name)).map(f => at('elements', name, f)) })))
   }
-  // the folder's files for the page: media, elements, uploads
+  if (p === '/api/styles' && post) {
+    const { name, paths, words, remove } = await readBody(req)
+    if (!/^[\w-]+$/.test(name ?? '')) return reply(res, 400, { error: 'a name of letters, digits, - and _' })
+    if (remove) fs.rmSync(at('styles', name), { recursive: true, force: true })
+    else {
+      const files = (paths ?? []).filter(f => inside(HOME, f) && kindOfFile(f) === 'image')
+      if (!files.length) return reply(res, 400, { error: 'a style takes one image or more' })
+      addStyle(name, files, words)
+    }
+    return reply(res, 200, savedStyles())
+  }
+  // the folder's files for the page: media, elements, styles, uploads
   if (p === '/files') {
     const f = inside(HOME, url.searchParams.get('path') ?? '')
     return f && fs.existsSync(f) && fs.statSync(f).isFile() ? sendFile(req, res, f) : reply(res, 404, { error: 'not found' })
@@ -899,7 +979,7 @@ async function studio() {
 }
 
 const commands = {
-  doctor, setup: () => setup(...args), studio, serve, draft, credits, jobs: () => jobs(args[0]), elements: () => elements(...args),
+  doctor, setup: () => setup(...args), studio, serve, draft, credits, jobs: () => jobs(args[0]), elements: () => elements(...args), styles: () => styles(...args),
   models: () => cmdModels(args[0]), tools: () => cmdTools(args[0]),
   image: () => generate('image'), video: () => generate('video'), audio: () => generate('audio'),
   run: async () => { const j = await run(args[0]); console.log(`${j.status}: ${j.outputs.join(', ') || j.error}`) },

@@ -32,7 +32,8 @@ const RUNNING_DOT = { image: "bg-img", video: "bg-vid", audio: "bg-aud" }
 // the page lives in the URL (#image, #credits…): a reload or the back button keeps it
 const PAGES = RAIL.flatMap((r) => (r ? [r.page] : []))
 const fromHash = (): Page => {
-  const h = window.location.hash.slice(1)
+  // a page may name its tab after it (#library/styles)
+  const h = window.location.hash.slice(1).split("/")[0]
   return (PAGES as string[]).includes(h) ? (h as Page) : "video"
 }
 
