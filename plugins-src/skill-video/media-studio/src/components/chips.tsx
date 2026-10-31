@@ -178,7 +178,15 @@ export function Price({ children, className }: { children: React.ReactNode; clas
 }
 
 // a section's title: small capitals, its hint in plain words beside it
-export function Label({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) {
+// stacked: the title, then its hint on a line of its own (a model's options, whose hints are long)
+export function Label({ children, hint, stacked }: { children: React.ReactNode; hint?: React.ReactNode; stacked?: boolean }) {
+  if (stacked)
+    return (
+      <div className="mb-2 text-xs text-muted-foreground">
+        <span className="block font-semibold tracking-wider text-foreground/70 uppercase">{children}</span>
+        {hint && <span className="mt-0.5 block">{hint}</span>}
+      </div>
+    )
   return (
     <div className="mb-2 flex items-baseline gap-1.5 text-xs text-muted-foreground">
       <span className="font-semibold tracking-wider text-foreground/70 uppercase">{children}</span>

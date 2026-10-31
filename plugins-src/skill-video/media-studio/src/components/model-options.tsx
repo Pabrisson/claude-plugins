@@ -17,7 +17,8 @@ const labelOf = (v: OptionValue) => (typeof v === "object" ? v.label : String(v)
 // model's own default goes when nothing is touched
 export function ModelOptions({ options, value, onChange }: { options: ModelOption[]; value: Record<string, unknown>; onChange: (v: Record<string, unknown> | undefined) => void }) {
   const put = (o: ModelOption, v: unknown) => {
-    const { [o.key]: _, ...rest } = value
+    const rest = { ...value }
+    delete rest[o.key]
     const next = v === o.default || v === undefined || v === "" ? rest : { ...rest, [o.key]: v }
     onChange(Object.keys(next).length ? next : undefined)
   }
@@ -39,7 +40,7 @@ export function ModelOptions({ options, value, onChange }: { options: ModelOptio
         if (o.type === "slider")
           return (
             <div key={o.key}>
-              <Label hint={o.hint}>{o.label}</Label>
+              <Label hint={o.hint} stacked>{o.label}</Label>
               <div className="flex items-center gap-3">
                 <Slider min={o.min} max={o.max} step={o.step ?? 0.05} value={[Number(v ?? o.min ?? 0)]} onValueChange={([x]) => put(o, +x.toFixed(2))} aria-label={o.label} />
                 <span className="w-10 text-right text-sm tabular-nums">{Number(v ?? 0).toFixed(2)}</span>
@@ -49,14 +50,14 @@ export function ModelOptions({ options, value, onChange }: { options: ModelOptio
         if (o.type === "choice")
           return (
             <div key={o.key}>
-              <Label hint={o.hint}>{o.label}</Label>
+              <Label hint={o.hint} stacked>{o.label}</Label>
               <Chips options={(o.values ?? []).map(valueOf)} value={v as string | number} label={(x) => labelOf(o.values!.find((y) => valueOf(y) === x)!)} onChange={(x) => put(o, x)} />
             </div>
           )
         if (o.type === "select")
           return (
             <div key={o.key}>
-              <Label hint={o.hint}>{o.label}</Label>
+              <Label hint={o.hint} stacked>{o.label}</Label>
               <Select value={String(v ?? "") || "auto"} onValueChange={(x) => put(o, x === "auto" ? "" : (o.values ?? []).map(valueOf).find((y) => String(y) === x))}>
                 <SelectTrigger className="w-full" aria-label={o.label}>
                   <SelectValue />
@@ -75,7 +76,7 @@ export function ModelOptions({ options, value, onChange }: { options: ModelOptio
         if (o.type === "file")
           return (
             <div key={o.key}>
-              <Label hint={o.hint}>{o.label}</Label>
+              <Label hint={o.hint} stacked>{o.label}</Label>
               {value[o.key] ? (
                 <div className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm">
                   <FileIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -86,7 +87,7 @@ export function ModelOptions({ options, value, onChange }: { options: ModelOptio
                 </div>
               ) : (
                 <Button variant="outline" size="sm" asChild>
-                  <label className="cursor-pointer">
+                  <label className="relative cursor-pointer">
                     <PlusIcon data-icon="inline-start" />
                     Choose a file
                     <input type="file" className="sr-only" onChange={async (e) => { const f = e.target.files?.[0]; if (f) put(o, await upload(f)) }} />
@@ -97,7 +98,7 @@ export function ModelOptions({ options, value, onChange }: { options: ModelOptio
           )
         return (
           <div key={o.key}>
-            <Label hint={o.hint}>{o.label}</Label>
+            <Label hint={o.hint} stacked>{o.label}</Label>
             <Input
               inputMode={o.type === "number" ? "decimal" : undefined}
               placeholder={o.default != null ? String(o.default) : "Auto"}

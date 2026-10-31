@@ -998,7 +998,7 @@ function ModelBlock({
             ) : null}
             {p.seed && (
               <div>
-                <Label hint="the same seed gives the same result">Seed</Label>
+                <Label hint="the same seed gives the same result" stacked>Seed</Label>
                 <Input
                   inputMode="numeric"
                   placeholder="random"
