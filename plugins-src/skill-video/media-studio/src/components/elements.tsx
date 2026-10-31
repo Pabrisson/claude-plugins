@@ -324,7 +324,7 @@ export function FilesEditor({
                   Library
                 </button>
               </PopoverTrigger>
-              <PopoverContent align="start" className="w-[min(460px,calc(100vw-2rem))] gap-0 p-0">
+              <PopoverContent align="start" collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col gap-0 p-0">
                 <LibraryList
                   title={`${kind === "audio" ? "Clips" : "Images"} from the library`}
                   items={results(state, kind)}

@@ -34,8 +34,10 @@ export type Field = {
   section?: string
   // a light field: how many lights the user may place
   lights?: number
-  // an element field: the Library's types it takes
+  // an element field: the Library's types it takes, several at once (« @Papi, @Coat ») and how each type reads
   types?: ElementType[]
+  multiple?: boolean
+  by_type?: Partial<Record<ElementType, string>>
   // may stay empty: the read-only prompt shows no {key} for it
   optional?: boolean
   // the tool cannot go without it (Object swap's element)
@@ -69,6 +71,9 @@ export type Tool = {
   // a References tool: the Element its sheets make, and the field or input it needs one of (words or photos)
   element?: ElementType
   one_of?: string[]
+  // a video edit Aleph 2 can carry from one edited frame: the image tool that edits it (or Custom edit on its frame
+  // prompt), the prompt that applies it to the shot, and whether this tool goes to Aleph only that way
+  keyframe?: { tool?: string; template?: string; apply: string; required?: boolean }
 }
 export type Model = {
   id: string

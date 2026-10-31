@@ -328,7 +328,7 @@ function LibraryPicker({ input, items, picked, onPick }: { input: Input; items: 
           <FolderOpenIcon className="size-3.5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[min(460px,calc(100vw-2rem))] gap-0 p-0">
+      <PopoverContent side="right" align="end" sideOffset={8} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col gap-0 p-0">
         <LibraryList title={`${input.label} from the library`} items={items} picked={picked} onPick={pick} multiple={input.multiple} />
       </PopoverContent>
     </Popover>
@@ -470,7 +470,7 @@ export function LibraryList({ title, items, picked, onPick, multiple, from }: { 
           </Button>
         </div>
       ) : (
-        <PickList items={list} picked={picked} onPick={onPick} empty={!items.length ? "Nothing in the library yet." : words ? `Nothing matches “${q.trim()}”.` : "Nothing matches these filters."} className="max-h-[min(380px,55vh)] p-3" />
+        <PickList items={list} picked={picked} onPick={onPick} empty={!items.length ? "Nothing in the library yet." : words ? `Nothing matches “${q.trim()}”.` : "Nothing matches these filters."} className="max-h-[min(380px,55vh)] min-h-0 flex-1 p-3" />
       )}
     </>
   )

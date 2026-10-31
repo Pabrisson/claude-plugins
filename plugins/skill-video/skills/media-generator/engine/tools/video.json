@@ -94,40 +94,40 @@
         { "value": "f/16", "group": "Deep", "note": "Everything sharp, sunstars" }
       ] },
       { "key": "movement", "label": "Movement", "type": "multi", "section": "Movement", "phrase": "Camera: {}", "default": "", "options": [
-        { "value": "static shot", "group": "Static" },
-        { "value": "dolly in", "group": "Push & pull" },
-        { "value": "dolly out", "group": "Push & pull" },
-        { "value": "slow zoom in", "group": "Push & pull" },
-        { "value": "slow zoom out", "group": "Push & pull" },
-        { "value": "crash zoom", "group": "Push & pull" },
-        { "value": "dolly zoom", "group": "Push & pull" },
-        { "value": "pan left", "group": "Pan & tilt" },
-        { "value": "pan right", "group": "Pan & tilt" },
-        { "value": "whip pan", "group": "Pan & tilt" },
-        { "value": "tilt up", "group": "Pan & tilt" },
-        { "value": "tilt down", "group": "Pan & tilt" },
-        { "value": "truck left", "group": "Lateral" },
-        { "value": "truck right", "group": "Lateral" },
-        { "value": "side tracking", "group": "Lateral" },
-        { "value": "crane up", "group": "Vertical" },
-        { "value": "crane down", "group": "Vertical" },
-        { "value": "pedestal up", "group": "Vertical" },
-        { "value": "pedestal down", "group": "Vertical" },
-        { "value": "arc left", "group": "Around" },
-        { "value": "arc right", "group": "Around" },
-        { "value": "orbit around the subject", "label": "Orbit", "group": "Around" },
-        { "value": "bullet time", "group": "Around" },
-        { "value": "tracking shot following the subject", "label": "Tracking", "group": "Follow" },
-        { "value": "handheld", "group": "Follow" },
-        { "value": "Steadicam follow", "group": "Follow" },
-        { "value": "snorricam on the actor", "label": "Snorricam", "group": "Follow" },
-        { "value": "POV", "group": "Follow" },
-        { "value": "FPV drone dive", "label": "FPV drone", "group": "Aerial" },
-        { "value": "drone orbit", "group": "Aerial" },
-        { "value": "aerial pullback", "group": "Aerial" },
-        { "value": "helicopter shot", "group": "Aerial" },
-        { "value": "robot arm move", "group": "Special" },
-        { "value": "rack focus", "group": "Special" }
+        { "value": "static shot", "group": "Static", "note": "The camera does not move: a locked-off frame." },
+        { "value": "dolly in", "group": "Push & pull", "note": "The camera rolls toward the subject: it grows, the background less so." },
+        { "value": "dolly out", "group": "Push & pull", "note": "The camera rolls back from the subject, revealing more of the place." },
+        { "value": "slow zoom in", "group": "Push & pull", "note": "The lens zooms in slowly: everything grows together, no depth shift." },
+        { "value": "slow zoom out", "group": "Push & pull", "note": "The lens zooms out slowly to show more of the frame." },
+        { "value": "crash zoom", "group": "Push & pull", "note": "A sudden, very fast zoom onto the subject, for impact." },
+        { "value": "dolly zoom", "group": "Push & pull", "note": "The camera rolls one way while the lens zooms the other: the subject stays, the background stretches (Vertigo)." },
+        { "value": "pan left", "group": "Pan & tilt", "note": "The camera turns left on its axis, sweeping across the scene." },
+        { "value": "pan right", "group": "Pan & tilt", "note": "The camera turns right on its axis, sweeping across the scene." },
+        { "value": "whip pan", "group": "Pan & tilt", "note": "A pan so fast the image blurs, often to cut to the next shot." },
+        { "value": "tilt up", "group": "Pan & tilt", "note": "The camera tips up on its axis, from the ground to the sky." },
+        { "value": "tilt down", "group": "Pan & tilt", "note": "The camera tips down on its axis, from the sky to the ground." },
+        { "value": "truck left", "group": "Lateral", "note": "The whole camera slides left along the scene: near things pass faster." },
+        { "value": "truck right", "group": "Lateral", "note": "The whole camera slides right along the scene: near things pass faster." },
+        { "value": "side tracking", "group": "Lateral", "note": "The camera travels beside a moving subject, keeping it in frame." },
+        { "value": "crane up", "group": "Vertical", "note": "The camera rises on a crane arm, often revealing the scene from above." },
+        { "value": "crane down", "group": "Vertical", "note": "The camera lowers on a crane arm, coming down into the scene." },
+        { "value": "pedestal up", "group": "Vertical", "note": "The camera rises straight up, its angle unchanged." },
+        { "value": "pedestal down", "group": "Vertical", "note": "The camera lowers straight down, its angle unchanged." },
+        { "value": "arc left", "group": "Around", "note": "The camera curves left around the subject, part of a circle." },
+        { "value": "arc right", "group": "Around", "note": "The camera curves right around the subject, part of a circle." },
+        { "value": "orbit around the subject", "label": "Orbit", "group": "Around", "note": "The camera circles the subject, which stays at the center." },
+        { "value": "bullet time", "group": "Around", "note": "Time almost stops while the camera sweeps around the subject." },
+        { "value": "tracking shot following the subject", "label": "Tracking", "group": "Follow", "note": "The camera follows the subject as it moves, keeping it in frame." },
+        { "value": "handheld", "group": "Follow", "note": "Held by hand: small shakes and drift, a raw documentary feel." },
+        { "value": "Steadicam follow", "group": "Follow", "note": "A smooth, floating follow on a stabilizer, gliding with the subject." },
+        { "value": "snorricam on the actor", "label": "Snorricam", "group": "Follow", "note": "The camera is rigged to the actor: their face stays still, the world swings around them." },
+        { "value": "POV", "group": "Follow", "note": "Seen through the character's eyes, moving as they look and walk." },
+        { "value": "FPV drone dive", "label": "FPV drone", "group": "Aerial", "note": "A racing drone dives fast and close, swooping through the scene." },
+        { "value": "drone orbit", "group": "Aerial", "note": "A drone circles the subject from high up." },
+        { "value": "aerial pullback", "group": "Aerial", "note": "The camera flies back and up, the subject shrinking into the landscape." },
+        { "value": "helicopter shot", "group": "Aerial", "note": "A high, steady glide over the landscape, as from a helicopter." },
+        { "value": "robot arm move", "group": "Special", "note": "A fast, precise move on a motion-control arm, like a commercial shot." },
+        { "value": "rack focus", "group": "Special", "note": "The focus shifts from one plane to another: the near thing blurs, the far one sharpens." }
       ] },
       { "key": "tempo", "label": "Tempo", "type": "choice", "section": "Movement", "default": "", "options": [
         { "value": "", "label": "Auto" },
@@ -358,7 +358,9 @@
     ],
     "fields": [],
     "template": "{prompt}. Change only that, keep everything else of the video identical.",
-    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.5"]
+    "keyframe": {"template": "{prompt}. Change only that, keep everything else of the image identical.", "apply": "{prompt}, as the keyframe shows. Change only that, keep everything else of the video identical."},
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.0-mini"],
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
   },
   {
     "id": "restyle", "label": "Restyle", "group": "Style", "mode": "edit", "icon": "paintbrush",
@@ -369,7 +371,9 @@
     ],
     "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "styles", "default": "Hand-painted cel" }],
     "template": "Redraw every frame of the video in the style of {style}. Keep the motion, camera move, framing, timing, poses and expressions exactly as filmed; only the look changes. {references} {prompt}",
-    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.5"]
+    "keyframe": {"tool": "restyle", "apply": "Redraw every frame of the video in the look of the keyframe: {style}. Keep the motion, camera move, framing, timing, poses and expressions exactly as filmed; only the look changes. {prompt}"},
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.0-mini"],
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
   },
   {
     "id": "extend", "label": "Extend", "group": "Custom", "mode": "edit", "icon": "fast-forward",
@@ -416,6 +420,7 @@
       ] }
     ],
     "template": "Relight the video: {light}. Light and shadows follow the 3D scene through the whole shot, nothing else changes. {prompt}",
+    "keyframe": {"tool": "relight", "apply": "Relight the whole video as the keyframe shows: {light}. Light and shadows follow the 3D scene through the whole shot, nothing else changes. {prompt}"},
     "models": ["runway/aleph-2", "black-forest-labs/flux-video-edit"]
   },
   {
@@ -459,22 +464,27 @@
       { "key": "items", "label": "New colors", "type": "recolors", "max": 3, "optional": true, "phrase": "{}" }
     ],
     "template": "Recolor the video: {grade}, {temperature}, {saturation}, {contrast}, {exposure}, {items}. Keep the motion, framing, timing, light direction and everything else identical. {prompt}",
+    "keyframe": {"template": "Recolor the image: {grade}, {temperature}, {saturation}, {contrast}, {exposure}, {items}. Keep the framing, light direction and everything else identical. {prompt}", "apply": "Recolor the whole video as the keyframe shows: {grade}, {temperature}, {saturation}, {contrast}, {exposure}, {items}. Keep the motion, framing, timing, light direction and everything else identical. {prompt}"},
     "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2"]
   },
   {
     "id": "object-swap", "label": "Object swap", "group": "Characters", "mode": "edit", "icon": "replace",
-    "description": "Replaces a subject or object with an element of your Library; the action stays. Paint it on a frame to point at it.",
+    "description": "Replaces a subject, an object, an outfit, a place or a pose with elements of your Library or photos; the action stays. Paint it on a frame to point at it.",
     "inputs": [
       { "key": "video", "kind": "video", "label": "Video" },
-      { "key": "sketch", "kind": "mask", "label": "Paint what goes", "optional": true, "field": "old", "phrase": "the area painted in translucent magenta on {}" }
+      { "key": "sketch", "kind": "mask", "label": "Paint what goes", "optional": true, "field": "old", "phrase": "the area painted in translucent magenta on {}" },
+      { "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true, "phrase": "with the subject of {}" }
     ],
     "fields": [
       { "key": "old", "label": "Replace", "type": "text", "placeholder": "the red mug" },
-      { "key": "element", "label": "With", "type": "element", "types": ["object", "character", "outfit", "brand", "other"], "required": true, "phrase": "{}" }
+      { "key": "element", "label": "With", "type": "element", "multiple": true, "types": ["character", "outfit", "object", "location", "pose", "brand", "other"], "phrase": "with {}",
+        "by_type": { "location": "{} as the setting", "pose": "the pose of {}" } }
     ],
-    "template": "Replace {old} ({sketch}) with {element}, keeping its position, motion and the lighting. Everything else stays identical. {prompt}",
-    "models": ["bytedance/seedance-2.5"],
-    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini"]
+    "one_of": ["element", "references"],
+    "template": "Replace {old} ({sketch}) {element} {references}, keeping its position, motion and the lighting. Everything else stays identical. {prompt}",
+    "keyframe": {"template": "Replace {old} ({sketch}) {element} {references}, at the same place and size, in the same light and perspective. Everything else stays identical. {prompt}", "apply": "Replace {old} {element}, exactly as the keyframe shows it, its whole look included: clothes, colors and shape. Keep its position, motion and the lighting through the whole shot. Everything else stays identical. {prompt}", "required": true},
+    "models": ["runway/aleph-2", "bytedance/seedance-2.0-mini"],
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
   },
   {
     "id": "clean-up", "label": "Clean up", "group": "Retouch", "mode": "edit", "icon": "eraser",
@@ -485,7 +495,9 @@
     ],
     "fields": [{ "key": "what", "label": "Remove", "type": "text", "placeholder": "the boom mic at the top and the man in the background" }],
     "template": "Remove {what} from the whole video and fill the background naturally. {sketch} Nothing else changes. {prompt}",
-    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.5"]
+    "keyframe": {"template": "Remove {what} from the image and fill the background naturally. {sketch} Nothing else changes. {prompt}", "apply": "Remove {what} from the whole video as the keyframe shows, filling the background naturally. Nothing else changes. {prompt}"},
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.0-mini"],
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
   },
   {
     "id": "inpaint", "label": "Inpaint", "group": "Retouch", "mode": "edit", "icon": "brush",
@@ -497,15 +509,17 @@
     ],
     "fields": [
       { "key": "change", "label": "Put there", "type": "text", "optional": true, "placeholder": "a vase of white tulips" },
-      { "key": "element", "label": "Or an element", "type": "element", "types": ["object", "character", "outfit", "brand", "other"], "phrase": "{}" }
+      { "key": "element", "label": "Or an element", "type": "element", "multiple": true, "types": ["character", "outfit", "object", "location", "pose", "brand", "other"], "phrase": "{}", "by_type": { "location": "{} as the setting", "pose": "the pose of {}" } }
     ],
     "one_of": ["change", "element", "references"],
     "template": "In the video, change only {sketch}: put {change} {element} {references} there, following the camera and the motion through the whole shot, in the scene's light. No magenta in the result; everything outside that area stays identical. {prompt}",
-    "models": ["bytedance/seedance-2.5"]
+    "keyframe": {"template": "In the image, change only {sketch}: put {change} {element} {references} there, in the scene's light and perspective. No magenta in the result; everything outside that area stays identical. {prompt}", "apply": "Put {change} {element} where the keyframe shows it, exactly as it looks there, following the camera and the motion through the whole shot, in the scene's light. Everything else stays identical. {prompt}", "required": true},
+    "models": ["runway/aleph-2", "bytedance/seedance-2.0-mini"],
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
   },
   {
     "id": "face-swap", "label": "Face swap", "group": "Characters", "mode": "edit", "icon": "scan-face",
-    "description": "Puts a face from photos or a character of your Library onto a person of the video; expressions and lip movements stay. Seedance 2.5 refuses photos of real-looking people.",
+    "description": "Puts a face from photos or a character of your Library onto a person of the video; expressions and lip movements stay. Seedance refuses photos of real-looking people.",
     "inputs": [
       { "key": "video", "kind": "video", "label": "Video" },
       { "key": "references", "kind": "image", "label": "Face", "optional": true, "multiple": true, "phrase": "the person in {}" }
@@ -516,7 +530,9 @@
     ],
     "one_of": ["character", "references"],
     "template": "Replace the face of the person {who} in the video with the face of {character} {references}. Keep the head movements, expressions, eye direction, lip movements, lighting and skin tone match; hair, body, clothes and background stay identical. {prompt}",
-    "models": ["bytedance/seedance-2.5"]
+    "keyframe": {"template": "Replace the face of the person {who} with the face of {character} {references}. Keep the head angle, expression, eye direction, lighting and skin tone match; hair, body, clothes and background stay identical. {prompt}", "apply": "Replace the face of the person {who} with the face of {character} as the keyframe shows it, keeping the head movements, expressions, eye direction and lip movements through the whole shot; hair, body, clothes and background stay identical. {prompt}", "required": true},
+    "models": ["runway/aleph-2", "bytedance/seedance-2.0-mini"],
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
   },
   {
     "id": "remove-background", "label": "Remove background", "group": "Retouch", "mode": "edit", "icon": "scissors",

@@ -43,6 +43,7 @@ import { ElementField } from "@/components/element-field"
 import { StyleField } from "@/components/style-picker"
 import { ExpandPreview, marginsOf } from "@/components/expand"
 import { ExtendPanel } from "@/components/extend"
+import { KeyframePanel } from "@/components/keyframe"
 import { InputSlots, slotFor, upload } from "@/components/inputs"
 import { MentionTextarea } from "@/components/mention"
 import { ToolPicker } from "@/components/tool-picker"
@@ -143,12 +144,16 @@ export function Composer({
   const def = state.settings.defaults[kind]
   const modelId = eleven || local ? undefined : (value.model && fitting.some((m) => m.id === value.model) ? value.model : def && fitting.some((m) => m.id === def) ? def : fitting[0]?.id)
   const model = models.find((m) => m.id === modelId)
+  // Aleph 2 on a tool with a keyframe recipe: the keyframe made from this video (kept with its time), sent with it
+  const keyframing = kind === "video" && !!tool.keyframe && model?.model === "runway/aleph-2"
+  const keyframe = keyframing && value.params.keyframe_video === value.inputs.video?.[0] ? value.inputs.keyframe?.[0] : undefined
+  const promptTool = keyframe ? { ...tool, template: tool.keyframe!.apply } : tool
 
   // the prompt sent: the tool's template filled with its fields and the user's words, or Claude's prompt (a draft)
   // with the user's words after it
-  const prompt = value.raw ? [value.rawText, value.intent].filter(Boolean).join(" ").trim() : fill(tool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs)
+  const prompt = value.raw ? [value.rawText, value.intent].filter(Boolean).join(" ").trim() : fill(promptTool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs)
   // the same, read only, with what is still to fill as {key}, and the @names as the model reads them
-  const filled = value.raw ? prompt : fill(tool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs, true)
+  const filled = value.raw ? prompt : fill(promptTool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs, true)
   const shownPrompt = kind === "audio" ? filled : withMentions(filled, kind, mentionFrom(kind, tool, value.inputs), state)
   // what the words can cite with @name (a voice's text is read as written), and the images those bring
   // the current workspace's Elements first in the @ list
@@ -170,13 +175,17 @@ export function Composer({
   // input of several takes what is left (« 2 / 13 »)
   // with a frame, OpenRouter keeps a video's frames and drops its reference images: none then
   const framed = kind === "video" && model?.role !== "avatar" && ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0)
-  const maxRefs = framed ? 0 : model?.params.references
+  // a keyframe's images (an Element, a painted frame, references) go to the image that makes it, not to Aleph
+  const maxRefs = keyframing ? undefined : framed ? 0 : model?.params.references
   const styleField = tool.fields.find((f) => f.type === "style")
   const styleImages = (styleField && state.styles?.find((s) => s.name === (value.fields[styleField.key] ?? styleField.default))?.files.length) || 0
   const usedRefs = imageInputs(kind, tool).reduce((n, i) => n + (value.inputs[i.key]?.length ?? 0), 0) + styleImages + mentioned
   const overRefs = maxRefs != null ? usedRefs - maxRefs : 0
   const limits = maxRefs == null ? {} : Object.fromEntries(imageInputs(kind, tool).filter((i) => i.multiple).map((i) => [i.key, Math.max(0, (value.inputs[i.key]?.length ?? 0) + maxRefs - usedRefs)]))
 
+  // a keyframe and its time go only with Aleph 2 and the video they were made from
+  const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe"))
+  const ownParams = Object.fromEntries(Object.entries(value.params).filter(([k]) => k !== "keyframe_video" && k !== "frame"))
   const spec: Spec = useMemo(
     () => ({
       kind,
@@ -185,12 +194,13 @@ export function Composer({
       prompt: value.raw ? prompt : value.intent,
       ...(value.raw ? { raw: true } : {}),
       fields: value.fields,
-      inputs: value.inputs,
-      params: value.params,
+      inputs: keyframe ? { ...ownInputs, keyframe: [keyframe] } : ownInputs,
+      params: keyframe ? { ...ownParams, frame: value.params.frame } : ownParams,
       ...(value.batch && value.batch > 1 && !eleven && !local && !sheets ? { batch: value.batch } : {}),
       ...(value.place ? { place: value.place } : {}),
     }),
-    [kind, tool.id, modelId, value, eleven, local, prompt, sheets]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kind, tool.id, modelId, value, eleven, local, prompt, sheets, keyframe]
   )
 
   // the estimate, again after every change (debounced)
@@ -200,6 +210,8 @@ export function Composer({
     ? missing.kind === "mask" || missing.kind === "sketch" ? missing.label : `Add ${missing.label.toLowerCase()}`
     : unpicked
       ? unpicked.type === "element" ? `Pick ${unpicked.label === "With" ? "an element" : `a ${unpicked.label.toLowerCase()}`}` : `Fill ${unpicked.label.toLowerCase()}`
+    : keyframing && tool.keyframe!.required && !keyframe
+      ? "Make the keyframe first"
     : overRefs > 0 && model
       ? usedRefs === styleImages
         ? framed ? "Frames or your style, not both" : "Pick a model for your style"
@@ -209,7 +221,7 @@ export function Composer({
     : sheets && !sheetCount
       ? "Pick a sheet"
     : unsaid
-      ? "Describe it or add photos"
+      ? tool.fields.some((f) => f.type === "element" && tool.one_of?.includes(f.key)) ? "Pick an element or add photos" : "Describe it or add photos"
       : !eleven && !local && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale"
       ? kind === "audio" ? "Write the text" : "Write a prompt"
       : tool.id === "translate" && !value.fields.to?.trim()
@@ -330,7 +342,7 @@ export function Composer({
     onDraftSeen(draft.at)
   }
 
-  const label = tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? tool.label : "Generate"
+  const label = keyframe ? "Apply to the shot" : tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? tool.label : "Generate"
   const a = blocker ? undefined : est.answer
   const price = a ? priceLabel(a) : blocker && probe.key === probeKey ? probe.label : null
   const ready = !busy && !!a && (eleven ? state.keys.elevenlabs : local || state.keys.openrouter)
@@ -507,11 +519,11 @@ export function Composer({
                 <div className="relative">
                   <Textarea
                     readOnly
-                    value={shownPrompt}
+                    value={keyframe && est.answer?.prompt ? est.answer.prompt : shownPrompt}
                     aria-label="Prompt sent to the model"
                     className="max-h-[calc(6lh+1rem)] min-h-16 resize-none border-dashed bg-muted/40 py-2 pr-10 pl-3 text-sm leading-relaxed text-foreground/80 focus-visible:ring-0 md:text-sm dark:bg-muted/30"
                   />
-                  <CopyText text={shownPrompt} what="Prompt" />
+                  <CopyText text={keyframe && est.answer?.prompt ? est.answer.prompt : shownPrompt} what="Prompt" />
                 </div>
                 {value.raw && (
                   <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => set({ raw: false })}>
@@ -593,6 +605,22 @@ export function Composer({
           />
         )}
 
+        {keyframing && (
+          <KeyframePanel
+            key={`${tool.id}:${value.inputs.video?.[0] ?? ""}`}
+            tool={tool}
+            spec={spec}
+            video={value.inputs.video?.[0]}
+            keyframe={keyframe}
+            at={value.params.frame as number | undefined}
+            state={state}
+            onModel={(id) => set({ params: { ...value.params, keyframe_model: id } })}
+            onSet={(k) =>
+              set(k ? { inputs: { ...value.inputs, keyframe: [k.path] }, params: { ...value.params, frame: k.at, keyframe_video: value.inputs.video?.[0] } } : { inputs: ownInputs, params: ownParams })
+            }
+          />
+        )}
+
         {!blocker && est.error && (
           <Alert variant="destructive">
             <AlertDescription>{est.error}</AlertDescription>
@@ -637,13 +665,25 @@ export function Composer({
             </Tooltip>
           )}
           {!eleven && !local && !sheets && <Batch value={value.batch ?? 1} onChange={(batch) => set({ batch })} />}
-          <Button variant="space" className={cn("h-11 min-w-0 flex-1 px-4 text-[15px]", blocker && !price ? "justify-center" : "justify-between")} disabled={!ready} onClick={() => go()}>
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate">{blocker ?? label}</span>
-              {!blocker && <Kbd className="bg-space-foreground/15 text-space-foreground/80">⌘↵</Kbd>}
-            </span>
-            {price && <Price className="bg-space-foreground/15 text-space-foreground">{price}</Price>}
-          </Button>
+          {/* the whole name on hover, the button cut short beside its price (a disabled one hovers through its span) */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex min-w-0 flex-1">
+                <Button variant="space" className={cn("h-11 w-full min-w-0 px-4 text-[15px]", blocker && !price ? "justify-center" : "justify-between")} disabled={!ready} onClick={() => go()}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{blocker ?? label}</span>
+                    {!blocker && <Kbd className="shrink-0 bg-space-foreground/15 px-1.5 text-space-foreground/80">⌘↵</Kbd>}
+                  </span>
+                  {price && <Price className="bg-space-foreground/15 text-space-foreground">{price}</Price>}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {blocker ?? label}
+              {price ? ` · ${price}` : ""}
+              {!blocker && ready ? " · ⌘↵" : ""}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 

@@ -31,6 +31,7 @@ const media = () => (fs.existsSync(at('media')) ? fs.readdirSync(at('media')) : 
 const probe = f => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,width,height:format=duration', '-of', 'json', f], { encoding: 'utf8' }))
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=64x64', '-frames:v', '1', at('a.png')])
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=3', '-f', 'lavfi', '-i', 'sine=d=3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', at('talk.mp4')])
+execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', at('long.mp4')])
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=2', at('voice.mp3')])
 test.after(() => { fake.close(); fs.rmSync(home, { recursive: true, force: true }) })
 
@@ -181,7 +182,7 @@ test('an unknown price needs its own yes; a refused payment (402) fails with exi
   assert.equal((await cli('image', '--prompt', 'x', '--model', 'fake/noprice', '--accept-unknown')).code, 0)
   const b = await cli('image', '--prompt', 'x', '--model', 'fake/broke', '--spend', '0.04')
   assert.equal(b.code, 3)
-  assert.match(b.err, /402 \(no credits left on OpenRouter\)/)
+  assert.match(b.err, /402 \(no credits left on OpenRouter, or held by videos still running: wait for them to end\)/)
   const last = ledger().at(-1)
   assert.deepEqual([last.status, last.actual], ['failed', 0])
 })
@@ -614,12 +615,21 @@ test('element fields: a Library name of the right type, cited like an @name; the
   }
   assert.equal(await prompt('image', '--tool', 'character-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'character=Max'),
     'Replace the person in the first image with Max (the character in the second image, a man with a beard): their face, hair, body and outfit, in the same pose, place and lighting.')
-  assert.match((await cli('image', '--tool', 'character-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'character=Mug', '--estimate')).err, /@Mug is an object, this takes character/)
-  assert.match((await cli('image', '--tool', 'character-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--estimate')).err, /Character swap needs character \(--field character=@<element>/)
-  assert.match((await cli('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.5', '--in', `video=${at('talk.mp4')}`, '--field', 'old=the mug', '--estimate')).err, /Object swap needs with/)
-  assert.match(await prompt('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.5', '--in', `video=${at('talk.mp4')}`, '--field', 'old=the red mug', '--field', 'element=@Mug'),
+  // a field of one type refuses another (video Face swap: a face); Character swap takes every type, or photos
+  assert.match((await cli('video', '--tool', 'face-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--field', 'character=Mug', '--estimate')).err, /@Mug is an object, this takes character/)
+  assert.match((await cli('image', '--tool', 'character-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--estimate')).err, /Character swap: pick an element of the Library \(--field character=@<name>/)
+  assert.match(await prompt('image', '--tool', 'character-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'character=@Max, @Mug'),
+    /^Replace the person in the first image with Max \(the character in the second image, a man with a beard\), Mug \(the object in the third image/)
+  assert.match((await cli('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--field', 'old=the mug', '--estimate')).err, /Object swap: pick an element of the Library \(--field element=@<name>, several: "@a, @b"\) or add references/)
+  assert.match(await prompt('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--field', 'old=the red mug', '--field', 'element=@Mug'),
     /^Replace the red mug with Mug \(the object in the first reference image\), keeping its position/)
-  assert.match(await prompt('video', '--tool', 'face-swap', '--model', 'bytedance/seedance-2.5', '--in', `video=${at('talk.mp4')}`, '--field', 'character=Max', '--field', 'who=the man on the left'),
+  // several Elements of any type, each read by its type, and photos: all of them references after the painted frame
+  await cli('elements', 'add', 'Lisbon', at('a.png'), '--type', 'location', '--words', 'a sunny street')
+  assert.match(await prompt('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--in', `references=${at('a.png')}`, '--field', 'old=the man', '--field', 'element=@Max, @Lisbon'),
+    /^Replace the man with Max \(the character in the second reference image, a man with a beard\), Lisbon \(the place in the third reference image, a sunny street\) as the setting with the subject of the first reference image, keeping/)
+  assert.match(await prompt('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--in', `references=${at('a.png')}`, '--field', 'old=the man'),
+    /^Replace the man with the subject of the first reference image, keeping/)
+  assert.match(await prompt('video', '--tool', 'face-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--field', 'character=Max', '--field', 'who=the man on the left'),
     /^Replace the face of the person \(the man on the left\) in the video with the face of Max \(the character in the first reference image, a man with a beard\)\./)
   // Recolor's settings, any of them: an empty one leaves no comma behind
   assert.equal(await prompt('video', '--tool', 'recolor', '--model', 'black-forest-labs/flux-video-edit', '--in', `video=${at('talk.mp4')}`, '--field', 'grade=Teal & orange', '--field', 'items=the jacket becomes yellow (#f5c518)'),
@@ -633,15 +643,53 @@ test('a painted frame: Clean up says nothing of it without one; with one, a mode
   const r = await cli('video', '--tool', 'clean-up', '--model', 'black-forest-labs/flux-video-edit', '--in', `video=${at('talk.mp4')}`, '--field', 'what=the man', '--estimate')
   assert.equal(JSON.parse(r.out).prompt, 'Remove the man from the whole video and fill the background naturally. Nothing else changes.')
   const m = await cli('video', '--tool', 'clean-up', '--model', 'black-forest-labs/flux-video-edit', '--in', `video=${at('talk.mp4')}`, '--in', `sketch=${at('a.png')}`, '--field', 'what=the man', '--estimate')
-  assert.match(m.err, /takes 0 reference images, this asks for 1: Fake: Seedance takes them \(--model bytedance\/seedance-2.5\)/)
-  const v = await cli('video', '--tool', 'inpaint', '--model', 'bytedance/seedance-2.5', '--in', `video=${at('talk.mp4')}`, '--in', `sketch=${at('a.png')}`, '--field', 'change=a vase of tulips', '--estimate')
+  assert.match(m.err, /takes 0 reference images, this asks for 1: Fake: Seedance takes them \(--model bytedance\/seedance-2.0-mini\)/)
+  const v = await cli('video', '--tool', 'inpaint', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--in', `sketch=${at('a.png')}`, '--field', 'change=a vase of tulips', '--estimate')
   assert.match(JSON.parse(v.out).prompt, /^In the video, change only the area painted in translucent magenta on the first reference image: put a vase of tulips there/)
-  // a source under the model's smallest (Seedance 2.5 refuses 848×480) goes scaled up just enough, its ratio kept
-  const run = await cli('video', '--tool', 'inpaint', '--model', 'bytedance/seedance-2.5', '--in', `video=${at('talk.mp4')}`, '--in', `sketch=${at('a.png')}`, '--field', 'change=tulips', '--spend', '1')
+  // Seedance takes a video from its shortest duration up, said before anything is sent
+  assert.match((await cli('video', '--tool', 'inpaint', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('talk.mp4')}`, '--in', `sketch=${at('a.png')}`, '--field', 'change=tulips', '--estimate')).err,
+    /Seedance takes a video of 4 to 5 s, this one is 3\.0 s: trim or extend it/)
+  // a source under the model's smallest (Seedance refuses 848×480) goes scaled up just enough, its ratio kept
+  const run = await cli('video', '--tool', 'inpaint', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--in', `sketch=${at('a.png')}`, '--field', 'change=tulips', '--spend', '1')
   assert.equal(run.code, 0, run.err)
+  // Seedance 2.5 edits only at the video's own length (-1), refused by OpenRouter for now, and says so
+  const s25 = await cli('video', '--tool', 'inpaint', '--model', 'bytedance/seedance-2.5', '--in', `video=${at('long.mp4')}`, '--in', `sketch=${at('a.png')}`, '--field', 'change=tulips', '--spend', '1')
+  assert.match(s25.err, /expected number to be >=1.*Seedance 2\.5 edits a video once OpenRouter accepts duration -1/s)
   const up = fs.readdirSync(at('.cache')).find(f => f.startsWith('min-'))
   const s = probe(at('.cache', up)).streams.find(x => x.codec_type === 'video')
   assert.ok(s.width * s.height >= 100000 && Math.abs(s.width / s.height - 16 / 9) < 0.02, `${s.width}×${s.height}`)
+})
+
+test('a keyframe: the frame edited as an image first, then Aleph 2 carries it through the shot', async () => {
+  const swap = ['video', '--tool', 'object-swap', '--in', `video=${at('long.mp4')}`, '--field', 'old=the man', '--field', 'element=@Max']
+  // Aleph 2 takes no image: without a keyframe it is refused, and a keyframe goes to no other model
+  assert.match((await cli(...swap, '--estimate')).err, /Object swap on Aleph 2 takes a keyframe: --frame <seconds>/)
+  assert.match((await cli(...swap, '--model', 'bytedance/seedance-2.0-mini', '--in', `keyframe=${at('a.png')}`, '--frame', '1', '--estimate')).err, /a keyframe goes to Aleph 2/)
+  assert.match((await cli(...swap, '--frame', '9', '--estimate')).err, /--frame is a time in the video: 0 to 4\.0 s/)
+  // the keyframe: the frame at 1 s through Custom edit, the Element's images after it
+  const k = JSON.parse((await cli(...swap, '--frame', '1', '--keyframe-model', 'fake/img', '--estimate')).out)
+  assert.deepEqual([k.tool, k.model], ['free-edit', 'fake/img'])
+  assert.match(k.prompt, /^Replace the man with Max \(the character in the second image, a man with a beard\), at the same place and size/)
+  const made = await cli(...swap, '--frame', '1', '--keyframe-model', 'fake/img', '--spend', '1')
+  assert.equal(made.code, 0, made.err)
+  const job = JSON.parse(fs.readFileSync(at('media', media().filter(d => d.includes('-free-edit-')).at(-1), 'job.json'), 'utf8'))
+  assert.deepEqual([job.kind, job.spec.keyframe.tool, job.spec.keyframe.at], ['image', 'object-swap', 1])
+  // then the shot: the video and the keyframe alone, the keyframe under Runway's own parameters at its time
+  const keyframe = at('media', job.id, job.outputs[0])
+  const shot = await cli(...swap, '--in', `keyframe=${keyframe}`, '--frame', '1', '--spend', '2')
+  assert.equal(shot.code, 0, shot.err)
+  const body = sent('/api/v1/videos').body
+  assert.equal(body.model, 'runway/aleph-2')
+  assert.match(body.prompt, /^Replace the man with Max \(the character in the keyframe, a man with a beard\), exactly as the keyframe shows it, its whole look included/)
+  assert.deepEqual(body.input_references.map(r => r.type), ['video_url'])
+  const [kf] = body.provider.options.runway.parameters.keyframes
+  assert.ok(kf.uri.startsWith('data:image/') && kf.seconds === 1, JSON.stringify(kf).slice(0, 80))
+  // each recipe names an image tool or a frame prompt, and only the fields and inputs of its tool
+  for (const t of JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'tools', 'video.json'), 'utf8')).filter(t => t.keyframe)) {
+    const keys = new Set(['prompt', ...t.fields.map(f => f.key), ...t.inputs.map(i => i.key)])
+    for (const text of [t.keyframe.template, t.keyframe.apply].filter(Boolean)) for (const [, key] of text.matchAll(/\{(\w+)\}/g)) assert.ok(keys.has(key), `${t.id}: {${key}}`)
+    assert.ok(t.keyframe.apply && (t.keyframe.template || t.keyframe.tool), t.id)
+  }
 })
 
 test('inpaint: the matte stays here; the result is laid on the original inside it, the rest keeps its pixels', async () => {
@@ -729,7 +777,8 @@ test('the tools\' models: each in the shipped list, able to run its tool', () =>
           if (video) assert.ok(['edit', 'upscale'].includes(m.role) || Object.keys(m.pricing).some(k => k.includes('with_video_input')), `${at} takes no video`)
           else assert.ok(!['edit', 'upscale'].includes(m.role), `${at} cannot create`)
           for (const f of ['first_frame', 'last_frame']) if (needs.some(i => i.key === f) && m.role !== 'avatar') assert.ok(m.frames.includes(f), `${at}: no ${f}`)
-          if (needs.some(i => ['references', 'sketch'].includes(i.key)) || t.fields.some(f => f.type === 'element' && f.required)) assert.notEqual(m.references, 0, `${at} takes no image`)
+          // Aleph 2 takes no image: on a tool with a keyframe, they make the keyframe
+          if ((needs.some(i => ['references', 'sketch'].includes(i.key)) || t.fields.some(f => f.type === 'element' && f.required)) && !(t.keyframe && id === 'runway/aleph-2')) assert.notEqual(m.references, 0, `${at} takes no image`)
         }
         if (kind === 'audio') assert.equal(m.role, 'speech', at)
       }

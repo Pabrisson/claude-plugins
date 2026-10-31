@@ -14,7 +14,7 @@ async function api(route, init = {}, key = process.env.OPENROUTER_API_KEY) {
   })
   if (!r.ok) {
     const text = await r.text(), message = (() => { try { return JSON.parse(text).error?.message ?? text } catch { return text } })()
-    const why = { 401: 'the key is refused', 402: 'no credits left on OpenRouter', 429: 'rate limited, try again in a moment' }[r.status]
+    const why = { 401: 'the key is refused', 402: 'no credits left on OpenRouter, or held by videos still running: wait for them to end', 429: 'rate limited, try again in a moment' }[r.status]
     throw Object.assign(new Error(`OpenRouter ${route.split('?')[0]}: ${r.status}${why ? ` (${why})` : ''} ${message}`.trim()), { status: r.status })
   }
   return r
@@ -60,11 +60,18 @@ export default {
   },
 
   // videos are jobs: the id to poll (and to continue with previous_job_id)
-  async video({ model, prompt, frames = {}, refs = [], ...params }) {
+  async video({ model, prompt, frames = {}, refs = [], keyframes, ...params }) {
     const frame_images = Object.entries(frames).filter(([, url]) => url).map(([frame_type, url]) => ({ type: 'image_url', image_url: { url }, frame_type }))
     const input_references = refs.map(({ kind, url }) => ({ type: `${kind}_url`, [`${kind}_url`]: { url } }))
-    const body = { model, ...(prompt ? { prompt } : {}), ...params, ...(frame_images.length ? { frame_images } : {}), ...(input_references.length ? { input_references } : {}) }
-    const j = await json('/videos', { method: 'POST', body: JSON.stringify(body) })
+    const body = { model, ...(prompt ? { prompt } : {}), ...params, ...(frame_images.length ? { frame_images } : {}), ...(input_references.length ? { input_references } : {}),
+      // a provider's own parameters (GET /videos/models: allowed_passthrough_parameters) go under its slug: Aleph 2's
+      // keyframes reach Runway only there (at the top level they were dropped, 2026-10-31)
+      ...(keyframes ? { provider: { options: { runway: { parameters: { keyframes } } } } } : {}) }
+    // Seedance 2.5's -1 (« follow the video ») is refused by OpenRouter until it takes it (2026-10-31): said so
+    const j = await json('/videos', { method: 'POST', body: JSON.stringify(body) }).catch(e => {
+      if (params.duration === -1 && e.status === 400) e.message += ': Seedance 2.5 edits a video once OpenRouter accepts duration -1 (github.com/OpenRouterTeam/typescript-sdk/issues/1096), till then take Seedance 2.0 Mini'
+      throw e
+    })
     return { id: j.id, polling_url: j.polling_url }
   },
   async poll(job) {

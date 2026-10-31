@@ -28,6 +28,7 @@ export function CompareDialog({
   jobs,
   home,
   per1000,
+  ready,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -36,15 +37,17 @@ export function CompareDialog({
   jobs: Job[]
   home: string
   per1000: number | null
+  // B set at once to the suggested file (a keyframe against its frame), not picked first
+  ready?: boolean
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {open && <Body origin={origin} file={file} jobs={jobs} home={home} per1000={per1000} />}
+      {open && <Body origin={origin} file={file} jobs={jobs} home={home} per1000={per1000} ready={ready} />}
     </Dialog>
   )
 }
 
-function Body({ origin, file, jobs, home, per1000 }: { origin: Job; file: string; jobs: Job[]; home: string; per1000: number | null }) {
+function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file: string; jobs: Job[]; home: string; per1000: number | null; ready?: boolean }) {
   const kind = mediaKind(file)
   const timed = kind !== "image"
   const inputs = Object.entries(origin.inputs ?? {})
@@ -57,8 +60,9 @@ function Body({ origin, file, jobs, home, per1000 }: { origin: Job; file: string
   const at = results.findIndex((r) => r.path === file)
   const suggested = inputs.find((i) => i.key !== "sketch" && i.key !== "mask")?.path ?? results.find((r, n) => n > at && r.path !== file)?.path ?? results.find((r) => r.path !== file)?.path
 
-  const [sides, setSides] = useState<Record<Side, Item | null>>({ a: results[at] ?? { path: file, title: origin.label, detail: origin.name }, b: null })
-  const [picking, setPicking] = useState<Side | null>("b")
+  const first = ready ? ([...inputs, ...results].find((x) => x.path === suggested) ?? null) : null
+  const [sides, setSides] = useState<Record<Side, Item | null>>({ a: results[at] ?? { path: file, title: origin.label, detail: origin.name }, b: first })
+  const [picking, setPicking] = useState<Side | null>(first ? null : "b")
   const [mode, setMode] = useState<"slider" | "side">("slider")
   const [split, setSplit] = useState(50)
   const [sound, setSound] = useState<Side>("a")

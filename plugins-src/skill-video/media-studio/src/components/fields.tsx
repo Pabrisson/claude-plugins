@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider"
 import { opt, sentence, shown, type Field, type Tool } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label } from "@/components/chips"
 import { colorWords } from "@/components/light-rig"
+import { MoveIcon, MovePreview } from "@/components/moves"
 
 // a multi field's value: its moves in order, joined the way the prompt says them
 const THEN = ", then "
@@ -169,6 +170,9 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
   const [open, setOpen] = useState(false)
   const [anchor, offset, measure] = useBeside()
   const options = (f.options ?? []).map(opt)
+  // the move under the pointer or the keys, shown moving beside the list with its words
+  const [active, setActive] = useState("")
+  const seen = options.find((o) => o.label.toLowerCase() === active.toLowerCase()) ?? options[0]
   const picked = value ? value.split(THEN) : []
   const groups = [...new Set(options.map((o) => o.group ?? ""))]
   const set = (list: string[]) => onChange(list.join(THEN))
@@ -179,6 +183,7 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
         {picked.map((m, i) => (
           <span key={`${m}-${i}`} className={cn(CHIP, CHIP_ON, "flex items-center gap-1.5 py-0.5 pr-1 pl-1")}>
             <span className="grid size-5 place-items-center rounded-full bg-space text-[11px] font-semibold text-space-foreground tabular-nums">{i + 1}</span>
+            <MoveIcon move={m} className="size-4 shrink-0" />
             {sentence(shown(f, m))}
             <button type="button" aria-label={`Remove ${shown(f, m)}`} onClick={() => set(picked.filter((_, j) => j !== i))} className="grid size-5 place-items-center rounded-full hover:bg-space/20">
               <XIcon className="size-3" />
@@ -191,8 +196,8 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
               <PlusIcon className="size-3.5" /> {picked.length ? "Then" : "Add a move"}
             </button>
           </PopoverTrigger>
-          <PopoverContent side="right" align="start" sideOffset={offset} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-72 flex-col p-0">
-            <Command loop className="min-h-0 flex-1">
+          <PopoverContent side="right" align="start" sideOffset={offset} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(36rem,calc(100vw-2rem))] flex-row p-0">
+            <Command loop value={active} onValueChange={setActive} className="min-h-0 w-80 flex-none">
               <CommandInput placeholder="Search moves" aria-label="Search camera moves" />
               <CommandList className="max-h-[min(480px,70vh)] min-h-0 flex-1">
                 <CommandEmpty>No such move.</CommandEmpty>
@@ -201,8 +206,12 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
                     {options
                       .filter((o) => (o.group ?? "") === g)
                       .map((o) => (
-                        <CommandItem key={o.value} value={o.label} onSelect={() => (set([...picked, o.value]), setOpen(false))}>
-                          <span className="flex-1">{sentence(o.label)}</span>
+                        <CommandItem key={o.value} value={o.label} onSelect={() => (set([...picked, o.value]), setOpen(false))} className="items-start">
+                          <MoveIcon move={o.value} className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block">{sentence(o.label)}</span>
+                            {o.note && <span className="line-clamp-2 block text-xs text-muted-foreground">{o.note}</span>}
+                          </span>
                           {picked.includes(o.value) && <span className="text-xs text-space tabular-nums">#{picked.indexOf(o.value) + 1}</span>}
                         </CommandItem>
                       ))}
@@ -210,6 +219,18 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
                 ))}
               </CommandList>
             </Command>
+            {seen && (
+              <div className="hidden w-56 flex-none flex-col gap-2 border-l p-3 sm:flex">
+                <div className="overflow-hidden rounded-lg ring-1 ring-foreground/10">
+                  <MovePreview move={seen.value} />
+                </div>
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <MoveIcon move={seen.value} className="size-4 shrink-0" />
+                  {sentence(seen.label)}
+                </p>
+                {seen.note && <p className="text-xs text-muted-foreground">{seen.note}</p>}
+              </div>
+            )}
           </PopoverContent>
         </Popover>
       </div>

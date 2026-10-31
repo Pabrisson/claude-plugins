@@ -68,7 +68,7 @@ is the user's own prompt; the others fill a prompt template from their fields. C
   images included: past that, the command stops before anything is sent; pick fewer or another model. A video
   with a first or last frame takes no reference image (OpenRouter keeps the frames and drops them): the command
   refuses both, keep one or the other. FLUX Video Edit and Aleph 2 take none besides their video: Restyle with
-  characters or a style of the user's own goes to Seedance 2.5.
+  characters or a style of the user's own goes to Seedance 2.0 Mini.
 - Fields: `--field <key>=<value>`, one of its options (its label works too: `--field light=Silhouette`, `Auto` leaves it
   out) or free text. Camera moves go in order: `--field movement="dolly in, then pan left"`. A relight's `light` is
   words: where each light is, its color, brightness and softness. Expand's frame is four margins, a share of the image
@@ -76,18 +76,31 @@ is the user's own prompt; the others fill a prompt template from their fields. C
 - `--prompt "…"` adds the user's words to the template, or is the whole prompt with "Custom". `--raw` sends the prompt
   exactly as written, without the template.
 - `@name` in the prompt cites an Element or a style of the Library: see « Elements and styles of the Library ».
-  Some tools take one in a field of their own: Character swap (`--field character=@Max`) and Object swap (`--field
-  element=@Mug`) need one, it is their only way to say the new person or thing; video Face swap and both Inpaints
-  take one if wanted. The Element must be of a type the field takes (`media.mjs tools` lists them): make it first when
-  there is none (« Elements and styles of the Library »).
+  Some tools take them in a field of their own: Character swap (`--field character="@Max, @Coat"`), Object swap
+  (`--field element="@Papi, @Coat, @Lisbon"`) and both Inpaints take several, of every type, each read by its type
+  (a place as the setting, a pose as the pose); Character swap and Object swap take photos instead or as well (`--in
+  references=<file>`), one or the other is needed. Video Face swap takes one character (a face). The Element must be
+  of a type the field takes (`media.mjs tools` lists them): make it first when there is none (« Elements and styles
+  of the Library »).
 - **A painted area** (image Inpaint, video Inpaint, Object swap, Clean up): the image or a frame with the area in
   translucent magenta (`--in sketch=<file>`). For an image Inpaint, `--in matte=<file>` (white where painted, black
   elsewhere) lays the model's result back on the original inside that area only, so the rest keeps its pixels (the
   dashboard makes both files; the matte is never sent; `--field outside=model` keeps the model's whole image). A
-  painted frame is an image beside the video: of the video models, only Seedance 2.5 takes one (the command names it
-  when the chosen model cannot). Seedance 2.5 refuses, free, any image that may show a real person
+  painted frame is an image beside the video: of the video models, only Seedance takes one (the command names it
+  when the chosen model cannot). A video sent to Seedance goes through Seedance 2.0 Mini, 4 s or longer (the command
+  refuses a shorter one, free): it remakes the shot at its length. Seedance 2.5 edits no video through OpenRouter yet (it
+  asks a length OpenRouter refuses): it stays among the other models, with Seedance 2.0 and 2.0 Fast, for the day it does. Seedance refuses, free, any image that may show a real person
   (`PrivacyInformation`): a painted frame with someone in it, a face photo for video Face swap. Say so and offer FLUX
   Video Edit or Aleph 2 with words only (no painted frame), or an illustrated face.
+- **A keyframe, then the shot (Aleph 2).** Object swap, Face swap and video Inpaint go to Aleph 2 by a keyframe: the
+  only edit through OpenRouter that keeps the video and changes just the subject, a character too. Clean up, Custom
+  edit, Restyle, Relight and Recolor take one on Aleph 2 as well. Two calls, each with its own estimate and yes:
+  1. `video --tool object-swap --in video=<file> --field old="the girl" --field element=@Papi --frame <seconds>`: the
+     frame at that time edited as an image (Seedream 5.0 Flash, about $0.02; `--keyframe-model <image model>` for
+     another), with the tool's Elements, painted area and references. Look at it (Read) and show it before going on.
+  2. The same with `--in keyframe=<that image> --frame <seconds>` (Aleph 2, $0.28 a second, $1.40 at least; a source
+     of 2 to 30 s under 16 MB): Aleph carries the change through the whole shot. Without a keyframe Aleph 2 refuses
+     these three tools, and a keyframe goes to no other model (OpenRouter has no other that takes one).
 - **Done here, free** (`provider: local`, no estimate to approve): Reframe, FPS boost (`--field target=60|120|slow2|slow4`),
   SDR to HDR (an HDR10 conversion, it adds no detail; `--field peak=600|1000|1600`), Depth map (about 0.3 s a frame)
   and Remove background (about 4 s a frame: a 5 s clip takes some minutes; `--field background=transparent|green|black|white`,
@@ -236,7 +249,7 @@ rush, or a B-roll clip in the project the prompt names.
 | Code | Meaning | What you do |
 |---|---|---|
 | 2 | The user's yes is needed: the estimate is printed | Ask (step 3), then run again with the flag it names |
-| 3 | No key, a refused key, or no credits left (402) | Say so: the key with `/plugin configure skill-video@pabrisson`, credits on openrouter.ai |
+| 3 | No key, a refused key, or no credits left (402) | Say so: the key with `/plugin configure skill-video@pabrisson`, credits on openrouter.ai; videos still running hold their price there, so with several at once wait for them and retry |
 | 1 | Any other error | Read the message: a missing input, a model that does not take a frame, a file over 50 MB… |
 
 ## Good to know

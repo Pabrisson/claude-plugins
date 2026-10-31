@@ -561,7 +561,7 @@ export function TimelineEditor({
                     <ReplaceIcon data-icon="inline-start" /> Swap take
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-[min(460px,calc(100vw-2rem))] gap-0 p-0">
+                <PopoverContent align="start" collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col gap-0 p-0">
                   <LibraryList title={`In place of ${name(selected)}`} items={items.filter((i) => trackKind(i.path) === kindOf(selected))} picked={[selected.path]} onPick={(p) => swap(selected, p)} />
                 </PopoverContent>
               </Popover>

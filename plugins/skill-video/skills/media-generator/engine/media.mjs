@@ -34,7 +34,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' },
-    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true },
+    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true },
   },
 })
 
@@ -96,10 +96,16 @@ async function tunnel(files) {
   } catch (e) { close(); throw e }
 }
 
+// once per version of a file (its path, time and size): the dashboard asks an estimate at every change, and each
+// ffprobe (about 0.13 s) holds the whole server
+const probed = new Map()
 function probe(file) {
+  const st = fs.statSync(file), key = `${file}:${st.mtimeMs}:${st.size}`
+  if (probed.has(key)) return { ...probed.get(key) }
   const j = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height,avg_frame_rate', '-of', 'json', file], { encoding: 'utf8' }))
   const v = j.streams.find(s => s.codec_type === 'video'), [a, b] = String(v?.avg_frame_rate ?? '0/1').split('/').map(Number)
-  return { duration: +(+j.format.duration || 0).toFixed(2), width: v?.width ?? null, height: v?.height ?? null, fps: b ? +(a / b).toFixed(3) : null, audio: j.streams.some(s => s.codec_type === 'audio') }
+  probed.set(key, { duration: +(+j.format.duration || 0).toFixed(2), width: v?.width ?? null, height: v?.height ?? null, fps: b ? +(a / b).toFixed(3) : null, audio: j.streams.some(s => s.codec_type === 'audio') })
+  return { ...probed.get(key) }
 }
 const ffmpeg = argv => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { stdio: ['ignore', 'ignore', 'pipe'] })
 
@@ -148,6 +154,9 @@ const LOCAL = { reframe: 'ffmpeg', fps: 'ffmpeg', hdr: 'ffmpeg', depth: 'Depth A
 const hasBin = bin => !spawnSync(bin, [bin === 'uv' ? '--version' : '-version'], { stdio: 'ignore' }).error
 // the tools whose prompt is the user's words (a style at most after them): never sent without them
 const CUSTOM = ['free', 'free-edit']
+// the video model that carries a keyframe through a shot, and the image model that makes it unless asked (2026-10-31:
+// Seedream 5.0 Flash, $0.018, at the video's ratio)
+const ALEPH = 'runway/aleph-2', KEYFRAME_MODEL = 'bytedance-seed/seedream-5-0-flash'
 // the router's kind for a tool kind: audio is speech
 const routerKind = kind => (kind === 'audio' ? 'speech' : kind)
 
@@ -202,6 +211,19 @@ function fill(tool, spec) {
 }
 // an option is a value, or { value, label, group, note }; a label given for a value stands for it (light=Silhouette)
 const optionValue = (f, v) => f.options?.find(o => typeof o === 'object' && o.label?.toLowerCase() === String(v).toLowerCase())?.value ?? v
+// the fields as a prompt takes them: their defaults (upscale's creativity, extend's direction…), an element as @name, an
+// option's label as its value, a style of the Library as its words with its images apart (looks), or only its words in
+// a keyframe (its images made it)
+function prepared(tool, spec, keyframe = false) {
+  const fields = { ...Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)])), ...spec.fields }, looks = []
+  for (const f of tool.fields) {
+    const s = f.type === 'style' && savedStyle(fields[f.key])
+    if (s) keyframe ? (fields[f.key] = s.words || s.name) : (looks.push(...s.files), (fields[f.key] = s.text))
+    else if (f.type === 'element' && String(fields[f.key] ?? '').trim()) fields[f.key] = elementFields(f, fields[f.key])
+    else if (fields[f.key] != null) fields[f.key] = optionValue(f, fields[f.key])
+  }
+  return { fields, looks }
+}
 
 // ---------- the Library: Elements and styles, cited with @name ----------
 
@@ -292,15 +314,16 @@ function cite(el, where) {
 }
 // the Elements an @name cites, in order: their images join the references after the tool's (from: the place of the
 // first), the name reads as what they are and where (« Lulu (the character in images 2 to 3) »), once; a voice, a style
-// (picked in a Style field) or an unknown name stays as written
-function mentions(text, kind, from) {
+// (picked in a Style field) or an unknown name stays as written. keyframe: they are in the keyframe, named so
+function mentions(text, kind, from, keyframe = false) {
   const refs = [], done = new Set()
   const out = text.replace(/@([\w-]+)/g, (all, name) => {
     if (done.has(name)) return name
     const el = element(name)
     if (!el || el.type === 'voice' || !el.files.length) return all
-    const where = placeOf(kind, from + refs.length, el.files.length)
-    refs.push(...el.files)
+    // in a keyframe already: « Papi (the character in the keyframe, …) », its images not sent again
+    const where = keyframe ? 'the keyframe' : placeOf(kind, from + refs.length, el.files.length)
+    if (!keyframe) refs.push(...el.files)
     done.add(name)
     return `${name} (${cite(el, where)})`
   })
@@ -314,6 +337,13 @@ function elementField(f, v) {
   if (!el || el.type === 'voice' || !el.files.length) throw userError(`${f.label}: no element @${name} in the Library (media.mjs elements)`)
   if (f.types && !f.types.includes(el.type)) throw userError(`${f.label}: @${name} is ${el.type === 'other' ? 'untyped' : `${/^[aeiou]/.test(el.type) ? 'an' : 'a'} ${el.type}`}, this takes ${f.types.join(' or ')}`)
   return `@${name}`
+}
+
+// a field of several Elements (Object swap's « With »: @Papi, @Coat): each checked, worded by its type when the field
+// says how (a place « as the setting », a pose « the pose of »), joined
+function elementFields(f, v) {
+  const names = f.multiple ? String(v).split(/[\s,]+/).filter(Boolean) : [v]
+  return names.map(n => { const at = elementField(f, n); return (f.by_type?.[element(at.slice(1)).type] ?? '{}').replace('{}', at) }).join(', ')
 }
 
 // a style of the Library (styles/<name>/): its images go last among the references, and the prompt cites them by
@@ -554,7 +584,7 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
     })
     if (refs.length > (m.params.references ?? 0)) throw userError(`${m.name} takes ${m.params.references ?? 0} reference images, this asks for ${refs.length}`)
     const size = f => { try { const s = probe(f); return [s.width, s.height] } catch { return [] } }
-    return { send: { model: m.model, prompt, refs: refs.map(dataUrl), ...params }, estimate: { n: params.n, resolution: params.resolution, quality: params.quality, refs: refs.length, sizes: refs.map(size) } }
+    return { send: { model: m.model, prompt, refs: refs.map(dataUrl), ...params }, estimate: { n: params.n, resolution: params.resolution, quality: params.quality, ratio: params.aspect_ratio, text: prompt?.length, refs: refs.length, sizes: refs.map(size) } }
   }
   if (kind === 'video') {
     const video = files('video')[0], source = video ? probe(video) : null, avatar = m.role === 'avatar'
@@ -568,8 +598,18 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
     const refs = [...images.map(f => ({ kind: 'image', file: f })), ...(video ? [{ kind: 'video', file: atLeast(video, m.params.min_pixels) }] : []), ...files('audio').map(f => ({ kind: 'audio', file: f }))]
     if (refs.some(r => r.kind !== 'image') && spawnSync('cloudflared', ['--version'], { stdio: 'ignore' }).error) throw userError('a video or a voice reaches OpenRouter through a Cloudflare tunnel: brew install cloudflared (no account)')
     const upscale = m.role === 'upscale', edit = !!video, still = files('first_frame')[0] ?? files('last_frame')[0]
+    // a keyframe (Aleph 2): an edited frame at its time in the video, 5 MB at most as a data: URI
+    const keyframe = files('keyframe')[0]
+    if (keyframe && !(+p.frame >= 0 && +p.frame <= source.duration)) throw userError(`the keyframe's time (--frame) is in the video: 0 to ${source.duration.toFixed(1)} s`)
+    if (keyframe && fs.statSync(keyframe).size > 5e6) throw userError('a keyframe is 5 MB at most')
+    // Seedance given a video remakes it at the source's length, sent: OpenRouter's 5 s default made a new 5 s video, and
+    // its -1 (« follow the video ») is refused; from its shortest duration up (2026-10-31). Seedance 2.5 edits only with
+    // -1: sent anyway, for the day OpenRouter takes it (github.com/OpenRouterTeam/typescript-sdk/issues/1096)
+    const lengths = edit && m.model.startsWith('bytedance/') && m.params.duration?.length ? [Math.min(...m.params.duration), Math.max(...m.params.duration)] : null
+    if (lengths && (source.duration < lengths[0] - 0.05 || source.duration > lengths[1] + 0.05))
+      throw userError(`${m.name} takes a video of ${lengths[0]} to ${lengths[1]} s, this one is ${source.duration.toFixed(1)} s: trim or extend it`)
     const params = clean({
-      duration: edit ? undefined : pick(m.params.duration, num(p.duration), 5),
+      duration: edit ? (lengths ? (m.model === 'bytedance/seedance-2.5' ? -1 : pick(m.params.duration, Math.round(source.duration))) : undefined) : pick(m.params.duration, num(p.duration), 5),
       resolution: upscale ? undefined : pick(m.params.resolution, p.resolution, '1080p', '720p'),
       // from an image, its own ratio unless one is asked
       aspect_ratio: edit ? undefined : pick(m.params.aspect_ratio, p.aspect_ratio ?? (still && ratioOf(m.params.aspect_ratio, still)), '16:9'),
@@ -579,12 +619,14 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
     })
     const send = { model: m.model, prompt: upscale && !prompt ? undefined : prompt, frames: Object.fromEntries(Object.entries(frames).map(([k, f]) => [k, dataUrl(f)])),
       // the images inlined, the videos and voices served by a tunnel when the job is submitted
-      refs: refs.map(r => (r.kind === 'image' ? { kind: r.kind, url: dataUrl(r.file) } : r)), ...params }
+      refs: refs.map(r => (r.kind === 'image' ? { kind: r.kind, url: dataUrl(r.file) } : r)), ...params,
+      ...(keyframe ? { keyframes: [{ uri: dataUrl(keyframe), seconds: +p.frame }] } : {}) }
     // a model without durations (an avatar) lasts as long as its voice
     const voice = files('audio')[0]
-    return { send, estimate: { duration: source?.duration ?? params.duration ?? (voice ? probe(voice).duration : undefined), resolution: params.resolution ?? `${Math.min(source?.width ?? 1920, source?.height ?? 1080)}p`,
+    return { send, estimate: { duration: (params.duration > 0 ? params.duration : undefined) ?? source?.duration ?? (voice ? probe(voice).duration : undefined), resolution: params.resolution ?? `${Math.min(source?.width ?? 1920, source?.height ?? 1080)}p`,
       ratio: params.aspect_ratio, sound: params.generate_audio, input: video ? 'video' : Object.keys(frames).length ? 'image' : 'text',
-      images: images.length + Object.keys(frames).length, creativity: spec.fields?.creativity, factor: spec.fields?.factor, width: source?.width, height: source?.height } }
+      images: images.length + Object.keys(frames).length, creativity: spec.fields?.creativity, factor: spec.fields?.factor, width: source?.width, height: source?.height,
+      source_duration: source?.duration, min_pixels: m.params.min_pixels } }
   }
   // speech: a preset voice, or up to 3 clips to clone
   const clips = files('voice_clips')
@@ -638,29 +680,25 @@ async function plan(spec) {
   // a References tool makes anyone without words or photos
   if (!probing && tool.one_of && !tool.one_of.some(k => spec.inputs?.[k]?.length || String(spec.fields?.[k] ?? '').trim())) {
     const [f, i] = [tool.fields.find(x => tool.one_of.includes(x.key)), tool.inputs.find(x => tool.one_of.includes(x.key))]
-    throw userError(`${tool.label}: describe it (--field ${f.key}="…") or add ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
+    throw userError(`${tool.label}: ${f.type === 'element' ? `pick an element of the Library (--field ${f.key}=@<name>, several: "@a, @b")` : `describe it (--field ${f.key}="…")`} or add ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
   }
   // a field the tool cannot go without (Object swap's element)
   for (const f of tool.fields) if (f.required && !probing && !String(spec.fields?.[f.key] ?? f.default ?? '').trim())
     throw userError(`${tool.label} needs ${f.label.toLowerCase()} (${f.type === 'element' ? `--field ${f.key}=@<element>, media.mjs elements` : `--field ${f.key}=…`})`)
-  // the fields left out take their defaults (upscale's creativity, extend's direction…)
-  const fields = { ...Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)])), ...spec.fields }
-  // a style of the Library: its words in the prompt, its images after the other references
-  const looks = []
-  for (const f of tool.fields) {
-    const s = f.type === 'style' && savedStyle(fields[f.key])
-    if (s) { looks.push(...s.files); fields[f.key] = s.text } else if (f.type === 'element' && String(fields[f.key] ?? '').trim()) fields[f.key] = elementField(f, fields[f.key])
-    else if (fields[f.key] != null) fields[f.key] = optionValue(f, fields[f.key])
-  }
+  // a keyframe made (--in keyframe, at --frame): Aleph 2 takes the video and it alone, the tool's short prompt naming
+  // the keyframe and the Elements by their words; their images, the painted area and the references made the keyframe
+  const kf = spec.kind === 'video' && !!tool.keyframe && !!spec.inputs?.keyframe?.length
+  const { fields, looks } = prepared(tool, spec, kf)
   spec = { ...spec, fields }
-  if (!probing) for (const i of tool.inputs) if (!i.optional && !spec.inputs?.[i.key]?.length) throw userError(`${tool.label} needs ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
+  if (!probing) for (const i of tool.inputs) if (!i.optional && !(kf && i.kind !== 'video') && !spec.inputs?.[i.key]?.length) throw userError(`${tool.label} needs ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
   for (const f of Object.values(spec.inputs ?? {}).flat()) if (!fs.existsSync(f)) throw userError(`no such file: ${f}`)
   // the @names of an image or a video prompt (a voice's text is read as written): their images after the tool's
-  const filled = fill(tool, spec)
+  const filled = fill(kf ? { ...tool, template: tool.keyframe.apply } : tool, spec)
   const { text: prompt, refs } = spec.kind === 'audio' ? { text: filled, refs: [] }
-    : mentions(filled, spec.kind, 1 + counted(spec.kind, tool).reduce((n, i) => n + (spec.inputs?.[i.key]?.length ?? 0), 0))
+    : mentions(filled, spec.kind, 1 + counted(spec.kind, tool).reduce((n, i) => n + (spec.inputs?.[i.key]?.length ?? 0), 0), kf)
   // a probe prices the tool before its files: a style's images would only trip the model's count
   if (!probing) refs.push(...looks)
+  if (kf) spec = { ...spec, inputs: { video: spec.inputs.video, keyframe: spec.inputs.keyframe } }
   if (LOCAL[tool.local]) {
     if (['depth', 'matte'].includes(tool.local) && !probing && !hasBin('uv')) throw userError(`${tool.label} runs a model on this machine with uv: brew install uv, then media.mjs setup vision`)
     return { tool, prompt: '', provider: 'local', model: LOCAL[tool.local], estimate: { amount: 0, unit: 'usd', known: true, detail: 'local, free' } }
@@ -675,6 +713,12 @@ async function plan(spec) {
   if (CUSTOM.includes(tool.id) && !spec.raw && !String(spec.prompt ?? '').trim() && !probing) throw userError('write a prompt (--prompt "…"): Custom has no prompt of its own')
   const id = spec.model ?? tool.models?.find(Boolean) ?? settings().defaults[spec.kind]
   const m = id ? await modelOf(spec.kind, id.includes(':') ? id : `openrouter:${id}`) : (await models(spec.kind)).find(x => x.role !== 'edit' && x.role !== 'upscale' && x.role !== 'avatar')
+  // a keyframe goes to Aleph 2 only (its passthrough keyframes); a tool whose images Aleph cannot take needs one there
+  if (kf && m.model !== ALEPH) throw userError(`a keyframe goes to Aleph 2 (--model ${ALEPH}), not ${m.name}`)
+  if (!kf && !probing && tool.keyframe?.required && m.model === ALEPH)
+    throw userError(`${tool.label} on Aleph 2 takes a keyframe: --frame <seconds> makes it from the video, then --in keyframe=<it> --frame <seconds>`)
+  // the tool's price before its keyframe: its Elements' images will go to the keyframe, not to Aleph
+  if (probing && tool.keyframe && m.model === ALEPH) refs.splice(0)
   let request
   try {
     // extend: the source's last frame starts the new shot (sequel), or its first frame ends it (prequel)
@@ -742,7 +786,34 @@ function standIn() {
 }
 // the jobs a generation makes, each with its plan: a batch's takes of one, or a References tool's sheets at their own
 // ratio, the first alone, the others after it to match its image
+// a frame of a video at t seconds, made once
+function frameAt(file, t) {
+  const out = at('.cache', `frame-${createHash('sha1').update(JSON.stringify([file, fs.statSync(file).mtimeMs, t])).digest('hex').slice(0, 12)}.png`)
+  if (!fs.existsSync(out)) (fs.mkdirSync(path.dirname(out), { recursive: true }), ffmpeg(['-ss', String(t), '-i', file, '-frames:v', '1', '-update', '1', out]))
+  if (!fs.existsSync(out)) throw userError(`no frame at ${t} s in ${path.basename(file)}`)
+  return out
+}
+// a video edit's keyframe (--frame <s>, no keyframe yet): the frame at s edited as an image, by the image tool the video
+// tool names (the same fields) or by Custom edit on its frame prompt, the frame first and the tool's other images after
+// it; on Seedream 5.0 Flash unless --keyframe-model. Its job remembers the video; Aleph 2 then carries it through the
+// shot (--in keyframe=<it> --frame <s>)
+function keyframeStep(spec) {
+  const tool = spec.kind === 'video' && toolOf('video', spec.tool), k = tool?.keyframe, t = spec.params?.frame
+  if (!k || t == null || spec.inputs?.keyframe?.length) return spec
+  const video = spec.inputs?.video?.[0]
+  if (!video) { if (spec.probe) return spec; throw userError(`${tool.label} needs its video first (--in video=<file>)`) }
+  const length = probe(video).duration
+  if (!(t >= 0 && t <= length)) throw userError(`--frame is a time in the video: 0 to ${length.toFixed(1)} s`)
+  const frame = frameAt(video, t), { video: _, keyframe: __, ...rest } = spec.inputs
+  const base = { kind: 'image', model: spec.params.keyframe_model ?? KEYFRAME_MODEL, params: {}, workspace: spec.workspace, probe: spec.probe, keyframe: { tool: tool.id, video, at: t } }
+  const defaults = Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)]))
+  if (k.tool) return { ...base, tool: k.tool, prompt: spec.prompt, fields: { ...defaults, ...spec.fields }, inputs: { image: [frame], ...(rest.references ? { references: rest.references } : {}) } }
+  const syn = { ...tool, template: k.template, inputs: [{ key: 'image', kind: 'image' }, ...tool.inputs.filter(i => i.kind !== 'video')] }
+  const prompt = fill(syn, { ...spec, kind: 'image', fields: prepared(tool, spec).fields, inputs: { image: [frame], ...rest } })
+  return { ...base, tool: 'free-edit', raw: true, prompt, fields: {}, inputs: { image: [frame], references: syn.inputs.slice(1).flatMap(i => rest[i.key] ?? []) } }
+}
 async function plans(spec) {
+  spec = keyframeStep(spec)
   const tool = toolOf(spec.kind, spec.tool), sheets = sheetsOf(tool, spec)
   if (!sheets) { const p = await plan(spec); return Array.from({ length: batchOf(spec) }, () => ({ spec, p })) }
   return Promise.all(sheets.list.map(async (o, k) => {
@@ -1031,7 +1102,8 @@ function specFromArgs(kind) {
   }
   const fields = Object.fromEntries((opt.field ?? []).map(x => { const i = x.indexOf('='); return [x.slice(0, i), x.slice(i + 1)] }))
   const params = clean({ n: num(opt.n), duration: num(opt.duration), aspect_ratio: opt.ratio, resolution: opt.resolution, quality: opt.quality,
-    sound: opt.sound === undefined ? undefined : opt.sound !== 'off', seed: num(opt.seed), voice: opt.voice })
+    sound: opt.sound === undefined ? undefined : opt.sound !== 'off', seed: num(opt.seed), voice: opt.voice,
+    frame: num(opt.frame), keyframe_model: opt['keyframe-model'] })
   return { kind, tool: opt.tool ?? (kind === 'audio' ? 'voice' : 'free'), model: opt.model, prompt: opt.prompt ?? args.join(' '), raw: opt.raw, fields, inputs, params, batch: num(opt.batch), workspace: opt.workspace }
 }
 

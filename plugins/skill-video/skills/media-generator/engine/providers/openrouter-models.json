@@ -1063,7 +1063,7 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
-      "pricing": {"duration_seconds_480p":0.05,"duration_seconds_720p":0.1,"duration_seconds_1080p":0.2}
+      "pricing": {"duration_seconds_480p":0.05,"duration_seconds_720p":0.1,"duration_seconds_1080p":0.2,"measured_billed_ratio_480p":2.125}
     },
     {
       "id": "alibaba/wan-3.0-prime",
@@ -1190,7 +1190,7 @@
       "sound": true,
       "seed": true,
       "upscale": null,
-      "min_pixels": null,
+      "min_pixels": 407696,
       "pricing": {"video_tokens":0.0000035,"video_tokens_without_audio":0.0000035,"video_tokens_with_video_input":0.0000021}
     },
     {
@@ -1319,7 +1319,7 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
-      "pricing": {"duration_seconds":0.112,"duration_seconds_with_audio":0.168,"text_to_video_duration_seconds_480p":0.112,"text_to_video_duration_seconds_720p":0.112,"image_to_video_duration_seconds_720p":0.112,"text_to_video_duration_seconds_1080p":0.112,"image_to_video_duration_seconds_1080p":0.112}
+      "pricing": {"duration_seconds":0.112,"duration_seconds_with_audio":0.168,"text_to_video_duration_seconds_480p":0.112,"text_to_video_duration_seconds_720p":0.112,"image_to_video_duration_seconds_720p":0.112,"text_to_video_duration_seconds_1080p":0.112,"image_to_video_duration_seconds_1080p":0.112,"measured_minimum_seconds":5}
     },
     {
       "id": "kwaivgi/kling-v3.0-std",

@@ -322,7 +322,7 @@
     ],
     "fields": [
       { "key": "change", "label": "Put there", "type": "text", "placeholder": "a vase of white tulips" },
-      { "key": "element", "label": "Or an element", "type": "element", "types": ["object", "character", "outfit", "brand", "other"], "phrase": "{}" },
+      { "key": "element", "label": "Or an element", "type": "element", "multiple": true, "types": ["character", "outfit", "object", "location", "pose", "brand", "other"], "phrase": "{}", "by_type": { "location": "{} as the setting", "pose": "the pose of {}" } },
       { "key": "outside", "label": "Outside the area", "type": "choice", "default": "exact", "options": [
         { "value": "exact", "label": "Kept pixel-exact" },
         { "value": "model", "label": "As the model made it" }
@@ -355,13 +355,17 @@
   },
   {
     "id": "character-swap", "label": "Character swap", "group": "Characters", "mode": "edit", "icon": "users",
-    "description": "Replaces the whole person with a character of your Library.",
-    "inputs": [{ "key": "image", "kind": "image", "label": "Target" }],
+    "description": "Replaces the whole person with characters, outfits or poses of your Library, or photos.",
+    "inputs": [
+      { "key": "image", "kind": "image", "label": "Target" },
+      { "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true, "phrase": "with the person in {}" }
+    ],
+    "one_of": ["character", "references"],
     "fields": [
-      { "key": "character", "label": "Character", "type": "element", "types": ["character"], "required": true, "phrase": "{}" },
+      { "key": "character", "label": "With", "type": "element", "multiple": true, "types": ["character", "outfit", "object", "location", "pose", "brand", "other"], "phrase": "with {}", "by_type": { "location": "{} as the setting", "pose": "the pose of {}" } },
       { "key": "who", "label": "Which person", "type": "text", "optional": true, "phrase": "({})", "placeholder": "the woman on the left" }
     ],
-    "template": "Replace the person {who} in the first image with {character}: their face, hair, body and outfit, in the same pose, place and lighting. {prompt}",
+    "template": "Replace the person {who} in the first image {character} {references}: their face, hair, body and outfit, in the same pose, place and lighting. {prompt}",
     "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"]
   },
   {

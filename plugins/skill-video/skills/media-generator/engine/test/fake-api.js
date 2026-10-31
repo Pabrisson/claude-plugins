@@ -48,6 +48,8 @@ setInterval(() => {}, 1e6)
         if (typeof body[k] !== 'number') return json({ success: false, error: { name: 'ZodError', message: `[{"expected":"number","code":"invalid_type","path":["${k}"],"message":"Invalid input: expected number, received ${typeof body[k]}"}]` } }, 400)
         if (!ok(body[k])) return json({ error: { message: `${name} ${body[k]} is not supported for this model. Supported values: ${values}`, code: 400, metadata: { failed_routing_step: 'Validate Video Parameters' } } }, 400)
       }
+      // a length of 1 s or more: OpenRouter refuses Seedance's -1 (« follow the video »), 2026-10-31
+      if ('duration' in body && !(body.duration >= 1)) return json({ success: false, error: { name: 'ZodError', message: '[{"origin":"number","code":"too_small","minimum":1,"path":["duration"],"message":"Too small: expected number to be >=1"}]' } }, 400)
       const bad = (body.input_references ?? []).findIndex(r => ['video_url', 'audio_url'].includes(r.type) && !r[r.type].url.startsWith('https://'))
       if (bad >= 0) return json({ error: { message: `Invalid reference URL: input_references[${bad}].${body.input_references[bad].type}.url: Only HTTPS URLs are allowed`, code: 400 } }, 400)
       // what a provider does with an https file: HEAD, then GET, through the (fake) tunnel

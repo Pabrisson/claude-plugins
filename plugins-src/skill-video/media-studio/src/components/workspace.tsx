@@ -329,7 +329,7 @@ function AddFromLibrary({ ws, results, onChanged }: { ws: Workspace; results: Pi
           <PlusIcon data-icon="inline-start" /> Add from library
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(460px,calc(100vw-2rem))] gap-0 p-0">
+      <PopoverContent align="end" collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col gap-0 p-0">
         <LibraryList
           title={`Add to ${ws.name}`}
           items={results}
@@ -356,10 +356,10 @@ function LinkElement({ state, ws, onChanged }: { state: State; ws: Workspace; on
           <LinkIcon data-icon="inline-start" /> Link an element
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
-        <Command>
+      <PopoverContent align="end" collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-80 flex-col p-0">
+        <Command className="min-h-0">
           <CommandInput placeholder="Search the Library's elements" />
-          <CommandList className="max-h-72">
+          <CommandList className="max-h-72 min-h-0 flex-1">
             <CommandEmpty>No element of that name.</CommandEmpty>
             {others.map((e) => (
               <CommandItem key={e.name} value={`${e.name} ${e.words}`} onSelect={() => api.workspaces({ slug: ws.slug, link: [e.name] }).then(onChanged, (err) => toast.error(plain(err.message)))}>

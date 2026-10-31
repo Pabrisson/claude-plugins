@@ -21,10 +21,21 @@ test('a video costs its most specific per-second price that fits, never one that
   assert.equal(estimateVideo(grok, { duration: 10, resolution: '1080p', input: 'image', images: 1 }).amount, 1.41)
   // a minimum per generation
   assert.equal(estimateVideo({ cents_per_second_output: '28', minimum_cents_per_generation: '56' }, { duration: 1, input: 'video' }).amount, 0.56)
-  // video tokens (Seedance): width × height × 24 fps × seconds / 1024, and the cheaper rate with a video input
-  const seed = { video_tokens: '0.0000107', video_tokens_with_video_input: '0.0000064' }
-  assert.equal(estimateVideo(seed, { duration: 5, resolution: '1080p', ratio: '16:9' }).amount, 2.6001)
-  assert.equal(estimateVideo(seed, { duration: 5, resolution: '1080p', ratio: '16:9', input: 'video' }).amount, 1.5552)
+  // video tokens (Seedance): its frame's pixels × (24 fps × seconds + 1) / 1024, as billed on 2026-10-31
+  const seed15 = { video_tokens: '0.0000024', video_tokens_without_audio: '0.0000012' }
+  assert.equal(estimateVideo(seed15, { duration: 4, resolution: '480p', ratio: '4:3', sound: false, input: 'image' }).amount, 0.0487, 'billed $0.04787 (752×560)')
+  // a video sent: the output at the plain price, plus the video's pixels at 8 frames a second at the with-video price
+  const mini = { video_tokens: '0.0000035', video_tokens_without_audio: '0.0000035', video_tokens_with_video_input: '0.0000021' }
+  const sent = { resolution: '480p', ratio: '16:9', input: 'video', width: 848, height: 480, min_pixels: 407696 }
+  assert.equal(estimateVideo(mini, { ...sent, duration: 4, sound: true, source_duration: 4.083 }).amount, 0.1694, 'billed $0.16962')
+  assert.equal(estimateVideo(mini, { ...sent, duration: 5, sound: false, source_duration: 2.04 }).amount, 0.1909, 'billed $0.19071')
+  // what the bill showed beyond the listed prices: a minimum length (Kling 3.0 Pro), a ratio at one tier (Wan 3.0, 480p)
+  const kling5 = { duration_seconds: '0.112', duration_seconds_with_audio: '0.168', measured_minimum_seconds: '5' }
+  assert.equal(estimateVideo(kling5, { duration: 3, sound: false }).amount, 0.56, 'billed $0.56 for 3 s')
+  assert.equal(estimateVideo(kling5, { duration: 8, sound: false }).amount, 0.896)
+  const wan = { duration_seconds_480p: '0.05', duration_seconds_720p: '0.1', measured_billed_ratio_480p: '2.125' }
+  assert.equal(estimateVideo(wan, { duration: 2, resolution: '480p' }).amount, 0.2125, 'billed $0.2125 twice')
+  assert.equal(estimateVideo(wan, { duration: 2, resolution: '720p' }).amount, 0.2)
   // megapixel-seconds of the output by creativity (FLUX upscale), at the share the router billed on 2026-10-29
   const up = { cents_per_megapixel_second_precise: '3.5', cents_per_megapixel_second_creative: '5' }
   assert.equal(estimateVideo(up, { duration: 1, creativity: 'precise', factor: 2, width: 320, height: 180 }).amount, 0.0047, 'billed $0.00467')
@@ -60,15 +71,25 @@ test('an image costs its outputs at the resolution tier, by image, megapixel or 
   // a surcharge variant is optional: left out
   assert.equal(estimateImage('krea/k3', [{ pricing: [{ billable: 'output_image', unit: 'image', cost_usd: 0.07 }, { billable: 'output_image', unit: 'request', cost_usd: 0.02, variant: 'high_thinking_surcharge' }] }], {}).amount, 0.07)
   assert.equal(estimateImage('x/y', [{ pricing: [] }], {}).known, false)
-  // GPT Image counts an input image in 512 px tiles once it fits 768 px on its short side (measured on 2026-10-29: $0.00287)
+  // GPT Image counts an input image in 32 px patches, 1,536 at most, its prompt's text, and an output not square half as
+  // much again (measured: $0.00287 on 2026-10-29, $0.007106 and $0.00479 on 2026-10-31)
   const mini = [{ pricing: [{ billable: 'input_image', unit: 'token', cost_usd: 0.0000025 }, { billable: 'input_text', unit: 'token', cost_usd: 0.000002 }, { billable: 'output_image', unit: 'token', cost_usd: 0.000008 }] }]
   assert.equal(estimateImage('openai/gpt-image-1-mini', mini, { quality: 'low', refs: 1, sizes: [[512, 512]] }).amount, 0.0028)
-  assert.equal(estimateImage('openai/gpt-image-1-mini', mini, { quality: 'low', refs: 1, sizes: [[4032, 3024]] }).amount, 0.0041)
+  assert.equal(estimateImage('openai/gpt-image-1-mini', mini, { quality: 'low', refs: 1, sizes: [[4032, 3024]] }).amount, 0.006)
+  assert.equal(estimateImage('openai/gpt-image-1-mini', mini, { quality: 'low', ratio: '3:2', text: 131, refs: 1, sizes: [[1536, 1024]] }).amount, 0.0072)
+  assert.equal(estimateImage('openai/gpt-image-1-mini', mini, { quality: 'low', ratio: '1:1', text: 108, refs: 1, sizes: [[1024, 1024]] }).amount, 0.0048)
+  // GPT Image 2.5 low: 196 tokens square ($0.00596 and $0.014257 billed, 2026-10-31)
+  const g25 = [{ pricing: [{ billable: 'input_image', unit: 'token', cost_usd: 0.000008 }, { billable: 'input_text', unit: 'token', cost_usd: 0.000005 }, { billable: 'output_image', unit: 'token', cost_usd: 0.00003 }] }]
+  assert.equal(estimateImage('openai/gpt-image-2.5-sunburst', g25, { quality: 'low', ratio: '1:1', text: 44 }).amount, 0.0059)
+  assert.equal(estimateImage('openai/gpt-image-2.5-flare', g25, { quality: 'low', ratio: '1:1', text: 108, refs: 1, sizes: [[1024, 1024]] }).amount, 0.0142)
 })
 
 test('speech costs its characters, and its seconds when the model bills them', () => {
+  // 28 characters: Gemini 25 audio tokens a second ($0.0007965 billed), Seed Audio whole seconds ($0.01 billed for 4.1 s)
+  assert.equal(estimateSpeech('google/gemini-3.8-flash-tts', { prompt: '0.0000005', completion: '0.000009' }, 'x'.repeat(28)).amount, 0.0008)
+  assert.equal(estimateSpeech('bytedance-seed/seed-audio-1-0', { prompt: '0', completion: '0.0025' }, 'x'.repeat(28)).amount, 0.01)
   assert.equal(estimateSpeech('elevenlabs/eleven-v4', { prompt: '0.00008', completion: '0' }, 'x'.repeat(1000)).amount, 0.08)
-  assert.equal(estimateSpeech('bytedance-seed/seed-audio-1-0', { prompt: '0', completion: '0.0025' }, 'x'.repeat(150)).amount, 0.025)
+  assert.equal(estimateSpeech('bytedance-seed/seed-audio-1-0', { prompt: '0', completion: '0.0025' }, 'x'.repeat(150)).amount, 0.0325, '1.5 s + 150 / 14, 13 whole seconds')
   assert.equal(estimateSpeech('a/b', null, 'hi').known, false)
 })
 
