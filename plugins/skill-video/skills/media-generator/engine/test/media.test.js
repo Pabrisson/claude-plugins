@@ -11,7 +11,10 @@ import { startFake } from './fake-api.js'
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'media-gen-'))
 const engine = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'media.mjs')
 const fake = await startFake(home)
-const env = { ...process.env, MEDIA_GENERATOR_DIR: home, MEDIA_GENERATOR_MODELS: path.join(path.dirname(engine), 'test', 'models.json'), OPENROUTER_BASE: `${fake.base}/api/v1`, OPENROUTER_API_KEY: 'k-test', OPENROUTER_MANAGEMENT_KEY: 'k-mgmt',
+// OpenRouter's catalog checked a moment ago, adding nothing: only its own test reads the fake's
+const catalogFile = path.join(home, 'catalog.json')
+fs.writeFileSync(catalogFile, JSON.stringify({ at: new Date().toISOString(), image: [], video: [], speech: [] }))
+const env = { ...process.env, MEDIA_GENERATOR_DIR: home, MEDIA_GENERATOR_MODELS: path.join(path.dirname(engine), 'test', 'models.json'), MEDIA_GENERATOR_CATALOG: catalogFile, OPENROUTER_BASE: `${fake.base}/api/v1`, OPENROUTER_API_KEY: 'k-test', OPENROUTER_MANAGEMENT_KEY: 'k-mgmt',
   ELEVENLABS_BASE: `${fake.base}/el`, ELEVENLABS_API_KEY: 'k-el', MEDIA_GENERATOR_POLL: '20', VIDEO_EDITOR_POLL: '20',
   // the fake cloudflared first, and the fake public DNS
   PATH: `${fake.bin}${path.delimiter}${process.env.PATH}`, MEDIA_GENERATOR_DOH: `${fake.base}/dns-query` }
@@ -35,13 +38,51 @@ execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=32
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=2', at('voice.mp3')])
 test.after(() => { fake.close(); fs.rmSync(home, { recursive: true, force: true }) })
 
-test('the catalogs: tools from the engine, models from its own list in one shape, never fetched', async () => {
+test('the catalogs: tools from the engine, models from its own list in one shape, the catalog not read again within a day', async () => {
   const t = await cli('tools', 'video', '--search', 'dolly')
   assert.match(t.out, /video dolly-zoom-in \(create, Camera\)/)
   assert.match(t.out, /--field speed=slow\|steady\|fast/)
   const m = await cli('models', 'video')
   assert.match(m.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s, 720p\/1080p, first_frame\+last_frame, audio, 3 refs\]/)
   assert.ok(!fake.calls.some(c => c.path.includes('models')), 'no catalog request')
+})
+
+// OpenRouter's catalog adds the models the list lacks, in its shape; the list wins for the ones it has
+test('OpenRouter\'s catalog: new models added once a day, the list kept for its own, a failure leaves the list', async () => {
+  const file = path.join(home, 'catalog-fresh.json'), e = { ...env, MEDIA_GENERATOR_CATALOG: file }, asked = () => fake.calls.filter(c => c.path.includes('/models')).length
+  const before = asked()
+  const v = await cliWith(e, 'models', 'video', '--refresh')
+  assert.match(v.err, /4 new models from OpenRouter's catalog: NewLab: New Image, NewLab: New Video, NewLab: New Edit, NewLab: New Voice/)
+  assert.match(v.out, /openrouter:fake\/new-vid {2}NewLab: New Video {2}\[3–5 s, 480p\/720p, first_frame\] {2}new, from the catalog, \$0\.015 for 3 s at 480p/)
+  assert.match(v.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s/, 'the list wins for a model it has')
+  assert.match(v.out, /openrouter:fake\/new-edit {2}NewLab: New Edit {2}\[edit\]/, 'no length of its own: it takes a video')
+  assert.match(v.out, /plus 2 new from OpenRouter's catalog/)
+  const c = JSON.parse(fs.readFileSync(file, 'utf8'))
+  assert.deepEqual(c.image.map(m => m.id), ['fake/new-img'], 'the unserved one waits')
+  assert.deepEqual(c.image[0], { id: 'fake/new-img', lab: 'NewLab', name: 'New Image', role: 'both', resolutions: ['1K', '4K'], aspect_ratios: ['9:16', '1:1', '16:9', 'auto'], max_images: 4, references: 6, quality: null, background: null, seed: true,
+    pricing: [[{ billable: 'output_image', unit: 'image', cost_usd: 0.05 }, { billable: 'output_image', unit: 'image', cost_usd: 0.2, variant: '4k' }]] })
+  assert.deepEqual(c.speech.map(m => [m.id, m.voices]), [['fake/new-tts', ['ava', 'max']]])
+  // within the day: the cache, no request; a new model runs like the list's
+  const n = asked()
+  assert.match((await cliWith(e, 'models', 'image')).out, /openrouter:fake\/new-img .*new, from the catalog, \$0\.05 an image/)
+  assert.equal(asked(), n, 'the cached catalog')
+  assert.match((await cliWith(e, 'image', '--prompt', 'a fox', '--model', 'fake/new-img', '--estimate')).out, /0\.05/)
+  // forced: read again, nothing new this time; down: forced says why, unforced keeps the cached one
+  assert.match((await cliWith(e, 'models', 'speech', '--refresh')).err, /nothing new/)
+  assert.ok(asked() > n)
+  fake.catalog.down = true
+  try {
+    const down = await cliWith(e, 'models', 'video', '--refresh')
+    assert.notEqual(down.code, 0)
+    assert.match(down.err, /catalog could not be read: .*503/)
+    fs.writeFileSync(file, JSON.stringify({ ...c, at: '2026-01-01T00:00:00Z' }))
+    assert.match((await cliWith(e, 'models', 'video')).out, /fake\/new-vid/, 'an old catalog when the new cannot be read')
+    fs.rmSync(file)
+    const none = await cliWith(e, 'models', 'video')
+    assert.equal(none.code, 0)
+    assert.doesNotMatch(none.out, /new-vid/)
+  } finally { fake.catalog.down = false }
+  assert.ok(asked() > before)
 })
 
 // the list is edited by hand: each model keeps its kind's keys, in order, and its lists sorted
@@ -440,10 +481,15 @@ test('the folder\'s .gitignore keeps the media, elements, styles, ledger and set
 
 test('the server: state, estimate, a threshold asks first (409), a confirmed click runs to the end; it stops with its Claude', { timeout: 30000 }, async t => {
   const port = 42000 + Math.floor(Math.random() * 500), url = `http://127.0.0.1:${port}`
-  const srv = spawn(process.execPath, [engine, 'serve'], { cwd: home, env: { ...env, MEDIA_GENERATOR_PORT: `${port}` } })
+  // its own catalog: the server reads the fake's at its start
+  const srv = spawn(process.execPath, [engine, 'serve'], { cwd: home, env: { ...env, MEDIA_GENERATOR_PORT: `${port}`, MEDIA_GENERATOR_CATALOG: path.join(home, 'catalog-server.json') } })
   t.after(() => srv.kill())
+  let log = ''
+  srv.stdout.on('data', d => (log += d))
   for (let i = 0; i < 50; i++) { if (await fetch(url + '/__media-generator').then(r => r.ok).catch(() => false)) break; await new Promise(ok => setTimeout(ok, 100)) }
   const post = (p, body) => fetch(url + p, { method: 'POST', body: JSON.stringify(body) }).then(async r => ({ code: r.status, body: await r.json() }))
+  for (let i = 0; i < 50 && !log.includes('new models'); i++) await new Promise(ok => setTimeout(ok, 100))
+  assert.match(log, /OpenRouter: 4 new models \(NewLab: New Image, NewLab: New Video, NewLab: New Edit, NewLab: New Voice\)/, 'the catalog read at the start')
   const state = await fetch(url + '/api/state').then(r => r.json())
   assert.equal(state.home, home)
   assert.deepEqual(state.fake, { on: true, bases: [`${fake.base}/api/v1`, `${fake.base}/el`] }, 'the fake APIs, for the header\'s badge and toggle')
@@ -451,6 +497,13 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.deepEqual((await post('/api/fake', { on: false })).body, { on: false, bases: state.fake.bases })
   assert.equal((await fetch(url + '/api/state').then(r => r.json())).fake.on, false)
   assert.equal((await post('/api/fake', { on: true })).body.on, true)
+  // Settings' « Update the list »: what the catalog adds, the ones found this time apart; the models then carry them
+  assert.equal(state.catalog.added, 4)
+  const up = (await post('/api/models/refresh', {})).body
+  assert.deepEqual(up.added.video, [{ id: 'openrouter:fake/new-vid', name: 'NewLab: New Video', found: false }, { id: 'openrouter:fake/new-edit', name: 'NewLab: New Edit', found: false }], 'nothing new since the start')
+  const fresh = (await fetch(url + '/api/models?kind=video').then(r => r.json())).find(m => m.model === 'fake/new-vid')
+  assert.equal(fresh.new, true)
+  assert.equal(fresh.from, '$0.015 for 3 s at 480p')
   assert.ok(state.media.length > 5)
   assert.equal(state.drafts.video.tool, 'orbit')
   // the Library's styles: made from the page with their words, in the state with how a prompt cites them, removed
@@ -523,7 +576,7 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
 
 test('workspaces: the Default one from the start, new generations join the current one; a timeline in words, rendered, zipped', { timeout: 60000 }, async t => {
   const port = 42500 + Math.floor(Math.random() * 400), url = `http://127.0.0.1:${port}`
-  const srv = spawn(process.execPath, [engine, 'serve'], { cwd: home, env: { ...env, MEDIA_GENERATOR_PORT: `${port}` } })
+  const srv = spawn(process.execPath, [engine, 'serve'], { cwd: home, env: { ...env, MEDIA_GENERATOR_PORT: `${port}`, MEDIA_GENERATOR_CATALOG: path.join(home, 'catalog-server2.json') } })
   t.after(() => srv.kill())
   for (let i = 0; i < 50; i++) { if (await fetch(url + '/__media-generator').then(r => r.ok).catch(() => false)) break; await new Promise(ok => setTimeout(ok, 100)) }
   const post = (p, body) => fetch(url + p, { method: 'POST', body: JSON.stringify(body) }).then(async r => ({ code: r.status, body: await r.json() }))

@@ -402,7 +402,7 @@ function Dashboard() {
       ) : page === "credits" ? (
         <Credits state={state} balances={balances} onBridge={bridge} />
       ) : (
-        <SettingsPage key={JSON.stringify(state.settings)} state={state} models={models} onSaved={refresh} />
+        <SettingsPage key={JSON.stringify(state.settings)} state={state} models={models} onSaved={refresh} onModels={() => (setModels({}), refresh())} />
       )}
       <DropToLibrary onAdded={refresh} />
     </div>

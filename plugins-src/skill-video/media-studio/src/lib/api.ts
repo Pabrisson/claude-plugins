@@ -83,6 +83,9 @@ export type Model = {
   kind: string
   role: string
   provider: string
+  // added from OpenRouter's catalog (not in the list kept with the engine), with its price at its cheapest settings
+  new?: boolean
+  from?: string | null
   params: {
     resolution?: string[] | null
     aspect_ratio?: string[] | null
@@ -170,6 +173,8 @@ export type State = {
   plans: Record<string, number>
   // the fake APIs a dev or test server was started on (none for a real one), and whether it uses them now
   fake: { on: boolean; bases: string[] }
+  // OpenRouter's catalog: when it was last read, how many models it adds to the list
+  catalog: { at: string | null; added: number }
   month: { openrouter: number; elevenlabs: number }
   workspaces: Workspace[]
 }
@@ -279,6 +284,8 @@ export const api = {
   engine: () => call<{ engine: string }>("/__media-generator"),
   tools: () => call<Record<Kind, Tool[]>>("/api/tools"),
   models: (kind: Kind) => call<Model[]>(`/api/models?kind=${kind}`),
+  // OpenRouter's catalog read now: the models it adds by router kind, found: new since the last read
+  refreshModels: () => post<{ at: string; added: Record<"image" | "video" | "speech", { id: string; name: string; found: boolean }[]> }>("/api/models/refresh", {}),
   balances: (refresh = false) =>
     call<Balances>(`/api/balances${refresh ? "?refresh" : ""}`),
   ledger: () => call<LedgerLine[]>("/api/ledger"),

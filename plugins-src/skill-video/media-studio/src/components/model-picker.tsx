@@ -15,6 +15,11 @@ const rank = (r?: string | null) => (r ? RES.indexOf(r) : -1)
 const top = (m: Model) => m.params.resolution?.at(-1)
 const longest = (m: Model) => m.params.duration?.at(-1) ?? 0
 
+// a model added from OpenRouter's catalog, not in the engine's own list
+export const NewBadge = ({ children = "New" }: { children?: string }) => (
+  <span className="shrink-0 rounded-full bg-space/15 px-1.5 py-px text-[10px] font-semibold tracking-wide whitespace-nowrap text-space uppercase">{children}</span>
+)
+
 // a model's name without its lab, which its logo already says
 export const shortName = (m: Model) => (m.lab && m.name.startsWith(`${m.lab}: `) ? m.name.slice(m.lab.length + 2) : m.name)
 
@@ -109,7 +114,10 @@ export function ModelPicker({
     >
       <ModelLogo model={m.model} lab={m.lab} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{shortName(m)}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="truncate font-medium">{shortName(m)}</span>
+          {m.new && <NewBadge />}
+        </span>
         <span className="block truncate text-xs text-muted-foreground">{[m.lab, ...capsOf(m)].filter(Boolean).join(" · ")}</span>
       </span>
       {prices[m.id] && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{prices[m.id].label}</span>}

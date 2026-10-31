@@ -118,7 +118,9 @@ is the user's own prompt; the others fill a prompt template from their fields. C
 ### 2. The model
 
 The tool's first recommended model, unless the user names one or it cannot do the job. `media.mjs models <kind>
---search <words>` shows what each model takes (durations, resolutions, frames, audio, references).
+--search <words>` shows what each model takes (durations, resolutions, frames, audio, references). Models marked
+« new, from the catalog » come from OpenRouter's catalog (read at each start of the dashboard and once a day; `--refresh` reads it now, when the user asks
+for the newest models): never recommend one over the tool's own, and say its price is OpenRouter's, not measured.
 Settings: `--duration`, `--ratio`, `--resolution`, `--n` (images), `--quality`, `--sound on|off` (video), `--seed`,
 `--voice` (speech). `--batch 2` to `4` runs the same generation that many times, one job each (a seed goes up by one a
 job); the estimate and the user's yes are for the total. Without them, the engine picks sensible values the model accepts: a video made from an image

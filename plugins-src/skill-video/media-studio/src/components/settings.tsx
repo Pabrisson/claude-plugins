@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react"
-import { CopyIcon, KeyRoundIcon, LayersIcon, TriangleAlertIcon, WalletIcon, type LucideIcon } from "lucide-react"
+import { CopyIcon, KeyRoundIcon, LayersIcon, LoaderCircleIcon, RefreshCwIcon, RouterIcon, TriangleAlertIcon, WalletIcon, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -12,7 +12,8 @@ import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { api, money, plain, type Kind, type Model, type Settings, type State } from "@/lib/api"
 import { Chips } from "@/components/chips"
-import { ModelPicker } from "@/components/model-picker"
+import { capsOf, ModelPicker, NewBadge, shortName } from "@/components/model-picker"
+import { ModelLogo } from "@/components/model-logo"
 import { Main, Side } from "@/components/pages"
 
 const KINDS: Kind[] = ["image", "video", "audio"]
@@ -25,6 +26,12 @@ type Provider = (typeof PROVIDERS)[number]["id"]
 type Limit = { on: boolean; text: string }
 const LIMITS = PROVIDERS.flatMap((p) => (["threshold", "cap"] as const).map((k) => `${p.id}.${k}`))
 const COMMAND = "/plugin configure skill-video@pabrisson"
+const KIND_NAME: Record<string, string> = { image: "Image", video: "Video", speech: "Voice" }
+// how long ago, in a few words
+const ago = (iso: string) => {
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60e3)
+  return min < 1 ? "just now" : min < 60 ? `${min} min ago` : min < 1440 ? `${Math.round(min / 60)} h ago` : `${Math.round(min / 1440)} d ago`
+}
 
 // a limit as typed: on with a positive number, or off; anything else is an error to fix before saving
 const amount = (l: Limit) => (l.on ? Number(l.text) : null)
@@ -63,13 +70,38 @@ function Row({ title, about, htmlFor, children }: { title: string; about: React.
   )
 }
 
-export function SettingsPage({ state, models, onSaved }: { state: State; models: Partial<Record<Kind, Model[]>>; onSaved: () => void }) {
+export function SettingsPage({ state, models, onSaved, onModels }: { state: State; models: Partial<Record<Kind, Model[]>>; onSaved: () => void; onModels: () => void }) {
   const saved = state.settings
   const [plan, setPlan] = useState(saved.elevenlabs.plan)
   const [defaults, setDefaults] = useState(saved.defaults)
   const [limits, setLimits] = useState(() => typed(saved))
   const [busy, setBusy] = useState(false)
   const [at, setAt] = useState("spending")
+  // OpenRouter's catalog read on a click: its loader, then the models it found that time (null before any click)
+  const [checking, setChecking] = useState(false)
+  const [found, setFound] = useState<string[] | null>(null)
+  const added = KINDS.flatMap((k) => (models[k] ?? []).filter((m) => m.new))
+  const loaded = KINDS.every((k) => models[k])
+  // the models may have read the catalog (once a day): its date then comes with the state read again
+  useEffect(() => {
+    if (loaded) onSaved()
+  }, [loaded, onSaved])
+
+  async function updateModels() {
+    setChecking(true)
+    try {
+      const r = await api.refreshModels()
+      const ids = Object.values(r.added).flat().filter((m) => m.found).map((m) => m.id)
+      setFound(ids)
+      toast.success(ids.length ? `${ids.length} new model${ids.length > 1 ? "s" : ""} from OpenRouter` : "The model list is up to date")
+      onModels()
+      document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    } catch (e) {
+      toast.error(plain((e as Error).message))
+    } finally {
+      setChecking(false)
+    }
+  }
 
   const next: Omit<Settings, "workspace"> = {
     openrouter: { threshold: amount(limits["openrouter.threshold"]), cap: amount(limits["openrouter.cap"]) },
@@ -112,6 +144,7 @@ export function SettingsPage({ state, models, onSaved }: { state: State; models:
   ]
   const nav = [
     { id: "spending", icon: WalletIcon, title: "Spending", status: noLimits ? "No limit set" : "Limits set", warn: noLimits },
+    { id: "openrouter", icon: RouterIcon, title: "OpenRouter", status: state.catalog.at ? `${state.catalog.added} model${state.catalog.added === 1 ? "" : "s"} added · ${ago(state.catalog.at)}` : "Model list not checked", warn: false },
     { id: "plan", icon: WalletIcon, title: "ElevenLabs plan", status: plan ? cap(plan) : "Not set", warn: false },
     { id: "models", icon: LayersIcon, title: "Default models", status: KINDS.some((k) => defaults[k]) ? `${KINDS.filter((k) => defaults[k]).length} of 3 set` : "The tools' choice", warn: false },
     { id: "keys", icon: KeyRoundIcon, title: "API keys", status: `${keys.filter((k) => k.set).length} of 3 set`, warn: !state.keys.openrouter },
@@ -205,6 +238,49 @@ export function SettingsPage({ state, models, onSaved }: { state: State; models:
                 </Fragment>
               )
             })}
+          </Section>
+
+          <Section id="openrouter" icon={RouterIcon} title="OpenRouter" about="The image, video and voice models of many labs, through one key.">
+            <Row title="Model list" about="The list kept with media-generator, plus the models OpenRouter adds to its catalog, read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create.">
+              <Button variant="outline" disabled={checking} onClick={updateModels} className="self-start" aria-busy={checking || undefined}>
+                {checking ? <LoaderCircleIcon className="animate-spin" aria-hidden /> : <RefreshCwIcon aria-hidden />}
+                {checking ? "Updating the list…" : "Update the list"}
+              </Button>
+              <span className="text-xs text-muted-foreground">{state.catalog.at ? `Checked ${ago(state.catalog.at)}` : "Not checked yet"}</span>
+            </Row>
+            <div id="catalog" className="scroll-mt-5 px-5 py-4">
+              <div className="mb-2 flex items-baseline gap-2">
+                <span className="text-sm font-medium">Added from OpenRouter's catalog</span>
+                {loaded && <span className="text-xs text-muted-foreground tabular-nums">{added.length}</span>}
+                {found && <span className="ml-auto text-xs text-muted-foreground">{found.length ? `${found.length} found just now` : "Nothing new just now"}</span>}
+              </div>
+              {!loaded ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> Loading the models…</p>
+              ) : !added.length ? (
+                <p className="text-sm text-muted-foreground">None: the list already has every model of the catalog.</p>
+              ) : (
+                <ul className="divide-y rounded-lg border">
+                  {added.map((m) => (
+                    <li key={m.id} className={cn("flex items-center gap-3 px-3 py-2", found?.includes(m.id) && "bg-space/5")}>
+                      <ModelLogo model={m.model} lab={m.lab} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium">{shortName(m)}</span>
+                          {found?.includes(m.id) && <NewBadge>Just added</NewBadge>}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {[m.lab, KIND_NAME[m.kind] ?? m.kind, ["edit", "upscale"].includes(m.role) && `${m.role} only`, ...capsOf(m)].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      {m.from && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{m.from}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {loaded && added.length > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">Their prices are OpenRouter's, never measured here, and the reference images a video model takes are unknown.</p>
+              )}
+            </div>
           </Section>
 
           <Section id="plan" icon={WalletIcon} title="ElevenLabs plan" about="Your plan prices ElevenLabs' credits in USD, everywhere a cost shows.">

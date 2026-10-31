@@ -34,7 +34,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' },
-    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true },
+    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' },
   },
 })
 
@@ -160,7 +160,8 @@ const ALEPH = 'runway/aleph-2', KEYFRAME_MODEL = 'bytedance-seed/seedream-5-0-fl
 // the router's kind for a tool kind: audio is speech
 const routerKind = kind => (kind === 'audio' ? 'speech' : kind)
 
-// every router's models of a kind, their ids prefixed with the router: lists kept by hand, nothing is fetched
+// every router's models of a kind, their ids prefixed with the router: its list kept by hand, plus the new models of
+// its catalog (checked once a day)
 async function models(kind) {
   const all = []
   for (const [name, p] of Object.entries(PROVIDERS)) for (const m of await p.models(routerKind(kind))) all.push({ ...m, id: `${name}:${m.model}`, provider: name })
@@ -1132,14 +1133,20 @@ async function generate(kind) {
 }
 
 async function cmdModels(kind = 'video') {
+  if (opt.refresh) {
+    const r = await PROVIDERS.openrouter.refresh().catch(e => die(`OpenRouter's catalog could not be read: ${e.message}`))
+    const found = Object.values(r.added).flat().filter(m => m.found)
+    console.error(found.length ? `${found.length} new model${found.length > 1 ? 's' : ''} from OpenRouter's catalog: ${found.map(m => m.name).join(', ')}` : 'OpenRouter\'s catalog: nothing new')
+  }
   const list = (await models(kind)).filter(m => !opt.search || `${m.id} ${m.name}`.toLowerCase().includes(opt.search.toLowerCase()))
   if (opt.json) return console.log(JSON.stringify(list.map(({ pricing, ...m }) => m)))
   for (const m of list) {
     const p = m.params, caps = [m.role !== 'create' && m.role !== 'generate' && m.role, p.duration && `${p.duration[0]}–${p.duration.at(-1)} s`, p.resolution?.join('/'),
       p.frames?.length && p.frames.join('+'), p.audio && 'audio', p.n && p.n.max > 1 && `up to ${p.n.max}`, p.references && `${p.references} refs`, p.voices && `${p.voices.length} voices`].filter(Boolean)
-    console.log(`${m.id}  ${m.name}${caps.length ? `  [${caps.join(', ')}]` : ''}`)
+    console.log(`${m.id}  ${m.name}${caps.length ? `  [${caps.join(', ')}]` : ''}${m.new ? `  new, from the catalog${m.from ? `, ${m.from}` : ''}` : ''}`)
   }
-  console.log(`${list.length} ${kind} models (the engine's list, providers/openrouter-models.json)`)
+  const added = list.filter(m => m.new).length
+  console.log(`${list.length} ${kind} models (the engine's list, providers/openrouter-models.json${added ? `, plus ${added} new from OpenRouter's catalog: their references unknown, priced as listed` : ''})`)
 }
 
 // how a field is given on the command line: an option's label (Auto for an empty one), several in order, words
@@ -1414,11 +1421,13 @@ async function handle(req, res) {
   if (p === '/api/state') {
     const drafts = fs.existsSync(at('.cache', 'drafts.json')) ? readJson(at('.cache', 'drafts.json')) : {}
     return reply(res, 200, { home: HOME, settings: settings(), keys: { openrouter: !!process.env.OPENROUTER_API_KEY, management: !!process.env.OPENROUTER_MANAGEMENT_KEY, elevenlabs: !!process.env.ELEVENLABS_API_KEY },
-      fake: fakeState(),
+      fake: fakeState(), catalog: PROVIDERS.openrouter.catalogInfo(),
       media: mediaList(), drafts, styles: savedStyles(), elements: elementList(), plans: PLANS,
       workspaces: (jobs => workspaceList().map(w => ({ ...w, linked: linkedElements(w.slug, jobs) })))(allJobs()), month: Object.fromEntries(['openrouter', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
   }
   if (p === '/api/tools') return reply(res, 200, TOOLS)
+  // Settings' « Update the list »: OpenRouter's catalog read now, what it adds
+  if (p === '/api/models/refresh' && post) return reply(res, 200, await PROVIDERS.openrouter.refresh())
   if (p === '/api/models') {
     const kind = url.searchParams.get('kind')
     return reply(res, 200, (await models(kind)).map(({ pricing, ...m }) => m))
@@ -1627,6 +1636,12 @@ function serve() {
   ensureHome()
   http.createServer((req, res) => handle(req, res).catch(e => reply(res, 500, { error: e.message })))
     .listen(PORT, '127.0.0.1', () => console.log(`media-generator server on http://127.0.0.1:${PORT}/ for ${HOME}`))
+  // every router's catalog read again at each start, the page not waiting for it (then once a day, or Settings' « Update
+  // the list »); a router that cannot be read keeps its last one
+  for (const p of Object.values(PROVIDERS)) p.refresh?.().then(r => {
+    const found = Object.values(r.added).flat().filter(m => m.found)
+    if (found.length) console.log(`${p.label}: ${found.length} new model${found.length > 1 ? 's' : ''} (${found.map(m => m.name).join(', ')})`)
+  }, e => console.error(`${p.label}: its catalog could not be read (${e.message}), the last one kept`))
 }
 
 // the Claude processes the server works for (each `studio` adds its own): it quits once they have all quit, like

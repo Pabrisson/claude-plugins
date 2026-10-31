@@ -2,6 +2,8 @@
 // $OPENROUTER_API_KEY (the plugin's secret), $OPENROUTER_MANAGEMENT_KEY for the account's balance, $OPENROUTER_BASE
 // for the tests' fake server
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { estimateImage, estimateSpeech, estimateVideo } from '../lib/cost.js'
 
 const base = () => (process.env.OPENROUTER_BASE ?? 'https://openrouter.ai/api/v1').replace(/\/$/, '')
@@ -21,9 +23,82 @@ async function api(route, init = {}, key = process.env.OPENROUTER_API_KEY) {
 }
 const json = async (route, init) => (await api(route, init)).json()
 
-// the models on offer: a normalized list kept by hand next to this file, never fetched (the tests' own in
-// $MEDIA_GENERATOR_MODELS)
+// the models on offer: a normalized list kept by hand next to this file (the tests' own in $MEDIA_GENERATOR_MODELS),
+// plus the models OpenRouter's catalog has and it lacks
 const list = () => JSON.parse(fs.readFileSync(process.env.MEDIA_GENERATOR_MODELS ?? new URL('./openrouter-models.json', import.meta.url), 'utf8'))
+
+// ---------- the catalog: OpenRouter's free routes, checked once a day, cached for every project of this machine ----------
+
+const CATALOG = () => process.env.MEDIA_GENERATOR_CATALOG ?? path.join(os.homedir(), '.cache/media-generator/openrouter-catalog.json')
+const DAY = 864e5
+const RES = ['360p', '432p', '480p', '540p', '720p', '768p', '1080p', '1440p', '512', '768', '1K', '1.5K', '2K', '4K']
+const byRes = l => (l?.length ? l.filter(r => RES.includes(r)).toSorted((a, b) => RES.indexOf(a) - RES.indexOf(b)) : null)
+const ratio = r => (r === 'auto' ? Infinity : r.split(':').reduce((a, b) => a / b))
+const byRatio = l => (l?.length ? l.toSorted((a, b) => ratio(a) - ratio(b)) : null)
+// « Black Forest Labs: FLUX 3 Image » → its lab and its name, as the hand list keeps them
+const named = m => { const i = m.name.indexOf(': '); return i > 0 ? { lab: m.name.slice(0, i), name: m.name.slice(i + 2) } : { lab: m.id.split('/')[0], name: m.name } }
+const values = p => p?.values ?? null
+
+// a catalog entry in the hand list's shape; null for one OpenRouter does not serve yet (no endpoint, no price)
+const NORMALIZE = {
+  image(m, endpoints) {
+    const sp = m.supported_parameters ?? {}, priced = endpoints.filter(e => e.pricing?.length)
+    if (!priced.length) return null
+    const takes = m.architecture?.input_modalities?.includes('image')
+    return { id: m.id, ...named(m), role: !takes ? 'create' : sp.input_references?.min > 0 ? 'edit' : 'both',
+      resolutions: byRes(values(sp.resolution)), aspect_ratios: byRatio(values(sp.aspect_ratio)), max_images: sp.n?.max ?? 1,
+      references: takes ? sp.input_references?.max ?? 1 : 0, quality: values(sp.quality), background: values(sp.background), seed: !!sp.seed,
+      pricing: priced.map(e => e.pricing) }
+  },
+  // the catalog does not say edit or avatar: a model with no length of its own takes a video (Aleph 2, FLUX Video Edit;
+  // HeyGen's avatar too), kept off the create tools till its tool names it; its references unknown
+  video: m => ({ id: m.id, ...named(m), role: m.upscale_factor ? 'upscale' : m.supported_durations?.length ? 'generate' : 'edit',
+    resolutions: byRes(m.supported_resolutions), aspect_ratios: byRatio(m.supported_aspect_ratios), durations: m.supported_durations?.toSorted((a, b) => a - b) ?? null,
+    frames: m.supported_frame_images ?? [], references: null, sound: !!m.generate_audio, seed: !!m.seed,
+    upscale: m.upscale_factor ? { ...m.upscale_factor, creativity: !!m.creativity } : null, min_pixels: null,
+    pricing: Object.fromEntries(Object.entries(m.pricing_skus ?? {}).map(([k, v]) => [k, Number(v)])) }),
+  speech: m => ({ id: m.id, ...named(m), role: 'speech', voices: m.supported_voices?.length ? m.supported_voices : null,
+    pricing: { prompt: Number(m.pricing?.prompt ?? 0), completion: Number(m.pricing?.completion ?? 0) } }),
+}
+
+// the routes answer without a key; the image prices come from each new model's endpoints, one request each
+async function fetchCatalog(hand) {
+  const get = route => fetch(base() + route, { signal: AbortSignal.timeout(15e3) }).then(r => {
+    if (!r.ok) throw new Error(`OpenRouter ${route.split('?')[0]}: ${r.status}`)
+    return r.json()
+  })
+  const [image, video, speech] = await Promise.all(['/images/models', '/videos/models', '/models?output_modalities=speech'].map(get))
+  const known = kind => new Set(hand[kind].map(m => m.id)), fresh = (kind, data) => data.filter(m => !known(kind).has(m.id))
+  const images = await Promise.all(fresh('image', image.data).map(async m => NORMALIZE.image(m, (await get(`/images/models/${m.id}/endpoints`).catch(() => null))?.endpoints ?? [])))
+  return { at: new Date().toISOString(), image: images.filter(Boolean), video: fresh('video', video.data).map(NORMALIZE.video), speech: fresh('speech', speech.data).map(NORMALIZE.speech) }
+}
+
+let catalog = null, pending = null
+const EMPTY = { at: null, image: [], video: [], speech: [] }
+const readCatalog = () => { try { return JSON.parse(fs.readFileSync(CATALOG(), 'utf8')) } catch { return null } }
+// the cached catalog while under a day old, else a new one; a failed check keeps the old one and waits a day (this
+// process), forced it says why. force: Settings' « Update the list », models --refresh
+async function catalogOf(force = false) {
+  catalog ??= readCatalog()
+  if (!force && catalog && Date.now() - Date.parse(catalog.checked ?? catalog.at) < DAY) return catalog
+  pending ??= fetchCatalog(list()).then(c => {
+    fs.mkdirSync(path.dirname(CATALOG()), { recursive: true })
+    fs.writeFileSync(CATALOG(), JSON.stringify(c, null, 1))
+    return (catalog = c)
+  }).catch(e => {
+    if (force) throw e
+    return (catalog = { ...EMPTY, ...catalog, checked: new Date().toISOString() })
+  }).finally(() => { pending = null })
+  return pending
+}
+
+// a short price to show beside a catalog model: its cheapest settings
+function fromPrice(kind, m) {
+  const e = kind === 'image' ? estimateImage(m.id, m.pricing.map(pricing => ({ pricing })), { resolution: m.resolutions?.[0] ?? '1K' })
+    : kind === 'video' ? estimateVideo(m.pricing, { duration: m.durations?.[0] ?? 5, resolution: m.resolutions?.[0], ratio: m.aspect_ratios?.[0], input: 'text' })
+      : estimateSpeech(m.id, m.pricing, 'x'.repeat(1000))
+  return e.known ? `$${e.amount} ${kind === 'image' ? 'an image' : kind === 'video' ? `for ${m.durations?.[0] ?? 5} s${m.resolutions?.[0] ? ` at ${m.resolutions[0]}` : ''}` : 'for 1,000 characters'}` : null
+}
 
 export default {
   id: 'openrouter',
@@ -31,11 +106,27 @@ export default {
   unit: 'usd',
   key: () => !!process.env.OPENROUTER_API_KEY,
 
-  // the list of a kind in the engine's shape: what each model accepts, and its raw prices for the estimates
+  // the catalog's models the hand list lacks, checked now: when, and what it added (its new ones this time apart)
+  async refresh() {
+    const prev = catalog ?? readCatalog(), before = new Set(['image', 'video', 'speech'].flatMap(k => prev?.[k]?.map(m => m.id) ?? []))
+    const c = await catalogOf(true)
+    const added = Object.fromEntries(['image', 'video', 'speech'].map(k => [k, c[k].map(m => ({ id: `openrouter:${m.id}`, name: `${m.lab}: ${m.name}`, found: !before.has(m.id) }))]))
+    return { at: c.at, added }
+  },
+  // when the catalog was last read, and how many models it adds (the dashboard's Settings)
+  catalogInfo() {
+    const c = catalog ?? readCatalog()
+    return { at: c?.at ?? null, added: c ? c.image.length + c.video.length + c.speech.length : 0 }
+  },
+
+  // the list of a kind in the engine's shape: what each model accepts, and its raw prices for the estimates. The
+  // catalog's ones say new, with a price at their cheapest settings
   async models(kind) {
-    const all = list()[kind]
-    if (!all) throw new Error(`no ${kind} models on OpenRouter`)
-    return all.map(m => ({
+    const hand = list()[kind]
+    if (!hand) throw new Error(`no ${kind} models on OpenRouter`)
+    const ids = new Set(hand.map(m => m.id)), added = (await catalogOf())[kind]?.filter(m => !ids.has(m.id)) ?? []
+    return [...hand, ...added.map(m => ({ ...m, new: true }))].map(m => ({
+      ...(m.new ? { new: true, from: fromPrice(kind, m) } : {}),
       model: m.id, name: `${m.lab}: ${m.name}`, lab: m.lab, kind, role: m.role,
       params: kind === 'image'
         ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, n: { min: 1, max: m.max_images }, references: m.references, seed: m.seed, quality: m.quality, background: m.background }

@@ -13,7 +13,7 @@ export async function startFake(dir) {
   const mp3 = make('fake.mp3', '-f', 'lavfi', '-i', 'sine=f=440:d=1')
   // HeyGen's PCM: 1 s at 44.1 kHz mono
   const pcm = Buffer.alloc(44100 * 2)
-  const calls = [], polls = {}, lookups = {}, names = {}, fetched = []
+  const calls = [], polls = {}, lookups = {}, names = {}, fetched = [], catalog = { down: false }
   // a fake cloudflared: its quick tunnel's name carries the local port, where the fake router fetches the files
   const bin = path.join(dir, 'bin')
   fs.mkdirSync(bin, { recursive: true })
@@ -34,7 +34,28 @@ setInterval(() => {}, 1e6)
     calls.push({ method: req.method, path: p + u.search, body, auth: req.headers.authorization ?? req.headers['xi-api-key'] ?? null, size: raw.length })
     const json = (v, code = 200, headers = {}) => { res.writeHead(code, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(v)) }
     const bytes = (b, type, headers = {}) => { res.writeHead(200, { 'content-type': type, ...headers }); res.end(b) }
-    // OpenRouter
+    // OpenRouter's catalog, as its routes answered on 2026-10-31: a model the list has (fake/img, fake/vid, fake/tts) and
+    // new ones; fake/unserved has no endpoint yet. down: 503
+    if (/^\/api\/v1\/(images\/models|videos\/models|models$)/.test(p) && catalog.down) return json({ error: { message: 'down' } }, 503)
+    if (p === '/api/v1/images/models') return json({ data: [
+      { id: 'fake/img', name: 'Fake: Something else', architecture: { input_modalities: ['text'], output_modalities: ['image'] }, supported_parameters: {} },
+      { id: 'fake/new-img', name: 'NewLab: New Image', architecture: { input_modalities: ['text', 'image'], output_modalities: ['image'] },
+        supported_parameters: { resolution: { type: 'enum', values: ['4K', '1K', '8K'] }, aspect_ratio: { type: 'enum', values: ['16:9', '1:1', '9:16', 'auto'] }, n: { type: 'range', min: 1, max: 4 }, input_references: { type: 'range', min: 0, max: 6 }, seed: { type: 'boolean' } } },
+      { id: 'fake/unserved', name: 'NewLab: Unserved', architecture: { input_modalities: ['text'], output_modalities: ['image'] }, supported_parameters: {} },
+    ] })
+    if (p === '/api/v1/images/models/fake/new-img/endpoints') return json({ id: 'fake/new-img', endpoints: [{ provider_name: 'NewLab', pricing: [{ billable: 'output_image', unit: 'image', cost_usd: 0.05 }, { billable: 'output_image', unit: 'image', cost_usd: 0.2, variant: '4k' }] }] })
+    if (p === '/api/v1/images/models/fake/unserved/endpoints') return json({ id: 'fake/unserved', endpoints: [] })
+    if (p === '/api/v1/videos/models') return json({ data: [
+      { id: 'fake/vid', name: 'Fake: Something else', supported_resolutions: ['480p'], supported_durations: [1] },
+      { id: 'fake/new-vid', name: 'NewLab: New Video', supported_resolutions: ['720p', '480p'], supported_aspect_ratios: ['16:9'], supported_durations: [5, 3],
+        supported_frame_images: ['first_frame'], upscale_factor: null, creativity: null, generate_audio: false, seed: true,
+        pricing_skus: { cents_per_video_output_second_480p: '0.5', cents_per_video_output_second_720p: '1' } },
+      { id: 'fake/new-edit', name: 'NewLab: New Edit', supported_resolutions: null, supported_durations: null, supported_frame_images: null, pricing_skus: { cents_per_second_output: '10' } },
+    ] })
+    if (p === '/api/v1/models' && u.searchParams.get('output_modalities') === 'speech') return json({ data: [
+      { id: 'fake/tts', name: 'Fake: Speech', pricing: { prompt: '0', completion: '0' }, supported_voices: ['x'] },
+      { id: 'fake/new-tts', name: 'NewLab: New Voice', pricing: { prompt: '0.00001', completion: '0' }, supported_voices: ['ava', 'max'] },
+    ] })
     if (p === '/api/v1/images') {
       if (body.model === 'fake/broke') return json({ error: { message: 'Insufficient credits' } }, 402)
       if (body.model === 'fake/busy') return json({ error: { message: 'slow down' } }, 429)
@@ -106,5 +127,5 @@ setInterval(() => {}, 1e6)
   })
   await new Promise(ok => server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${server.address().port}`
-  return { base, bin, calls, fetched, close: () => { server.closeAllConnections(); server.close() } }
+  return { base, bin, calls, fetched, catalog, close: () => { server.closeAllConnections(); server.close() } }
 }
