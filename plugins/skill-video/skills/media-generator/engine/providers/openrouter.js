@@ -84,6 +84,13 @@ async function fetchCatalog(hand) {
   return { at: new Date().toISOString(), image: images.filter(Boolean), video: videos, speech: fresh('speech', speech.data).map(NORMALIZE.speech) }
 }
 
+// each model of a catalog keeps the date it first showed (Settings lists the newest first); one there before dates were
+// kept has none
+const stamp = (next, prev) => {
+  const was = new Map(['image', 'video', 'speech'].flatMap(k => (prev?.[k] ?? []).map(m => [m.id, m.since ?? null])))
+  for (const k of ['image', 'video', 'speech']) for (const m of next[k] ?? []) m.since = was.has(m.id) ? was.get(m.id) : next.at
+  return next
+}
 let catalog = null, pending = null
 const EMPTY = { at: null, image: [], video: [], speech: [] }
 const readCatalog = () => { try { return JSON.parse(fs.readFileSync(CATALOG(), 'utf8')) } catch { return null } }
@@ -92,7 +99,7 @@ const readCatalog = () => { try { return JSON.parse(fs.readFileSync(CATALOG(), '
 async function catalogOf(force = false) {
   catalog ??= readCatalog()
   if (!force && catalog && Date.now() - Date.parse(catalog.checked ?? catalog.at) < DAY) return catalog
-  pending ??= fetchCatalog(list()).then(c => {
+  pending ??= fetchCatalog(list()).then(c => stamp(c, catalog)).then(c => {
     fs.mkdirSync(path.dirname(CATALOG()), { recursive: true })
     fs.writeFileSync(CATALOG(), JSON.stringify(c, null, 1))
     return (catalog = c)
@@ -137,7 +144,7 @@ export default {
     if (!hand) throw new Error(`no ${kind} models on OpenRouter`)
     const ids = new Set(hand.map(m => m.id)), added = (await catalogOf())[kind]?.filter(m => !ids.has(m.id)) ?? []
     return [...hand, ...added.map(m => ({ ...m, new: true }))].map(m => ({
-      ...(m.new ? { new: true, from: fromPrice(kind, m) } : {}),
+      ...(m.new ? { new: true, from: fromPrice(kind, m), since: m.since ?? null } : {}),
       model: m.id, name: `${m.lab}: ${m.name}`, lab: m.lab, kind, role: m.role,
       params: kind === 'image'
         ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, n: { min: 1, max: m.max_images }, references: m.references, seed: m.seed, quality: m.quality, background: m.background, options: resolveOptions(m.options) }

@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { retry429, windowed } from '../lib/limit.js'
-import { palette, resolveOptions } from '../lib/options.js'
+import { OPTIONS, palette, resolveOptions } from '../lib/options.js'
 
 const base = () => (process.env.KIE_BASE ?? 'https://api.kie.ai').replace(/\/$/, '')
 const uploads = () => (process.env.KIE_UPLOAD_BASE ?? 'https://kieai.redpandaai.co').replace(/\/$/, '')
@@ -186,6 +186,13 @@ async function fetchCatalog(hand, before) {
   return { at: new Date().toISOString(), pages, ...out }
 }
 
+// each model of a catalog keeps the date it first showed (Settings lists the newest first); one there before dates were
+// kept has none
+const stamp = (next, prev) => {
+  const was = new Map(['image', 'video', 'speech'].flatMap(k => (prev?.[k] ?? []).map(m => [m.id, m.since ?? null])))
+  for (const k of ['image', 'video', 'speech']) for (const m of next[k] ?? []) m.since = was.has(m.id) ? was.get(m.id) : next.at
+  return next
+}
 let catalog = null, prices = null, pending = { prices: null, catalog: null }
 const old = c => !c || Date.now() - Date.parse(c.checked ?? c.at) > DAY
 // one of them read again when over a day old; a failed read keeps what was there and waits a day (this process),
@@ -194,7 +201,7 @@ function freshen(name, force) {
   if (name === 'prices') prices ??= readCache('prices')
   else catalog ??= readCache('catalog')
   if (!force && !old(name === 'prices' ? prices : catalog)) return Promise.resolve()
-  pending[name] ??= (name === 'prices' ? fetchPrices() : fetchCatalog(list(), catalog)).then(v => {
+  pending[name] ??= (name === 'prices' ? fetchPrices() : fetchCatalog(list(), catalog).then(c => stamp(c, catalog))).then(v => {
     if (name === 'prices') prices = writeCache('prices', v)
     else catalog = writeCache('catalog', v)
   }, e => {
@@ -220,13 +227,14 @@ function kieModel(m, mode) {
   if (typeof m.kie === 'string') return { model: m.kie, set: {} }
   const v = FALLBACK[mode].map(k => m.kie[k]).find(Boolean)
   if (!v) throw new Error(`${m.name} on Kie takes no ${mode === 'video' ? 'video' : mode === 'text' ? 'prompt alone' : mode}`)
-  return typeof v === 'string' ? { model: v, set: {} } : { model: v.model, set: v.set ?? {} }
+  return typeof v === 'string' ? { model: v, set: {} } : { model: v.model, set: v.set ?? {}, fields: v.fields }
 }
-// the engine's values under the model's input keys: « key[] » takes a list, the rest one value, cast as it says
+// the engine's values under the model's input keys: « key[] » takes a list, the rest one value, cast as it says; a mode
+// can name some of them its own way (Wan 2.7: the audio is text-to-video's audio_url, image-to-video's driving audio)
 export function build(m, mode, vals) {
-  const { model, set } = kieModel(m, mode), input = { ...m.set, ...set }
+  const { model, set, fields: own } = kieModel(m, mode), input = { ...m.set, ...set }, fields = { ...m.fields, ...own }
   for (const [name, v] of Object.entries(vals)) {
-    const key = m.fields?.[name], rule = m.values?.[name]
+    const key = fields[name], rule = m.values?.[name]
     if (!key || v == null || v === '' || (Array.isArray(v) && !v.length)) continue
     const cast = x => (rule === 'string' ? String(x) : rule === 'number' ? +x : rule && typeof rule === 'object' ? (rule[x] ?? x) : x)
     if (key.endsWith('[]')) input[key.slice(0, -2)] = [...(input[key.slice(0, -2)] ?? []), ...[v].flat().map(cast)]
@@ -234,9 +242,9 @@ export function build(m, mode, vals) {
   }
   // a model that wants each input named in its prompt (Kling 4.0's @image_1, HappyHorse's [Image 1]): the names the
   // prompt lacks added at its end
-  const names = Object.entries(m.cite ?? {}).flatMap(([name, t]) => (m.fields?.[name] ? [vals[name]].flat().filter(Boolean).map((_, i) => t.replace('{n}', i + 1)) : []))
+  const names = Object.entries(m.cite ?? {}).flatMap(([name, t]) => (fields[name] ? [vals[name]].flat().filter(Boolean).map((_, i) => t.replace('{n}', i + 1)) : []))
   const missing = names.filter(t => !String(input.prompt ?? '').includes(t))
-  if (m.fields?.prompt && missing.length) input[m.fields.prompt] = `${input[m.fields.prompt] ?? ''} (${missing.join(', ')})`.trim()
+  if (fields.prompt && missing.length) input[fields.prompt] = `${input[fields.prompt] ?? ''} (${missing.join(', ')})`.trim()
   return { model, input }
 }
 const modeOf = (kind, m, has) => (kind === 'image' ? (has.images ? 'refs' : 'text')
@@ -307,6 +315,8 @@ const extOf = url => path.extname(new URL(url).pathname).slice(1).toLowerCase()
 // of one when it takes a list; loop is Grok's (its first frame as loop_url), handled with the frames
 async function withOptions(m, input, options = {}) {
   const list = resolveOptions(m.options)
+  // a switch the model's list turns on where its API has it off (Kling 4.0 keeps its video's sound) is sent on
+  for (const o of list) if (o.type === 'switch' && o.default === true && OPTIONS[o.key]?.default === false && !(o.key in options)) input[o.key] = true
   for (const [k, v] of Object.entries(options)) {
     const o = list.find(x => x.key === k)
     if (!o || k === 'loop') continue
@@ -341,9 +351,10 @@ export default {
     if (serving()) freshen('catalog').catch(() => {})
     const hand = list()[kind]
     if (!hand) throw new Error(`no ${kind} models on Kie`)
-    const ids = new Set(hand.map(m => m.id))
-    return [...hand, ...(catalog?.[kind] ?? []).filter(m => !ids.has(m.id))].map(m => ({
-      ...(m.new ? { new: true, from: null } : {}), ...(m.note ? { note: m.note } : {}),
+    // (a catalog read before the list took one of its models in shows it no more)
+    const ids = new Set(hand.map(m => m.id)), names = new Set(hand.flatMap(m => (typeof m.kie === 'string' ? [m.kie] : Object.values(m.kie ?? {}).map(v => v.model ?? v))))
+    return [...hand, ...(catalog?.[kind] ?? []).filter(m => !ids.has(m.id) && !names.has(m.kie))].map(m => ({
+      ...(m.new ? { new: true, from: null, since: m.since ?? null } : {}), ...(m.note ? { note: m.note } : {}),
       model: m.id, name: `${m.lab}: ${m.name}`, lab: m.lab, kind, role: m.role,
       params: kind === 'image'
         ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, n: { min: 1, max: m.max_images ?? 1 }, references: m.references ?? 0, seed: !!m.seed, quality: m.quality ?? null, background: m.background ?? null, options: resolveOptions(m.options) }
@@ -351,10 +362,10 @@ export default {
           ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, duration: m.durations, frames: m.frames ?? [], references: m.references ?? null, audio: !!m.sound, seed: !!m.seed,
             creativity: false, factor: !!m.upscale, factors: m.upscale?.factors ?? null, min_pixels: null, mix: !!m.mix, follow: !!m.follow, videos: m.videos ?? 0, audios: m.audios ?? 0,
             // Kling's named elements: how many, and whether they go with a frame
-            elements: m.elements?.max ?? 0, elements_with_frames: m.elements?.frames !== false,
+            elements: m.elements?.max ?? 0, elements_with_frames: m.elements?.frames !== false, element_voice: !!m.elements?.voice, element_voice_seconds: m.elements?.voice_seconds ?? null,
             // its editors: Kling's shots, middle frames (Grok's at their times), OmniHuman's masks of who speaks, Kling
             // 4.0's voices of the Library, Seedance 2.5's draft then its final
-            shots: m.shots ?? null, mid_frames: m.mid_frames ?? null, masks: m.masks?.max ?? 0, named_voices: m.named_voices?.max ?? 0, draft: !!m.draft,
+            shots: m.shots ?? null, mid_frames: m.mid_frames ?? null, cite: m.cite ?? null, ref_seconds: m.ref_seconds ?? null, materials: m.materials ?? null, element_views: m.element_views ?? null, follows_audio: !!m.follows_audio, masks: m.masks?.max ?? 0, named_voices: m.named_voices?.max ?? 0, draft: !!m.draft,
             options: resolveOptions(m.options) }
           : { voices: m.voices ?? null, clone: false, dialogue: m.dialogue === 'gemini', speakers: m.dialogue === 'gemini' ? 2 : 0, options: resolveOptions(m.options) },
       pricing: m.price?.length ? m.price : CATALOG_PRICES.models[m.id] ?? [],
@@ -383,12 +394,15 @@ export default {
     if (loop) [first_frame, last_frame] = [undefined, undefined]
     // middle frames go to the keyframe mode (Kling 4.0's keyframe-to-video), first frame or not
     const mode = modeOf('video', m, { video: video.length, frames: frames.first_frame || frames.last_frame || (m.mid_frames && mid_frames.length), images: images.length })
+    // a video to edit, named first when the model wants its inputs cited (« In @video_1: replace… »), not at the end
+    const said = m.cite?.video && refs.some(r => r.source) ? m.cite.video.replace('{n}', 1) : null
+    if (said && !String(prompt ?? '').includes(said)) prompt = `In ${said}: ${prompt ?? ''}`.trim()
     const { model: name, input } = build(m, mode, { prompt, first_frame, last_frame, images, video, audio, duration, resolution, aspect_ratio, sound: generate_audio, seed, factor: upscale_factor })
     if (loop) input.loop_url = await upload(frames.first_frame)
     // the cited Elements, each whole: its name in the prompt, its words, its 2 to 4 images (Kling 4.0 a tag too)
     const el = m.elements
     if (el && elements.length) input[el.key] = await Promise.all(elements.map(async e => ({ name: e.name, description: (e.words || e.name).slice(0, 100),
-      [el.images]: await Promise.all(e.files.map(upload)), ...(el.tag ? { tag: TAGS[e.type] ?? 'others' } : {}) })))
+      [el.images]: await Promise.all(e.files.map(upload)), ...(el.tag ? { tag: TAGS[e.type] ?? 'others' } : {}), ...(el.voice && e.voice ? { [el.voice.replace(/\[\]$/, '')]: el.voice.endsWith('[]') ? [await upload(e.voice)] : await upload(e.voice) } : {}) })))
     // Kling's shots: each its words and seconds, the length their sum
     if (m.shots && shots?.length) Object.assign(input, { [m.shots.flag]: true, [m.shots.key]: shots.map(x => ({ prompt: x.prompt, duration: x.duration })) })
     // the middle frames, in order (Kling 4.0, cited @keyframe_n) or each at its time (Grok)

@@ -347,7 +347,7 @@
     "fields": [{ "key": "motion", "label": "Attitude", "type": "text", "placeholder": "calm, nods now and then" }],
     "template": "The person speaks the audio, natural lip-sync and facial expressions, {motion}. {prompt}",
     "models": ["heygen/avatar-iv"],
-    "kie": { "models": ["kwaivgi/kling-ai-avatar-pro", "bytedance/omnihuman-1.5", "bytedance/omnihuman-2.0"], "also": ["kwaivgi/kling-ai-avatar-standard", "meigen-ai/infinitalk"] }
+    "kie": { "models": ["kwaivgi/kling-ai-avatar-pro", "bytedance/omnihuman-1.5", "bytedance/omnihuman-2.0"], "also": ["kwaivgi/kling-ai-avatar-standard", "meigen-ai/infinitalk", "alibaba/wan-2.7"] }
   },
   {
     "id": "free-edit", "label": "Custom edit", "group": "Custom", "mode": "edit", "icon": "wand",
@@ -496,7 +496,7 @@
     "keyframe": {"template": "Replace {old} ({sketch}) {element} {references}, at the same place and size, in the same light and perspective. Everything else stays identical. {prompt}", "apply": "Replace {old} {element}, exactly as the keyframe shows it, its whole look included: clothes, colors and shape. Keep its position, motion and the lighting through the whole shot. Everything else stays identical. {prompt}", "required": true},
     "models": ["runway/aleph-2", "bytedance/seedance-2.0-mini"],
     "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"],
-    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit"] },
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit", "alibaba/wan-2.2-animate-replace"] },
     "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
@@ -552,6 +552,16 @@
     "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"],
     "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit"] },
     "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
+  },
+  {
+    "id": "lip-sync", "label": "Lip sync", "group": "Characters", "mode": "edit", "icon": "speech",
+    "description": "Someone who speaks in a video says a new voice: the lips follow it, the video lasts as long as the voice. On Kie.ai.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }, { "key": "audio", "kind": "audio", "label": "Voice" }],
+    "fields": [],
+    "template": "",
+    "routers": ["kie"],
+    "models": [],
+    "kie": { "models": ["volcengine/video-to-video-lip-sync"] }
   },
   {
     "id": "remove-background", "label": "Remove background", "group": "Retouch", "mode": "edit", "icon": "scissors",

@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos and voices with AI models through model routers (Kie.ai by default, or OpenRouter, one active at a time), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, face swap, inpaint, clean up, reframe, and on this machine for free: remove background, depth map, FPS boost, SDR to HDR), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Gathers each project in a workspace, with a timeline to lay its shots and sounds on and hand to video-editor. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "crée un workspace", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
+description: Generates and edits images, videos and voices with AI models through model routers (Kie.ai by default, or OpenRouter, one active at a time), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, lip sync, several keyframes, reference videos and voices, spoken lines, extend, upscale, relight, recolor, restyle, object swap, face swap, inpaint, clean up, reframe, and on this machine for free: remove background, depth map, FPS boost, SDR to HDR), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Gathers each project in a workspace, with a timeline to lay its shots and sounds on and hand to video-editor. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "crée un workspace", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -108,6 +108,8 @@ is the user's own prompt; the others fill a prompt template from their fields. C
   2. The same with `--in keyframe=<that image> --frame <seconds>` (Aleph 2, $0.28 a second, $1.40 at least; a source
      of 2 to 30 s under 16 MB): Aleph carries the change through the whole shot. Without a keyframe Aleph 2 refuses
      these three tools, and a keyframe goes to no other model (OpenRouter has no other that takes one).
+  The user's own image can be the keyframe (the dashboard's « Your image », from the computer or the Library): step 2
+  straight with it; the Element or photos are then not asked, the keyframe carries the change.
 - **Done here, free** (`provider: local`, no estimate to approve): Reframe, FPS boost (`--field target=60|120|slow2|slow4`),
   SDR to HDR (an HDR10 conversion, it adds no detail; `--field peak=600|1000|1600`), Depth map (about 0.3 s a frame)
   and Remove background (about 4 s a frame: a 5 s clip takes some minutes; `--field background=transparent|green|black|white`,
@@ -138,7 +140,9 @@ offer to switch the router.
 Clean up, Inpaint, Face swap, Relight, Recolor) go to Seedance 2.5 first, which takes the video, the Elements'
 images and up to 1080p, then Kling 4.0 (it remakes the shot from the video at the source's length, cheaper, Elements
 beside it), Kling 3.0 Omni Transformation and Wan 2.7 Video Edit; no Aleph 2 there, so no keyframe
-step. Upscale video is Topaz (×1, ×2, ×4: ×1.5 runs ×2, ×3 runs ×4), Talking avatar Kling AI Avatar or OmniHuman,
+step. Object swap also runs on Wan 2.2 Animate Replace (not recommended, $0.03–0.06 a second, 480p to 720p): the
+person of the video becomes the one of an Element's main view or of one photo, motion and expressions kept, no prompt
+(the « Replace » words and a painted area do nothing there). Upscale video is Topaz (×1, ×2, ×4: ×1.5 runs ×2, ×3 runs ×4), Talking avatar Kling AI Avatar or OmniHuman,
 Remove background Recraft. Voice: ElevenLabs straight, or Gemini TTS on Kie (no cloning there), no FLUX video, no HeyGen. Kling 4.0,
 Veo 3.1 Lite and Quality, Wan 3.0 Prime, HappyHorse, Vidu Q4, PixVerse V6 Max, MiniMax H3, Gemini Omni are among
 the other models. `media.mjs models <kind>
@@ -166,9 +170,29 @@ them; the dashboard shows the same in its Options block and editors.
 - **Shots** (Kling 3.0 and 3.0 Omni on Kie): `--shot "<seconds>: <words>"`, one a shot in order (1 to 12 s each, their
   sum a length the model makes, 15 s at most), with `--tool free`; `@names` work in them.
 - **Middle frames** (Kling 4.0: up to 8, in order, cited `@keyframe_1`…; Grok Imagine Video: up to 4, each at its time):
-  `--in mid_frames=<image>` (Grok: `--in mid_frames=<image>@<seconds>`).
+  `--in mid_frames=<image>` (Grok: `--in mid_frames=<image>@<seconds>`). Kling 4.0's length caps all its frames, first
+  and last included: 3 s → 4, 4 s → 5 … 9 s and more → 10 (refused before, free). No reference image beside frames.
+- **Omni references** (Kie: Kling 4.0, Kling 3.0 Omni, Seedance 2.x, Wan 3.0, Wan 2.7, Hailuo 3, Vidu Q4; the counts in
+  `models video`): reference videos `--in ref_videos=<video>`, sounds `--in ref_audios=<audio>`, with `--tool free` or
+  Cinematic camera, never beside a frame; each within the model's lengths (Kling 4.0 2 to 30 s, 30 s in all; Seedance 2.0
+  2 to 15 s, 15 s in all). Kling 4.0 wants each cited: `@image_1`, `@video_1` in the words (the command adds the missing
+  ones at the end); 15 references in all (images, videos, Elements, voices). A video given changes the price to the
+  model's « with video input » rate.
+- **A voice of one's own** (Kling 4.0): `--in ref_voices=<clip>@<Name>`, cited `@Name` in the words; up to 3 with the
+  Library's. A character Element can carry its own voice: `elements set Papi --voice @Narrator` (a voice of the
+  Library); it then speaks with it wherever `@Papi` is cited on Kling 4.0, without counting among the 3, and on Kling 3.0
+  and 3.0 Omni (its first clip, 5 to 30 s). Wan 2.7 on Kie: a reference sound (`--in ref_audios=`) is the voice its
+  subjects speak with beside references, the sound the video follows from words alone; a photo and a voice make a
+  talking head on it too (Talking avatar, as long as the voice).
+- **Spoken lines** (any video model with sound: the lips follow them): `--say "@Papi: Bonjour"`, `--say "@Papi
+  (@Narrator): Bonjour"` (in that voice, Kling 4.0), `--say "(@Narrator): Il était une fois"` (off screen), in order;
+  written after the words as « @Papi says: "Bonjour" ».
 - **Who speaks** (OmniHuman 1.5, Talking avatar): `--in speaker_masks=<mask>`, the person painted white.
 - **Library voices** (Kling 4.0): cite a voice Element `@Narrator` in the prompt: its clip goes as the voice of that name.
+- **Lip sync** (Edit, Kie only: Volcengine, $0.04 a second of the voice): `video --tool lip-sync --in video=<someone
+  speaking> --in audio=<the new voice>`, no prompt; the video lasts as long as the voice (trimmed or looped);
+  `--option mode=basic` for a complex scene (several people, cuts), `separate_vocal=on` to clean the voice first. A
+  photo that speaks is Talking avatar.
 - **Draft** (Seedance 2.5 on Kie): `--option draft=on` makes a 480p preview; once the user likes it, `--from-draft
   <generation>` makes its 1080p final within 7 days (no prompt; Kie lists no price for it: an unknown cost, its own yes
   then `--accept-unknown`).

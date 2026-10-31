@@ -13,13 +13,14 @@ const namesOf = (value?: string) => String(value ?? "").split(/[\s,]+/).filter((
 // Elements of the Library picked for a field (Object swap's « With », Character swap's character): its value is @name,
 // or several joined on a multiple field, which the engine cites like the words' own; their images count among the
 // model's references
-export function ElementField({ field: f, value, items, blocked, onChange }: { field: Field; value?: string; items: Mentionable[]; blocked?: string; onChange: (v: string) => void }) {
+// views: how many images of each the model takes (Wan 2.2 Animate Replace: its main one), all when unset
+export function ElementField({ field: f, value, items, blocked, views, onChange }: { field: Field; value?: string; items: Mentionable[]; blocked?: string; views?: number | null; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const fits = items.filter((i) => !f.types || f.types.includes(i.type))
   const picked = namesOf(value).map((n) => fits.find((i) => `@${i.name}` === n)).filter((i): i is Mentionable => !!i)
   const current = f.multiple ? undefined : picked[0]
   const groups = ELEMENT_TYPES.filter((t) => fits.some((i) => i.type === t.type))
-  const images = picked.reduce((n, i) => n + i.files.length, 0)
+  const images = picked.reduce((n, i) => n + Math.min(i.files.length, views ?? Infinity), 0)
   const pick = (name: string) => {
     if (!f.multiple) return (onChange(name), setOpen(false))
     const now = picked.map((i) => `@${i.name}`)

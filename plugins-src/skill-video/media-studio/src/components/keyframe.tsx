@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Columns2Icon, LoaderCircleIcon, RefreshCwIcon, XIcon } from "lucide-react"
+import { Columns2Icon, ImagePlusIcon, LoaderCircleIcon, RefreshCwIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { api, fileUrl, outputPath, per1000, plain, priceLabel, type Model, type 
 import { CompareDialog } from "@/components/compare"
 import { ModelPicker, type Priced } from "@/components/model-picker"
 import { modelsFor } from "@/components/composer"
+import { ImageSource } from "@/components/keyframes"
 
 // the image model that makes a keyframe unless another is picked (the engine's own default)
 const KEYFRAME_MODEL = "bytedance-seed/seedream-5-0-flash"
@@ -148,15 +149,25 @@ export function KeyframePanel({
         {!video ? (
           <p className="px-1 text-xs text-muted-foreground">Add the video first.</p>
         ) : (
-          <Button variant={keyframe ? "outline" : "secondary"} disabled={busy} onClick={() => (keyframe && onSet(null), make())}>
-            {keyframe ? (
-              <>
-                <RefreshCwIcon /> Redo the keyframe
-              </>
-            ) : (
-              `${verb}${price ? ` · ${price}` : ""}`
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant={keyframe ? "outline" : "secondary"} className="min-w-0 flex-1" disabled={busy} onClick={() => (keyframe && onSet(null), make())}>
+              {keyframe ? (
+                <>
+                  <RefreshCwIcon /> Redo the keyframe
+                </>
+              ) : (
+                <span className="truncate">{`${verb}${price ? ` · ${price}` : ""}`}</span>
+              )}
+            </Button>
+            {/* or the user's own keyframe, at the slider's time: from the computer or the library */}
+            <ImageSource media={state.media} home={state.home} frames={false} side="bottom" onAdd={([path]) => onSet({ path, at: keyframe ? (at ?? 0) : t })}>
+              {(loading) => (
+                <Button variant="outline" disabled={busy || loading} title={`Your own keyframe, at ${(keyframe ? (at ?? 0) : t).toFixed(1)} s: from your computer or the library`}>
+                  {loading ? <LoaderCircleIcon className="animate-spin" /> : <ImagePlusIcon />} Your image
+                </Button>
+              )}
+            </ImageSource>
+          </div>
         )}
       </div>
     </div>

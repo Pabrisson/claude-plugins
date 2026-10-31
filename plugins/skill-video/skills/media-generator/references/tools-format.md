@@ -41,6 +41,7 @@ the same files: a new tool is a new entry, nothing else to code.
 | `provider` | `elevenlabs` for the tools video-editor's engine does (change voice, translate). Voice's ElevenLabs models are named by their own ids in `models` (`eleven_v4`), reached straight whichever router is active |
 | `element` | A References tool: the Element type its sheets make (`character`, `outfit`…), for the dashboard's « Make an element » |
 | `one_of` | Keys of which one at least must be given, a field or an input (`["who", "references"]`: words or photos) |
+| `routers` | The routers it runs on, when not both (`["kie"]`: Lip sync); the dashboard hides it on another one and the command says to switch |
 
 Fields (`type`):
 - **choice**: a few `options`, as chips. **select**: a long list, as a searchable button (beside the composer, grouped, a

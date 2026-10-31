@@ -880,6 +880,171 @@
       ]
     },
     {
+      "id": "alibaba/wan-2.2-animate-replace",
+      "lab": "Alibaba",
+      "name": "Wan 2.2 Animate Replace",
+      "kie": "wan/2-2-animate-replace",
+      "role": "edit",
+      "resolutions": ["480p","580p","720p"],
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 1,
+      "videos": 1,
+      "audios": 0,
+      "element_views": 1,
+      "sound": false,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "video": "video_url",
+        "images": "image_url",
+        "resolution": "resolution"
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "wan 2.2 Animate, 2.2 Animate Replace, 1.0s-480p"
+        },
+        {
+          "when": {
+            "resolution": "580p"
+          },
+          "row": "wan 2.2 Animate, 2.2 Animate Replace, 1.0s-580p"
+        },
+        {
+          "row": "wan 2.2 Animate, 2.2 Animate Replace, 1.0s-720p"
+        }
+      ],
+      "note": "the person of the video replaced by the one in the image, motion and expressions kept; no prompt; one image (an Element's main view); video and image 10 MB at most"
+    },
+    {
+      "id": "alibaba/wan-2.7",
+      "lab": "Alibaba",
+      "name": "Wan 2.7",
+      "kie": {
+        "text": {
+          "model": "wan/2-7-text-to-video",
+          "fields": {
+            "aspect_ratio": "ratio",
+            "audio": "audio_url"
+          }
+        },
+        "frames": {
+          "model": "wan/2-7-image-to-video",
+          "fields": {
+            "first_frame": "first_frame_url",
+            "last_frame": "last_frame_url",
+            "audio": "driving_audio_url"
+          }
+        },
+        "refs": {
+          "model": "wan/2-7-r2v",
+          "fields": {
+            "images": "reference_image[]",
+            "video": "reference_video[]",
+            "audio": "reference_voice",
+            "aspect_ratio": "aspect_ratio"
+          }
+        },
+        "video": {
+          "model": "wan/2-7-r2v",
+          "fields": {
+            "images": "reference_image[]",
+            "video": "reference_video[]",
+            "audio": "reference_voice",
+            "aspect_ratio": "aspect_ratio"
+          }
+        }
+      },
+      "role": "generate",
+      "resolutions": ["720p","1080p"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9"],
+      "durations": [2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame","last_frame"],
+      "references": 5,
+      "videos": 5,
+      "audios": 1,
+      "materials": 5,
+      "sound": false,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "resolution": "resolution",
+        "duration": "duration",
+        "seed": "seed"
+      },
+      "options": ["negative_prompt","prompt_extend"],
+      "skip": {
+        "first_clip_url": "a clip continued: Extend starts the next shot from its last frame",
+        "first_frame": "a first frame goes to image-to-video: references and frames do not go together"
+      },
+      "price": [
+        {
+          "when": {
+            "input": "video",
+            "resolution": "720p"
+          },
+          "row": "wan 2.7 video, r2v, 720p"
+        },
+        {
+          "when": {
+            "input": "video",
+            "resolution": "1080p"
+          },
+          "row": "wan 2.7 video, r2v, 1080p"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "720p"
+          },
+          "row": "wan 2.7 video, r2v, 720p"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1080p"
+          },
+          "row": "wan 2.7 video, r2v, 1080p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "wan 2.7 video, image-to-video, 720p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "wan 2.7 video, image-to-video, 1080p"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "wan 2.7 video, text-to-video, 720p"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "wan 2.7 video, text-to-video, 1080p"
+        }
+      ],
+      "note": "references (r2v): 5 images and videos in all, 2–10 s, the voice its subjects speak with (reference_voice; else a reference video's own sound); image-to-video: a driving audio the person speaks; text-to-video: a custom audio; aspect ratio not with a frame"
+    },
+    {
       "id": "alibaba/wan-3.0",
       "lab": "Alibaba",
       "name": "Wan 3.0",
@@ -892,6 +1057,7 @@
       "references": 10,
       "videos": 5,
       "audios": 5,
+      "ref_seconds": {"each":[1, 15],"total":15},
       "sound": true,
       "seed": true,
       "follow": false,
@@ -977,6 +1143,7 @@
       "references": 10,
       "videos": 5,
       "audios": 5,
+      "ref_seconds": {"each":[1, 15],"total":15},
       "sound": true,
       "seed": true,
       "follow": false,
@@ -1138,6 +1305,7 @@
       "references": 9,
       "videos": 3,
       "audios": 3,
+      "ref_seconds": {"each":[2, 15],"total":15},
       "sound": true,
       "seed": false,
       "follow": false,
@@ -1234,6 +1402,7 @@
       "references": 9,
       "videos": 3,
       "audios": 3,
+      "ref_seconds": {"each":[2, 15],"total":15},
       "sound": true,
       "seed": false,
       "follow": false,
@@ -1297,6 +1466,7 @@
       "references": 9,
       "videos": 3,
       "audios": 3,
+      "ref_seconds": {"each":[2, 15],"total":15},
       "sound": true,
       "seed": false,
       "follow": false,
@@ -1360,6 +1530,7 @@
       "references": 30,
       "videos": 10,
       "audios": 10,
+      "ref_seconds": {"each":[2, 30],"total":30},
       "sound": true,
       "seed": false,
       "follow": true,
@@ -2028,6 +2199,7 @@
       "references": 7,
       "videos": 1,
       "audios": 0,
+      "ref_seconds": {"each":[3, 15.5]},
       "sound": true,
       "seed": false,
       "follow": false,
@@ -2036,7 +2208,9 @@
       "elements": {
         "max": 7,
         "key": "elements",
-        "images": "element_input_urls"
+        "images": "element_input_urls",
+        "voice": "element_input_audio_urls[]",
+        "voice_seconds": [5, 30]
       },
       "fields": {
         "prompt": "prompt",
@@ -2243,7 +2417,9 @@
       "elements": {
         "max": 7,
         "key": "elements",
-        "images": "element_input_urls"
+        "images": "element_input_urls",
+        "voice": "element_input_audio_urls[]",
+        "voice_seconds": [5, 30]
       },
       "set": {
         "audio": false
@@ -2303,7 +2479,9 @@
       "elements": {
         "max": 3,
         "key": "kling_elements",
-        "images": "element_input_urls"
+        "images": "element_input_urls",
+        "voice": "element_input_audio_urls[]",
+        "voice_seconds": [5, 30]
       },
       "set": {
         "multi_shots": false
@@ -2454,6 +2632,8 @@
       "references": 10,
       "videos": 5,
       "audios": 0,
+      "ref_seconds": {"each":[2, 30],"total":30},
+      "materials": 15,
       "sound": true,
       "seed": false,
       "follow": false,
@@ -2464,6 +2644,7 @@
         "key": "elements",
         "images": "image_urls",
         "tag": true,
+        "voice": "voice_url",
         "frames": false
       },
       "fields": {
@@ -2483,10 +2664,11 @@
         "images": "@image_{n}",
         "video": "@video_{n}"
       },
-      "options": ["keep_original_sound"],
+      "options": [{"key": "keep_original_sound", "default": true}],
       "mid_frames": {
         "key": "keyframe_urls",
         "max": 8,
+        "total": 10,
         "cite": "@keyframe_{n}"
       },
       "named_voices": {
@@ -2535,6 +2717,49 @@
           "row": "kling 4.0, reference-to-video, 1080P no video input"
         }
       ]
+    },
+    {
+      "id": "volcengine/video-to-video-lip-sync",
+      "lab": "Volcengine",
+      "name": "Lip Sync",
+      "kie": "volcengine/video-to-video-lip-sync",
+      "role": "edit",
+      "resolutions": null,
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 0,
+      "videos": 1,
+      "audios": 1,
+      "sound": false,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "follows_audio": true,
+      "set": {
+        "mode": "lite"
+      },
+      "fields": {
+        "video": "video_url",
+        "audio": "audio_url"
+      },
+      "options": [
+        {"key": "mode", "label": "Scene", "type": "choice", "values": [{"value": "lite", "label": "One face, from the front"}, {"value": "basic", "label": "Complex scene"}], "default": "lite", "hint": "a complex scene finds the scenes and who speaks"},
+        {"key": "separate_vocal", "label": "Clean the voice", "type": "switch", "default": false, "hint": "takes the background noise out of the voice first"},
+        {"key": "open_scenedet", "label": "Find who speaks", "type": "switch", "default": false, "hint": "cuts and speakers found; complex scene only"}
+      ],
+      "skip": {
+        "align_audio": "on, Kie's default: a video shorter than the voice loops",
+        "align_audio_reverse": "off, Kie's default: the loop plays forward",
+        "templ_start_seconds": "0, Kie's default: the lips are matched from the video's start"
+      },
+      "price": [
+        {
+          "row": "volcengine, lip sync"
+        }
+      ],
+      "note": "video 360p–1080p, 24–60 fps, 500 MB; voice 1–240 s (lite) or 210 s (basic), 10 MB; output mp4 25 fps, as long as the voice (the video trimmed or looped)"
     },
     {
       "id": "meigen-ai/infinitalk",
@@ -2882,6 +3107,7 @@
       "references": 15,
       "videos": 0,
       "audios": 3,
+      "ref_seconds": {"each":[3, 12]},
       "sound": true,
       "seed": false,
       "follow": false,

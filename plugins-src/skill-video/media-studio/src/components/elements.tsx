@@ -38,6 +38,7 @@ import { LibraryList, Listen, upload, type Pick } from "@/components/inputs"
 import type { Compose } from "@/components/composer"
 import { Main, Side } from "@/components/pages"
 import { WorkspaceRows } from "@/components/workspace-list"
+import { OwnVoice } from "@/components/voice-picker"
 
 // a new Element as a result leads to it: its type and files, the words its tool had
 export type ElementDraft = { type: ElementType; paths: string[]; words?: string }
@@ -456,6 +457,10 @@ export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: {
           <Label hint={el.type === "voice" ? "how it sounds" : "sent with every @name"}>What it is</Label>
           <Textarea value={words} placeholder={WORDS[el.type]} onChange={(e) => setWords(e.target.value)} onBlur={() => words !== el.words && save({ words })} className="min-h-16" />
         </div>
+
+        {el.type === "character" && (
+          <OwnVoice voices={(state.elements ?? []).filter((e) => e.type === "voice" && e.files.length)} value={el.voice ?? null} onChange={(v) => save({ voice: v ?? "" })} />
+        )}
 
         {el.type === "brand" && (
           <>

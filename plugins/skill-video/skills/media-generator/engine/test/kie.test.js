@@ -13,6 +13,8 @@ import { retry429, retryAfter, windowed } from '../lib/limit.js'
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'media-gen-kie-'))
 const engine = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'media.mjs')
 const fake = await startFake(home)
+// each CLI run waits on its own window: the account's 20 a 10 s is the limits test's, not this many runs'
+fake.kie.rate = 1000
 const orCatalog = path.join(home, 'catalog.json')
 fs.writeFileSync(orCatalog, JSON.stringify({ at: new Date().toISOString(), image: [], video: [], speech: [] }))
 const env = { ...process.env, MEDIA_GENERATOR_DIR: home, MEDIA_GENERATOR_MODELS: path.join(path.dirname(engine), 'test', 'models.json'), MEDIA_GENERATOR_CATALOG: orCatalog,
@@ -33,6 +35,8 @@ execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=green:s=64x64', '-frames:v', '1', at('b.png')])
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', at('long.mp4')])
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=2', at('voice.mp3')])
+execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=6', at('voice6.mp3')])
+execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', at('short.mp4')])
 test.after(() => { fake.close(); fs.rmSync(home, { recursive: true, force: true }) })
 
 test('the router: Kie by default (OpenRouter with only its key), the one picked after; only its models; its catalog and prices read from its API and docs', async () => {
@@ -55,7 +59,12 @@ test('the router: Kie by default (OpenRouter with only its key), the one picked 
   assert.match(vid.out, /kie:newlab\/new-video {2}NewLab: New Video {2}\[3–5 s, 480p\/720p, first_frame\] {2}new, from the catalog/)
   assert.doesNotMatch(vid.out, /needs-mask/)
   const asked = fake.calls.filter(c => c.path.startsWith('/kiedocs/')).length
+  // each keeps the day it first showed (Settings lists the newest first)
+  const since = () => JSON.parse(fs.readFileSync(path.join(home, 'kie-cache', 'kie-catalog.json'), 'utf8')).video.find(m => m.id === 'newlab/new-video').since
+  const first = since()
+  assert.ok(first)
   const again = await cli('models', 'video', '--refresh')
+  assert.equal(since(), first)
   assert.match(again.err, /Kie\.ai's catalog: nothing new/)
   assert.equal(fake.calls.filter(c => c.path.startsWith('/kiedocs/market')).length, asked - 1, 'each docs page read once, the index again')
   const prices = JSON.parse(fs.readFileSync(at('kie-cache', 'kie-prices.json'), 'utf8'))
@@ -165,8 +174,67 @@ test('every capability: the models\' options and editors reach Kie under the nam
   assert.equal(last().input.keyframe_urls.length, 2)
   assert.equal(last().input.prompt, '@Narr says hello (@keyframe_1, @keyframe_2)')
   assert.deepEqual(last().input.voices.map(v => [v.name, /^http/.test(v.audio_url)]), [['Narr', true]])
+  // its length caps all its frames: 4 at 3 s, first and last included
+  const four = ['--in', `first_frame=${at('a.png')}`, '--in', `mid_frames=${at('a.png')}`, '--in', `mid_frames=${at('b.png')}`, '--in', `last_frame=${at('b.png')}`]
+  assert.match((await cli('video', '--model', 'fake/kling4', '--prompt', 'x', ...four, '--in', `mid_frames=${at('b.png')}`, '--duration', '3', '--estimate')).err, /takes 4 frames at 3 s, first and last included: this has 5/)
+  assert.equal((await cli('video', '--model', 'fake/kling4', '--prompt', 'x', ...four, '--duration', '3', '--estimate')).code, 0)
+  // an edit: the video named first, its own sound kept unless turned off
+  await run('video', '--tool', 'free-edit', '--model', 'fake/kling4', '--in', `video=${at('long.mp4')}`, '--prompt', 'the car is red', '--accept-unknown')
+  assert.deepEqual([last().model, last().input.video_urls.length, last().input.keep_original_sound], ['fake-kling4-ref', 1, true])
+  assert.match(last().input.prompt, /^In @video_1: the car is red/)
+  await run('video', '--tool', 'free-edit', '--model', 'fake/kling4', '--in', `video=${at('long.mp4')}`, '--prompt', 'the car is red', '--option', 'keep_original_sound=off', '--accept-unknown')
+  assert.equal(last().input.keep_original_sound, false)
+  // lines spoken in sync: who says what, a character's own voice (its element's voice_url), a voice off screen
+  await run('elements', 'add', 'Hero', at('a.png'), at('b.png'), '--type', 'character', '--voice', '@Narr')
+  assert.match((await cli('elements', 'set', 'Narr', '--voice', '@Narr')).err, /only a character has a voice of its own/)
+  await run('video', '--model', 'fake/kling4', '--prompt', 'in a park', '--say', '@Hero: Hello there', '--say', '(@Narr): And so it began', '--accept-unknown')
+  assert.equal(last().input.prompt, 'in a park @Hero says: "Hello there" @Narr says off screen: "And so it began"')
+  assert.deepEqual([last().input.elements[0].name, /^http/.test(last().input.elements[0].voice_url), last().input.voices.map(v => v.name)], ['Hero', true, ['Narr']])
+  assert.match((await cli('video', '--model', 'fake/kling', '--prompt', 'x', '--say', '@Hero (@Narr): hi', '--estimate')).err, /takes no voice of its own for a line: Kling 4\.0 on Kie does/)
+  // Kling 3.0: a character's own voice too, a list of one clip of 5 to 30 s
+  assert.match((await cli('video', '--model', 'fake/kling', '--prompt', '@Hero waves', '--estimate')).err, /takes a character's voice of 5 to 30 s: @Narr's first clip is 2\.\d s/)
+  await run('elements', 'add', 'Long', at('voice6.mp3'), '--type', 'voice')
+  await run('elements', 'set', 'Hero', '--voice', '@Long')
+  await run('video', '--model', 'fake/kling', '--prompt', '@Hero waves', '--duration', '5', '--accept-unknown')
+  assert.deepEqual(last().input.kling_elements.map(e => [e.name, e.element_input_audio_urls?.length]), [['Hero', 1]])
+  // a mode with its own names (Wan 2.7): the sound is text-to-video's audio_url, image-to-video's driving audio (a talking
+  // head as long as its voice), references' voice
+  await run('video', '--model', 'fake/wan27', '--prompt', 'a song', '--in', `ref_audios=${at('voice.mp3')}`, '--ratio', '1:1', '--accept-unknown')
+  assert.deepEqual([last().model, !!last().input.audio_url, last().input.ratio], ['fake-wan-t', true, '1:1'])
+  await run('video', '--tool', 'talking-avatar', '--model', 'fake/wan27', '--in', `first_frame=${at('a.png')}`, '--in', `audio=${at('voice6.mp3')}`, '--accept-unknown')
+  assert.deepEqual([last().model, !!last().input.first_frame_url, !!last().input.driving_audio_url, last().input.duration], ['fake-wan-i', true, true, 5])
+  await run('video', '--model', 'fake/wan27', '--prompt', 'the dancer', '--in', `ref_videos=${at('short.mp4')}`, '--in', `references=${at('a.png')}`, '--in', `ref_audios=${at('voice.mp3')}`, '--accept-unknown')
+  assert.deepEqual([last().model, last().input.reference_video.length, last().input.reference_image.length, !!last().input.reference_voice], ['fake-wan-r', 1, 1, true])
+  // Object swap on Wan 2.2 Animate Replace: the video and an Element's main view alone (not refused for its 2 views), no
+  // prompt (4 s at 12 credits)
+  const swap = ['video', '--tool', 'object-swap', '--model', 'alibaba/wan-2.2-animate-replace', '--in', `video=${at('long.mp4')}`, '--field', 'old=the man', '--field', 'element=@Hero']
+  assert.equal(JSON.parse((await cli(...swap, '--estimate')).out).estimate.credits, 48)
+  await run(...swap, '--spend', '1')
+  assert.deepEqual([last().model, typeof last().input.image_url, !!last().input.video_url, last().input.prompt], ['fake-animate', 'string', true, undefined])
+  // omni references: a reference video cited as written (not the video an edit changes), a voice of one's own by name
+  await run('video', '--model', 'fake/kling4', '--prompt', 'the dancer of @video_1, @Hero speaks', '--in', `ref_videos=${at('short.mp4')}`, '--in', `ref_voices=${at('voice.mp3')}@Hero`, '--accept-unknown')
+  assert.deepEqual([last().model, last().input.video_urls.length, last().input.prompt], ['fake-kling4-ref', 1, 'the dancer of @video_1, @Hero speaks'])
+  assert.deepEqual(last().input.voices.map(v => v.name), ['Hero'])
+  // each within the model's lengths, and its count of references in all (images, videos, Elements, voices)
+  assert.match((await cli('video', '--model', 'fake/kling4', '--prompt', 'x', '--in', `ref_videos=${at('long.mp4')}`, '--estimate')).err, /takes reference videos of 2 to 3 s, long\.mp4 is 4\.0 s: cut it/)
+  assert.match((await cli('video', '--model', 'fake/kling4', '--prompt', 'x', '--in', `ref_videos=${at('short.mp4')}`, '--in', `ref_videos=${at('short.mp4')}`, '--in', `ref_videos=${at('short.mp4')}`, '--estimate')).err, /takes 5 s of reference videos in all, these last 6\.0 s/)
+  assert.match((await cli('video', '--model', 'fake/kling4', '--prompt', 'x', '--in', `references=${at('a.png')}`, '--in', `references=${at('b.png')}`, '--in', `ref_videos=${at('short.mp4')}`, '--in', `ref_voices=${at('voice.mp3')}`, '--in', `ref_voices=${at('voice.mp3')}@Two`, '--estimate')).err, /takes 4 references in all \(images, videos, Elements and voices\), this has 5/)
+  assert.match((await cli('video', '--model', 'fake/kling4', '--prompt', 'x', '--in', `ref_audios=${at('voice.mp3')}`, '--estimate')).err, /takes 0 reference sounds, this has 1/)
+  assert.match((await cli('video', '--model', 'fake/kling', '--prompt', 'x', '--in', `ref_voices=${at('voice.mp3')}`, '--estimate')).err, /takes no voice of its own: Kling 4\.0 on Kie does/)
+  // Seedance: reference sounds too, never beside a frame; a reference video priced as a video input
+  await run('video', '--model', 'bytedance/seedance-2.5', '--prompt', 'a dancer', '--in', `ref_audios=${at('voice.mp3')}`, '--in', `ref_videos=${at('short.mp4')}`, '--resolution', '480p', '--duration', '5', '--spend', '5')
+  assert.deepEqual([last().input.reference_audio_urls.length, last().input.reference_video_urls.length], [1, 1])
+  assert.match((await cli('video', '--model', 'bytedance/seedance-2.5', '--prompt', 'x', '--in', `ref_audios=${at('voice.mp3')}`, '--in', `first_frame=${at('a.png')}`, '--estimate')).err, /a first, middle or last frame and references do not go together/)
   assert.match((await cli('video', '--model', 'fake/kimg', '--prompt', 'x', '--in', `mid_frames=${at('a.png')}`, '--estimate')).err, /no video model fake\/kimg/)
   assert.match((await cli('video', '--model', 'fake/kling', '--prompt', 'x', '--in', `mid_frames=${at('a.png')}`, '--estimate')).err, /takes no middle frames: Kling 4\.0 and Grok/)
+  // Lip sync (Kie only): the video and the voice, no prompt; as long as the voice (2 s at 8 credits); its scene mode
+  const lip = ['video', '--tool', 'lip-sync', '--in', `video=${at('long.mp4')}`, '--in', `audio=${at('voice.mp3')}`]
+  assert.equal(Math.round(JSON.parse((await cli(...lip, '--estimate')).out).estimate.credits), 16)
+  await run(...lip, '--option', 'mode=basic', '--spend', '1')
+  assert.deepEqual([last().model, last().input.mode, !!last().input.video_url, !!last().input.audio_url, last().input.prompt], ['fake-lip', 'basic', true, true, undefined])
+  assert.equal((await run('setup', 'set', 'router.active=openrouter')).code, 0)
+  assert.match((await cli(...lip, '--estimate')).err, /Lip sync runs on Kie\.ai only: switch the router in Settings/)
+  assert.equal((await run('setup', 'set', 'router.active=kie')).code, 0)
   // OmniHuman: the masks of who speaks, its fast mode
   await run('video', '--tool', 'talking-avatar', '--model', 'fake/omni', '--in', `first_frame=${at('a.png')}`, '--in', `audio=${at('voice.mp3')}`, '--in', `speaker_masks=${at('b.png')}`, '--option', 'pe_fast_mode=on', '--accept-unknown')
   assert.deepEqual([last().input.mask_url.length, last().input.pe_fast_mode], [1, true])
@@ -244,7 +312,7 @@ test('Kie\'s estimates: per second with the input video, per image, a missing ro
 // the shipped list: its shape, its lists sorted; every tool has a model on Kie that can run it
 test('the shipped Kie list is normalized, and every tool that generates runs on Kie with models able to', () => {
   const dir = path.dirname(engine), list = JSON.parse(fs.readFileSync(path.join(dir, 'providers', 'kie-models.json'), 'utf8'))
-  const RES = ['360p', '480p', '540p', '720p', '768p', '1080p', '1K', '1.5K', '2K', '4K'], ratio = r => r.split(':').reduce((a, b) => a / b)
+  const RES = ['360p', '480p', '540p', '580p', '720p', '768p', '1080p', '1K', '1.5K', '2K', '4K'], ratio = r => r.split(':').reduce((a, b) => a / b)
   const sorted = (l, by, at) => assert.deepEqual(l, l.toSorted((a, b) => by(a) - by(b)), at)
   const roles = { image: ['create', 'both', 'edit'], video: ['generate', 'edit', 'upscale', 'avatar'], speech: ['speech'] }
   const NAMES = ['prompt', 'images', 'first_frame', 'last_frame', 'video', 'audio', 'resolution', 'aspect_ratio', 'duration', 'sound', 'seed', 'n', 'quality', 'background', 'factor', 'text', 'voice']
@@ -284,7 +352,8 @@ test('the shipped Kie list is normalized, and every tool that generates runs on 
           if (video) assert.ok(['edit', 'upscale'].includes(m.role) || m.videos > 0, `${at} takes no video`)
           else assert.ok(!['edit', 'upscale'].includes(m.role), `${at} cannot create`)
           for (const f of ['first_frame', 'last_frame']) if (needs.some(i => i.key === f) && m.role !== 'avatar') assert.ok(m.frames.includes(f), `${at}: no ${f}`)
-          if (t.id === 'talking-avatar') assert.equal(m.role, 'avatar', at)
+          // a talking head: an avatar model, or one whose first frame a voice drives (Wan 2.7)
+          if (t.id === 'talking-avatar') assert.ok(m.role === 'avatar' || (m.frames.includes('first_frame') && m.audios > 0), at)
         }
         if (kind === 'audio') assert.equal(m.role, 'speech', at)
       }

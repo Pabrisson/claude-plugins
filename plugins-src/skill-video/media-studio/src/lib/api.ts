@@ -88,6 +88,8 @@ export type Model = {
   // added from OpenRouter's catalog (not in the list kept with the engine), with its price at its cheapest settings
   new?: boolean
   from?: string | null
+  // when the catalog first showed it (null: before dates were kept)
+  since?: string | null
   params: {
     resolution?: string[] | null
     aspect_ratio?: string[] | null
@@ -113,12 +115,25 @@ export type Model = {
     // its own editors (Kie): Kling's shots, the middle frames (Grok's at their times), OmniHuman's masks of who speaks,
     // Kling 4.0's voices of the Library, Seedance 2.5's draft then its final
     shots?: { max: number; each: [number, number]; total: number } | null
-    mid_frames?: { max: number; timed?: boolean } | null
+    // Kling 4.0's caps all its frames by its length (total), each cited @keyframe_n
+    mid_frames?: { max: number; timed?: boolean; total?: number; cite?: string } | null
+    // the names a model wants its inputs cited by in the words (Kling 4.0: @first_frame, @image_1, @video_1…)
+    cite?: Record<string, string> | null
     masks?: number
     named_voices?: number
     draft?: boolean
     // a video model that takes its frames and reference images together (Kie's Grok)
     mix?: boolean
+    // the reference videos and sounds it takes, their lengths (each, and in all), and its count of references in all
+    // (Kling 4.0: images, videos, Elements and voices, 15)
+    videos?: number | null
+    audios?: number | null
+    ref_seconds?: { each: [number, number]; total?: number } | null
+    materials?: number | null
+    // a character Element's own voice goes with it (Kling 4.0)
+    element_voice?: boolean
+    // how many views of each cited Element it takes (Wan 2.2 Animate Replace: its main one); all when unset
+    element_views?: number | null
     // Kling's named elements (Kie): how many @Elements it takes whole, and whether beside a frame
     elements?: number
     elements_with_frames?: boolean
@@ -297,7 +312,8 @@ export type Voice = {
 // an Element of the Library: what its images are to the model (a voice holds clips), its words, a brand's colors and
 // typeface, a voice's ElevenLabs id once it is on the account
 export type ElementType = "character" | "outfit" | "object" | "location" | "pose" | "brand" | "voice" | "other"
-export type Element = { name: string; type: ElementType; words: string; colors: string[]; font: string; voice_id: string | null; files: string[] }
+// voice: a character's own voice, a voice of the Library heard when it speaks in a video (Kling 4.0)
+export type Element = { name: string; type: ElementType; words: string; colors: string[]; font: string; voice_id: string | null; voice?: string | null; files: string[] }
 export const ELEMENT_TYPES: { type: ElementType; label: string; plural: string; hint: string }[] = [
   { type: "character", label: "Character", plural: "Characters", hint: "a person, a creature, a mascot" },
   { type: "outfit", label: "Outfit", plural: "Outfits", hint: "clothes, shoes, accessories worn" },
@@ -355,7 +371,7 @@ export const api = {
   voices: () => call<Voice[] | { voices: Voice[] }>("/api/voices"),
   clone: (name: string, paths: string[]) =>
     post<{ ok: true }>("/api/voice-clone", { name, paths }),
-  elements: (body: { name: string; type?: ElementType; words?: string; colors?: string[]; font?: string; paths?: string[]; drop?: string[]; remove?: boolean; elevenlabs?: boolean; workspace?: string | null }) =>
+  elements: (body: { name: string; type?: ElementType; words?: string; colors?: string[]; font?: string; voice?: string; paths?: string[]; drop?: string[]; remove?: boolean; elevenlabs?: boolean; workspace?: string | null }) =>
     post<Element[]>("/api/elements", body),
   styles: (body: { name: string; paths?: string[]; words?: string; drop?: string[]; remove?: boolean }) => post<SavedStyle[]>("/api/styles", body),
   workspaces: (body: { new?: string; slug?: string; use?: boolean; name?: string; add?: string[]; drop?: string[]; link?: string[]; unlink?: string[]; timeline?: Timeline; rev?: number; remove?: boolean }) =>

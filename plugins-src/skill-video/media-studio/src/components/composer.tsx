@@ -48,6 +48,8 @@ import { StyleField } from "@/components/style-picker"
 import { ExpandPreview, marginsOf } from "@/components/expand"
 import { ExtendPanel } from "@/components/extend"
 import { KeyframePanel } from "@/components/keyframe"
+import { frameCap, KeyframeStrip } from "@/components/keyframes"
+import { LinesEditor, OmniRefs, voiceName, type SpokenLine } from "@/components/omni"
 import { InputSlots, slotFor, upload } from "@/components/inputs"
 import { MentionTextarea } from "@/components/mention"
 import { ToolPicker } from "@/components/tool-picker"
@@ -166,17 +168,29 @@ export function Composer({
   const shotLengths = (mp?.duration ?? []).filter((d) => !mp?.shots || d <= mp.shots.total)
   // Seedance 2.5's final, made from a draft
   const draftOf = kind === "video" && mp?.draft ? (value.params.draft_of as string | undefined) : undefined
-  // the model's own inputs, among the tool's right after its first frame (the photo of a talking avatar): the middle
-  // frames (Kling 4.0, Grok) between the first and the last, OmniHuman's mask of who speaks on the photo
+  // the model's own inputs, among the tool's right after its first frame (the photo of a talking avatar): OmniHuman's
+  // mask of who speaks on the photo
   const framedTool = tool.inputs.some((i) => i.key === "first_frame")
   const modelInputs: InputT[] = !framedTool ? [] : [
-    ...(kind === "video" && mp?.mid_frames ? [{ key: "mid_frames", kind: "image" as const, label: "Middle frames", optional: true, multiple: true }] : []),
     ...(tool.id === "talking-avatar" && mp?.masks ? [{ key: "speaker_masks", kind: "mask" as const, label: "Who speaks", optional: true }] : []),
   ]
+  // a model with middle frames (Kling 4.0, Grok): its first, middle and last frames in one strip, in order
+  const strip = kind === "video" && framedTool && !!mp?.mid_frames
+  const seconds = Number(pick(mp?.duration, value.params.duration as number, 5) ?? 5)
+  const frameCount = (value.inputs.mid_frames?.length ?? 0) + (value.inputs.first_frame?.length ?? 0) + (value.inputs.last_frame?.length ?? 0)
+  const cap = strip ? frameCap(mp!.mid_frames!, seconds) : null
   // a voice model that clones nothing (Kie's) or takes voices whole (ElevenLabs): no clips, no Library voice field
   const noClone = model?.params.clone === false || direct || waiting
-  const toolInputs = noClone ? tool.inputs.filter((i) => i.key !== "voice_clips") : tool.inputs, first = toolInputs.findIndex((i) => i.key === "first_frame")
-  const slotTool = { ...tool, inputs: first < 0 ? toolInputs : [...toolInputs.slice(0, first + 1), ...modelInputs, ...toolInputs.slice(first + 1)] }
+  const toolInputs = tool.inputs.filter((i) => !(noClone && i.key === "voice_clips") && !(strip && ["first_frame", "last_frame"].includes(i.key))), first = toolInputs.findIndex((i) => i.key === "first_frame")
+  // a new video's references beyond images (omni references: Kling 4.0, Seedance, Wan 3.0, Hailuo 3, Vidu Q4): videos,
+  // sounds, and voices of one's own (Kling 4.0), after the tool's references
+  const omni = kind === "video" && mode === "create" && model?.role === "generate" && tool.inputs.some((i) => i.key === "references")
+  const refInputs: InputT[] = !omni ? [] : [
+    ...((mp?.videos ?? 0) > 0 ? [{ key: "ref_videos", kind: "video" as const, label: "Videos", optional: true, multiple: true }] : []),
+    ...((mp?.audios ?? 0) > 0 ? [{ key: "ref_audios", kind: "audio" as const, label: "Sounds", optional: true, multiple: true }] : []),
+    ...((mp?.named_voices ?? 0) > 0 ? [{ key: "ref_voices", kind: "audio" as const, label: "Voices", optional: true, multiple: true }] : []),
+  ]
+  const slotTool = { ...tool, inputs: [...(first < 0 ? toolInputs : [...toolInputs.slice(0, first + 1), ...modelInputs, ...toolInputs.slice(first + 1)]), ...refInputs] }
   // Aleph 2 on a tool with a keyframe recipe: the keyframe made from this video (kept with its time), sent with it
   const keyframing = kind === "video" && !!tool.keyframe && model?.model === "runway/aleph-2"
   const keyframe = keyframing && value.params.keyframe_video === value.inputs.video?.[0] ? value.inputs.keyframe?.[0] : undefined
@@ -194,22 +208,24 @@ export function Composer({
   // Kling 4.0 cites the Library's voices too (@Narrator)
   const items = kind === "audio" ? [] : [...mentionables(state), ...(mp?.named_voices ? (state.elements ?? []).filter((e) => e.type === "voice" && e.files.length) : [])]
   // (the words' own and an element field's: the prompt holds both)
-  const mentioned = cited(prompt, items).reduce((n, i) => n + i.files.length, 0)
+  // (one image of each on a model that takes its subject's main view alone: Wan 2.2 Animate Replace)
+  const mentioned = cited(prompt, items).reduce((n, i) => n + (mp?.element_views === 1 ? 1 : i.files.length), 0)
   // the user writes the whole prompt (Custom, speech), or adds words to the one the tool builds; those are needed on
   // Custom and Custom edit (no prompt of their own), optional beside a tool's
   const whole = ownPrompt(tool), takesWords = tool.template.includes("{prompt}")
   const custom = tool.id === "free" || tool.id === "free-edit"
   const missing = tool.inputs.find((i) => !i.optional && !value.inputs[i.key]?.length)
-  const unpicked = tool.fields.find((f) => f.required && !String(value.fields[f.key] ?? f.default ?? "").trim())
+  // a keyframe carries the change: the Element or photos it was made with are not asked again (the user's own one)
+  const unpicked = keyframe ? undefined : tool.fields.find((f) => f.required && !String(value.fields[f.key] ?? f.default ?? "").trim())
   // a References tool: a job a sheet, so no batch; it needs words or photos
   const sheets = tool.fields.find((f) => f.type === "sheets")
   const sheetCount = sheets ? String(value.fields[sheets.key] ?? sheets.default ?? "").split(",").filter((x) => x.trim()).length : 0
-  const unsaid = tool.one_of && !tool.one_of.some((k) => value.inputs[k]?.length || value.fields[k]?.trim())
+  const unsaid = !keyframe && tool.one_of && !tool.one_of.some((k) => value.inputs[k]?.length || value.fields[k]?.trim())
   // the reference images the model takes, and those this sends: the tool's image inputs and a Library style's; an
   // input of several takes what is left (« 2 / 13 »)
   // with a frame, OpenRouter keeps a video's frames and drops its reference images (Seedance on Kie refuses both):
   // none then, unless the model takes both (mix)
-  const framed = kind === "video" && model?.role !== "avatar" && !model?.params.mix && ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0)
+  const framed = kind === "video" && model?.role !== "avatar" && !model?.params.mix && ["first_frame", "last_frame", ...(strip ? ["mid_frames"] : [])].some((k) => (value.inputs[k]?.length ?? 0) > 0)
   // a keyframe's images (an Element, a painted frame, references) go to the image that makes it, not to Aleph
   const maxRefs = keyframing ? undefined : framed ? 0 : model?.params.references
   const styleField = tool.fields.find((f) => f.type === "style")
@@ -218,14 +234,18 @@ export function Composer({
   const usedRefs = imageInputs(kind, tool).reduce((n, i) => n + (value.inputs[i.key]?.length ?? 0), 0) + styleImages + (kind === "video" && model?.params.elements ? 0 : mentioned)
   const overRefs = maxRefs != null ? usedRefs - maxRefs : 0
   const limits = maxRefs == null ? {} : Object.fromEntries(imageInputs(kind, tool).filter((i) => i.multiple).map((i) => [i.key, Math.max(0, (value.inputs[i.key]?.length ?? 0) + maxRefs - usedRefs)]))
-  // (and the middle frames, at most the model's count)
-  const slotLimits = { ...limits, ...(mp?.mid_frames ? { mid_frames: mp.mid_frames.max } : {}) }
+  // (each of the others at the model's count; none beside a frame)
+  const libraryVoices = cited(prompt, items).filter((i) => i.type === "voice").length
+  const slotLimits = { ...limits, ...Object.fromEntries(refInputs.map((i) => [i.key, framed ? 0 : Math.max(0, i.key === "ref_videos" ? mp!.videos! : i.key === "ref_audios" ? mp!.audios! : mp!.named_voices! - libraryVoices)])) }
+  // a new video's spoken lines, the lips in sync, on a model with sound
+  const speaks = kind === "video" && mode === "create" && model?.role === "generate" && !!mp?.audio && tool.template.includes("{prompt}") && !shots && !draftOf
+  const lines = speaks && Array.isArray(value.params.lines) ? (value.params.lines as SpokenLine[]) : []
 
   // a keyframe and its time go only with Aleph 2 and the video they were made from
   // (a model's own inputs and editors go only with a model that has them)
-  const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe" && (!["mid_frames", "speaker_masks"].includes(k) || modelInputs.some((i) => i.key === k))))
+  const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe" && (!["mid_frames", "speaker_masks", "ref_videos", "ref_audios", "ref_voices"].includes(k) || [...modelInputs, ...refInputs].some((i) => i.key === k) || (k === "mid_frames" && strip))))
   const ownParams = Object.fromEntries(Object.entries(value.params).filter(([k]) => k !== "keyframe_video" && k !== "frame" && (k !== "dialogue" || !!dialogue) && (k !== "shots" || !!shots)
-    && (k !== "mid_times" || !!mp?.mid_frames?.timed) && (k !== "draft_of" || !!draftOf)))
+    && (k !== "mid_times" || !!mp?.mid_frames?.timed) && (k !== "draft_of" || !!draftOf) && (k !== "lines" || speaks) && (k !== "voice_names" || refInputs.some((i) => i.key === "ref_voices"))))
   const spec: Spec = useMemo(
     () => ({
       kind,
@@ -268,9 +288,11 @@ export function Composer({
       ? !shots.some((x) => x.prompt.trim()) ? "Write the shots" : shotLengths.length && !shotLengths.includes(shotsTotal) ? `Shots last ${shotsTotal} s: ${shotLengths[0]} to ${shotLengths.at(-1)} s` : null
       : dialogue
       ? !dialogue.some((l) => l.text.trim()) ? "Write the lines" : dialogue.some((l) => l.text.trim() && !l.voice) ? "Pick each line's voice" : mp?.speakers && dialogueVoices > mp.speakers ? `${mp.speakers} voices at most` : direct && dialogueChars > 2000 ? "Shorten the dialogue" : null
-      : mp?.mid_frames?.timed && (value.inputs.mid_frames?.length ?? 0) > 0 && (value.inputs.mid_frames ?? []).some((_, i) => !(((value.params.mid_times as number[] | undefined)?.[i] ?? 0) > 0))
+      : cap != null && frameCount > cap
+      ? `${cap} frames at most at ${seconds} s`
+      : strip && mp?.mid_frames?.timed && (value.inputs.mid_frames?.length ?? 0) > 0 && (value.inputs.mid_frames ?? []).some((_, i) => !(((value.params.mid_times as number[] | undefined)?.[i] ?? 0) > 0))
       ? "Time each middle frame"
-      : !eleven && !local && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale"
+      : !eleven && !local && !!tool.template && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale" && !lines.some((l) => l.text.trim())
       ? kind === "audio" ? "Write the text" : "Write a prompt"
       : direct && !value.params.voice
         ? "Pick a voice"
@@ -544,7 +566,7 @@ export function Composer({
               ) : f.type === "recolors" ? (
                 <Recolors key={f.key} field={f} fields={value.fields} onChange={(patch) => set({ fields: { ...value.fields, ...patch }, raw: false })} />
               ) : f.type === "element" ? (
-                <ElementField key={f.key} field={f} value={value.fields[f.key]} items={items} blocked={maxRefs === 0 ? (framed ? "not with a frame" : "not on this model") : undefined} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
+                <ElementField key={f.key} field={f} value={value.fields[f.key]} items={items} views={mp?.element_views} blocked={maxRefs === 0 ? (framed ? "not with a frame" : "not on this model") : undefined} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               ) : (
                 <FieldInput key={f.key} field={f} value={value.fields[f.key]} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               )
@@ -622,6 +644,20 @@ export function Composer({
           </div>
         )}
 
+        {strip && !draftOf && (
+          <KeyframeStrip
+            inputs={value.inputs}
+            times={(value.params.mid_times as (number | undefined)[] | undefined) ?? []}
+            mf={mp!.mid_frames!}
+            cite={mp?.cite}
+            seconds={seconds}
+            media={state.media}
+            home={state.home}
+            onChange={(inputs, times) => set({ inputs, ...(mp?.mid_frames?.timed ? { params: { ...value.params, mid_times: times } } : {}) })}
+            onCite={(tag) => set({ intent: `${value.intent.trimEnd()}${value.intent.trim() ? " " : ""}${tag} ` })}
+          />
+        )}
+
         {tool.template && (
           <div className="flex flex-col gap-3">
             {/* the prompt the tool builds, read only: what goes to the model */}
@@ -688,31 +724,24 @@ export function Composer({
           </div>
         )}
 
-        {/* Grok's middle frames: each its time in the video */}
-        {!draftOf && (
-          <div className="contents">
-            {mp?.mid_frames?.timed && (value.inputs.mid_frames?.length ?? 0) > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {(value.inputs.mid_frames ?? []).map((_, i) => (
-                  <label key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    Frame {i + 1} at
-                    <Input
-                      inputMode="decimal"
-                      className="h-7 w-16 text-xs"
-                      placeholder="s"
-                      value={(value.params.mid_times as number[] | undefined)?.[i] ?? ""}
-                      onChange={(e) => {
-                        const times = [...((value.params.mid_times as number[] | undefined) ?? [])]
-                        times[i] = e.target.value === "" ? (undefined as unknown as number) : +e.target.value
-                        set({ params: { ...value.params, mid_times: times } })
-                      }}
-                    />
-                    s
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+        {speaks && (
+          <LinesEditor
+            lines={lines}
+            onChange={(l) => set({ params: { ...value.params, lines: l.length ? l : undefined } })}
+            characters={mentionables(state).filter((i) => i.type === "character")}
+            voices={mp?.named_voices ? [...(state.elements ?? []).filter((e) => e.type === "voice" && e.files.length).map((e) => `@${e.name}`), ...(value.inputs.ref_voices ?? []).map((f, i) => `@${voiceName(f, (value.params.voice_names as string[] | undefined)?.[i])}`)] : null}
+          />
+        )}
+        {omni && model && (
+          <OmniRefs
+            mp={model.params}
+            inputs={ownInputs}
+            voiceNames={(value.params.voice_names as string[] | undefined) ?? []}
+            intent={value.intent}
+            items={items}
+            onIntent={(intent) => set({ intent })}
+            onVoiceNames={(voice_names) => set({ params: { ...value.params, voice_names } })}
+          />
         )}
 
         {expand && <ExpandPreview image={value.inputs.image?.[0]} fields={value.fields} onChange={(patch) => set({ fields: { ...value.fields, ...patch } })} />}

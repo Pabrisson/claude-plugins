@@ -17,7 +17,7 @@ export async function startFake(dir) {
   // Kie: its tasks, its uploads, its window of new tasks, how many 429 to answer first (busy), the credits each model
   // bills, its price rows
   const kie = { tasks: {}, uploads: [], window: [], busy: 0, credits: { 'fake-i2i': 12, 'fake-vid': 136, 'fake-gem': 3 },
-    prices: { 'fake img, 1K': [6, 'per image'], 'fake img, 2K': [10, 'per image'], 'fake vid, 480p no video': [28, 'per second'], 'fake vid, 480p with video': [17, 'per second'],
+    prices: { 'fake img, 1K': [6, 'per image'], 'fake img, 2K': [10, 'per image'], 'fake vid, 480p no video': [28, 'per second'], 'fake lip, per second': [8, 'per second'], 'fake animate, per second': [12, 'per second'], 'fake vid, 480p with video': [17, 'per second'],
       'fake vid, 1080p with video': [95, 'per second'], 'fake tts': [6, 'per 1000 characters'] } }
   // a fake cloudflared: its quick tunnel's name carries the local port, where the fake router fetches the files
   const bin = path.join(dir, 'bin')
@@ -166,7 +166,7 @@ setInterval(() => {}, 1e6)
     if (p === '/kie/api/v1/jobs/createTask') {
       const now = Date.now()
       kie.window = kie.window.filter(t => now - t < 10e3)
-      if (kie.window.length >= 20 || kie.busy-- > 0) return json({ code: 429, msg: 'Your call frequency is too high. Please try again later.', data: null })
+      if (kie.window.length >= (kie.rate ?? 20) || kie.busy-- > 0) return json({ code: 429, msg: 'Your call frequency is too high. Please try again later.', data: null })
       kie.window.push(now)
       if (!body?.input) return json({ code: 422, msg: 'The input cannot be null', data: null })
       if (body.model === 'fake-broke') return json({ code: 402, msg: 'Credits insufficient', data: null })

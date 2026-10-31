@@ -85,11 +85,12 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
   const [defaults, setDefaults] = useState(saved.defaults)
   const [limits, setLimits] = useState(() => typed(saved))
   const [busy, setBusy] = useState(false)
-  const [at, setAt] = useState("router")
+  const [at, setAt] = useState("spending")
   // the active router's catalog read on a click: its loader, then the models it found that time (null before any click)
   const [checking, setChecking] = useState(false)
   const [found, setFound] = useState<string[] | null>(null)
-  const added = KINDS.flatMap((k) => (models[k] ?? []).filter((m) => m.new))
+  // the newest first: the ones just found, then by the day each first showed
+  const added = KINDS.flatMap((k) => (models[k] ?? []).filter((m) => m.new)).sort((a, b) => +!!found?.includes(b.id) - +!!found?.includes(a.id) || (b.since ?? "").localeCompare(a.since ?? ""))
   const loaded = KINDS.every((k) => models[k])
   // the models may have read the catalog (once a day): its date then comes with the state read again
   useEffect(() => {
@@ -162,11 +163,11 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
     { set: state.keys.elevenlabs, name: "ElevenLabs key", about: "Change voice and Translate, and the credits left." },
   ]
   const nav = [
-    { id: "router", icon: RouterIcon, title: "Router", status: `${name} active${state.catalog.at ? ` · list ${ago(state.catalog.at)}` : ""}`, warn: !state.keys[router] },
     { id: "spending", icon: WalletIcon, title: "Spending", status: noLimits ? "No limit set" : "Limits set", warn: noLimits },
     { id: "plan", icon: WalletIcon, title: "ElevenLabs plan", status: plan ? cap(plan) : "Not set", warn: false },
     { id: "models", icon: LayersIcon, title: "Default models", status: KINDS.some((k) => defaults[k]) ? `${KINDS.filter((k) => defaults[k]).length} of 3 set` : "The tools' choice", warn: false },
     { id: "keys", icon: KeyRoundIcon, title: "API keys", status: `${keys.filter((k) => k.set).length} of ${keys.length} set`, warn: !state.keys[saved.router.active] },
+    { id: "router", icon: RouterIcon, title: "Router", status: `${name} active${state.catalog.at ? ` · list ${ago(state.catalog.at)}` : ""}`, warn: !state.keys[router] },
   ]
 
   return (
@@ -195,84 +196,6 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
 
       <Main title="Settings">
         <div className="flex max-w-4xl flex-col gap-5 pb-4">
-          <Section id="router" icon={RouterIcon} title="Router" about="Where every image, video and voice is made. One router at a time: the tools show its models, priced by it.">
-            <div className="px-5 py-4">
-              <RadioGroup value={router} onValueChange={(v) => setRouter(v as Router)} className="grid gap-3 md:grid-cols-2" aria-label="Active router">
-                {ROUTERS.map((r) => (
-                  <FieldLabel key={r.id} htmlFor={`router-${r.id}`}>
-                    <Field orientation="horizontal" className="items-start">
-                      <RadioGroupItem value={r.id} id={`router-${r.id}`} className="mt-0.5" />
-                      <FieldContent>
-                        <FieldTitle>
-                          {ROUTER_NAME[r.id]}
-                          {saved.router.active === r.id && <Badge variant="secondary">Active</Badge>}
-                          <Badge variant="outline" className={cn(state.keys[r.id] ? "text-done" : "text-cost")}>{state.keys[r.id] ? "Key set" : "No key"}</Badge>
-                        </FieldTitle>
-                        <FieldDescription>{r.about}</FieldDescription>
-                        <FieldDescription className="text-xs">Rate limit: {r.limit}</FieldDescription>
-                      </FieldContent>
-                    </Field>
-                  </FieldLabel>
-                ))}
-              </RadioGroup>
-              {router !== saved.router.active && (
-                <p className="mt-3 text-xs text-muted-foreground">Save to switch to {ROUTER_NAME[router]}{!state.keys[router] && ": without its key, prices show and nothing can be generated"}.</p>
-              )}
-            </div>
-            <Row
-              title={`${name}'s model list`}
-              about={saved.router.active === "kie"
-                ? "The list kept with media-generator, plus the models Kie adds (read from its docs), and its prices from its price list: read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."
-                : "The list kept with media-generator, plus the models OpenRouter adds to its catalog, read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."}
-            >
-              <Button variant="outline" disabled={checking} onClick={updateModels} className="self-start" aria-busy={checking || undefined}>
-                {checking ? <LoaderCircleIcon className="animate-spin" aria-hidden /> : <RefreshCwIcon aria-hidden />}
-                {checking ? "Updating the list…" : "Update the list"}
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                {state.catalog.at ? `Checked ${ago(state.catalog.at)}` : "Not checked yet"}
-                {state.catalog.prices_at ? ` · prices ${ago(state.catalog.prices_at)}` : ""}
-              </span>
-            </Row>
-            <div id="catalog" className="scroll-mt-5 px-5 py-4">
-              <div className="mb-2 flex items-baseline gap-2">
-                <span className="text-sm font-medium">Added from {name}'s catalog</span>
-                {loaded && <span className="text-xs text-muted-foreground tabular-nums">{added.length}</span>}
-                {found && <span className="ml-auto text-xs text-muted-foreground">{found.length ? `${found.length} found just now` : "Nothing new just now"}</span>}
-              </div>
-              {!loaded ? (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> Loading the models…</p>
-              ) : !added.length ? (
-                <p className="text-sm text-muted-foreground">None: the list already has every model of the catalog.</p>
-              ) : (
-                <ul className="divide-y rounded-lg border">
-                  {added.map((m) => (
-                    <li key={m.id} className={cn("flex items-center gap-3 px-3 py-2", found?.includes(m.id) && "bg-space/5")}>
-                      <ModelLogo model={m.model} lab={m.lab} />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1.5">
-                          <span className="truncate text-sm font-medium">{shortName(m)}</span>
-                          {found?.includes(m.id) && <NewBadge>Just added</NewBadge>}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {[m.lab, KIND_NAME[m.kind] ?? m.kind, ["edit", "upscale"].includes(m.role) && `${m.role} only`, ...capsOf(m)].filter(Boolean).join(" · ")}
-                        </span>
-                      </span>
-                      {m.from && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{m.from}</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {loaded && added.length > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {saved.router.active === "kie"
-                    ? "Read from Kie's docs: their price is not on its list yet, so each asks for your yes, and the reference images a video model takes are unknown."
-                    : "Their prices are OpenRouter's, never measured here, and the reference images a video model takes are unknown."}
-                </p>
-              )}
-            </div>
-          </Section>
-
           <Section id="spending" icon={WalletIcon} title="Spending" about="Each provider in its own unit. Off means never: every click on a paid button spends.">
             {spending.map((p) => {
               const t = limits[`${p.id}.threshold`], c = limits[`${p.id}.cap`]
@@ -382,6 +305,84 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
                 </InputGroupAddon>
               </InputGroup>
             </Row>
+          </Section>
+
+          <Section id="router" icon={RouterIcon} title="Router" about="Where every image, video and voice is made. One router at a time: the tools show its models, priced by it.">
+            <div className="px-5 py-4">
+              <RadioGroup value={router} onValueChange={(v) => setRouter(v as Router)} className="grid gap-3 md:grid-cols-2" aria-label="Active router">
+                {ROUTERS.map((r) => (
+                  <FieldLabel key={r.id} htmlFor={`router-${r.id}`}>
+                    <Field orientation="horizontal" className="items-start">
+                      <RadioGroupItem value={r.id} id={`router-${r.id}`} className="mt-0.5" />
+                      <FieldContent>
+                        <FieldTitle>
+                          {ROUTER_NAME[r.id]}
+                          {saved.router.active === r.id && <Badge variant="secondary">Active</Badge>}
+                          <Badge variant="outline" className={cn(state.keys[r.id] ? "text-done" : "text-cost")}>{state.keys[r.id] ? "Key set" : "No key"}</Badge>
+                        </FieldTitle>
+                        <FieldDescription>{r.about}</FieldDescription>
+                        <FieldDescription className="text-xs">Rate limit: {r.limit}</FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  </FieldLabel>
+                ))}
+              </RadioGroup>
+              {router !== saved.router.active && (
+                <p className="mt-3 text-xs text-muted-foreground">Save to switch to {ROUTER_NAME[router]}{!state.keys[router] && ": without its key, prices show and nothing can be generated"}.</p>
+              )}
+            </div>
+            <Row
+              title={`${name}'s model list`}
+              about={saved.router.active === "kie"
+                ? "The list kept with media-generator, plus the models Kie adds (read from its docs), and its prices from its price list: read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."
+                : "The list kept with media-generator, plus the models OpenRouter adds to its catalog, read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."}
+            >
+              <Button variant="outline" disabled={checking} onClick={updateModels} className="self-start" aria-busy={checking || undefined}>
+                {checking ? <LoaderCircleIcon className="animate-spin" aria-hidden /> : <RefreshCwIcon aria-hidden />}
+                {checking ? "Updating the list…" : "Update the list"}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {state.catalog.at ? `Checked ${ago(state.catalog.at)}` : "Not checked yet"}
+                {state.catalog.prices_at ? ` · prices ${ago(state.catalog.prices_at)}` : ""}
+              </span>
+            </Row>
+            <div id="catalog" className="scroll-mt-5 px-5 py-4">
+              <div className="mb-2 flex items-baseline gap-2">
+                <span className="text-sm font-medium">Added from {name}'s catalog</span>
+                {loaded && <span className="text-xs text-muted-foreground tabular-nums">{added.length}</span>}
+                {found && <span className="ml-auto text-xs text-muted-foreground">{found.length ? `${found.length} found just now` : "Nothing new just now"}</span>}
+              </div>
+              {!loaded ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> Loading the models…</p>
+              ) : !added.length ? (
+                <p className="text-sm text-muted-foreground">None: the list already has every model of the catalog.</p>
+              ) : (
+                <ul className="max-h-96 divide-y overflow-y-auto overscroll-contain rounded-lg border">
+                  {added.map((m) => (
+                    <li key={m.id} className={cn("flex items-center gap-3 px-3 py-2", found?.includes(m.id) && "bg-space/5")}>
+                      <ModelLogo model={m.model} lab={m.lab} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium">{shortName(m)}</span>
+                          {found?.includes(m.id) ? <NewBadge>Just added</NewBadge> : <NewBadge />}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {[m.since && `added ${ago(m.since)}`, m.lab, KIND_NAME[m.kind] ?? m.kind, ["edit", "upscale"].includes(m.role) && `${m.role} only`, ...capsOf(m)].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      {m.from && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{m.from}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {loaded && added.length > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {saved.router.active === "kie"
+                    ? "Read from Kie's docs: their price is not on its list yet, so each asks for your yes, and the reference images a video model takes are unknown."
+                    : "Their prices are OpenRouter's, never measured here, and the reference images a video model takes are unknown."}
+                </p>
+              )}
+            </div>
           </Section>
         </div>
 

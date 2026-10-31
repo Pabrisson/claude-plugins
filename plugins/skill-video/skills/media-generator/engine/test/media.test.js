@@ -64,7 +64,9 @@ test('OpenRouter\'s catalog: new models added once a day, the list kept for its 
   assert.match(v.out, /plus 2 new from its catalog/)
   const c = JSON.parse(fs.readFileSync(file, 'utf8'))
   assert.deepEqual(c.image.map(m => m.id), ['fake/new-img'], 'the unserved one waits')
-  assert.deepEqual(c.image[0], { id: 'fake/new-img', lab: 'NewLab', name: 'New Image', role: 'both', resolutions: ['1K', '4K'], aspect_ratios: ['9:16', '1:1', '16:9', 'auto'], max_images: 4, references: 6, quality: null, background: null, seed: true, options: [],
+  // (the day it first showed: Settings lists the newest first)
+  assert.equal(c.image[0].since, c.at)
+  assert.deepEqual({ ...c.image[0], since: undefined }, { since: undefined, id: 'fake/new-img', lab: 'NewLab', name: 'New Image', role: 'both', resolutions: ['1K', '4K'], aspect_ratios: ['9:16', '1:1', '16:9', 'auto'], max_images: 4, references: 6, quality: null, background: null, seed: true, options: [],
     pricing: [[{ billable: 'output_image', unit: 'image', cost_usd: 0.05 }, { billable: 'output_image', unit: 'image', cost_usd: 0.2, variant: '4k' }]] })
   assert.deepEqual(c.speech.map(m => [m.id, m.voices]), [['fake/new-tts', ['ava', 'max']]])
   // within the day: the cache, no request; a new model runs like the list's
@@ -401,7 +403,7 @@ test('references: the prompt says where an input\'s images are; the model\'s cou
     /^In the video, change only the area painted in translucent magenta on the first reference image: put a cup \(as shown in the second reference image\) there/)
   // a frame and references: OpenRouter would keep the frame and drop the references, so nothing goes
   const both = await cli('video', '--model', 'fake/vid', '--prompt', 'a fox', '--in', `first_frame=${at('a.png')}`, '--in', `references=${at('a.png')}`, '--estimate')
-  assert.match(both.err, /a first or last frame and reference images do not go together/)
+  assert.match(both.err, /a first, middle or last frame and references do not go together/)
   await cli('styles', 'remove', 'Chalk')
 })
 
@@ -792,6 +794,9 @@ test('a keyframe: the frame edited as an image first, then Aleph 2 carries it th
   assert.equal(body.model, 'runway/aleph-2')
   assert.match(body.prompt, /^Replace the man with Max \(the character in the keyframe, a man with a beard\), exactly as the keyframe shows it, its whole look included/)
   assert.deepEqual(body.input_references.map(r => r.type), ['video_url'])
+  // the user's own keyframe (an image of theirs) carries the change alone: no Element asked
+  const own = JSON.parse((await cli('video', '--tool', 'object-swap', '--in', `video=${at('long.mp4')}`, '--field', 'old=the man', '--in', `keyframe=${at('a.png')}`, '--frame', '2', '--estimate')).out)
+  assert.match(own.prompt, /^Replace the man, exactly as the keyframe shows it/)
   const [kf] = body.provider.options.runway.parameters.keyframes
   assert.ok(kf.uri.startsWith('data:image/') && kf.seconds === 1, JSON.stringify(kf).slice(0, 80))
   // each recipe names an image tool or a frame prompt, and only the fields and inputs of its tool

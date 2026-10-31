@@ -320,3 +320,21 @@ export function LibraryVoices({ voices, value, onChange }: { voices: Element[]; 
   ]
   return <VoiceList label="Your voices" hint={`cloned from its clips · ${voices.length} in the Library`} rows={rows} value={value ?? "-"} onChange={(v) => onChange(v === "-" ? null : v)} placeholder="The model's voices" />
 }
+
+// a character's own voice: a voice of the Library, heard when it speaks in a video (Kling 4.0 on Kie)
+export function OwnVoice({ voices, value, onChange }: { voices: Element[]; value: string | null; onChange: (name: string | null) => void }) {
+  if (!voices.length)
+    return (
+      <div>
+        <Label hint="heard when it speaks in a video">Its voice</Label>
+        <p className="text-xs text-muted-foreground">
+          No voice in the Library yet: a Voice element is 1 to 3 clean clips of someone speaking. <a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">Make one</a>.
+        </p>
+      </div>
+    )
+  const rows: Row[] = [
+    { value: "-", title: "No voice of its own", note: "The model gives it one", group: "None" },
+    ...voices.map((v) => ({ value: v.name, title: `@${v.name}`, note: v.words || `${v.files.length} clip${v.files.length > 1 ? "s" : ""}`, file: v.files[0], group: "Your voices" })),
+  ]
+  return <VoiceList label="Its voice" hint="heard when it speaks in a video (Kling 4.0, Kling 3.0: a clip of 5 to 30 s)" rows={rows} value={value ?? "-"} onChange={(v) => onChange(v === "-" ? null : v)} placeholder="No voice of its own" />
+}

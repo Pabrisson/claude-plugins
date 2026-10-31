@@ -14,6 +14,8 @@ const list = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(imp
 const all = ['image', 'video', 'speech'].flatMap(k => list[k].map(m => ({ ...m, kind: k })))
 const names = m => (typeof m.kie === 'string' ? [m.kie] : Object.values(m.kie).map(v => v.model ?? v))
 const key = f => f.replace(/\[\]$/, '')
+// the fields a mode names its own way (Wan 2.7: audio_url, driving_audio_url, reference_voice)
+const modeFields = m => Object.values(typeof m.kie === 'object' ? m.kie : {}).flatMap(v => Object.values(v.fields ?? {}))
 
 test('Kie live: the shipped list against Kie\'s names, docs and prices; nothing spent', { skip: !live && 'KIE_LIVE=1 and KIE_API_KEY', timeout: 300e3 }, async () => {
   const before = await kie.balance()
@@ -35,7 +37,7 @@ test('Kie live: the shipped list against Kie\'s names, docs and prices; nothing 
     // a key is sent in the modes that take it (a text-to-image model has no images): one of its models has it
     const known = new Set(names(m).flatMap(n => Object.keys(specs[n]?.props ?? {})))
     if (known.size) {
-      for (const f of Object.values(m.fields ?? {})) assert.ok(known.has(key(f)), `${m.id}: no input ${key(f)} in its docs`)
+      for (const f of [...Object.values(m.fields ?? {}), ...modeFields(m)]) assert.ok(known.has(key(f)), `${m.id}: no input ${key(f)} in its docs`)
       for (const k of Object.keys(m.set ?? {})) assert.ok(known.has(k), `${m.id}: no input ${k} to set`)
       if (m.elements) assert.ok(known.has(m.elements.key), `${m.id}: no input ${m.elements.key} for its Elements`)
       for (const o of m.options ?? []) { const k = typeof o === 'string' ? o : o.covers ?? o.key; assert.ok(known.has(k), `${m.id}: no input ${k} for its option`) }
@@ -45,7 +47,7 @@ test('Kie live: the shipped list against Kie\'s names, docs and prices; nothing 
   // dashboard does not show is said, never forgotten (the docs' own YAML noise apart: apidog's keys, nested schemas)
   const noise = k => /^(required|properties|x-apidog.*)$/.test(k) || /^0[0-9A-Z]{25}$/.test(k)
   for (const m of all) {
-    const sent = new Set([...Object.values(m.fields ?? {}).map(key), ...Object.keys(m.set ?? {}), m.elements?.key, m.shots?.key, m.shots?.flag, m.mid_frames?.key, m.masks?.key, m.named_voices?.key,
+    const sent = new Set([...Object.values(m.fields ?? {}).map(key), ...modeFields(m).map(key), ...Object.keys(m.set ?? {}), m.elements?.key, m.shots?.key, m.shots?.flag, m.mid_frames?.key, m.masks?.key, m.named_voices?.key,
       ...(m.dialogue === 'gemini' ? ['speakers', 'dialogue_turns'] : []), ...(m.options ?? []).map(o => (typeof o === 'string' ? o : o.covers ?? o.key))].filter(Boolean))
     for (const v of Object.values(typeof m.kie === 'object' ? m.kie : {})) for (const k of Object.keys(v.set ?? {})) sent.add(k)
     const left = [...new Set(names(m).flatMap(n => Object.keys(specs[n]?.props ?? {})))].filter(k => !noise(k) && !sent.has(k) && !m.skip?.[k] && !SKIP[k])

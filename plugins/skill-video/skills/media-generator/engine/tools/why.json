@@ -31,7 +31,8 @@
     "heygen/avatar-iv": "HeyGen's Avatar IV, lip-sync with gestures, from one photo",
     "kwaivgi/kling-ai-avatar-pro": "Kling's talking head, 1080p",
     "bytedance/omnihuman-1.5": "Gestures with the voice, and who speaks in a group photo",
-    "bytedance/omnihuman-2.0": "OmniHuman's newest, at a lower price"
+    "bytedance/omnihuman-2.0": "OmniHuman's newest, at a lower price",
+    "volcengine/video-to-video-lip-sync": "The lips of a filmed person matched to a new voice, up to 4 min"
   },
   "audio": {
     "eleven_v4": "ElevenLabs' newest, audio tags, dialogues, 90+ languages",
