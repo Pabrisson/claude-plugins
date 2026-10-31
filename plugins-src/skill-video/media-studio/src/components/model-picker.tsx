@@ -34,6 +34,13 @@ export function capsOf(m: Model) {
     p.references ? `${p.references} reference${p.references > 1 ? "s" : ""}` : null,
     p.n && p.n.max > 1 ? `up to ${p.n.max} at once` : null,
     p.voices?.length ? `${p.voices.length} voices` : null,
+    p.shots ? `${p.shots.max} shots` : null,
+    p.mid_frames ? `${p.mid_frames.max} middle frames` : null,
+    p.masks ? "who speaks" : null,
+    p.named_voices ? "Library voices" : null,
+    p.draft ? "draft" : null,
+    p.dialogue ? "dialogue" : null,
+    p.tags ? "audio tags" : null,
   ].filter((c): c is string => !!c)
 }
 
@@ -60,6 +67,8 @@ const FILTERS: Record<Kind, Filter[]> = {
   ],
   audio: [
     { id: "voices", label: "20+ voices", test: (m) => (m.params.voices?.length ?? 0) >= 20 },
+    { id: "dialogue", label: "Dialogue", test: (m) => !!m.params.dialogue },
+    { id: "tags", label: "Audio tags", test: (m) => !!m.params.tags },
     { id: "free", label: "No cost", test: (m) => m.model.endsWith(":free") },
   ],
 }
@@ -75,6 +84,7 @@ export function ModelPicker({
   onOpen,
   none,
   label = "Model",
+  why = {},
 }: {
   kind: Kind
   recommended: Model[]
@@ -86,6 +96,8 @@ export function ModelPicker({
   // the choice of no model, with its words ("The tool's choice")
   none?: string
   label?: string
+  // why each recommended model is recommended, a line under it
+  why?: Record<string, string>
 }) {
   const [open, setOpen] = useState(false)
   const [on, setOn] = useState<string[]>([])
@@ -119,6 +131,7 @@ export function ModelPicker({
           {m.new && <NewBadge />}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{[m.lab, ...capsOf(m)].filter(Boolean).join(" · ")}</span>
+        {why[m.model] && recommended.includes(m) && <span className="mt-0.5 line-clamp-2 block text-[11px] leading-snug text-foreground/75">{why[m.model]}</span>}
       </span>
       {prices[m.id] && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{prices[m.id].label}</span>}
     </CommandItem>

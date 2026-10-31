@@ -112,7 +112,10 @@ export function ToolPicker({
                             {isLocal(t) ? (
                               "Local, free"
                             ) : t.provider === "elevenlabs" ? (
-                              "ElevenLabs"
+                              <>
+                                <ModelLogo model="elevenlabs" className="size-4 rounded-sm bg-transparent p-0" />
+                                ElevenLabs
+                              </>
                             ) : m ? (
                               <>
                                 <ModelLogo model={m.model} lab={m.lab} className="size-4 rounded-sm bg-transparent p-0" />

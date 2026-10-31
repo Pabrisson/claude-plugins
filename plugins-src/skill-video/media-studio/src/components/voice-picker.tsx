@@ -227,9 +227,10 @@ function useElevenVoices(enabled: boolean) {
   return { voices, error }
 }
 
-// Change voice's new voice: the Library's voices (one not on ElevenLabs yet goes there when the job runs) and the
-// ElevenLabs voices (its default ones and the account's own). Its value is a voice id, or @name for a Library voice
-export function VoicePicker({ enabled, value, onChange, library }: { enabled: boolean; value?: string; onChange: (v: string) => void; library: Element[] }) {
+// an ElevenLabs voice (Change voice's new one, Voice's and a dialogue's lines on an ElevenLabs model): the Library's
+// voices (one not on ElevenLabs yet goes there when the job runs) and the ElevenLabs voices (its default ones and the
+// account's own). Its value is a voice id, or @name for a Library voice
+export function VoicePicker({ enabled, value, onChange, library, label = "New voice", placeholder = "Pick the new voice", hint }: { enabled: boolean; value?: string; onChange: (v: string) => void; library: Element[]; label?: string; placeholder?: string; hint?: string }) {
   const { voices, error } = useElevenVoices(enabled)
   if (!enabled) return null
   const ours = library.filter((e) => e.type === "voice" && e.files.length)
@@ -246,12 +247,12 @@ export function VoicePicker({ enabled, value, onChange, library }: { enabled: bo
   ]
   return (
     <VoiceList
-      label="New voice"
-      hint={ours.length ? `${ours.length} of yours, ${voices?.length ?? "…"} on ElevenLabs` : "ElevenLabs' and your own"}
+      label={label}
+      hint={hint ?? (ours.length ? `${ours.length} of yours, ${voices?.length ?? "…"} on ElevenLabs` : "ElevenLabs' and your own")}
       rows={rows}
       value={value}
       onChange={onChange}
-      placeholder="Pick the new voice"
+      placeholder={placeholder}
       status={error ?? (voices ? undefined : "Loading the voices…")}
       footer={
         <>
@@ -287,24 +288,18 @@ function minimax(name: string): Voice {
   return { voice_id: name, name: title, labels: { ...(gender && { gender }), ...(age && { age }) }, languages: LANG[prefix] ? [LANG[prefix]] : [] }
 }
 
-// a speech model's own voices; an ElevenLabs model's are the account's default ones (the router's « george » is
-// « George - Warm, Captivating Storyteller »), with their samples, labels and filters; Gemini's and MiniMax's with
-// what their makers say of them, filtered the same, without a sample. The Library's voices stay in their own field
-export function ModelVoices({ model, voices, value, onChange, elevenlabs }: { model: string; voices: string[]; value: string; onChange: (v: string) => void; elevenlabs: boolean }) {
-  const eleven = model.startsWith("elevenlabs/") && elevenlabs
-  const { voices: account } = useElevenVoices(eleven)
-  const byName = new Map((account ?? []).map((v) => [titleOf(v).toLowerCase(), v]))
+// a router speech model's own voices: Gemini's and MiniMax's with what their makers say of them, filtered, without a
+// sample. ElevenLabs' are reached straight (VoicePicker); the Library's voices stay in their own field
+export function ModelVoices({ model, voices, value, onChange, label = "Voice", placeholder = "Pick a voice" }: { model: string; voices: string[]; value: string; onChange: (v: string) => void; label?: string; placeholder?: string }) {
   const rows: Row[] = voices.map((name) => {
-    const v = eleven
-      ? byName.get(name.toLowerCase())
-      : model.startsWith("google/") && GEMINI[name]
-        ? { voice_id: name, name: `${name} - ${GEMINI[name]}`, labels: { descriptive: GEMINI[name].toLowerCase() } }
-        : model.startsWith("minimax/")
-          ? minimax(name)
-          : undefined
+    const v = model.startsWith("google/") && GEMINI[name]
+      ? { voice_id: name, name: `${name} - ${GEMINI[name]}`, labels: { descriptive: GEMINI[name].toLowerCase() } }
+      : model.startsWith("minimax/")
+        ? minimax(name)
+        : undefined
     return v ? { value: name, title: titleOf(v), note: noteOf(v), voice: v } : { value: name, title: name, note: "" }
   })
-  return <VoiceList label="Voice" hint={`${voices.length} voices of this model`} rows={rows} value={value} onChange={onChange} placeholder="Pick a voice" />
+  return <VoiceList label={label} hint={label === "Voice" ? `${voices.length} voices of this model` : undefined} rows={rows} value={value} onChange={onChange} placeholder={placeholder} />
 }
 
 // Voice's own field for the Library's voices: one picked sends its clips to be cloned and says how it sounds; « The

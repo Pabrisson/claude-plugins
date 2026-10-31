@@ -14,7 +14,9 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import zlib from 'node:zlib'
 import { appendLedger, money, needsYes, PLANS, readLedger, spentThisMonth } from './lib/cost.js'
-import { PROVIDERS, routerOf } from './providers/index.js'
+import { DIALOGUE_MAX, DIALOGUE_VOICES, fromSnapshot } from './providers/elevenlabs.js'
+import { DIRECT, PROVIDERS, routerOf } from './providers/index.js'
+import { palette } from './lib/options.js'
 
 const SELF = fileURLToPath(import.meta.url), ENGINE = path.dirname(SELF)
 // the code this process runs: a server started from an older media.mjs gets replaced
@@ -31,7 +33,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     tool: { type: 'string', short: 't' }, model: { type: 'string', short: 'm' }, prompt: { type: 'string' }, raw: { type: 'boolean' },
     in: { type: 'string', multiple: true }, field: { type: 'string', multiple: true },
     n: { type: 'string' }, batch: { type: 'string' }, duration: { type: 'string' }, ratio: { type: 'string' }, resolution: { type: 'string' },
-    quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' },
+    quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' }, option: { type: 'string', multiple: true }, line: { type: 'string', multiple: true }, shot: { type: 'string', multiple: true }, 'from-draft': { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' },
     type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' },
@@ -113,7 +115,10 @@ const ffmpeg = argv => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { 
 
 // thresholds and caps in each provider's unit, all unset until the user sets them (Settings, or setup set)
 const SETTINGS = {
+  // the one router that generates: kie or openrouter (Settings' Router); unset, Kie (OpenRouter when only its key is set)
+  router: { active: null },
   openrouter: { threshold: null, cap: null },
+  kie: { threshold: null, cap: null },
   elevenlabs: { threshold: null, cap: null, plan: null },
   defaults: { image: null, video: null, audio: null },
   // the workspace new generations join (workspaces use, the dashboard's header)
@@ -121,7 +126,9 @@ const SETTINGS = {
 }
 const settings = () => {
   const s = fs.existsSync(at('settings.json')) ? readJson(at('settings.json')) : {}
-  return Object.fromEntries(Object.entries(SETTINGS).map(([k, v]) => [k, { ...v, ...s[k] }]))
+  const out = Object.fromEntries(Object.entries(SETTINGS).map(([k, v]) => [k, { ...v, ...s[k] }]))
+  out.router.active ??= !process.env.KIE_API_KEY && process.env.OPENROUTER_API_KEY ? 'openrouter' : 'kie'
+  return out
 }
 // the USD price of 1,000 ElevenLabs credits on the user's plan, null without a paid one
 const per1000 = () => PLANS[settings().elevenlabs.plan] || null
@@ -160,16 +167,32 @@ const ALEPH = 'runway/aleph-2', KEYFRAME_MODEL = 'bytedance-seed/seedream-5-0-fl
 // the router's kind for a tool kind: audio is speech
 const routerKind = kind => (kind === 'audio' ? 'speech' : kind)
 
-// every router's models of a kind, their ids prefixed with the router: its list kept by hand, plus the new models of
-// its catalog (checked once a day)
-async function models(kind) {
-  const all = []
-  for (const [name, p] of Object.entries(PROVIDERS)) for (const m of await p.models(routerKind(kind))) all.push({ ...m, id: `${name}:${m.model}`, provider: name })
-  return all
+// the router that generates, one at a time
+const active = () => (PROVIDERS[settings().router.active] ? settings().router.active : 'kie')
+// a tool's models on the active router: its own list for that router when it has one (tools/*.json "kie"), else its
+// list, the models the router lacks left out by models(); each recommended one with why (the tool's own reason, else
+// tools/why.json's)
+const WHY = JSON.parse(fs.readFileSync(path.join(ENGINE, 'tools/why.json'), 'utf8'))
+const kindOfTool = tool => KINDS.find(k => TOOLS[k].includes(tool))
+const toolModels = tool => {
+  const models = tool[active()]?.models ?? tool.models, kind = kindOfTool(tool)
+  return { models, also: tool[active()]?.also ?? tool.also, why: Object.fromEntries((models ?? []).map(id => [id, tool.why?.[id] ?? WHY[kind]?.[id]]).filter(([, w]) => w)) }
 }
+
+// the active router's models of a kind, their ids prefixed with the router: its list kept by hand, plus the new models
+// of its catalog (checked once a day). Speech: ElevenLabs' own models first, straight from it (its key), and none of a
+// router's ElevenLabs
+async function models(kind) {
+  const name = active(), own = (await PROVIDERS[name].models(routerKind(kind))).map(m => ({ ...m, id: `${name}:${m.model}`, provider: name }))
+  if (kind !== 'audio') return own
+  const direct = (await DIRECT.elevenlabs.models('speech').catch(() => [])).map(m => ({ ...m, id: `elevenlabs:${m.model}`, provider: 'elevenlabs' }))
+  return [...direct, ...own.filter(m => !m.model.startsWith('elevenlabs/'))]
+}
+// a model of another router (a remix, a default set before a switch) runs on the active one when it has it
 async function modelOf(kind, id) {
-  const { name, model } = routerOf(id), m = (await models(kind)).find(x => x.provider === name && x.model === model)
-  if (!m) throw userError(`no ${kind} model ${id}: media.mjs models ${kind}`)
+  const { name, model, provider } = routerOf(id), all = await models(kind), m = all.find(x => x.model === model)
+  if (!m && name === 'elevenlabs') throw userError(`ElevenLabs' ${model} needs its key (/plugin configure skill-video@pabrisson): media.mjs models audio`)
+  if (!m) throw userError(`no ${kind} model ${model} on ${PROVIDERS[active()].label}${name !== active() ? ` (it is ${provider.label}'s): pick another, or switch the router in Settings` : ''}: media.mjs models ${kind}`)
   return m
 }
 
@@ -270,6 +293,8 @@ function outputsOf(ids, kind) {
 
 // adds files to an Element (made when new) and sets what is given: its type, words, a brand's colors and typeface;
 // from: generations whose results join it; drop: file names taken out
+// the References tool that makes more views of an Element of a type
+const REF_TOOLS = { character: 'character', outfit: 'outfit', object: 'object', location: 'location', pose: 'pose' }
 function saveElement(name, { type, words, colors, font, files = [], from = [], drop = [], workspace: ws }) {
   if (!NAME.test(name ?? '')) throw userError('an Element\'s name is letters, digits, - and _')
   const now = element(name), t = type ?? now?.type ?? 'other'
@@ -278,6 +303,12 @@ function saveElement(name, { type, words, colors, font, files = [], from = [], d
   const odd = all.find(f => kindOfFile(f) !== want)
   if (odd) throw userError(`${path.basename(odd)} is not ${want === 'audio' ? 'a sound: a voice takes clips' : 'an image'}`)
   if (!now && !all.length) throw userError(`a new Element takes ${want === 'audio' ? 'a voice clip' : 'an image'} or more`)
+  // an Element of images has 2 at least: Kling takes 2 to 4 views of each, and every model reads it better
+  const kept = new Set([...(now?.files ?? []).map(f => path.basename(f)), ...all.map(f => path.basename(f))].filter(f => !drop.map(d => path.basename(d)).includes(f)))
+  if (want === 'image' && kept.size < 2) {
+    const tool = REF_TOOLS[t]
+    throw userError(`an Element takes 2 images at least, @${name} would have ${kept.size}: ${tool ? `make another view from it with ${tool} (media.mjs image --tool ${tool} --in references=<its image>, its estimate then the user's yes), then add it (--from <that generation>)` : 'add a second one (another version or angle)'}`)
+  }
   ensureHome()
   const d = at('elements', name)
   fs.mkdirSync(d, { recursive: true })
@@ -329,6 +360,32 @@ function mentions(text, kind, from, keyframe = false) {
     return `${name} (${cite(el, where)})`
   })
   return { text: out, refs }
+}
+
+// the @Elements of a prompt as Kling's named elements: each name (letters, digits, _) cited as is, its words and 2 to 4
+// images; an Element of one image, too many, or Elements beside a frame where the model takes none, said before sending
+function klingElements(text, m, spec) {
+  const elements = [], voices = [], seen = new Map()
+  const out = text.replace(/@([\w-]+)/g, (all, name) => {
+    const el = element(name)
+    // a voice of the Library, cited the same on Kling 4.0 (its voices)
+    if (el?.type === 'voice' && el.files.length && m.params.named_voices) {
+      if (!seen.has(name)) (seen.set(name, name.replace(/-/g, '_').slice(0, 20)), voices.push({ name: seen.get(name), file: el.files[0] }))
+      return `@${seen.get(name)}`
+    }
+    if (!el || el.type === 'voice' || !el.files.length) return all
+    if (!seen.has(name)) {
+      if (el.files.length < 2) throw userError(`@${name} has 1 image: ${m.name} takes 2 to 4 views of an Element. ${REF_TOOLS[el.type] ? `Make another with media.mjs image --tool ${REF_TOOLS[el.type]} --in references=<its image> (its estimate, then the user's yes), then media.mjs elements set ${name} --from <that generation>` : `Add a second image: media.mjs elements set ${name} <file>`}`)
+      seen.set(name, name.replace(/-/g, '_').slice(0, 20))
+      elements.push({ name: seen.get(name), words: el.words, type: el.type, files: el.files.slice(0, 4) })
+    }
+    return `@${seen.get(name)}`
+  })
+  if (elements.length > m.params.elements) throw userError(`${m.name} takes ${m.params.elements} Elements, this cites ${elements.length}`)
+  if (voices.length > m.params.named_voices) throw userError(`${m.name} takes ${m.params.named_voices} voices, this cites ${voices.length}`)
+  if (elements.length && !m.params.elements_with_frames && ['first_frame', 'last_frame'].some(k => spec.inputs?.[k]?.length))
+    throw userError(`${m.name} takes no Element with a first or last frame: remove the frame or the @names`)
+  return { text: out, elements, voices }
 }
 
 // an element field's value: a name of the Library (with or without its @), of a type the field takes, written @name so
@@ -573,6 +630,9 @@ function expandCanvas(file, fields) {
 function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
   const files = key => spec.inputs?.[key] ?? []
   const p = { ...tool.params, ...spec.params }
+  if (m.provider === 'elevenlabs') return elevenRequest(m, prompt, p, !!spec.probe)
+  // the model's own settings (its Options), checked; sent only when some are asked
+  const options = optionValues(m, p.options), own = Object.keys(options).length ? { options } : {}
   if (kind === 'image') {
     const refs = [...tool.inputs.filter(i => i.kind !== 'matte').flatMap(i => files(i.key)), ...refsFromMentions]
     const params = clean({
@@ -585,32 +645,38 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
     })
     if (refs.length > (m.params.references ?? 0)) throw userError(`${m.name} takes ${m.params.references ?? 0} reference images, this asks for ${refs.length}`)
     const size = f => { try { const s = probe(f); return [s.width, s.height] } catch { return [] } }
-    return { send: { model: m.model, prompt, refs: refs.map(dataUrl), ...params }, estimate: { n: params.n, resolution: params.resolution, quality: params.quality, ratio: params.aspect_ratio, text: prompt?.length, refs: refs.length, sizes: refs.map(size) } }
+    return { send: { model: m.model, prompt, refs: refs.map(dataUrl), ...params, ...own }, estimate: { n: params.n, resolution: params.resolution, quality: params.quality, ratio: params.aspect_ratio, text: prompt?.length, refs: refs.length, sizes: refs.map(size) } }
   }
   if (kind === 'video') {
+    if (p.draft_of) return draftFinal(m, p, own)
     const video = files('video')[0], source = video ? probe(video) : null, avatar = m.role === 'avatar'
     // an avatar takes its photo as a reference, not as a frame
     const frames = clean({ first_frame: avatar ? undefined : files('first_frame')[0], last_frame: files('last_frame')[0] })
     for (const f of Object.keys(frames)) if (!m.params.frames.includes(f)) throw userError(`${m.name} takes no ${f.replace('_', ' ')}: pick another model`)
     const images = [...(avatar ? files('first_frame') : []), ...files('references'), ...files('sketch'), ...refsFromMentions]
     if (m.params.references != null && images.length > m.params.references) throw userError(`${m.name} takes ${m.params.references} reference images, this asks for ${images.length}`)
-    // with a frame, OpenRouter keeps the frames and drops the reference images: never sent for nothing
-    if (!avatar && images.length && Object.keys(frames).length) throw userError('a first or last frame and reference images do not go together (OpenRouter keeps the frames, drops the references): remove one or the other; a Library style\'s images are references too')
+    // with a frame, OpenRouter keeps the frames and drops the reference images (Seedance on Kie refuses both): never
+    // sent for nothing, unless the model takes both (Kling's elements beside its frames)
+    if (!avatar && !m.params.mix && images.length && Object.keys(frames).length) throw userError(`a first or last frame and reference images do not go together on ${m.name}: remove one or the other; a Library style's images are references too`)
     const refs = [...images.map(f => ({ kind: 'image', file: f })), ...(video ? [{ kind: 'video', file: atLeast(video, m.params.min_pixels) }] : []), ...files('audio').map(f => ({ kind: 'audio', file: f }))]
-    if (refs.some(r => r.kind !== 'image') && spawnSync('cloudflared', ['--version'], { stdio: 'ignore' }).error) throw userError('a video or a voice reaches OpenRouter through a Cloudflare tunnel: brew install cloudflared (no account)')
+    if (video && m.params.videos === 0 && !['edit', 'upscale'].includes(m.role)) throw userError(`${m.name} takes no video: pick another model`)
+    // Kie takes the files by its own upload; OpenRouter fetches them through a tunnel
+    if (refs.some(r => r.kind !== 'image') && !PROVIDERS[m.provider].upload && spawnSync('cloudflared', ['--version'], { stdio: 'ignore' }).error) throw userError('a video or a voice reaches OpenRouter through a Cloudflare tunnel: brew install cloudflared (no account)')
     const upscale = m.role === 'upscale', edit = !!video, still = files('first_frame')[0] ?? files('last_frame')[0]
     // a keyframe (Aleph 2): an edited frame at its time in the video, 5 MB at most as a data: URI
     const keyframe = files('keyframe')[0]
     if (keyframe && !(+p.frame >= 0 && +p.frame <= source.duration)) throw userError(`the keyframe's time (--frame) is in the video: 0 to ${source.duration.toFixed(1)} s`)
     if (keyframe && fs.statSync(keyframe).size > 5e6) throw userError('a keyframe is 5 MB at most')
-    // Seedance given a video remakes it at the source's length, sent: OpenRouter's 5 s default made a new 5 s video, and
-    // its -1 (« follow the video ») is refused; from its shortest duration up (2026-10-31). Seedance 2.5 edits only with
-    // -1: sent anyway, for the day OpenRouter takes it (github.com/OpenRouterTeam/typescript-sdk/issues/1096)
-    const lengths = edit && m.model.startsWith('bytedance/') && m.params.duration?.length ? [Math.min(...m.params.duration), Math.max(...m.params.duration)] : null
+    // a model that makes videos (Seedance, Kling 4.0) given one remakes it at the source's length, sent: OpenRouter's 5 s
+    // default made a new 5 s video, and its -1 (« follow the video ») is refused; from its shortest duration up
+    // (2026-10-31). Seedance 2.5 edits only with -1: sent anyway, for the day OpenRouter takes it
+    // (github.com/OpenRouterTeam/typescript-sdk/issues/1096)
+    const lengths = edit && (m.model.startsWith('bytedance/') || m.params.videos > 0) && m.params.duration?.length ? [Math.min(...m.params.duration), Math.max(...m.params.duration)] : null
     if (lengths && (source.duration < lengths[0] - 0.05 || source.duration > lengths[1] + 0.05))
       throw userError(`${m.name} takes a video of ${lengths[0]} to ${lengths[1]} s, this one is ${source.duration.toFixed(1)} s: trim or extend it`)
     const params = clean({
-      duration: edit ? (lengths ? (m.model === 'bytedance/seedance-2.5' ? -1 : pick(m.params.duration, Math.round(source.duration))) : undefined) : pick(m.params.duration, num(p.duration), 5),
+      // a model that follows its video (Seedance on Kie) gets -1, the source's own length
+      duration: edit ? (m.params.follow || (lengths && m.model === 'bytedance/seedance-2.5') ? -1 : lengths ? pick(m.params.duration, Math.round(source.duration)) : undefined) : pick(m.params.duration, num(p.duration), 5),
       resolution: upscale ? undefined : pick(m.params.resolution, p.resolution, '1080p', '720p'),
       // from an image, its own ratio unless one is asked
       aspect_ratio: edit ? undefined : pick(m.params.aspect_ratio, p.aspect_ratio ?? (still && ratioOf(m.params.aspect_ratio, still)), '16:9'),
@@ -618,7 +684,11 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
       creativity: upscale && m.params.creativity ? (spec.fields?.creativity === 'creative' ? 1 : 0) : undefined,
       upscale_factor: upscale && m.params.factor ? +(spec.fields?.factor ?? 2) : undefined,
     })
-    const send = { model: m.model, prompt: upscale && !prompt ? undefined : prompt, frames: Object.fromEntries(Object.entries(frames).map(([k, f]) => [k, dataUrl(f)])),
+    // its own editors: the shots' seconds make its length, a draft is 480p
+    const ed = videoEditors(m, spec, p, options, params.duration)
+    if (ed.duration) params.duration = ed.duration
+    if (ed.resolution) params.resolution = ed.resolution
+    const send = { model: m.model, ...own, ...ed.send, prompt: upscale && !prompt ? undefined : prompt, frames: Object.fromEntries(Object.entries(frames).map(([k, f]) => [k, dataUrl(f)])),
       // the images inlined, the videos and voices served by a tunnel when the job is submitted
       refs: refs.map(r => (r.kind === 'image' ? { kind: r.kind, url: dataUrl(r.file) } : r)), ...params,
       ...(keyframe ? { keyframes: [{ uri: dataUrl(keyframe), seconds: +p.frame }] } : {}) }
@@ -629,11 +699,131 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
       images: images.length + Object.keys(frames).length, creativity: spec.fields?.creativity, factor: spec.fields?.factor, width: source?.width, height: source?.height,
       source_duration: source?.duration, min_pixels: m.params.min_pixels } }
   }
-  // speech: a preset voice, or up to 3 clips to clone
-  const clips = files('voice_clips')
-  if (!prompt) throw userError('write what the voice says (--prompt)')
+  // speech: a preset voice, or up to 3 clips to clone; a dialogue's lines (Gemini on Kie: two voices)
+  const clips = files('voice_clips'), lines = (p.dialogue ?? []).filter(l => String(l.text ?? '').trim())
+  if (lines.length) {
+    if (!m.params.dialogue) throw userError(`${m.name} speaks one voice: a dialogue goes to Eleven v4 or v3, or Gemini TTS on Kie`)
+    const voices = new Set(lines.map(l => l.voice ?? ''))
+    if (voices.size > m.params.speakers) throw userError(`${m.name} takes ${m.params.speakers} voices in a dialogue, this one has ${voices.size}`)
+    const text = lines.map(l => l.text).join('\n')
+    return { send: { model: m.model, text, dialogue: lines.map(l => ({ voice: l.voice || m.params.voices?.[0], text: l.text })), instructions: spec.fields?.instructions || undefined, ...own }, estimate: { text } }
+  }
+  if (!prompt && !spec.probe) throw userError('write what the voice says (--prompt)')
+  if (clips.length && m.params.clone === false) throw userError(`${m.name} clones no voice here: pick one of its voices (--voice), or switch the router to OpenRouter in Settings`)
   const voice = p.voice ?? (clips.length ? undefined : m.params.voices?.[0])
-  return { send: { model: m.model, text: prompt, voice, instructions: spec.fields?.instructions || undefined, refs: clips.map(dataUrl) }, estimate: { text: prompt } }
+  return { send: { model: m.model, text: prompt, voice, instructions: spec.fields?.instructions || undefined, refs: clips.map(dataUrl), ...own }, estimate: { text: prompt } }
+}
+
+// a video model's own editors, checked: Kling's shots (their seconds its length), the middle frames (Kling 4.0's in
+// order, Grok's each at its time), OmniHuman's masks of who speaks, Grok's loop (a first frame and no last), Seedance
+// 2.5's draft (480p, its final made from it later)
+function videoEditors(m, spec, p, options, duration) {
+  const files = k => spec.inputs?.[k] ?? [], mp = m.params, send = {}, out = { send }
+  const shots = (p.shots ?? []).filter(x => String(x.prompt ?? '').trim())
+  if (shots.length) {
+    const sh = mp.shots
+    if (!sh) throw userError(`${m.name} takes no shots of its own: Kling 3.0 and Kling 3.0 Omni on Kie do`)
+    if (shots.length > sh.max) throw userError(`${m.name} takes ${sh.max} shots at most, this has ${shots.length}`)
+    if (shots.some(x => !(Number.isInteger(+x.duration) && +x.duration >= sh.each[0] && +x.duration <= sh.each[1]))) throw userError(`a shot lasts ${sh.each[0]} to ${sh.each[1]} s, in whole seconds`)
+    const total = shots.reduce((n, x) => n + +x.duration, 0)
+    // its lengths said as they are: a range, or the few it makes
+    const lengths = (mp.duration ?? []).filter(d => d <= sh.total), range = lengths.every((d, i) => !i || d === lengths[i - 1] + 1)
+    if (total > sh.total || (lengths.length && !lengths.includes(total))) throw userError(`the shots last ${total} s: ${m.name} makes ${range ? `${lengths[0] ?? 1} to ${lengths.at(-1) ?? sh.total} s` : `${lengths.slice(0, -1).join(', ')} or ${lengths.at(-1)} s`}`)
+    if (options.prefer_multi_shots) throw userError('Smart shots or your own shots, not both')
+    send.shots = shots.map(x => ({ prompt: x.prompt, duration: +x.duration }))
+    out.duration = total
+  }
+  const mids = files('mid_frames')
+  if (mids.length) {
+    const mf = mp.mid_frames, length = out.duration ?? duration ?? 5
+    if (!mf) throw userError(`${m.name} takes no middle frames: Kling 4.0 and Grok Imagine Video on Kie do`)
+    if (mids.length > mf.max) throw userError(`${m.name} takes ${mf.max} middle frames at most, this has ${mids.length}`)
+    const times = (p.mid_times ?? []).map(Number)
+    if (mf.timed) {
+      if (times.length !== mids.length || times.some(t => !(t > 0 && t < length))) throw userError(`each middle frame has its time, inside the video's ${length} s (--in mid_frames=<file>@<seconds>)`)
+      if (times.some((t, i) => i && t - times[i - 1] < 1 / 3)) throw userError('the middle frames go in order, a third of a second apart at least')
+    }
+    send.mid_frames = mids.map((f, i) => ({ url: dataUrl(f), ...(mf.timed ? { at: times[i] } : {}) }))
+  }
+  const masks = files('speaker_masks')
+  if (masks.length) {
+    if (!mp.masks) throw userError(`${m.name} takes no mask of who speaks: OmniHuman 1.5 on Kie does`)
+    if (masks.length > mp.masks) throw userError(`${m.name} takes ${mp.masks} masks at most`)
+    send.masks = masks.map(dataUrl)
+  }
+  if (options.loop && (!files('first_frame').length || files('last_frame').length)) throw userError('a loop starts and ends on its first frame: give a first frame, no last one')
+  if (options.draft) out.resolution = '480p'
+  return out
+}
+
+// Seedance 2.5's final from its draft (--from-draft <generation>, within 7 days): the draft's own task, at 1080p, its
+// length; Kie lists no price of its own for it: estimated at the 1080p rate, said unknown
+function draftFinal(m, p, own) {
+  const d = m.params.draft && fs.existsSync(path.join(mediaDir(p.draft_of), 'job.json')) ? readJob(p.draft_of) : null
+  if (!m.params.draft) throw userError(`${m.name} makes no final from a draft: Seedance 2.5 on Kie does`)
+  if (!d || d.model !== m.model || d.provider !== m.provider || !d.spec.params?.options?.draft) throw userError(`${p.draft_of} is not a draft of ${m.name} (media.mjs jobs)`)
+  if (d.status !== 'done' || !d.job?.id) throw userError(`the draft ${p.draft_of} is not done`)
+  if (Date.now() - Date.parse(d.created) > 7 * 864e5) throw userError('a draft makes its final within 7 days: this one is older, make it again')
+  const { draft, ...kept } = own.options ?? {}
+  return { send: { model: m.model, draft_of: d.job.id, refs: [], ...(Object.keys(kept).length ? { options: kept } : {}) },
+    estimate: { duration: d.spec.params?.duration ?? 5, resolution: '1080p', input: 'text', final: true } }
+}
+
+// a model's options (model.params.options: sliders, switches, choices, selects, numbers, words), each checked and cast;
+// a choice given by its value or its label (--option stability=Natural)
+function optionValues(m, asked) {
+  const list = m.params.options ?? [], out = {}, is = (a, b) => String(a).toLowerCase() === String(b).toLowerCase()
+  for (const [k, raw] of Object.entries(asked ?? {})) {
+    if (raw === undefined || raw === null || raw === '') continue
+    const o = list.find(x => x.key === k)
+    if (!o) throw userError(`${m.name} has no option ${k}${list.length ? ` (its options: ${list.map(x => x.key).join(', ')})` : ''}`)
+    if (o.type === 'slider' || o.type === 'number') {
+      const v = Number(raw)
+      if (!Number.isFinite(v) || (o.min != null && v < o.min) || (o.max != null && v > o.max)) throw userError(`${o.label} (${k}) is a number${o.min != null ? ` from ${o.min} to ${o.max}` : ''}`)
+      out[k] = v
+    } else if (o.type === 'switch') {
+      if (![true, false, 'true', 'false', 'on', 'off'].includes(raw)) throw userError(`${o.label} (${k}) is on or off`)
+      out[k] = raw === true || raw === 'true' || raw === 'on'
+    } else if (o.values) {
+      const hit = o.values.find(x => (typeof x === 'object' ? [x.value, x.label] : [x]).some(y => is(y, raw)))
+      if (hit === undefined) throw userError(`${o.label} (${k}) is one of ${o.values.map(x => (typeof x === 'object' ? x.label : x)).join(', ')}`)
+      out[k] = typeof hit === 'object' ? hit.value : hit
+    } else if (o.type === 'file') {
+      if (!fs.existsSync(String(raw))) throw userError(`${o.label} (${k}): no such file ${raw}`)
+      out[k] = path.resolve(String(raw))
+    } else {
+      // a palette checked now: 3 to 10 #hex colors
+      if (o.transform === 'palette') try { palette(raw) } catch (e) { throw userError(e.message) }
+      out[k] = String(raw)
+    }
+  }
+  return out
+}
+
+// a voice of the Library (@name) for ElevenLabs: its id once it is on the account, else it goes there when the job runs
+function elevenVoice(voice) {
+  if (!String(voice).startsWith('@')) return voice
+  const v = element(voice.slice(1))
+  if (v?.type !== 'voice' || !v.files.length) throw userError(`no voice ${voice} in the Library (media.mjs elements)`)
+  return v.voice_id ?? voice
+}
+// ElevenLabs straight: one voice of the account or of the Library, or a dialogue's lines, each its voice (--line
+// "<voice>: <words>", Eleven v4 and v3); its options; priced on its characters (a probe, the model list's price, before
+// the voice is picked)
+function elevenRequest(m, prompt, p, probing) {
+  const options = optionValues(m, p.options), seed = p.seed, lines = (p.dialogue ?? []).filter(l => String(l.text ?? '').trim())
+  if (lines.length) {
+    if (!m.params.dialogue) throw userError(`${m.name} speaks one voice: a dialogue goes to Eleven v4 or v3 (--model eleven_v4)`)
+    if (!probing && lines.some(l => !l.voice)) throw userError('each line of a dialogue has its voice (--line "<voice_id or @name>: <words>")')
+    const chars = lines.reduce((n, l) => n + l.text.length, 0), voices = new Set(lines.map(l => l.voice))
+    if (chars > DIALOGUE_MAX) throw userError(`a dialogue reads reliably up to ${DIALOGUE_MAX} characters, this one has ${chars}: split it in two`)
+    if (voices.size > DIALOGUE_VOICES) throw userError(`a dialogue takes ${DIALOGUE_VOICES} voices at most, this one has ${voices.size}`)
+    return { send: { model: m.model, dialogue: lines.map(l => ({ voice: l.voice && elevenVoice(l.voice), text: l.text })), options, seed }, estimate: { text: chars } }
+  }
+  if (!prompt && !probing) throw userError('write what the voice says (--prompt), or a dialogue\'s lines (--line "<voice>: <words>")')
+  if (!p.voice && !probing) throw userError('pick a voice (--voice <voice_id>: media.mjs voices lists them; or --voice @<a voice of the Library>)')
+  if (m.params.max_chars && prompt.length > m.params.max_chars) throw userError(`${m.name} reads ${m.params.max_chars} characters at a time, this text has ${prompt.length}: split it`)
+  return { send: { model: m.model, text: prompt, voice: p.voice && elevenVoice(p.voice), options, seed }, estimate: { text: prompt.length } }
 }
 
 // ElevenLabs' estimate from video.mjs (the one place its rates live): credits
@@ -672,12 +862,6 @@ function elevenEstimate(argv) {
 // probe: a price for the tool picker before its inputs and words are there (never run)
 async function plan(spec) {
   const tool = toolOf(spec.kind, spec.tool), probing = !!spec.probe
-  // a voice of the Library (--voice @name): its clips are cloned, its words say how it sounds
-  if (spec.kind === 'audio' && spec.tool === 'voice' && String(spec.params?.voice ?? '').startsWith('@')) {
-    const v = element(spec.params.voice.slice(1)), { voice, ...params } = spec.params
-    if (v?.type !== 'voice' || !v.files.length) throw userError(`no voice ${voice} in the Library (media.mjs elements)`)
-    spec = { ...spec, params, inputs: { ...spec.inputs, voice_clips: v.files.slice(0, 3) }, fields: { ...spec.fields, instructions: spec.fields?.instructions || v.words || undefined } }
-  }
   // a References tool makes anyone without words or photos
   if (!probing && tool.one_of && !tool.one_of.some(k => spec.inputs?.[k]?.length || String(spec.fields?.[k] ?? '').trim())) {
     const [f, i] = [tool.fields.find(x => tool.one_of.includes(x.key)), tool.inputs.find(x => tool.one_of.includes(x.key))]
@@ -695,8 +879,9 @@ async function plan(spec) {
   for (const f of Object.values(spec.inputs ?? {}).flat()) if (!fs.existsSync(f)) throw userError(`no such file: ${f}`)
   // the @names of an image or a video prompt (a voice's text is read as written): their images after the tool's
   const filled = fill(kf ? { ...tool, template: tool.keyframe.apply } : tool, spec)
-  const { text: prompt, refs } = spec.kind === 'audio' ? { text: filled, refs: [] }
+  let { text: prompt, refs } = spec.kind === 'audio' ? { text: filled, refs: [] }
     : mentions(filled, spec.kind, 1 + counted(spec.kind, tool).reduce((n, i) => n + (spec.inputs?.[i.key]?.length ?? 0), 0), kf)
+  const cited = refs.length
   // a probe prices the tool before its files: a style's images would only trip the model's count
   if (!probing) refs.push(...looks)
   if (kf) spec = { ...spec, inputs: { video: spec.inputs.video, keyframe: spec.inputs.keyframe } }
@@ -709,13 +894,33 @@ async function plan(spec) {
     const argv = elevenArgs(tool, spec)
     return { tool, prompt: '', provider: 'elevenlabs', model: argv[0] === 'dub' ? argv[argv.indexOf('--model') + 1] : 'eleven_multilingual_sts_v2', argv, estimate: elevenEstimate(argv) }
   }
-  if (!prompt && !probing && !['upscale'].includes(tool.id)) throw userError('write a prompt (--prompt "…"), or fill the tool\'s fields (--field key=value)')
+  if (!prompt && !probing && !['upscale'].includes(tool.id) && !spec.params?.dialogue?.length && !spec.params?.shots?.length && !spec.params?.draft_of) throw userError('write a prompt (--prompt "…"), or fill the tool\'s fields (--field key=value)')
   // the user's words are optional beside a tool's own prompt, the whole prompt of Custom and Custom edit
-  if (CUSTOM.includes(tool.id) && !spec.raw && !String(spec.prompt ?? '').trim() && !probing) throw userError('write a prompt (--prompt "…"): Custom has no prompt of its own')
-  const id = spec.model ?? tool.models?.find(Boolean) ?? settings().defaults[spec.kind]
-  const m = id ? await modelOf(spec.kind, id.includes(':') ? id : `openrouter:${id}`) : (await models(spec.kind)).find(x => x.role !== 'edit' && x.role !== 'upscale' && x.role !== 'avatar')
+  if (CUSTOM.includes(tool.id) && !spec.raw && !String(spec.prompt ?? '').trim() && !probing && !spec.params?.shots?.length && !spec.params?.draft_of) throw userError('write a prompt (--prompt "…"): Custom has no prompt of its own')
+  // the model asked, else the tool's first one this router has, else the default (when this router has it)
+  const all = await models(spec.kind), has = x => x && all.some(y => y.model === routerOf(x).model)
+  const id = spec.model ?? toolModels(tool).models?.find(has) ?? [settings().defaults[spec.kind]].find(has)
+  if (!id && toolModels(tool).models?.length) throw userError(`${tool.label} has no model on ${PROVIDERS[active()].label}: pick one (--model, media.mjs models ${spec.kind}), or switch the router in Settings`)
+  const m = id ? await modelOf(spec.kind, id) : all.find(x => x.role !== 'edit' && x.role !== 'upscale' && x.role !== 'avatar')
+  // a voice of the Library (--voice @name) on a router's model: its clips are cloned, its words say how it sounds
+  // (ElevenLabs takes it whole, by its id)
+  if (spec.kind === 'audio' && m.provider !== 'elevenlabs' && String(spec.params?.voice ?? '').startsWith('@')) {
+    const v = element(spec.params.voice.slice(1)), { voice, ...params } = spec.params
+    if (v?.type !== 'voice' || !v.files.length) throw userError(`no voice ${voice} in the Library (media.mjs elements)`)
+    spec = { ...spec, params, inputs: { ...spec.inputs, voice_clips: v.files.slice(0, 3) }, fields: { ...spec.fields, instructions: spec.fields?.instructions || v.words || undefined } }
+  }
   // a keyframe goes to Aleph 2 only (its passthrough keyframes); a tool whose images Aleph cannot take needs one there
   if (kf && m.model !== ALEPH) throw userError(`a keyframe goes to Aleph 2 (--model ${ALEPH}), not ${m.name}`)
+  // Kling's named elements (on Kie): a cited @Element goes whole, its name kept in the prompt, not as reference images
+  // (and in its shots, each rewritten the same)
+  const shotTexts = (spec.params?.shots ?? []).map(x => String(x.prompt ?? ''))
+  const named = spec.kind === 'video' && m.params.elements && !kf ? klingElements([filled, ...shotTexts].join('\n\u0000\n'), m, spec) : null
+  if (named && shotTexts.length) {
+    const [text, ...shots] = named.text.split('\n\u0000\n')
+    Object.assign(named, { text })
+    spec = { ...spec, params: { ...spec.params, shots: spec.params.shots.map((x, i) => ({ ...x, prompt: shots[i] })) } }
+  }
+  if (named?.elements.length || named?.voices.length) { prompt = named.text; refs.splice(0, cited) }
   if (!kf && !probing && tool.keyframe?.required && m.model === ALEPH)
     throw userError(`${tool.label} on Aleph 2 takes a keyframe: --frame <seconds> makes it from the video, then --in keyframe=<it> --frame <seconds>`)
   // the tool's price before its keyframe: its Elements' images will go to the keyframe, not to Aleph
@@ -737,12 +942,20 @@ async function plan(spec) {
   } catch (e) {
     // too many images for this model: the tool's model that takes them (a painted frame on Clean up goes to Seedance)
     const want = +e.message.match(/this asks for (\d+)/)?.[1]
-    const fit = want && (await models(spec.kind)).find(x => tool.models?.includes(x.model) && x.model !== m.model && (x.params.references ?? Infinity) >= want)
+    const fit = want && (await models(spec.kind)).find(x => toolModels(tool).models?.includes(x.model) && x.model !== m.model && (x.params.references ?? Infinity) >= want)
     if (fit) e.message += `: ${fit.name} takes them (--model ${fit.model})`
     throw e
   }
+  if (named?.elements.length) request.send.elements = named.elements.map(e => ({ ...e, files: e.files.map(dataUrl) }))
+  // Kling 4.0's voices of the Library, each its first clip
+  if (named?.voices.length) request.send.voices = named.voices.map(v => ({ name: v.name, file: dataUrl(v.file) }))
   const { provider } = routerOf(m.id)
-  return { tool, prompt, provider: m.provider, model: m.model, name: m.name, request, estimate: provider.estimate(routerKind(spec.kind), m, request.estimate) }
+  const estimate = provider.estimate(routerKind(spec.kind), m, request.estimate)
+  // a voice priced before its text (the tool list's price): by its characters, none to count yet
+  if (probing && spec.kind === 'audio' && !request.estimate?.text) Object.assign(estimate, { amount: null, known: false, detail: 'per character of its text' })
+  // a draft's final: priced at the model's rate, said unknown (Kie lists no price of its own for it)
+  if (request.send.draft_of) Object.assign(estimate, { known: false, detail: `Kie lists no price for a draft's final: about ${estimate.credits ?? '?'} credits at its 1080p rate` })
+  return { tool, prompt, provider: m.provider, model: m.model, name: m.name, request, estimate }
 }
 
 // whether this spend may go: the CLI needs --spend (Claude asked the user), the dashboard's click is the yes unless
@@ -872,7 +1085,7 @@ async function run(id) {
   try {
     if (job.after) request = await matchFirst(dir, job)
     if (job.provider === 'local') await runLocal(dir, job)
-    else if (job.provider === 'elevenlabs') runEleven(dir, job, argv)
+    else if (argv) runEleven(dir, job, argv)
     else await runRouter(dir, job, request)
     Object.assign(job, { status: 'done', note: null, finished: new Date().toISOString() })
   } catch (e) {
@@ -916,7 +1129,7 @@ async function runRouter(dir, job, request) {
   const { provider } = routerOf(`${job.provider}:${job.model}`)
   if (job.kind === 'image') {
     progress(job, `generating with ${job.name}…`)
-    const r = await provider.image(request)
+    const r = await provider.image(request, { progress: m => progress(job, m) })
     job.outputs = r.files.map((f, i) => {
       const name = `out-${i + 1}.${(f.type.split('/')[1] ?? 'png').replace('svg+xml', 'svg').replace('jpeg', 'jpg')}`
       fs.writeFileSync(path.join(dir, name), f.data)
@@ -937,20 +1150,32 @@ async function runRouter(dir, job, request) {
     return
   }
   if (job.kind === 'audio') {
+    // ElevenLabs: a voice of the Library not on the account yet goes there first (its paid plans), its id kept with it
+    if (job.provider === 'elevenlabs') {
+      const onAccount = v => (String(v).startsWith('@') ? (progress(job, `putting ${v} on ElevenLabs…`), voiceToEleven(v.slice(1)).voice_id) : v)
+      request = { ...request, ...(request.voice ? { voice: onAccount(request.voice) } : {}), ...(request.dialogue ? { dialogue: request.dialogue.map(l => ({ ...l, voice: onAccount(l.voice) })) } : {}) }
+    }
     progress(job, `speaking with ${job.name}…`)
     let r
-    try { r = await provider.speech(request) } catch (e) {
+    const told = { progress: m => progress(job, m) }
+    try { r = await provider.speech(request, told) } catch (e) {
       // some voices only answer raw PCM (16-bit, at the rate it says): wrapped into an MP3 here
-      if (!/pcm|format/i.test(e.message)) throw e
-      r = await provider.speech({ ...request, format: 'pcm' })
+      if (job.provider === 'elevenlabs' || !/pcm|format/i.test(e.message)) throw e
+      r = await provider.speech({ ...request, format: 'pcm' }, told)
       fs.writeFileSync(path.join(dir, 'out.pcm'), r.data)
       ffmpeg(['-f', 's16le', '-ar', `${r.rate}`, '-ac', `${r.channels}`, '-i', path.join(dir, 'out.pcm'), '-b:a', '192k', path.join(dir, 'out.mp3')])
       fs.rmSync(path.join(dir, 'out.pcm'))
     }
     if (r.format === 'mp3') fs.writeFileSync(path.join(dir, 'out.mp3'), r.data)
+    else if (r.format !== 'pcm') {
+      // a WAV or another file (Kie): made an MP3 like the others
+      fs.writeFileSync(path.join(dir, `out-raw.${r.format}`), r.data)
+      ffmpeg(['-i', path.join(dir, `out-raw.${r.format}`), '-b:a', '192k', path.join(dir, 'out.mp3')])
+      fs.rmSync(path.join(dir, `out-raw.${r.format}`))
+    }
     job.outputs = ['out.mp3']
     if (r.generation) progress(job, 'reading its cost…')
-    const cost = r.generation ? await provider.generationCost(r.generation) : null
+    const cost = r.cost ?? (r.generation ? await provider.generationCost(r.generation) : null)
     if (cost != null) Object.assign(job, { actual: cost, actual_known: true })
     return
   }
@@ -960,20 +1185,29 @@ async function runRouter(dir, job, request) {
   let t = null
   try {
     if (!job.job) {
-      const local = request.refs.filter(r => r.file)
+      // the router's own upload takes the files (Kie), else a tunnel serves them (OpenRouter)
+      const local = provider.upload ? [] : request.refs.filter(r => r.file)
+      if (provider.upload && request.refs.some(r => r.file)) progress(job, `sending the files to ${PROVIDERS[job.provider].label}…`)
       if (local.length) {
         progress(job, `opening a tunnel for ${job.name} to fetch the ${[...new Set(local.map(r => r.kind))].join(' and ')}…`)
         t = await tunnel(local.map(r => r.file))
       }
-      job.job = await provider.video({ ...request, refs: request.refs.map(r => (r.file ? { kind: r.kind, url: t.urls[local.indexOf(r)] } : r)) })
+      job.job = await provider.video({ ...request, refs: request.refs.map(r => (r.file && t ? { kind: r.kind, url: t.urls[local.indexOf(r)] } : r)) }, { progress: m => progress(job, m) })
       progress(job, `submitted to ${job.name} (${job.job.id})`)
     }
     for (let wait = 0; ; wait++) {
       const s = await provider.poll(job.job)
       if (s.status === 'completed') {
         job.outputs = []
+        // its own format (Seedance's MOV), else MP4; the last frame beside when asked
+        const ext = url => { const e = path.extname(new URL(url, 'http://x').pathname).toLowerCase(); return ['.mp4', '.mov', '.webm'].includes(e) ? e : '.mp4' }
         for (const [i, url] of s.urls.entries()) {
-          const name = s.urls.length > 1 ? `out-${i + 1}.mp4` : 'out.mp4'
+          const name = s.urls.length > 1 ? `out-${i + 1}${ext(url)}` : `out${ext(url)}`
+          fs.writeFileSync(path.join(dir, name), await provider.download(url))
+          job.outputs.push(name)
+        }
+        for (const [what, url] of Object.entries(s.extra ?? {})) {
+          const name = `${what}${path.extname(new URL(url, 'http://x').pathname) || '.jpg'}`
           fs.writeFileSync(path.join(dir, name), await provider.download(url))
           job.outputs.push(name)
         }
@@ -1096,14 +1330,26 @@ function runEleven(dir, job, argv) {
 
 function specFromArgs(kind) {
   const inputs = {}
+  // a middle frame at its time (Grok): --in mid_frames=<file>@<seconds>
+  const mid_times = []
   for (const x of opt.in ?? []) {
     const i = x.indexOf('=')
     if (i < 1) die('--in takes <input>=<file>, the tool\'s inputs (media.mjs tools)')
-    ;(inputs[x.slice(0, i)] ??= []).push(path.resolve(x.slice(i + 1)))
+    let [key, file] = [x.slice(0, i), x.slice(i + 1)]
+    const t = key === 'mid_frames' && /@(\d+(\.\d+)?)$/.exec(file)
+    if (t) [file, mid_times[(inputs.mid_frames ?? []).length]] = [file.slice(0, t.index), +t[1]]
+    ;(inputs[key] ??= []).push(path.resolve(file))
   }
   const fields = Object.fromEntries((opt.field ?? []).map(x => { const i = x.indexOf('='); return [x.slice(0, i), x.slice(i + 1)] }))
+  // a model's options (--option key=value), a dialogue's lines (--line "<voice>: <words>")
+  const pair = (x, sep, what) => { const i = x.indexOf(sep); if (i < 1) die(what); return [x.slice(0, i).trim(), x.slice(i + sep.length).trim()] }
+  const options = opt.option && Object.fromEntries(opt.option.map(x => pair(x, '=', '--option takes <key>=<value>, the model\'s options (media.mjs models audio --json)')))
+  const dialogue = opt.line?.map(x => { const [voice, text] = pair(x, ':', '--line takes "<voice_id or @name>: <words>"'); return { voice, text } })
+  // Kling's shots: --shot "<seconds>: <words>", in order
+  const shots = opt.shot?.map(x => { const [duration, prompt] = pair(x, ':', '--shot takes "<seconds>: <words>"'); return { duration: +duration, prompt } })
   const params = clean({ n: num(opt.n), duration: num(opt.duration), aspect_ratio: opt.ratio, resolution: opt.resolution, quality: opt.quality,
-    sound: opt.sound === undefined ? undefined : opt.sound !== 'off', seed: num(opt.seed), voice: opt.voice,
+    sound: opt.sound === undefined ? undefined : opt.sound !== 'off', seed: num(opt.seed), voice: opt.voice, options, dialogue, shots,
+    mid_times: mid_times.length ? mid_times : undefined, draft_of: opt['from-draft'],
     frame: num(opt.frame), keyframe_model: opt['keyframe-model'] })
   return { kind, tool: opt.tool ?? (kind === 'audio' ? 'voice' : 'free'), model: opt.model, prompt: opt.prompt ?? args.join(' '), raw: opt.raw, fields, inputs, params, batch: num(opt.batch), workspace: opt.workspace }
 }
@@ -1134,19 +1380,21 @@ async function generate(kind) {
 
 async function cmdModels(kind = 'video') {
   if (opt.refresh) {
-    const r = await PROVIDERS.openrouter.refresh().catch(e => die(`OpenRouter's catalog could not be read: ${e.message}`))
+    const label = PROVIDERS[active()].label
+    const r = await PROVIDERS[active()].refresh().catch(e => die(`${label}'s catalog could not be read: ${e.message}`))
     const found = Object.values(r.added).flat().filter(m => m.found)
-    console.error(found.length ? `${found.length} new model${found.length > 1 ? 's' : ''} from OpenRouter's catalog: ${found.map(m => m.name).join(', ')}` : 'OpenRouter\'s catalog: nothing new')
+    console.error(found.length ? `${found.length} new model${found.length > 1 ? 's' : ''} from ${label}'s catalog: ${found.map(m => m.name).join(', ')}` : `${label}'s catalog: nothing new`)
   }
   const list = (await models(kind)).filter(m => !opt.search || `${m.id} ${m.name}`.toLowerCase().includes(opt.search.toLowerCase()))
   if (opt.json) return console.log(JSON.stringify(list.map(({ pricing, ...m }) => m)))
   for (const m of list) {
     const p = m.params, caps = [m.role !== 'create' && m.role !== 'generate' && m.role, p.duration && `${p.duration[0]}–${p.duration.at(-1)} s`, p.resolution?.join('/'),
-      p.frames?.length && p.frames.join('+'), p.audio && 'audio', p.n && p.n.max > 1 && `up to ${p.n.max}`, p.references && `${p.references} refs`, p.voices && `${p.voices.length} voices`].filter(Boolean)
+      p.frames?.length && p.frames.join('+'), p.audio && 'audio', p.n && p.n.max > 1 && `up to ${p.n.max}`, p.references && `${p.references} refs`, p.voices && `${p.voices.length} voices`, p.dialogue && 'dialogue', p.tags && 'audio tags', p.shots && `${p.shots.max} shots`, p.mid_frames && `${p.mid_frames.max} middle frames${p.mid_frames.timed ? ' at their times' : ''}`, p.masks && 'masks of who speaks', p.named_voices && `${p.named_voices} Library voices`, p.draft && 'draft then final', p.options?.length && `options ${p.options.map(o => o.key).join(' ')}`].filter(Boolean)
     console.log(`${m.id}  ${m.name}${caps.length ? `  [${caps.join(', ')}]` : ''}${m.new ? `  new, from the catalog${m.from ? `, ${m.from}` : ''}` : ''}`)
   }
-  const added = list.filter(m => m.new).length
-  console.log(`${list.length} ${kind} models (the engine's list, providers/openrouter-models.json${added ? `, plus ${added} new from OpenRouter's catalog: their references unknown, priced as listed` : ''})`)
+  const added = list.filter(m => m.new).length, direct = list.filter(m => m.provider === 'elevenlabs').length
+  if (direct) console.log(`${direct} ElevenLabs models, straight from ElevenLabs (its key, its credits${fromSnapshot ? '; the key lacks models_read: the engine\'s copy of its list' : ''}); options: --option key=value, a dialogue: --line "<voice>: <words>"`)
+  console.log(`${list.length - direct} ${kind} models on ${PROVIDERS[active()].label}, the active router (the engine's list, providers/${active()}-models.json${added ? `, plus ${added} new from its catalog: their references unknown, ${active() === 'kie' ? 'their price unknown' : 'priced as listed'}` : ''})`)
 }
 
 // how a field is given on the command line: an option's label (Auto for an empty one), several in order, words
@@ -1169,7 +1417,8 @@ function cmdTools(kind) {
     if (opt.json) { console.log(JSON.stringify(list)); continue }
     for (const t of list) {
       const ins = t.inputs.map(i => `--in ${i.key}=<${i.kind}>${i.optional ? '?' : ''}`).join(' '), fields = t.fields.map(fieldHelp).join(' ')
-      console.log(`${k} ${t.id} (${t.mode}, ${t.group}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${t.models ? `\n    models: ${t.models.join(', ')}` : ''}${t.also ? `\n    also: ${t.also.join(', ')}` : ''}`)
+      const { models: ms, also, why } = toolModels(t)
+      console.log(`${k} ${t.id} (${t.mode}, ${t.group}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${ms ? `\n    models: ${ms.map(m => `${m}${why[m] ? ` (${why[m]})` : ''}`).join(', ')}` : ''}${also ? `\n    also: ${also.join(', ')}` : ''}`)
     }
   }
 }
@@ -1209,11 +1458,15 @@ async function credits() {
   const b = await balances(), ledger = readLedger(HOME), s = settings(), usd = per1000()
   const or = b.openrouter
   console.log(or.error ? `openrouter: ${or.error}` : `openrouter: ${or.account_left != null ? `$${or.account_left} left on the account, ` : ''}${or.key_left != null ? `$${or.key_left.toFixed(2)} left on this key` : 'no limit on this key'}${or.month != null ? `, $${or.month.toFixed(2)} used this month` : ''}`)
+  const kie = b.kie
+  console.log(kie.error ? `kie: ${kie.error}` : `kie: ${kie.credits} credits left (${money(kie.account_left, 'usd')})`)
   const el = b.elevenlabs
   console.log(el.error ? `elevenlabs: ${el.error}` : `elevenlabs: ${money(el.left, 'credits', usd)} left of ${el.limit}${el.reset ? `, renewed on ${el.reset}` : ''}`)
-  for (const p of ['openrouter', 'elevenlabs']) {
+  console.log(`active router: ${PROVIDERS[active()].label}`)
+  for (const p of ['openrouter', 'kie', 'elevenlabs']) {
     const spent = spentThisMonth(ledger, p), cap = s[p].cap
-    console.log(`${p} this month here: ${money(spent, p === 'openrouter' ? 'usd' : 'credits', usd)}${cap != null ? ` of a ${money(cap, p === 'openrouter' ? 'usd' : 'credits', usd)} cap` : ''}`)
+    const unit = p === 'elevenlabs' ? 'credits' : 'usd'
+    console.log(`${p} this month here: ${money(spent, unit, usd)}${cap != null ? ` of a ${money(cap, unit, usd)} cap` : ''}`)
   }
   for (const e of ledger.slice(-10)) console.log(`  ${e.at.slice(0, 16).replace('T', ' ')}  ${e.label} · ${e.model}  ${money(e.actual, e.unit, usd)}${e.actual_known ? '' : ' (est.)'}  ${e.status} · ${e.by}`)
 }
@@ -1232,13 +1485,14 @@ function setup(sub, ...rest) {
       const [k, v] = [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)], [sec, key] = k.split('.')
       if (sec === 'workspace') die('setup set: the workspace changes with media.mjs workspaces use <slug>')
       if (!SETTINGS[sec] || !(key in SETTINGS[sec])) die(`setup set: ${k} is not one of ${Object.entries(SETTINGS).flatMap(([a, o]) => Object.keys(o).map(b => `${a}.${b}`)).join(', ')}`)
-      s[sec][key] = v === 'none' || v === '' ? null : sec === 'defaults' ? v
+      s[sec][key] = sec === 'router' ? (PROVIDERS[v] ? v : die(`setup set: router.active is one of ${Object.keys(PROVIDERS).join(', ')}`))
+        : v === 'none' || v === '' ? null : sec === 'defaults' ? v
         : key === 'plan' ? (v in PLANS ? v : die(`setup set: elevenlabs.plan is one of ${Object.keys(PLANS).join(', ')}, or none`))
         : Number.isFinite(+v) && +v >= 0 ? +v : die(`setup set: ${k} is a number, or none`)
     }
     ensureHome()
     writeJson(at('settings.json'), s)
-  } else if (sub) die('usage: setup [vision | set openrouter.threshold=<usd> openrouter.cap=<usd> elevenlabs.threshold=<credits> elevenlabs.cap=<credits> elevenlabs.plan=<${Object.keys(PLANS).join('|')}> defaults.video=<model>…]')
+  } else if (sub) die('usage: setup [vision | set router.active=<openrouter|kie> openrouter.threshold=<usd> openrouter.cap=<usd> kie.threshold=<usd> kie.cap=<usd> elevenlabs.threshold=<credits> elevenlabs.cap=<credits> elevenlabs.plan=<${Object.keys(PLANS).join('|')}> defaults.video=<model>…]')
   for (const [sec, o] of Object.entries(s)) console.log(`${sec}: ${Object.entries(o).map(([k, v]) => `${k} ${v ?? 'not set'}`).join(' · ')}`)
 }
 
@@ -1341,9 +1595,11 @@ function doctor() {
       : 'ok      uv; the vision models are not fetched yet: media.mjs setup vision (330 MB, once), or at their first use')
   console.log(process.env.OPENROUTER_API_KEY ? 'openrouter: key set' : 'openrouter: no key, nothing can be generated; the plugin\'s secret: /plugin configure skill-video@pabrisson')
   console.log(process.env.OPENROUTER_MANAGEMENT_KEY ? 'openrouter management key: set (the account\'s balance)' : 'openrouter management key: not set (the key\'s own limit only)')
-  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (change voice, translate)' : 'elevenlabs: no key, no voice change or translation')
+  console.log(process.env.KIE_API_KEY ? 'kie: key set' : 'kie: no key (the default router; OpenRouter is used while only its key is set)')
+  console.log(`active router: ${PROVIDERS[active()].label}${PROVIDERS[active()].key() ? '' : ', without its key: nothing can be generated'}`)
+  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Voice and dialogues straight from ElevenLabs, change voice, translate)' : 'elevenlabs: no key, no voice change or translation')
   const s = settings()
-  console.log(`limits: ${['openrouter', 'elevenlabs'].map(p => `${p} threshold ${s[p].threshold ?? 'none'}, cap ${s[p].cap ?? 'none'}`).join(' · ')}`)
+  console.log(`limits: ${['openrouter', 'kie', 'elevenlabs'].map(p => `${p} threshold ${s[p].threshold ?? 'none'}, cap ${s[p].cap ?? 'none'}`).join(' · ')}`)
   console.log(`folder: ${HOME}`)
   if (fs.existsSync(at('media'))) {
     const kept = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', 'media/x', 'elements/x', 'styles/x', 'workspaces/x', 'ledger.jsonl', 'settings.json'], { encoding: 'utf8' })
@@ -1405,7 +1661,7 @@ let balanceCache = { at: 0, value: null }
 
 // the fake APIs a dev or test server was started on ($OPENROUTER_BASE, $ELEVENLABS_BASE): the header's toggle turns
 // them off (the real APIs, with the server's keys) and on again, for this server and the runs it starts
-const FAKE = Object.fromEntries(['OPENROUTER_BASE', 'ELEVENLABS_BASE'].filter(k => process.env[k]).map(k => [k, process.env[k]]))
+const FAKE = Object.fromEntries(['OPENROUTER_BASE', 'ELEVENLABS_BASE', 'KIE_BASE', 'KIE_UPLOAD_BASE', 'KIE_DOCS'].filter(k => process.env[k]).map(k => [k, process.env[k]]))
 const fakeState = () => ({ on: Object.keys(FAKE).some(k => process.env[k]), bases: Object.values(FAKE) })
 function useFake(on) {
   for (const [k, v] of Object.entries(FAKE)) if (on) process.env[k] = v; else delete process.env[k]
@@ -1420,14 +1676,15 @@ async function handle(req, res) {
   if (p === '/__media-generator/quit' && post) { reply(res, 200, { ok: true }); return setTimeout(() => process.exit(0), 50) }
   if (p === '/api/state') {
     const drafts = fs.existsSync(at('.cache', 'drafts.json')) ? readJson(at('.cache', 'drafts.json')) : {}
-    return reply(res, 200, { home: HOME, settings: settings(), keys: { openrouter: !!process.env.OPENROUTER_API_KEY, management: !!process.env.OPENROUTER_MANAGEMENT_KEY, elevenlabs: !!process.env.ELEVENLABS_API_KEY },
-      fake: fakeState(), catalog: PROVIDERS.openrouter.catalogInfo(),
+    return reply(res, 200, { home: HOME, settings: settings(), keys: { openrouter: !!process.env.OPENROUTER_API_KEY, management: !!process.env.OPENROUTER_MANAGEMENT_KEY, kie: !!process.env.KIE_API_KEY, elevenlabs: !!process.env.ELEVENLABS_API_KEY },
+      fake: fakeState(), router: active(), catalog: PROVIDERS[active()].catalogInfo(),
       media: mediaList(), drafts, styles: savedStyles(), elements: elementList(), plans: PLANS,
-      workspaces: (jobs => workspaceList().map(w => ({ ...w, linked: linkedElements(w.slug, jobs) })))(allJobs()), month: Object.fromEntries(['openrouter', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
+      workspaces: (jobs => workspaceList().map(w => ({ ...w, linked: linkedElements(w.slug, jobs) })))(allJobs()), month: Object.fromEntries(['openrouter', 'kie', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
   }
-  if (p === '/api/tools') return reply(res, 200, TOOLS)
-  // Settings' « Update the list »: OpenRouter's catalog read now, what it adds
-  if (p === '/api/models/refresh' && post) return reply(res, 200, await PROVIDERS.openrouter.refresh())
+  // the tools with the active router's model lists
+  if (p === '/api/tools') return reply(res, 200, Object.fromEntries(Object.entries(TOOLS).map(([k, list]) => [k, list.map(t => ({ ...t, ...toolModels(t) }))])))
+  // Settings' « Update the list »: the active router's catalog read now, what it adds
+  if (p === '/api/models/refresh' && post) return reply(res, 200, await PROVIDERS[active()].refresh())
   if (p === '/api/models') {
     const kind = url.searchParams.get('kind')
     return reply(res, 200, (await models(kind)).map(({ pricing, ...m }) => m))
@@ -1519,10 +1776,12 @@ async function handle(req, res) {
     const body = await readBody(req), s = settings()
     for (const sec of Object.keys(SETTINGS).filter(x => x !== 'workspace')) for (const k of Object.keys(SETTINGS[sec])) if (body[sec] && k in body[sec]) {
       const v = body[sec][k]
-      s[sec][k] = v === null || v === '' ? null : sec === 'defaults' ? String(v) : k === 'plan' ? (v in PLANS ? v : s[sec][k]) : Number.isFinite(+v) && +v >= 0 ? +v : s[sec][k]
+      s[sec][k] = sec === 'router' ? (PROVIDERS[v] ? v : s[sec][k]) : v === null || v === '' ? null : sec === 'defaults' ? String(v) : k === 'plan' ? (v in PLANS ? v : s[sec][k]) : Number.isFinite(+v) && +v >= 0 ? +v : s[sec][k]
     }
     ensureHome()
     writeJson(at('settings.json'), s)
+    // another router: its balance in the header
+    balanceCache = { at: 0, value: null }
     return reply(res, 200, s)
   }
   if (p === '/api/voices') {

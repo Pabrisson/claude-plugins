@@ -10,7 +10,8 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/
 import { Kbd } from "@/components/ui/kbd"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
-import { api, money, plain, type Kind, type Model, type Settings, type State } from "@/lib/api"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { api, money, plain, ROUTER_NAME, type Kind, type Model, type Router, type Settings, type State } from "@/lib/api"
 import { Chips } from "@/components/chips"
 import { capsOf, ModelPicker, NewBadge, shortName } from "@/components/model-picker"
 import { ModelLogo } from "@/components/model-logo"
@@ -19,9 +20,16 @@ import { Main, Side } from "@/components/pages"
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 const PROVIDERS = [
+  { id: "kie", name: "Kie.ai", unit: "usd", what: "Images, videos and voices, its credits counted" },
   { id: "openrouter", name: "OpenRouter", unit: "usd", what: "Images, videos and voices" },
   { id: "elevenlabs", name: "ElevenLabs", unit: "credits", what: "Change voice and Translate" },
 ] as const
+// the routers, one active at a time (Kie by default): what each is, and its rate limit (OpenRouter's docs; Kie's docs and a probe,
+// 2026-10-31)
+const ROUTERS: { id: Router; about: string; limit: string }[] = [
+  { id: "kie", about: "Many labs through one key, billed in credits ($0.005 each) and shown in USD from its price list. Often cheaper; Seedance 2.5 edits a video here, in 1080p.", limit: "20 new generations every 10 s for the account: past that, the next ones wait their turn here." },
+  { id: "openrouter", about: "Many labs through one key, billed in USD. A video or a voice reaches it by a tunnel opened for the job.", limit: "No request cap on paid models: when a model's own limit answers, the job waits the time it asks and tries again." },
+]
 type Provider = (typeof PROVIDERS)[number]["id"]
 type Limit = { on: boolean; text: string }
 const LIMITS = PROVIDERS.flatMap((p) => (["threshold", "cap"] as const).map((k) => `${p.id}.${k}`))
@@ -73,11 +81,12 @@ function Row({ title, about, htmlFor, children }: { title: string; about: React.
 export function SettingsPage({ state, models, onSaved, onModels }: { state: State; models: Partial<Record<Kind, Model[]>>; onSaved: () => void; onModels: () => void }) {
   const saved = state.settings
   const [plan, setPlan] = useState(saved.elevenlabs.plan)
+  const [router, setRouter] = useState<Router>(saved.router.active)
   const [defaults, setDefaults] = useState(saved.defaults)
   const [limits, setLimits] = useState(() => typed(saved))
   const [busy, setBusy] = useState(false)
-  const [at, setAt] = useState("spending")
-  // OpenRouter's catalog read on a click: its loader, then the models it found that time (null before any click)
+  const [at, setAt] = useState("router")
+  // the active router's catalog read on a click: its loader, then the models it found that time (null before any click)
   const [checking, setChecking] = useState(false)
   const [found, setFound] = useState<string[] | null>(null)
   const added = KINDS.flatMap((k) => (models[k] ?? []).filter((m) => m.new))
@@ -93,7 +102,7 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
       const r = await api.refreshModels()
       const ids = Object.values(r.added).flat().filter((m) => m.found).map((m) => m.id)
       setFound(ids)
-      toast.success(ids.length ? `${ids.length} new model${ids.length > 1 ? "s" : ""} from OpenRouter` : "The model list is up to date")
+      toast.success(ids.length ? `${ids.length} new model${ids.length > 1 ? "s" : ""} from ${ROUTER_NAME[saved.router.active]}` : "The model list is up to date")
       onModels()
       document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "nearest" })
     } catch (e) {
@@ -104,11 +113,13 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
   }
 
   const next: Omit<Settings, "workspace"> = {
+    router: { active: router },
     openrouter: { threshold: amount(limits["openrouter.threshold"]), cap: amount(limits["openrouter.cap"]) },
+    kie: { threshold: amount(limits["kie.threshold"]), cap: amount(limits["kie.cap"]) },
     elevenlabs: { threshold: amount(limits["elevenlabs.threshold"]), cap: amount(limits["elevenlabs.cap"]), plan },
     defaults,
   }
-  const dirty = JSON.stringify(next) !== JSON.stringify({ openrouter: { threshold: saved.openrouter.threshold, cap: saved.openrouter.cap }, elevenlabs: { threshold: saved.elevenlabs.threshold, cap: saved.elevenlabs.cap, plan: saved.elevenlabs.plan }, defaults: saved.defaults })
+  const dirty = JSON.stringify(next) !== JSON.stringify({ router: { active: saved.router.active }, openrouter: { threshold: saved.openrouter.threshold, cap: saved.openrouter.cap }, kie: { threshold: saved.kie.threshold, cap: saved.kie.cap }, elevenlabs: { threshold: saved.elevenlabs.threshold, cap: saved.elevenlabs.cap, plan: saved.elevenlabs.plan }, defaults: saved.defaults })
   const invalid = LIMITS.some((k) => wrong(limits[k]))
 
   async function save() {
@@ -116,7 +127,11 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
     setBusy(true)
     try {
       await api.settings(next)
-      toast.success("Settings saved")
+      // another router: its models in every list
+      if (router !== saved.router.active) {
+        toast.success(`${ROUTER_NAME[router]} is now the router: the tools show its models`)
+        onModels()
+      } else toast.success("Settings saved")
       onSaved()
     } catch (e) {
       toast.error(plain((e as Error).message))
@@ -136,18 +151,22 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
   })
 
   const put = (k: string, patch: Partial<Limit>) => setLimits((l) => ({ ...l, [k]: { ...l[k], ...patch } }))
-  const noLimits = PROVIDERS.every((p) => !limits[`${p.id}.threshold`].on && !limits[`${p.id}.cap`].on)
+  // the spending of the router picked here and ElevenLabs'
+  const spending = PROVIDERS.filter((p) => p.id === router || p.id === "elevenlabs")
+  const noLimits = spending.every((p) => !limits[`${p.id}.threshold`].on && !limits[`${p.id}.cap`].on)
+  const name = ROUTER_NAME[saved.router.active]
   const keys = [
-    { set: state.keys.openrouter, name: "OpenRouter key", about: "Every image, video and voice model. Without it, prices show and nothing can be generated." },
+    { set: state.keys.kie, name: "Kie.ai key", about: "Every image, video and voice model while Kie.ai is the router, and its credits left." },
+    { set: state.keys.openrouter, name: "OpenRouter key", about: "Every image, video and voice model while OpenRouter is the router. Without it, prices show and nothing can be generated." },
     { set: state.keys.management, name: "OpenRouter management key", about: "Optional: the account's whole balance in the header, not only this key's." },
     { set: state.keys.elevenlabs, name: "ElevenLabs key", about: "Change voice and Translate, and the credits left." },
   ]
   const nav = [
+    { id: "router", icon: RouterIcon, title: "Router", status: `${name} active${state.catalog.at ? ` · list ${ago(state.catalog.at)}` : ""}`, warn: !state.keys[router] },
     { id: "spending", icon: WalletIcon, title: "Spending", status: noLimits ? "No limit set" : "Limits set", warn: noLimits },
-    { id: "openrouter", icon: RouterIcon, title: "OpenRouter", status: state.catalog.at ? `${state.catalog.added} model${state.catalog.added === 1 ? "" : "s"} added · ${ago(state.catalog.at)}` : "Model list not checked", warn: false },
     { id: "plan", icon: WalletIcon, title: "ElevenLabs plan", status: plan ? cap(plan) : "Not set", warn: false },
     { id: "models", icon: LayersIcon, title: "Default models", status: KINDS.some((k) => defaults[k]) ? `${KINDS.filter((k) => defaults[k]).length} of 3 set` : "The tools' choice", warn: false },
-    { id: "keys", icon: KeyRoundIcon, title: "API keys", status: `${keys.filter((k) => k.set).length} of 3 set`, warn: !state.keys.openrouter },
+    { id: "keys", icon: KeyRoundIcon, title: "API keys", status: `${keys.filter((k) => k.set).length} of ${keys.length} set`, warn: !state.keys[saved.router.active] },
   ]
 
   return (
@@ -176,8 +195,86 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
 
       <Main title="Settings">
         <div className="flex max-w-4xl flex-col gap-5 pb-4">
+          <Section id="router" icon={RouterIcon} title="Router" about="Where every image, video and voice is made. One router at a time: the tools show its models, priced by it.">
+            <div className="px-5 py-4">
+              <RadioGroup value={router} onValueChange={(v) => setRouter(v as Router)} className="grid gap-3 md:grid-cols-2" aria-label="Active router">
+                {ROUTERS.map((r) => (
+                  <FieldLabel key={r.id} htmlFor={`router-${r.id}`}>
+                    <Field orientation="horizontal" className="items-start">
+                      <RadioGroupItem value={r.id} id={`router-${r.id}`} className="mt-0.5" />
+                      <FieldContent>
+                        <FieldTitle>
+                          {ROUTER_NAME[r.id]}
+                          {saved.router.active === r.id && <Badge variant="secondary">Active</Badge>}
+                          <Badge variant="outline" className={cn(state.keys[r.id] ? "text-done" : "text-cost")}>{state.keys[r.id] ? "Key set" : "No key"}</Badge>
+                        </FieldTitle>
+                        <FieldDescription>{r.about}</FieldDescription>
+                        <FieldDescription className="text-xs">Rate limit: {r.limit}</FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  </FieldLabel>
+                ))}
+              </RadioGroup>
+              {router !== saved.router.active && (
+                <p className="mt-3 text-xs text-muted-foreground">Save to switch to {ROUTER_NAME[router]}{!state.keys[router] && ": without its key, prices show and nothing can be generated"}.</p>
+              )}
+            </div>
+            <Row
+              title={`${name}'s model list`}
+              about={saved.router.active === "kie"
+                ? "The list kept with media-generator, plus the models Kie adds (read from its docs), and its prices from its price list: read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."
+                : "The list kept with media-generator, plus the models OpenRouter adds to its catalog, read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."}
+            >
+              <Button variant="outline" disabled={checking} onClick={updateModels} className="self-start" aria-busy={checking || undefined}>
+                {checking ? <LoaderCircleIcon className="animate-spin" aria-hidden /> : <RefreshCwIcon aria-hidden />}
+                {checking ? "Updating the list…" : "Update the list"}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {state.catalog.at ? `Checked ${ago(state.catalog.at)}` : "Not checked yet"}
+                {state.catalog.prices_at ? ` · prices ${ago(state.catalog.prices_at)}` : ""}
+              </span>
+            </Row>
+            <div id="catalog" className="scroll-mt-5 px-5 py-4">
+              <div className="mb-2 flex items-baseline gap-2">
+                <span className="text-sm font-medium">Added from {name}'s catalog</span>
+                {loaded && <span className="text-xs text-muted-foreground tabular-nums">{added.length}</span>}
+                {found && <span className="ml-auto text-xs text-muted-foreground">{found.length ? `${found.length} found just now` : "Nothing new just now"}</span>}
+              </div>
+              {!loaded ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> Loading the models…</p>
+              ) : !added.length ? (
+                <p className="text-sm text-muted-foreground">None: the list already has every model of the catalog.</p>
+              ) : (
+                <ul className="divide-y rounded-lg border">
+                  {added.map((m) => (
+                    <li key={m.id} className={cn("flex items-center gap-3 px-3 py-2", found?.includes(m.id) && "bg-space/5")}>
+                      <ModelLogo model={m.model} lab={m.lab} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium">{shortName(m)}</span>
+                          {found?.includes(m.id) && <NewBadge>Just added</NewBadge>}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {[m.lab, KIND_NAME[m.kind] ?? m.kind, ["edit", "upscale"].includes(m.role) && `${m.role} only`, ...capsOf(m)].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      {m.from && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{m.from}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {loaded && added.length > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {saved.router.active === "kie"
+                    ? "Read from Kie's docs: their price is not on its list yet, so each asks for your yes, and the reference images a video model takes are unknown."
+                    : "Their prices are OpenRouter's, never measured here, and the reference images a video model takes are unknown."}
+                </p>
+              )}
+            </div>
+          </Section>
+
           <Section id="spending" icon={WalletIcon} title="Spending" about="Each provider in its own unit. Off means never: every click on a paid button spends.">
-            {PROVIDERS.map((p) => {
+            {spending.map((p) => {
               const t = limits[`${p.id}.threshold`], c = limits[`${p.id}.cap`]
               const spent = state.month[p.id], usd = p.unit === "usd"
               const show = (n: number) => money(n, p.unit)
@@ -240,49 +337,6 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
             })}
           </Section>
 
-          <Section id="openrouter" icon={RouterIcon} title="OpenRouter" about="The image, video and voice models of many labs, through one key.">
-            <Row title="Model list" about="The list kept with media-generator, plus the models OpenRouter adds to its catalog, read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create.">
-              <Button variant="outline" disabled={checking} onClick={updateModels} className="self-start" aria-busy={checking || undefined}>
-                {checking ? <LoaderCircleIcon className="animate-spin" aria-hidden /> : <RefreshCwIcon aria-hidden />}
-                {checking ? "Updating the list…" : "Update the list"}
-              </Button>
-              <span className="text-xs text-muted-foreground">{state.catalog.at ? `Checked ${ago(state.catalog.at)}` : "Not checked yet"}</span>
-            </Row>
-            <div id="catalog" className="scroll-mt-5 px-5 py-4">
-              <div className="mb-2 flex items-baseline gap-2">
-                <span className="text-sm font-medium">Added from OpenRouter's catalog</span>
-                {loaded && <span className="text-xs text-muted-foreground tabular-nums">{added.length}</span>}
-                {found && <span className="ml-auto text-xs text-muted-foreground">{found.length ? `${found.length} found just now` : "Nothing new just now"}</span>}
-              </div>
-              {!loaded ? (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> Loading the models…</p>
-              ) : !added.length ? (
-                <p className="text-sm text-muted-foreground">None: the list already has every model of the catalog.</p>
-              ) : (
-                <ul className="divide-y rounded-lg border">
-                  {added.map((m) => (
-                    <li key={m.id} className={cn("flex items-center gap-3 px-3 py-2", found?.includes(m.id) && "bg-space/5")}>
-                      <ModelLogo model={m.model} lab={m.lab} />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1.5">
-                          <span className="truncate text-sm font-medium">{shortName(m)}</span>
-                          {found?.includes(m.id) && <NewBadge>Just added</NewBadge>}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {[m.lab, KIND_NAME[m.kind] ?? m.kind, ["edit", "upscale"].includes(m.role) && `${m.role} only`, ...capsOf(m)].filter(Boolean).join(" · ")}
-                        </span>
-                      </span>
-                      {m.from && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{m.from}</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {loaded && added.length > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">Their prices are OpenRouter's, never measured here, and the reference images a video model takes are unknown.</p>
-              )}
-            </div>
-          </Section>
-
           <Section id="plan" icon={WalletIcon} title="ElevenLabs plan" about="Your plan prices ElevenLabs' credits in USD, everywhere a cost shows.">
             <Row title="Plan" about="USD per 1,000 credits. Not set: costs show in credits only.">
               <Chips
@@ -338,6 +392,7 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
               variant="ghost"
               onClick={() => {
                 setPlan(saved.elevenlabs.plan)
+                setRouter(saved.router.active)
                 setDefaults(saved.defaults)
                 setLimits(typed(saved))
               }}

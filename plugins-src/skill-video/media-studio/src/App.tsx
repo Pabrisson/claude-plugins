@@ -8,7 +8,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Switch } from "@/components/ui/switch"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
-import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, type Balances, type Clip, type Job, type Kind, type Model, type Page, type Place, type State, type Tool } from "@/lib/api"
+import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, ROUTER_NAME, type Balances, type Clip, type Job, type Kind, type Model, type Page, type Place, type State, type Tool } from "@/lib/api"
 import { endOf, freeze, inside, isStill, lay, marginsTo, place, placeOf, voiceUnder } from "@/lib/timeline"
 import { Chips } from "@/components/chips"
 import { blank, Composer, type Compose } from "@/components/composer"
@@ -204,9 +204,14 @@ function Dashboard() {
       const raw = !!job.raw && tool?.template !== "{prompt}"
       setCompose((c) => ({
         ...c,
-        [job.kind]: { tool: job.tool, model: job.provider === "openrouter" ? `openrouter:${job.model}` : undefined, intent: raw ? "" : intent, raw, rawText: raw ? intent : "", fields: job.fields ?? {}, inputs, params: job.params ?? {}, place: at },
+        [job.kind]: { tool: job.tool, model: job.provider === "local" ? undefined : `${job.provider}:${job.model}`, intent: raw ? "" : intent, raw, rawText: raw ? intent : "", fields: job.fields ?? {}, inputs, params: job.params ?? {}, place: at },
       }))
       return setPage(job.kind)
+    }
+    // a draft's final (Seedance 2.5 on Kie): Custom on its model, from the draft, nothing else to fill
+    if (b === "final") {
+      setCompose((c) => ({ ...c, video: { ...blank("video", "free"), model: `${job.provider}:${job.model}`, params: { draft_of: job.id }, place: at } }))
+      return setPage("video")
     }
     // a new Element of a result: a References sheet brings its whole set and the photos it was made from
     if (b === "element") {
@@ -402,7 +407,7 @@ function Dashboard() {
       ) : page === "credits" ? (
         <Credits state={state} balances={balances} onBridge={bridge} />
       ) : (
-        <SettingsPage key={JSON.stringify(state.settings)} state={state} models={models} onSaved={refresh} onModels={() => (setModels({}), refresh())} />
+        <SettingsPage key={JSON.stringify(state.settings)} state={state} models={models} onSaved={refresh} onModels={() => (setModels({}), api.tools().then(setTools, () => {}), refresh())} />
       )}
       <DropToLibrary onAdded={refresh} />
     </div>
@@ -485,7 +490,7 @@ function DropToLibrary({ onAdded }: { onAdded: () => void }) {
 
 function Header({ state, balances, onChanged }: { state: State; balances: Balances | null; onChanged: () => void }) {
   const { resolvedTheme, setTheme } = useTheme()
-  const ob = balances?.openrouter, eb = balances?.elevenlabs
+  const ob = balances?.openrouter, kb = balances?.kie, eb = balances?.elevenlabs
   const folder = state.home.split("/").filter(Boolean).pop()
   return (
     <header className="col-span-full flex items-center gap-3 border-b px-4">
@@ -505,8 +510,13 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
       <span className="text-muted-foreground/50" aria-hidden>/</span>
       <WorkspaceMenu state={state} onChanged={onChanged} />
       <span className="flex-1" />
-      <Balance name="OpenRouter">
-        {!state.keys.openrouter ? <span className="text-muted-foreground">no key</span>
+      {/* the active router's balance: Kie's in credits, their dollars beside */}
+      <Balance name={ROUTER_NAME[state.router]}>
+        {!state.keys[state.router] ? <span className="text-muted-foreground">no key</span>
+          : state.router === "kie"
+            ? !kb ? <span className="text-muted-foreground">…</span>
+              : kb.error ? <span className="text-muted-foreground">unavailable</span>
+              : <><b className="font-semibold tabular-nums">{(kb.credits ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</b><small className="text-muted-foreground">credits · ${(kb.account_left ?? 0).toFixed(2)}</small></>
           : !ob ? <span className="text-muted-foreground">…</span>
           : ob.error ? <span className="text-muted-foreground">unavailable</span>
           : ob.account_left != null ? <><b className="font-semibold tabular-nums">${ob.account_left.toFixed(2)}</b><small className="text-muted-foreground">left</small></>

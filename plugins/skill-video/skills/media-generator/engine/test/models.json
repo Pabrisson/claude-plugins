@@ -2,7 +2,8 @@
   "about": "The tests' models, in the shape of providers/openrouter-models.json (MEDIA_GENERATOR_MODELS)",
   "updated": "2026-10-30",
   "image": [
-    { "id": "fake/img", "lab": "Fake", "name": "Image", "role": "both", "resolutions": ["1K", "2K"], "aspect_ratios": ["1:1", "16:9"], "max_images": 4, "references": 4, "quality": null, "background": null, "seed": false,
+    { "id": "fake/img", "lab": "Fake", "name": "Image", "role": "both", "resolutions": ["1K", "2K"], "aspect_ratios": ["1:1", "16:9"], "max_images": 4, "references": 8, "quality": null, "background": null, "seed": false,
+      "options": [{ "key": "output_format", "values": ["png", "webp"], "default": "png" }, "output_compression"],
       "pricing": [[{ "billable": "output_image", "unit": "image", "cost_usd": 0.04 }]] },
     { "id": "fake/noprice", "lab": "Fake", "name": "No price", "role": "both", "resolutions": ["1K", "2K"], "aspect_ratios": ["1:1", "16:9"], "max_images": 4, "references": 4, "quality": null, "background": null, "seed": false,
       "pricing": [[]] },
@@ -11,6 +12,7 @@
   ],
   "video": [
     { "id": "fake/vid", "lab": "Fake", "name": "Video", "role": "generate", "resolutions": ["720p", "1080p"], "aspect_ratios": ["9:16", "1:1", "16:9"], "durations": [5, 10],
+      "slug": "fakelab", "options": ["negative_prompt", "cfg_scale"],
       "frames": ["first_frame", "last_frame"], "references": 3, "sound": true, "seed": true, "upscale": null, "pricing": { "duration_seconds_with_audio": 0.12, "duration_seconds_without_audio": 0.1 } },
     { "id": "fake/avatar-iv", "lab": "Fake", "name": "Avatar", "role": "avatar", "resolutions": ["720p", "1080p"], "aspect_ratios": null, "durations": null,
       "frames": [], "references": 1, "sound": false, "seed": false, "upscale": null, "pricing": { "duration_seconds": 0.05 } },

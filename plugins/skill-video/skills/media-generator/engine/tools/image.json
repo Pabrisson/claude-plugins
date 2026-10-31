@@ -5,7 +5,7 @@
     "inputs": [{ "key": "references", "kind": "image", "label": "References", "optional": true, "multiple": true }],
     "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": ". Rendered in the style of {}" }],
     "template": "{prompt} {style}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image", "recraft/recraft-v4-styles", "recraft/recraft-v4-styles-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image", "recraft/recraft-v4-styles", "recraft/recraft-v4-styles-pro"]
   },
   {
     "id": "cinematic-camera", "label": "Cinematic camera", "group": "Camera", "mode": "create", "icon": "camera",
@@ -156,7 +156,7 @@
       { "label": "Landscape from above", "group": "Nature", "note": "Top down, everything sharp", "fields": { "body": "ARRI Alexa 65", "lens": "premium modern spherical prime", "focal": "18mm", "aperture": "f/11", "shot": "extreme wide shot", "angle": "bird's-eye view from directly above", "lighting": "golden hour sunlight, long warm shadows", "grade": "saturated Fuji Velvia colors" } }
     ],
     "template": "{prompt}. {body}, {lens}, {focal}, {aperture}: matching depth of field, perspective and lens rendering. {shot}, {angle}. {lighting}. {grade}. {era}. {genre}. A cinematic, photorealistic film still.",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "character", "label": "Character references", "group": "References", "mode": "create", "icon": "user", "element": "character",
@@ -176,7 +176,7 @@
       { "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": "Rendered in the style of {}." }
     ],
     "template": "Character reference sheet: {sheets}. {who} {references} {sheet} Plain light gray studio background, soft even light, no text, no labels, no props. {style} {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "outfit", "label": "Outfit references", "group": "References", "mode": "create", "icon": "shirt", "element": "outfit",
@@ -196,7 +196,7 @@
       { "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": "Rendered in the style of {}." }
     ],
     "template": "Outfit reference sheet: {sheets}. {what} {references} {sheet} Plain light gray studio background, soft even light, no text, no labels. {style} {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "object", "label": "Object references", "group": "References", "mode": "create", "icon": "box", "element": "object",
@@ -215,7 +215,7 @@
       { "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": "Rendered in the style of {}." }
     ],
     "template": "Product reference sheet: {sheets}. {what} {references} {sheet} Plain white seamless background, soft even studio light, no added text or labels. {style} {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "location", "label": "Location references", "group": "References", "mode": "create", "icon": "map-pin", "element": "location",
@@ -235,7 +235,7 @@
       { "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": "Rendered in the style of {}." }
     ],
     "template": "Location reference sheet: {sheets}. {what} {references} {sheet} Consistent architecture, materials and light direction, no text, no labels. {style} {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "pose", "label": "Pose references", "group": "References", "mode": "create", "icon": "person-standing", "element": "pose",
@@ -253,7 +253,7 @@
       ] }
     ],
     "template": "Pose reference: {sheets}. {what} {references} {sheet} Plain light gray background, soft even light, no text. {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "product-shot", "label": "Product shot", "group": "Product", "mode": "create", "icon": "package",
@@ -264,7 +264,7 @@
       { "key": "angle", "label": "Angle", "type": "choice", "options": ["front", "three-quarter", "top-down", "close-up"], "default": "three-quarter" }
     ],
     "template": "Professional product photo of the product in the reference images, exact shape, colors and labels kept: {set}, {angle} view. {prompt}",
-    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-3-pro-image"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0"]
   },
   {
     "id": "free-edit", "label": "Custom edit", "group": "Custom", "mode": "edit", "icon": "wand",
@@ -275,7 +275,7 @@
     ],
     "fields": [],
     "template": "Edit the first image: {prompt}. Keep everything else identical.",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "restyle", "label": "Restyle", "group": "Style", "mode": "edit", "icon": "paintbrush",
@@ -283,7 +283,7 @@
     "inputs": [{ "key": "image", "kind": "image", "label": "Image" }, { "key": "references", "kind": "image", "label": "Characters", "optional": true, "multiple": true, "phrase": "The people, products and clothes of {} keep their exact identity, redrawn in the same style." }],
     "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "styles", "default": "Hand-painted cel" }],
     "template": "Redraw the first image in the style of {style}. Keep its composition, framing, poses, expressions and every element in place; only the look changes. {references} {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst", "bytedance-seed/seedream-5-0-pro", "black-forest-labs/flux-3-image"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "relight", "label": "Relight", "group": "Light & color", "mode": "edit", "icon": "sun",
@@ -309,7 +309,7 @@
       ] }
     ],
     "template": "Relight the first image with {light}. {references} Shadows, highlights and reflections follow the new light; subject, pose, framing and background stay identical. {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "inpaint", "label": "Inpaint", "group": "Retouch", "mode": "edit", "icon": "brush",
@@ -330,7 +330,7 @@
     ],
     "one_of": ["change", "element", "references"],
     "template": "The second image is the first with an area painted over in translucent magenta. Change only that area: {change} {element}. {references} No magenta in the result; everything outside the area stays identical. {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"],
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"],
     "local": "paste"
   },
   {
@@ -339,7 +339,9 @@
     "inputs": [{ "key": "image", "kind": "image", "label": "Image" }],
     "fields": [],
     "template": "Upscale this image to high resolution: same content, composition and colors, sharper detail and texture, no new elements. {prompt}",
-    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-lite"],
+    "models": ["google/gemini-nano-banana-2.1", "bytedance-seed/seedream-5-0-lite"],
+    "kie": { "models": ["topaz/image-upscale", "google/gemini-nano-banana-2.1", "bytedance-seed/seedream-5-0-lite"] },
+    "why": {"google/gemini-nano-banana-2.1": "Redraws the image at 4K, at a low price", "bytedance-seed/seedream-5-0-lite": "4K at the lowest price"},
     "params": { "resolution": "4K" }
   },
   {
@@ -351,7 +353,7 @@
     ],
     "fields": [],
     "template": "Replace the face of the person in the first image with {face}. Keep the first image's pose, expression, lighting, skin tone match, hair and background. {prompt}",
-    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro", "openai/gpt-image-2.5-sunburst"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "character-swap", "label": "Character swap", "group": "Characters", "mode": "edit", "icon": "users",
@@ -366,7 +368,7 @@
       { "key": "who", "label": "Which person", "type": "text", "optional": true, "phrase": "({})", "placeholder": "the woman on the left" }
     ],
     "template": "Replace the person {who} in the first image {character} {references}: their face, hair, body and outfit, in the same pose, place and lighting. {prompt}",
-    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "expand", "label": "Expand", "group": "Retouch", "mode": "edit", "icon": "expand",
@@ -380,7 +382,7 @@
       { "key": "beyond", "label": "What's beyond", "type": "text", "placeholder": "more of the beach and the sky" }
     ],
     "template": "The image sits on a larger canvas with flat gray margins. Fill the gray margins by continuing the scene naturally ({beyond}), with the same perspective, light, grain and colors. {references} The original picture stays untouched where it is; no gray, border or seam is left. {prompt}",
-    "models": ["google/gemini-3-pro-image", "openai/gpt-image-2.5-sunburst"],
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"],
     "local": "expand"
   },
   {
@@ -399,7 +401,7 @@
         { "value": "the camera facing the subject, lowered 35° below eye level, looking up", "label": "Low angle", "cam": { "az": 0, "el": -35, "zoom": 0 } }
       ] }],
     "template": "The same scene, same subject and moment, from a new camera position: {angle}. {references} Consistent identity, outfit, lighting and place. {prompt}",
-    "models": ["google/gemini-3-pro-image", "bytedance-seed/seedream-5-0-pro"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "edit-text", "label": "Edit text", "group": "Retouch", "mode": "edit", "icon": "type",
@@ -410,7 +412,7 @@
       { "key": "new", "label": "New text", "type": "text", "placeholder": "WINTER SALE" }
     ],
     "template": "Replace the text \"{old}\" with \"{new}\" in the same font, size, color, perspective and place. {references} Nothing else changes. {prompt}",
-    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-3-pro-image"]
+    "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "bytedance-seed/seedream-5-0-pro"]
   },
   {
     "id": "remove-background", "label": "Remove background", "group": "Retouch", "mode": "edit", "icon": "scissors",
@@ -419,6 +421,8 @@
     "fields": [],
     "template": "Cut out the main subject of the image on a fully transparent background, clean edges, the subject unchanged. {prompt}",
     "models": ["openai/gpt-image-2.5-sunburst", "openai/gpt-image-2.5-flare"],
+    "kie": { "models": ["recraft/remove-background", "openai/gpt-image-2.5-flare", "openai/gpt-image-2.5-sunburst"] },
+    "why": {"openai/gpt-image-2.5-sunburst": "#1 in editing, a transparent background", "openai/gpt-image-2.5-flare": "#3 in editing, a transparent background"},
     "params": { "background": "transparent" }
   }
 ]

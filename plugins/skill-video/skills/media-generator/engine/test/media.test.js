@@ -15,6 +15,8 @@ const fake = await startFake(home)
 const catalogFile = path.join(home, 'catalog.json')
 fs.writeFileSync(catalogFile, JSON.stringify({ at: new Date().toISOString(), image: [], video: [], speech: [] }))
 const env = { ...process.env, MEDIA_GENERATOR_DIR: home, MEDIA_GENERATOR_MODELS: path.join(path.dirname(engine), 'test', 'models.json'), MEDIA_GENERATOR_CATALOG: catalogFile, OPENROUTER_BASE: `${fake.base}/api/v1`, OPENROUTER_API_KEY: 'k-test', OPENROUTER_MANAGEMENT_KEY: 'k-mgmt',
+  // no Kie key: OpenRouter is the router by default
+  KIE_API_KEY: '',
   ELEVENLABS_BASE: `${fake.base}/el`, ELEVENLABS_API_KEY: 'k-el', MEDIA_GENERATOR_POLL: '20', VIDEO_EDITOR_POLL: '20',
   // the fake cloudflared first, and the fake public DNS
   PATH: `${fake.bin}${path.delimiter}${process.env.PATH}`, MEDIA_GENERATOR_DOH: `${fake.base}/dns-query` }
@@ -33,6 +35,9 @@ const sent = route => fake.calls.filter(c => c.path === route).at(-1)
 const media = () => (fs.existsSync(at('media')) ? fs.readdirSync(at('media')) : [])
 const probe = f => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,width,height:format=duration', '-of', 'json', f], { encoding: 'utf8' }))
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=64x64', '-frames:v', '1', at('a.png')])
+// an Element of images takes 2 at least: a second view, a third to drop one
+for (const [c, f] of [['green', 'b.png'], ['red', 'c.png']]) execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `color=${c}:s=64x64`, '-frames:v', '1', at(f)])
+const two = () => [at('a.png'), at('b.png')]
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=3', '-f', 'lavfi', '-i', 'sine=d=3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', at('talk.mp4')])
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', at('long.mp4')])
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=2', at('voice.mp3')])
@@ -43,7 +48,7 @@ test('the catalogs: tools from the engine, models from its own list in one shape
   assert.match(t.out, /video dolly-zoom-in \(create, Camera\)/)
   assert.match(t.out, /--field speed=slow\|steady\|fast/)
   const m = await cli('models', 'video')
-  assert.match(m.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s, 720p\/1080p, first_frame\+last_frame, audio, 3 refs\]/)
+  assert.match(m.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s, 720p\/1080p, first_frame\+last_frame, audio, 3 refs, options negative_prompt cfg_scale\]/)
   assert.ok(!fake.calls.some(c => c.path.includes('models')), 'no catalog request')
 })
 
@@ -56,10 +61,10 @@ test('OpenRouter\'s catalog: new models added once a day, the list kept for its 
   assert.match(v.out, /openrouter:fake\/new-vid {2}NewLab: New Video {2}\[3–5 s, 480p\/720p, first_frame\] {2}new, from the catalog, \$0\.015 for 3 s at 480p/)
   assert.match(v.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s/, 'the list wins for a model it has')
   assert.match(v.out, /openrouter:fake\/new-edit {2}NewLab: New Edit {2}\[edit\]/, 'no length of its own: it takes a video')
-  assert.match(v.out, /plus 2 new from OpenRouter's catalog/)
+  assert.match(v.out, /plus 2 new from its catalog/)
   const c = JSON.parse(fs.readFileSync(file, 'utf8'))
   assert.deepEqual(c.image.map(m => m.id), ['fake/new-img'], 'the unserved one waits')
-  assert.deepEqual(c.image[0], { id: 'fake/new-img', lab: 'NewLab', name: 'New Image', role: 'both', resolutions: ['1K', '4K'], aspect_ratios: ['9:16', '1:1', '16:9', 'auto'], max_images: 4, references: 6, quality: null, background: null, seed: true,
+  assert.deepEqual(c.image[0], { id: 'fake/new-img', lab: 'NewLab', name: 'New Image', role: 'both', resolutions: ['1K', '4K'], aspect_ratios: ['9:16', '1:1', '16:9', 'auto'], max_images: 4, references: 6, quality: null, background: null, seed: true, options: [],
     pricing: [[{ billable: 'output_image', unit: 'image', cost_usd: 0.05 }, { billable: 'output_image', unit: 'image', cost_usd: 0.2, variant: '4k' }]] })
   assert.deepEqual(c.speech.map(m => [m.id, m.voices]), [['fake/new-tts', ['ava', 'max']]])
   // within the day: the cache, no request; a new model runs like the list's
@@ -100,7 +105,9 @@ test('the shipped model list is normalized', () => {
   for (const kind of Object.keys(keys)) {
     assert.ok(list[kind].length > 0, kind)
     for (const m of list[kind]) {
-      assert.deepEqual(Object.keys(m), keys[kind], m.id)
+      // its provider's slug, its own settings and the ones it leaves out, when it has some, before its prices
+      assert.deepEqual(Object.keys(m).filter(k => !['slug', 'options', 'skip'].includes(k)), keys[kind], m.id)
+      assert.deepEqual(Object.keys(m).slice(-1), ['pricing'], m.id)
       assert.ok(roles[kind].includes(m.role), `${m.id}: role ${m.role}`)
       if (m.resolutions) (assert.ok(m.resolutions.every(r => RES.includes(r)), `${m.id}: ${m.resolutions}`), sorted(m.resolutions, r => RES.indexOf(r)))
       if (m.aspect_ratios) sorted(m.aspect_ratios, ratio)
@@ -142,9 +149,10 @@ test('a tool: its template filled from the fields, its inputs sent in order', as
   const miss = await cli('image', '--tool', 'face-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`)
   assert.match(miss.err, /Face swap needs face \(--in face=<file>\)/)
   // an @Element brings its images
-  assert.match((await cli('elements', 'add', 'Lulu', at('a.png'))).out, /@Lulu: other, 1 image$/m)
+  assert.match((await cli('elements', 'add', 'Lulu', at('a.png'))).err, /an Element takes 2 images at least, @Lulu would have 1: add a second one/)
+  assert.match((await cli('elements', 'add', 'Lulu', ...two())).out, /@Lulu: other, 2 images$/m)
   const e = await cli('image', '--prompt', '@Lulu in a café', '--model', 'fake/img', '--estimate')
-  assert.equal(JSON.parse(e.out).prompt, 'Lulu (shown in the first image) in a café')
+  assert.equal(JSON.parse(e.out).prompt, 'Lulu (shown in images 1 to 2) in a café')
   // the user's words are optional on a tool with its own prompt, needed on Custom and Custom edit (only a style is not enough)
   assert.equal((await cli('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--estimate')).code, 0)
   for (const argv of [['--tool', 'free-edit', '--in', `image=${at('a.png')}`], ['--field', 'style=Watercolor']])
@@ -155,27 +163,28 @@ test('Elements: typed, from files or results; an @name says what it is and where
   const est = async (...argv) => JSON.parse((await cli(...argv, '--estimate')).out)
   const bad = await cli('elements', 'add', 'Mo', at('a.png'), '--type', 'hero')
   assert.match(bad.err, /the types are character, outfit, object, location, pose, brand, voice, other/)
-  assert.match((await cli('elements', 'add', 'Mo', at('a.png'), '--type', 'character', '--words', 'a tall man, grey beard')).out, /^@Mo: character, 1 image · a tall man, grey beard$/m)
+  assert.match((await cli('elements', 'add', 'Mo', at('a.png'), '--type', 'character')).err, /make another view from it with character \(media\.mjs image --tool character --in references=<its image>/)
+  assert.match((await cli('elements', 'add', 'Mo', ...two(), '--type', 'character', '--words', 'a tall man, grey beard')).out, /^@Mo: character, 2 images · a tall man, grey beard$/m)
   // a result joins it by its generation's id; the same file twice is kept once
   await cli('image', '--prompt', 'a jacket', '--model', 'fake/img', '--spend', '1')
   const jacket = media().filter(d => d.includes('-free-')).sort().at(-1)
-  assert.match((await cli('elements', 'add', 'Veste', '--type', 'outfit', '--from', jacket)).out, /^@Veste: outfit, 1 image$/m)
-  assert.match((await cli('elements', 'add', 'Veste', '--from', jacket)).out, /^@Veste: outfit, 1 image$/m)
+  assert.match((await cli('elements', 'add', 'Veste', at('b.png'), '--type', 'outfit', '--from', jacket)).out, /^@Veste: outfit, 2 images$/m)
+  assert.match((await cli('elements', 'add', 'Veste', '--from', jacket)).out, /^@Veste: outfit, 2 images$/m)
   assert.ok(fs.existsSync(at('elements', 'Veste', `${jacket}-out-1.png`)))
-  assert.match((await cli('elements', 'add', 'Acme', at('a.png'), '--type', 'brand', '--colors', '#0E2A47, #F2B134', '--font', 'Inter')).out, /^@Acme: brand, 1 image · #0E2A47 #F2B134$/m)
+  assert.match((await cli('elements', 'add', 'Acme', ...two(), '--type', 'brand', '--colors', '#0E2A47, #F2B134', '--font', 'Inter')).out, /^@Acme: brand, 2 images · #0E2A47 #F2B134$/m)
   // in the prompt, after the tool's own images, each once; a style of the Library too; an unknown name stays
   await cli('styles', 'add', 'Ink', at('a.png'), '--words', 'thick brush ink')
   const r = await est('image', '--tool', 'free-edit', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--prompt', '@Mo wears @Veste, @Acme on the wall, by @nobody. @Mo smiles')
-  assert.equal(r.prompt, 'Edit the first image: Mo (the character in the second image, a tall man, grey beard) wears Veste (the outfit in the third image), '
-    + 'Acme (the brand in the fourth image: its logo reproduced exactly, its colors #0E2A47, #F2B134, the typeface Inter) on the wall, by @nobody. Mo smiles. Keep everything else identical.')
+  assert.equal(r.prompt, 'Edit the first image: Mo (the character in images 2 to 3, a tall man, grey beard) wears Veste (the outfit in images 4 to 5), '
+    + 'Acme (the brand in images 6 to 7: its logo reproduced exactly, its colors #0E2A47, #F2B134, the typeface Inter) on the wall, by @nobody. Mo smiles. Keep everything else identical.')
   // a style is picked in a Style field, never cited
   assert.equal((await est('image', '--model', 'fake/img', '--prompt', 'a fox in @Ink')).prompt, 'a fox in @Ink')
   // the model's count holds them too
-  assert.match((await cli('image', '--tool', 'free-edit', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--prompt', '@Mo @Veste @Acme @Lulu', '--estimate')).err, /Fake: Image takes 4 reference images, this asks for 5/)
+  assert.match((await cli('image', '--tool', 'free-edit', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--prompt', '@Mo @Veste @Acme @Lulu', '--estimate')).err, /Fake: Image takes 8 reference images, this asks for 9/)
   // a video model counts its reference images apart from its frames
-  assert.match((await est('video', '--model', 'fake/vid', '--prompt', '@Mo runs')).prompt, /^Mo \(the character in the first reference image, a tall man, grey beard\) runs/)
+  assert.match((await est('video', '--model', 'fake/vid', '--prompt', '@Mo runs')).prompt, /^Mo \(the character in reference images 1 to 2, a tall man, grey beard\) runs/)
   // set changes one, show tells all, a voice holds clips and is never cited in words
-  assert.match((await cli('elements', 'set', 'Mo', '--type', 'pose')).out, /^@Mo: pose, 1 image · a tall man, grey beard$/m)
+  assert.match((await cli('elements', 'set', 'Mo', '--type', 'pose')).out, /^@Mo: pose, 2 images · a tall man, grey beard$/m)
   assert.match((await cli('elements', 'set', 'Nope', '--words', 'x')).err, /no Element @Nope/)
   assert.deepEqual(JSON.parse((await cli('elements', 'show', 'Acme')).out).colors, ['#0E2A47', '#F2B134'])
   assert.match((await cli('elements', 'add', 'Narr', at('a.png'), '--type', 'voice')).err, /a.png is not a sound: a voice takes clips/)
@@ -250,6 +259,12 @@ test('a video: a job submitted with its frames and settings (the ratio of its im
   assert.deepEqual([line.estimate, line.actual], [1, 0.6])
   const id = media().find(d => d.includes('dolly'))
   assert.ok(probe(at('media', id, 'out.mp4')).streams.some(s => s.codec_type === 'video'))
+  // the model's own settings go under its provider's slug; an image's at the top level
+  assert.match((await cli('video', '--model', 'fake/vid', '--prompt', 'x', '--option', 'cfg_scale=2', '--estimate')).err, /Prompt adherence \(cfg_scale\) is a number from 0 to 1/)
+  assert.equal((await cli('video', '--model', 'fake/vid', '--prompt', 'a fox', '--option', 'negative_prompt=blur', '--option', 'cfg_scale=0.3', '--spend', '1')).code, 0)
+  assert.deepEqual(sent('/api/v1/videos').body.provider, { options: { fakelab: { parameters: { negative_prompt: 'blur', cfg_scale: 0.3 } } } })
+  assert.equal((await cli('image', '--model', 'fake/img', '--prompt', 'a fox', '--option', 'output_format=webp', '--option', 'output_compression=80', '--spend', '1')).code, 0)
+  assert.deepEqual([sent('/api/v1/images').body.output_format, sent('/api/v1/images').body.output_compression], ['webp', 80])
 })
 
 test('talking avatar: the photo goes as a reference (the model takes no frame), the voice by the tunnel, its length the voice\'s', async () => {
@@ -369,9 +384,9 @@ test('references: the prompt says where an input\'s images are; the model\'s cou
   assert.doesNotMatch((await est('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`)).prompt, /Match the light/)
   const f = await est('image', '--tool', 'face-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--in', `face=${at('a.png')}`, '--in', `face=${at('a.png')}`)
   assert.match(f.prompt, /^Replace the face of the person in the first image with the face of the person in images 2 to 3\./)
-  // Fake: Image takes 4: the source and 4 references are one too many, said before anything is sent
-  const over = await cli('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`, ...Array(4).fill(['--in', `references=${at('a.png')}`]).flat(), '--estimate')
-  assert.match(over.err, /Fake: Image takes 4 reference images, this asks for 5/)
+  // Fake: Image takes 8: the source and 8 references are one too many, said before anything is sent
+  const over = await cli('image', '--tool', 'relight', '--model', 'fake/img', '--in', `image=${at('a.png')}`, ...Array(8).fill(['--in', `references=${at('a.png')}`]).flat(), '--estimate')
+  assert.match(over.err, /Fake: Image takes 8 reference images, this asks for 9/)
   // expand keeps them beside its canvas
   const x = await cli('image', '--tool', 'expand', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--in', `references=${at('a.png')}`, '--field', 'left=0.5', '--spend', '1')
   assert.equal(x.code, 0, x.err)
@@ -427,6 +442,42 @@ test('speech: a voice that only answers PCM is wrapped into an MP3 at its rate; 
   const mp3 = probe(at('media', id, 'out.mp3'))
   assert.ok(mp3.streams.some(s => s.codec_type === 'audio'))
   assert.ok(Math.abs(+mp3.format.duration - 1) < 0.1, `1 s at the rate its type says, not ${mp3.format.duration} s`)
+})
+
+test('ElevenLabs straight, never by the router: its models first, a voice, its options, a dialogue; billed in its credits', async () => {
+  const list = await cli('models', 'audio')
+  assert.match(list.out, /^elevenlabs:eleven_v4 {2}Eleven v4 {2}\[speech, dialogue, audio tags, options stability similarity_boost language_code apply_text_normalization\]$/m)
+  assert.match(list.out, /^elevenlabs:eleven_multilingual_v2 .*options stability similarity_boost style speed use_speaker_boost apply_text_normalization\]$/m)
+  assert.doesNotMatch(list.out, /multilingual_sts/)
+  // Voice's first model, a voice needed; priced a credit a character, half on Turbo
+  assert.match((await cli('audio', '--prompt', 'Bonjour', '--estimate')).err, /pick a voice/)
+  const est = JSON.parse((await cli('audio', '--prompt', 'Bonjour à tous', '--voice', 'v1', '--estimate')).out)
+  assert.deepEqual([est.provider, est.model, est.estimate.amount, est.estimate.unit], ['elevenlabs', 'eleven_v4', 14, 'credits'])
+  assert.equal(JSON.parse((await cli('audio', '--model', 'eleven_v4_turbo', '--prompt', 'Bonjour à tous', '--voice', 'v1', '--estimate')).out).estimate.amount, 7)
+  // its options checked: one the model lacks, a value out of range, a choice by its label
+  assert.match((await cli('audio', '--prompt', 'x', '--voice', 'v1', '--option', 'speed=1.1', '--estimate')).err, /Eleven v4 has no option speed \(its options: stability, similarity_boost, language_code, apply_text_normalization\)/)
+  assert.match((await cli('audio', '--model', 'eleven_multilingual_v2', '--prompt', 'x', '--voice', 'v1', '--option', 'speed=2', '--estimate')).err, /Speed \(speed\) is a number from 0.7 to 1.2/)
+  assert.match((await cli('audio', '--model', 'eleven_flash_v2_5', '--prompt', 'x'.repeat(41), '--voice', 'v1', '--estimate')).err, /reads 40 characters at a time, this text has 41/)
+  const r = await cli('audio', '--model', 'eleven_v3', '--prompt', '[whispers] Bonjour', '--voice', 'v1', '--option', 'stability=Robust', '--option', 'speed=0.9', '--option', 'language_code=fr', '--seed', '7', '--spend', '18')
+  assert.equal(r.code, 0, r.err)
+  const tts = sent('/el/v1/text-to-speech/v1?output_format=mp3_44100_128')
+  assert.deepEqual(tts.body, { model_id: 'eleven_v3', language_code: 'fr', seed: 7, text: '[whispers] Bonjour', voice_settings: { stability: 1, speed: 0.9 } })
+  assert.equal(tts.auth, 'k-el')
+  assert.deepEqual(ledger().at(-1) && [ledger().at(-1).provider, ledger().at(-1).actual, ledger().at(-1).actual_known, ledger().at(-1).unit], ['elevenlabs', 18, true, 'credits'])
+  // no option asked, no voice settings sent: the voice's own
+  await cli('audio', '--prompt', 'Salut', '--voice', 'v1', '--spend', '5')
+  assert.equal(sent('/el/v1/text-to-speech/v1?output_format=mp3_44100_128').body.voice_settings, undefined)
+  // a dialogue: its lines and voices, on v4 or v3 only, its settings apart
+  assert.match((await cli('audio', '--model', 'eleven_flash_v2_5', '--line', 'v1: Salut', '--line', 'v2: Bonjour', '--estimate')).err, /speaks one voice: a dialogue goes to Eleven v4 or v3/)
+  const d = await cli('audio', '--line', 'v1: [laughs] Salut !', '--line', 'v2: Bonjour.', '--option', 'stability=0.3', '--spend', '24')
+  assert.equal(d.code, 0, d.err)
+  assert.deepEqual(sent('/el/v1/text-to-dialogue?output_format=mp3_44100_128').body, { model_id: 'eleven_v4', inputs: [{ text: '[laughs] Salut !', voice_id: 'v1' }, { text: 'Bonjour.', voice_id: 'v2' }], settings: { stability: 0.3 } })
+  assert.equal(ledger().at(-1).actual, 24)
+  // a voice of the Library goes whole, put on the account first: this fake plan cannot clone
+  await cli('elements', 'add', 'Lea', at('voice.mp3'), '--type', 'voice')
+  const lib = await cli('audio', '--prompt', 'Bonjour', '--voice', '@Lea', '--spend', '7')
+  assert.match(lib.err, /instant voice cloning/)
+  assert.equal(ledger().at(-1).actual, 0)
 })
 
 test('change voice: through video.mjs and ElevenLabs, in credits; their dollars once a paid plan is set', async () => {
@@ -516,12 +567,15 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.deepEqual((await post('/api/styles', { name: 'Pen', words: 'finer pen' })).body.map(s => [s.files.length, s.words]), [[1, 'finer pen']])
   assert.deepEqual((await post('/api/styles', { name: 'Pen', remove: true })).body, [])
   // the Library's Elements: in the state, made and changed from the page; a voice refused by ElevenLabs says why
-  const made = await post('/api/elements', { name: 'Zoe', type: 'character', words: 'red hair', paths: [at('a.png'), '/etc/hosts'] })
-  assert.deepEqual(made.body.filter(e => e.name === 'Zoe').map(e => [e.type, e.files.length, e.words]), [['character', 1, 'red hair']])
+  assert.equal((await post('/api/elements', { name: 'Zoe', type: 'character', paths: [at('a.png')] })).code, 400)
+  const made = await post('/api/elements', { name: 'Zoe', type: 'character', words: 'red hair', paths: [...two(), at('c.png'), '/etc/hosts'] })
+  assert.deepEqual(made.body.filter(e => e.name === 'Zoe').map(e => [e.type, e.files.length, e.words]), [['character', 3, 'red hair']])
   assert.equal((await post('/api/elements', { name: 'Zoe', type: 'hero' })).code, 400)
   await post('/api/elements', { name: 'Zoe', words: 'short red hair', drop: ['a.png'] })
   const zoe = (await fetch(url + '/api/state').then(r => r.json())).elements.find(e => e.name === 'Zoe')
-  assert.deepEqual([zoe.type, zoe.words, zoe.files.length], ['character', 'short red hair', 0])
+  assert.deepEqual([zoe.type, zoe.words, zoe.files.length], ['character', 'short red hair', 2])
+  // never under 2
+  assert.equal((await post('/api/elements', { name: 'Zoe', drop: ['b.png'] })).code, 400)
   await post('/api/elements', { name: 'Vox', type: 'voice', paths: [at('voice.mp3')] })
   const cloned = await post('/api/elements', { name: 'Vox', elevenlabs: true })
   assert.deepEqual([cloned.code, /instant voice cloning/.test(cloned.body.error)], [400, true])
@@ -529,6 +583,9 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   const spec = { kind: 'image', tool: 'free', model: 'openrouter:fake/img', prompt: 'a lighthouse', inputs: {}, params: { n: 2 } }
   const est = await post('/api/estimate', spec)
   assert.deepEqual([est.body.estimate.amount, est.body.shown, est.body.needs], [0.08, '$0.08', null])
+  // the tool list's price of a voice, before its text: per character, not an error
+  const voice = await post('/api/estimate', { kind: 'audio', tool: 'voice', prompt: '', fields: {}, inputs: {}, params: {}, probe: true })
+  assert.deepEqual([voice.code, voice.body.estimate?.known, voice.body.estimate?.detail], [200, false, 'per character of its text'])
   await post('/api/settings', { openrouter: { threshold: 0.05 } })
   const ask = await post('/api/generate', spec)
   assert.deepEqual([ask.code, ask.body.needs, ask.body.shown], [409, 'threshold', '$0.08'])
@@ -599,10 +656,10 @@ test('workspaces: the Default one from the start, new generations join the curre
   const mine = (await state()).media.filter(j => j.workspaces?.includes('pub-lulu')).map(j => j.id)
   assert.deepEqual(mine.toSorted(), [fox, ...Object.values(imported)].toSorted())
   // a new Element is linked to it; an @name cited by one of its generations links its Element too
-  await post('/api/elements', { name: 'Fox', type: 'character', paths: [at('a.png')] })
+  await post('/api/elements', { name: 'Fox', type: 'character', paths: two() })
   // or to the one asked, or to none
-  await post('/api/elements', { name: 'Owl', type: 'character', paths: [at('a.png')], workspace: 'default' })
-  await post('/api/elements', { name: 'Elk', type: 'character', paths: [at('a.png')], workspace: null })
+  await post('/api/elements', { name: 'Owl', type: 'character', paths: two(), workspace: 'default' })
+  await post('/api/elements', { name: 'Elk', type: 'character', paths: two(), workspace: null })
   const linked = (await state()).workspaces
   assert.deepEqual([linked.find(w => w.slug === 'pub-lulu').elements, linked.find(w => w.slug === 'default').elements.filter(n => ['Owl', 'Elk'].includes(n))], [['Fox'], ['Owl']])
   // each result's files measured once: size and length
@@ -659,31 +716,31 @@ test('workspaces: the Default one from the start, new generations join the curre
 })
 
 test('element fields: a Library name of the right type, cited like an @name; the words fold around what is left out', async () => {
-  await cli('elements', 'add', 'Max', at('a.png'), '--type', 'character', '--words', 'a man with a beard')
-  await cli('elements', 'add', 'Mug', at('a.png'), '--type', 'object')
+  await cli('elements', 'add', 'Max', ...two(), '--type', 'character', '--words', 'a man with a beard')
+  await cli('elements', 'add', 'Mug', ...two(), '--type', 'object')
   const prompt = async (...argv) => {
     const r = await cli(...argv, '--estimate')
     assert.equal(r.code, 0, r.err)
     return JSON.parse(r.out).prompt
   }
   assert.equal(await prompt('image', '--tool', 'character-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'character=Max'),
-    'Replace the person in the first image with Max (the character in the second image, a man with a beard): their face, hair, body and outfit, in the same pose, place and lighting.')
+    'Replace the person in the first image with Max (the character in images 2 to 3, a man with a beard): their face, hair, body and outfit, in the same pose, place and lighting.')
   // a field of one type refuses another (video Face swap: a face); Character swap takes every type, or photos
   assert.match((await cli('video', '--tool', 'face-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--field', 'character=Mug', '--estimate')).err, /@Mug is an object, this takes character/)
   assert.match((await cli('image', '--tool', 'character-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--estimate')).err, /Character swap: pick an element of the Library \(--field character=@<name>/)
   assert.match(await prompt('image', '--tool', 'character-swap', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'character=@Max, @Mug'),
-    /^Replace the person in the first image with Max \(the character in the second image, a man with a beard\), Mug \(the object in the third image/)
+    /^Replace the person in the first image with Max \(the character in images 2 to 3, a man with a beard\), Mug \(the object in images 4 to 5/)
   assert.match((await cli('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--field', 'old=the mug', '--estimate')).err, /Object swap: pick an element of the Library \(--field element=@<name>, several: "@a, @b"\) or add references/)
   assert.match(await prompt('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--field', 'old=the red mug', '--field', 'element=@Mug'),
-    /^Replace the red mug with Mug \(the object in the first reference image\), keeping its position/)
+    /^Replace the red mug with Mug \(the object in reference images 1 to 2\), keeping its position/)
   // several Elements of any type, each read by its type, and photos: all of them references after the painted frame
-  await cli('elements', 'add', 'Lisbon', at('a.png'), '--type', 'location', '--words', 'a sunny street')
+  await cli('elements', 'add', 'Lisbon', ...two(), '--type', 'location', '--words', 'a sunny street')
   assert.match(await prompt('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--in', `references=${at('a.png')}`, '--field', 'old=the man', '--field', 'element=@Max, @Lisbon'),
-    /^Replace the man with Max \(the character in the second reference image, a man with a beard\), Lisbon \(the place in the third reference image, a sunny street\) as the setting with the subject of the first reference image, keeping/)
+    /^Replace the man with Max \(the character in reference images 2 to 3, a man with a beard\), Lisbon \(the place in reference images 4 to 5, a sunny street\) as the setting with the subject of the first reference image, keeping/)
   assert.match(await prompt('video', '--tool', 'object-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--in', `references=${at('a.png')}`, '--field', 'old=the man'),
     /^Replace the man with the subject of the first reference image, keeping/)
   assert.match(await prompt('video', '--tool', 'face-swap', '--model', 'bytedance/seedance-2.0-mini', '--in', `video=${at('long.mp4')}`, '--field', 'character=Max', '--field', 'who=the man on the left'),
-    /^Replace the face of the person \(the man on the left\) in the video with the face of Max \(the character in the first reference image, a man with a beard\)\./)
+    /^Replace the face of the person \(the man on the left\) in the video with the face of Max \(the character in reference images 1 to 2, a man with a beard\)\./)
   // Recolor's settings, any of them: an empty one leaves no comma behind
   assert.equal(await prompt('video', '--tool', 'recolor', '--model', 'black-forest-labs/flux-video-edit', '--in', `video=${at('talk.mp4')}`, '--field', 'grade=Teal & orange', '--field', 'items=the jacket becomes yellow (#f5c518)'),
     'Recolor the video: a teal and orange grade, the jacket becomes yellow (#f5c518). Keep the motion, framing, timing, light direction and everything else identical.')
@@ -722,7 +779,7 @@ test('a keyframe: the frame edited as an image first, then Aleph 2 carries it th
   // the keyframe: the frame at 1 s through Custom edit, the Element's images after it
   const k = JSON.parse((await cli(...swap, '--frame', '1', '--keyframe-model', 'fake/img', '--estimate')).out)
   assert.deepEqual([k.tool, k.model], ['free-edit', 'fake/img'])
-  assert.match(k.prompt, /^Replace the man with Max \(the character in the second image, a man with a beard\), at the same place and size/)
+  assert.match(k.prompt, /^Replace the man with Max \(the character in images 2 to 3, a man with a beard\), at the same place and size/)
   const made = await cli(...swap, '--frame', '1', '--keyframe-model', 'fake/img', '--spend', '1')
   assert.equal(made.code, 0, made.err)
   const job = JSON.parse(fs.readFileSync(at('media', media().filter(d => d.includes('-free-edit-')).at(-1), 'job.json'), 'utf8'))
@@ -813,12 +870,16 @@ test('the setups: every value a setup sets is one of its field\'s options', () =
 // what each tool forces or needs, every model it names can do: a slip here makes a tool quietly do something else
 test('the tools\' models: each in the shipped list, able to run its tool', () => {
   const list = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'providers', 'openrouter-models.json'), 'utf8'))
+  const kie = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'providers', 'kie-models.json'), 'utf8'))
   for (const [kind, router] of [['image', 'image'], ['video', 'video'], ['audio', 'speech']]) {
     for (const t of JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'tools', `${kind}.json`), 'utf8'))) {
       const needs = t.inputs.filter(i => !i.optional && i.kind !== 'matte')
-      for (const id of [...(t.models ?? []), ...(t.also ?? [])]) {
+      // ElevenLabs' own (eleven_…) are reached straight: its live test checks them against its API. One list serves both
+      // routers: a model Kie alone has (Kling 4.0) is checked by Kie's test
+      for (const id of [...(t.models ?? []), ...(t.also ?? [])].filter(x => !/^eleven_/.test(x))) {
         const m = list[router].find(x => x.id === id), at = `${kind}/${t.id}: ${id}`
-        assert.ok(m, `${at} is not in the list`)
+        assert.ok(m || kie[router].some(x => x.id === id), `${at} is in neither list`)
+        if (!m) continue
         if (kind === 'image') {
           if (t.mode === 'edit') assert.notEqual(m.role, 'create', `${at} cannot edit`)
           assert.ok(needs.filter(i => ['image', 'sketch', 'mask'].includes(i.kind)).length <= m.references, `${at}: too few references`)
@@ -837,4 +898,12 @@ test('the tools\' models: each in the shipped list, able to run its tool', () =>
       }
     }
   }
+})
+
+// a recommended model says why it is (under it in the model list): the tool's own reason, or tools/why.json's
+test('every recommended model has its reason', () => {
+  const dir = path.dirname(engine), why = JSON.parse(fs.readFileSync(path.join(dir, 'tools', 'why.json'), 'utf8'))
+  for (const kind of ['image', 'video', 'audio'])
+    for (const t of JSON.parse(fs.readFileSync(path.join(dir, 'tools', `${kind}.json`), 'utf8')))
+      for (const id of [...(t.models ?? []), ...(t.kie?.models ?? [])]) assert.ok(t.why?.[id] ?? why[kind][id], `${kind}/${t.id}: no reason for ${id}`)
 })

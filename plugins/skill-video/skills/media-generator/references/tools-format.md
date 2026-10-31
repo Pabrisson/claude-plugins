@@ -34,10 +34,11 @@ the same files: a new tool is a new entry, nothing else to code.
 | `template` | The prompt: `{key}` is a field's value (or its default), `{prompt}` the user's own words |
 | `models` | Router model ids, recommended first; without it, any model of the kind |
 | `also` | Other models it runs on, not recommended: the dashboard lists them under « Other models » (a video edit tool offers no other) |
+| `kie` | `{ "models": […], "also": […] }`: its lists when Kie.ai is the active router, for a tool whose models differ there (what Kie lacks, what it does better: Seedance 2.5 edits a video on Kie). Without it the tool keeps `models` and `also`, the models Kie lacks left out. Ids are the same on both routers when the model is |
 | `keyframe` | A video edit Aleph 2 carries from one edited frame: `tool` (an image tool, the same fields) or `template` (Custom edit's prompt on the frame, the frame first and the tool's other images after it), `apply` (the shot's prompt naming the keyframe), `required` (Aleph 2 only with a keyframe) |
 | `params` | Settings forced for this tool, such as `{ "resolution": "4K" }` or `{ "background": "transparent" }` |
 | `local` | Done on the machine: `reframe`, `fps` (frames made by motion, ffmpeg's minterpolate), `hdr` (HDR10 from SDR) with ffmpeg, `depth` and `matte` (`vision.py`, ONNX models fetched once), all free and without a model; `extend` (a frame of the source, then the new shot joined), `expand` (the image padded with gray margins from its `margin` fields, sent at the model's closest ratio), `paste` (an inpaint's result laid back on the original inside its `matte` input, unless the field `outside` is `model`) |
-| `provider` | `elevenlabs` for the tools video-editor's engine does (change voice, translate) |
+| `provider` | `elevenlabs` for the tools video-editor's engine does (change voice, translate). Voice's ElevenLabs models are named by their own ids in `models` (`eleven_v4`), reached straight whichever router is active |
 | `element` | A References tool: the Element type its sheets make (`character`, `outfit`…), for the dashboard's « Make an element » |
 | `one_of` | Keys of which one at least must be given, a field or an input (`["who", "references"]`: words or photos) |
 

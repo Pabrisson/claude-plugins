@@ -1,14 +1,17 @@
 ---
 name: media-generator
-description: Generates and edits images, videos and voices with AI models through model routers (OpenRouter), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, face swap, inpaint, clean up, reframe, and on this machine for free: remove background, depth map, FPS boost, SDR to HDR), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Gathers each project in a workspace, with a timeline to lay its shots and sounds on and hand to video-editor. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "crée un workspace", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
+description: Generates and edits images, videos and voices with AI models through model routers (Kie.ai by default, or OpenRouter, one active at a time), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, extend, upscale, relight, recolor, restyle, object swap, face swap, inpaint, clean up, reframe, and on this machine for free: remove background, depth map, FPS boost, SDR to HDR), text to speech with preset or cloned voices, voice change and dubbing into other languages (ElevenLabs). Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Gathers each project in a workspace, with a timeline to lay its shots and sounds on and hand to video-editor. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "ouvre le générateur", "crée un workspace", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
 
 # Media generator
 
-You generate and edit images, videos and voices for the user with AI models. The models sit behind a router
-(OpenRouter: one key for many labs), and the voice change and dubbing use ElevenLabs. Every generation costs money,
+You generate and edit images, videos and voices for the user with AI models. The models sit behind a router,
+one active at a time: Kie.ai by default, or OpenRouter (each one key for many labs; OpenRouter when only its key is
+set; the user picks it in Settings › Router, or `media.mjs setup set router.active=kie|openrouter` when they ask).
+ElevenLabs is never reached through a router: its voices (Voice, dialogues), the voice change and dubbing go straight
+to its API, with its own key and credits, whichever router is active. Every generation costs money,
 so the user always sees the price first and says yes. A local dashboard does the same with clicks.
 
 `media.mjs` below means `node ${CLAUDE_SKILL_DIR}/engine/media.mjs`: write it out in full in every command (a shell
@@ -20,7 +23,8 @@ variable holding `node …` does not run under zsh). Everything lives in the fol
   brands; voices picked as a voice), their images or clips and `element.json` (type, words);
 - `styles/<name>/`: the user's own styles, a few images of a look and its words (`style.json`);
 - `ledger.jsonl`: every paid action, in the provider's unit;
-- `settings.json`: the confirmation thresholds, the monthly caps, the ElevenLabs plan and the default models.
+- `settings.json`: the active router, the confirmation thresholds, the monthly caps, the ElevenLabs plan and the
+  default models.
 
 Talk to the user in French. Write prompts for the models in English, unless the user wants on-screen text in
 another language. The dashboard is in English.
@@ -31,9 +35,12 @@ Run `media.mjs doctor` once per conversation.
 - A missing tool: give its install command and stop.
 - `openrouter: no key`: nothing can be generated. Tell the user to set it with `/plugin configure skill-video@pabrisson`
   (a key from openrouter.ai/keys), then restart the session. `tools`, `models` and the dashboard still work.
+- `active router: …, without its key`: the router picked in Settings has no key. Same as above for that router (a
+  Kie key from kie.ai/api-key), or switch back to the other one if the user prefers.
 - `elevenlabs: no key`: no voice change and no translation. Everything else works.
 - `missing cloudflared`: a video or a voice cannot reach OpenRouter (video edits, upscale, talking avatar). Give
-  `brew install cloudflared` (no account needed). Everything else works.
+  `brew install cloudflared` (no account needed). Everything else works, and Kie needs none (it takes the files by its
+  own upload).
 - `missing uv`: no Depth map and no Remove background for videos (they run models on this machine). Give `brew install
   uv`. Everything else works. With uv, the models download by themselves at their first use (330 MB, once), or ahead
   with `media.mjs setup vision`.
@@ -117,14 +124,55 @@ is the user's own prompt; the others fill a prompt template from their fields. C
 
 ### 2. The model
 
-The tool's first recommended model, unless the user names one or it cannot do the job. `media.mjs models <kind>
+The tool's first recommended model on the active router, unless the user names one or it cannot do the job; `media.mjs
+tools <kind> --search <tool>` gives each recommended model with why (ranked on Artificial Analysis' leaderboards,
+October 2026: GPT Image 2.5 Sunburst first for images, MiniMax H3 first for new videos, Wan 3.0, Seedance 2.5, Kling
+4.0 after it). Say why when you pick one the user did not. Each
+router has its own list (`providers/openrouter-models.json`, `providers/kie-models.json`), each model with what it
+takes there: the same model may do more on one (Seedance 2.5 on Kie edits a video and goes to 1080p, through
+OpenRouter it does neither; Kling 3.0 is 720p on OpenRouter, up to 4K on Kie). A model named in a remix or a
+default of the other router runs on the active one when it has it; otherwise the command says so: pick another or
+offer to switch the router.
+
+**On Kie** (`media.mjs credits` says which router is active): the video edits (Custom edit, Restyle, Object swap,
+Clean up, Inpaint, Face swap, Relight, Recolor) go to Seedance 2.5 first, which takes the video, the Elements'
+images and up to 1080p, then Kling 4.0 (it remakes the shot from the video at the source's length, cheaper, Elements
+beside it), Kling 3.0 Omni Transformation and Wan 2.7 Video Edit; no Aleph 2 there, so no keyframe
+step. Upscale video is Topaz (×1, ×2, ×4: ×1.5 runs ×2, ×3 runs ×4), Talking avatar Kling AI Avatar or OmniHuman,
+Remove background Recraft. Voice: ElevenLabs straight, or Gemini TTS on Kie (no cloning there), no FLUX video, no HeyGen. Kling 4.0,
+Veo 3.1 Lite and Quality, Wan 3.0 Prime, HappyHorse, Vidu Q4, PixVerse V6 Max, MiniMax H3, Gemini Omni are among
+the other models. `media.mjs models <kind>
 --search <words>` shows what each model takes (durations, resolutions, frames, audio, references). Models marked
-« new, from the catalog » come from OpenRouter's catalog (read at each start of the dashboard and once a day; `--refresh` reads it now, when the user asks
-for the newest models): never recommend one over the tool's own, and say its price is OpenRouter's, not measured.
+« new, from the catalog » come from the active router's catalog (read at each start of the dashboard and once a day;
+`--refresh` reads it now, when the user asks for the newest models): never recommend one over the tool's own. On
+OpenRouter say its price is OpenRouter's, not measured; on Kie its price is unknown (each asks for the user's own yes,
+`--accept-unknown`).
 Settings: `--duration`, `--ratio`, `--resolution`, `--n` (images), `--quality`, `--sound on|off` (video), `--seed`,
 `--voice` (speech). `--batch 2` to `4` runs the same generation that many times, one job each (a seed goes up by one a
 job); the estimate and the user's yes are for the total. Without them, the engine picks sensible values the model accepts: a video made from an image
 keeps that image's ratio (the closest the model takes).
+
+**Each model's own settings and editors** (`media.mjs models <kind>` lists them: `options …`, `N shots`, `N middle
+frames`, `masks of who speaks`, `N Library voices`, `draft then final`, `dialogue`). Use them when the user's wish needs
+them; the dashboard shows the same in its Options block and editors.
+- `--option <key>=<value>` (repeat it): the model's own settings by the names its API gives them, a choice by its value
+  or its label: `negative_prompt="…"` (Avoid), `prompt_extend=on|off`, `cfg_scale=0.4`, `web_search=on`,
+  `return_last_frame=on` (also saves `last-frame.jpg`, to start the next shot from), `output_format=png|jpeg|webp|mov`,
+  `output_compression=80`, `thinking_mode=on`, `color_palette="#112233 #445566 #778899"` (3 to 10), `temperature=1.2`,
+  `filler_words=on`, `pe_fast_mode=on`, `keep_original_sound=on`, `audio_setting=origin`, `personGeneration=allow_adult`,
+  `enable_translation=off`, `loop=on` (Grok: its first frame ends it too), `reference_link_urls=<a public page>` or
+  `reference_file_urls=<a PDF, Word, slides…>` (Wan 3.0: a video made from it). OpenRouter's go under its provider's
+  name by themselves. One the model lacks is refused with its list.
+- **Shots** (Kling 3.0 and 3.0 Omni on Kie): `--shot "<seconds>: <words>"`, one a shot in order (1 to 12 s each, their
+  sum a length the model makes, 15 s at most), with `--tool free`; `@names` work in them.
+- **Middle frames** (Kling 4.0: up to 8, in order, cited `@keyframe_1`…; Grok Imagine Video: up to 4, each at its time):
+  `--in mid_frames=<image>` (Grok: `--in mid_frames=<image>@<seconds>`).
+- **Who speaks** (OmniHuman 1.5, Talking avatar): `--in speaker_masks=<mask>`, the person painted white.
+- **Library voices** (Kling 4.0): cite a voice Element `@Narrator` in the prompt: its clip goes as the voice of that name.
+- **Draft** (Seedance 2.5 on Kie): `--option draft=on` makes a 480p preview; once the user likes it, `--from-draft
+  <generation>` makes its 1080p final within 7 days (no prompt; Kie lists no price for it: an unknown cost, its own yes
+  then `--accept-unknown`).
+- **Dialogue** (ElevenLabs v4 and v3, Gemini TTS on Kie with 2 voices): `--line "<voice>: <words>"`, below.
 
 ### 3. The price, then the user's yes
 
@@ -134,8 +182,8 @@ say it: `$0.84`, `1,610 credits`, or `1,610 credits · $0.29` once their ElevenL
 - options: go at that price (recommended when it matches the request), a cheaper way when there is one (a faster
   model, a shorter clip, a lower resolution, fewer images or a smaller batch, `dubbing_v1` rather than `dubbing_v2`), and no.
 
-Only after a yes, run it again with `--spend <amount>` (the estimate's amount: USD for OpenRouter, credits for
-ElevenLabs).
+Only after a yes, run it again with `--spend <amount>` (the estimate's amount: USD for OpenRouter and Kie, credits
+for ElevenLabs).
 
 Three cases need the user's own words before the flag:
 - **Unknown cost** (`unknown cost`): say « coût inconnu », ask, then `--accept-unknown`.
@@ -169,20 +217,30 @@ and local: no estimate, no yes.
   before the types).
 - **Citing.** `@name` in any image or video prompt (Custom, a tool's words, a raw prompt) sends the Element's images
   after the tool's own and names them: « Lulu (the character in images 2 to 3, <its words>) ». Their images count
-  toward the model's references (`N refs`). A style is never cited: it goes in a Style field (`--field style=<name>`).
-  A voice is never cited in words either: `audio --tool voice --voice @name` clones its clips, its words say how it
-  sounds.
+  toward the model's references (`N refs`). On Kling 3.0, Kling 3.0 Omni and Kling 4.0 (Kie) they go instead as
+  Kling's own named elements, whole: the prompt keeps `@name`, its words and 2 to 4 images go with it (Kling 3.0 takes
+  3, the others 7; Kling 4.0 none beside a first or last frame), and they count toward no reference image.
+  A style is never cited: it goes in a Style field (`--field style=<name>`).
+  A voice is never cited in words either: `audio --tool voice --voice @name` speaks with it (on ElevenLabs, whole;
+  on a router's model, its clips cloned and its words saying how it sounds).
 - **Making one**, when the user asks (« crée le personnage Lulu avec ces photos », « garde ce produit », « fais-en un
   style ») or pastes « Ask Claude » from the dashboard:
   1. Look at the images (Read) and write what it is in a few English words: they go with every `@name`.
-  2. `media.mjs elements add <name> <files…> --type <type> --words "…"`; a brand adds `--colors "#hex,#hex"` and
+  2. **2 images at least** (a voice: clips): `elements add` refuses fewer. With one image only, make the second view
+     yourself with the type's References tool on it (`media.mjs image --tool character|outfit|object|location|pose
+     --in references=<the image> --field sheets="<the sheet it lacks>"`, e.g. a full-body turnaround beside a face, a
+     detail sheet beside six views): its price, the user's yes, then look at it (Read) and keep it only if it holds the
+     identity. A brand or other takes a second version from the user.
+  3. `media.mjs elements add <name> <files…> --type <type> --words "…"`; a brand adds `--colors "#hex,#hex"` and
      `--font "…"`, a voice takes audio clips. `--from <generation id>` takes a result's images or clips (several
      `--from` for several). A style: `media.mjs styles add <name> <images…> --words "<the look>"` (1 to 5 images,
      `--from` too).
-  3. Photos that are not clean references (a busy background, one angle only) for a type with a References tool:
+  4. Photos that are not clean references (a busy background, one angle only) for a type with a References tool:
      offer its sheets first. That is a generation: its price and the user's yes (step 3 above). Then save the sheets
      that came out right, with the photos when they help.
-  4. Tell the user the `@name` to cite. The open dashboard shows it at once.
+  5. Tell the user the `@name` to cite. The open dashboard shows it at once.
+- An Element made before this rule with one image works as before, except on Kling's elements: the command says so;
+  make its second view as in step 2 (`elements set <name> --from <that generation>`).
 - **Changing one.** `elements set <name> [<files…>] [--type …] [--words …] [--colors …] [--font …] [--drop <file>]`,
   `elements show <name>`, `elements remove <name>`; the same `set`, `show`, `remove` for `styles`. `elements
   elevenlabs <name>` puts a voice on the ElevenLabs account for Change voice (ElevenLabs needs a paid plan for it).
@@ -214,9 +272,21 @@ or none). The dashboard's header switches it.
 
 ## Voices, voice change, translation
 
-- **Speech** (`audio --tool voice`): `--prompt` is the text read. A preset voice of the model (`--voice`, from
-  `media.mjs models audio`), a voice of the Library (`--voice @name`), or a voice cloned from 1 to 3 clips (`--in
-  voice_clips=<file>`). `--field instructions="…"` says how it sounds.
+- **Speech** (`audio --tool voice`): `--prompt` is the text read. ElevenLabs' models come first, straight from its API
+  (Eleven v4 by default, then v4 Turbo, v3, v3 Conversational, Multilingual v2, Flash and Turbo v2.5; `media.mjs
+  models audio` lists them with what each takes); the active router's other speech models follow (Gemini TTS…).
+  - On ElevenLabs: `--voice <voice_id>` (`media.mjs voices` lists the account's) or `--voice @name` (a voice of the
+    Library, put on the account when the job runs: ElevenLabs' paid plans clone, the free one refuses). A credit a
+    character, half on v4 Turbo, v3 Conversational, Flash and Turbo. Audio tags in the text steer v4, v4 Turbo and v3
+    (`[whispers]`, `[laughs]`, `[sighs]`, `[excited]`…). Its options, each model its own: `--option stability=0.4`,
+    `similarity_boost`, `style`, `speed` (0.7 to 1.2, not on v4), `use_speaker_boost=on`, `language_code=fr`,
+    `apply_text_normalization=on|off|auto`; on v3 stability is `Creative`, `Natural` or `Robust`. `--seed` too.
+  - A **dialogue** (Eleven v4 and v3): one `--line "<voice_id or @name>: <words>"` a line, in order, up to 2,000
+    characters and 10 voices; no `--prompt`. Its options: stability and similarity, language, numbers. Gemini TTS on
+    Kie speaks dialogues of 2 voices too (`--line "Kore: …"`), « how it sounds » as each line's style, tags like
+    `<laugh>` in the words, `--option temperature=…` and `filler_words=on`.
+  - On a router's model: a preset voice (`--voice`), a voice of the Library (`--voice @name`, its clips cloned), or a
+    voice cloned from 1 to 3 clips (`--in voice_clips=<file>`); `--field instructions="…"` says how it sounds.
 - **Change voice** (`audio --tool change-voice --in clip=<audio or video> --voice <voice_id>`): the same delivery
   (pauses, emotion, rhythm) in another voice, put back on the video. `media.mjs voices` lists the ElevenLabs voices
   (its default ones and the account's own). `--voice @name` takes a voice of the Library: one not on the account
@@ -251,7 +321,7 @@ rush, or a B-roll clip in the project the prompt names.
 | Code | Meaning | What you do |
 |---|---|---|
 | 2 | The user's yes is needed: the estimate is printed | Ask (step 3), then run again with the flag it names |
-| 3 | No key, a refused key, or no credits left (402) | Say so: the key with `/plugin configure skill-video@pabrisson`, credits on openrouter.ai; videos still running hold their price there, so with several at once wait for them and retry |
+| 3 | No key, a refused key, or no credits left (402) | Say so: the key with `/plugin configure skill-video@pabrisson`, credits on openrouter.ai or kie.ai; on OpenRouter, videos still running hold their price, so with several at once wait for them and retry |
 | 1 | Any other error | Read the message: a missing input, a model that does not take a frame, a file over 50 MB… |
 
 ## Good to know
@@ -259,14 +329,20 @@ rush, or a B-roll clip in the project the prompt names.
 - **The dashboard.** `media.mjs studio` reuses this folder's server or starts one on the first free port from 41287,
   on 127.0.0.1 only. It stops by itself once every Claude Code session that opened it has quit. A generation started
   there runs in its own process and finishes even if the page closes.
-- **Costs.** OpenRouter in USD as it reports them, never converted. ElevenLabs in credits, and in USD at the price of
+- **Costs.** OpenRouter in USD as it reports them, never converted. Kie in USD from its own price list (its public
+  price API, read at each start of the dashboard and once a day; its credits at $0.005 each, shown beside; the models
+  its catalog adds priced by `providers/kie-catalog-prices.json`, matched by hand), the real cost from the credits each
+  task consumed. ElevenLabs in credits, and in USD at the price of
   the plan set in the settings (`setup set elevenlabs.plan=free|starter|creator|pro|scale|business`, only when the user
   names theirs). The thresholds and caps are per provider and unset until the user sets them (dashboard Settings,
   or `setup set`). `media.mjs credits` gives the balances and this month's spending.
 - **What leaves the machine.** The prompt and the input files of a generation go to its router or to ElevenLabs.
   Images are inlined (up to 50 MB a file). A video or a voice for OpenRouter is served from this machine at a random
   address through a Cloudflare quick tunnel, opened when the job is submitted (about 20 s) and closed when it ends.
-  Nothing else.
+  Kie takes every file by its own upload (free, deleted after 24 h). Nothing else.
+- **Rate limits.** Kie takes 20 new generations every 10 s for the account: past that the engine waits its turn (the
+  job says « waiting for Kie's rate limit »), and a 429 is tried again after 10 s, 5 times. OpenRouter has no cap on
+  paid models; a model's own 429 is tried again after the time it asks. A 429 is never billed.
 - **Git.** The engine writes the folder's `.gitignore`: git keeps `media/`, `elements/`, `styles/`, `ledger.jsonl` and
   `settings.json`, and leaves out `.cache/` and `.trash/` (what the dashboard deleted).
 - **A new tool** is an entry in `engine/tools/<kind>.json`: read `references/tools-format.md`. A new preset style

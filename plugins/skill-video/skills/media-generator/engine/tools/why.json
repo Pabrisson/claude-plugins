@@ -1,0 +1,42 @@
+{
+  "about": "Why each recommended model is recommended, factual and short, shown under it in the model list and given by media.mjs tools. A tool's own `why` wins for its models. Ranks from Artificial Analysis' leaderboards, October 2026 (never cited in the lines)",
+  "image": {
+    "openai/gpt-image-2.5-sunburst": "#1 in text to image and in image editing",
+    "google/gemini-nano-banana-2.1": "#4 in text to image, #6 in editing, at a third of the price, up to 4K",
+    "microsoft/mai-image-2.6": "#5 in text to image, #4 in editing, at a low price",
+    "x-ai/grok-imagine-image-2.0": "#6 in text to image, among the cheapest of the top ten",
+    "bytedance-seed/seedream-5-0-pro": "#9 in editing, up to 10 reference images",
+    "bytedance-seed/seedream-5-0-lite": "2K to 4K at a few cents",
+    "black-forest-labs/flux-3-image": "#13 in text to image, up to 4K",
+    "recraft/recraft-v4-styles": "Draws in a style taken from your images, for a Library style",
+    "recraft/recraft-v4-styles-pro": "Recraft's style references, Pro, for a Library style",
+    "openai/gpt-image-2.5-flare": "#2 in text to image, #3 in editing, a transparent background",
+    "topaz/image-upscale": "A dedicated upscaler, the image itself kept",
+    "recraft/remove-background": "A dedicated cut-out model, transparent PNG, a fraction of a cent"
+  },
+  "video": {
+    "minimax/hailuo-3": "#3 in text to video, #4 in image to video, at a fraction of the price, both frames, sound",
+    "alibaba/wan-3.0": "#1 in text to video, up to 30 s, sound",
+    "bytedance/seedance-2.5": "#1 in image to video, #4 in text to video, up to 30 references, sound, the dearest",
+    "kwaivgi/kling-4.0": "Kling's newest, not ranked yet, Elements, Library voices, middle frames, up to 30 s",
+    "heygen/heygen-video-1": "#6 in text and in image to video, the cheapest of the top ten, from a first frame",
+    "google/veo-3.1-fast": "Google's Veo 3.1, first and last frames, sound, up to 4K",
+    "black-forest-labs/flux-video-edit": "The cheapest video edit",
+    "runway/aleph-2": "Carries an edited keyframe through the whole shot",
+    "bytedance/seedance-2.0-mini": "Edits the video itself at a low price, up to 720p",
+    "kwaivgi/kling-v3.0-omni-transformation": "Kling's dedicated video edit, the shot kept, what you say changed",
+    "alibaba/wan-2.7-video-edit": "Alibaba's video edit at a low price, can keep the original sound",
+    "black-forest-labs/flux-video-upscale": "A dedicated video upscaler",
+    "topaz/video-upscale": "Topaz's dedicated video upscaler, ×2 or ×4",
+    "heygen/avatar-iv": "HeyGen's Avatar IV, lip-sync with gestures, from one photo",
+    "kwaivgi/kling-ai-avatar-pro": "Kling's talking head, 1080p",
+    "bytedance/omnihuman-1.5": "Gestures with the voice, and who speaks in a group photo",
+    "bytedance/omnihuman-2.0": "OmniHuman's newest, at a lower price"
+  },
+  "audio": {
+    "eleven_v4": "ElevenLabs' newest, audio tags, dialogues, 90+ languages",
+    "google/gemini-3.8-flash-tts": "70 voices, a style in words, dialogues of two",
+    "bytedance-seed/seed-audio-1-0": "ByteDance's voice model",
+    "minimax/speech-2.8-hd": "MiniMax's HD voices at a low price"
+  }
+}

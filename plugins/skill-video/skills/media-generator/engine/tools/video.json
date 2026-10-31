@@ -9,7 +9,7 @@
     ],
     "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "styles", "phrase": ". Rendered in the style of {}" }],
     "template": "{prompt} {style}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "animate", "label": "Animate", "group": "Frames", "mode": "create", "icon": "play",
@@ -17,7 +17,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
     "fields": [{ "key": "motion", "label": "What moves", "type": "text", "placeholder": "her hair in the wind, the camera slowly pushes in" }],
     "template": "{motion}. Keep the image's subject, style and lighting. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "first-last-frame", "label": "First & last frame", "group": "Frames", "mode": "create", "icon": "between-horizontal-start",
@@ -28,7 +28,7 @@
     ],
     "fields": [{ "key": "transition", "label": "How it goes from one to the other", "type": "text", "placeholder": "a smooth camera move, the light shifts to dusk" }],
     "template": "A continuous shot from the first frame to the last frame: {transition}. {prompt}",
-    "models": ["google/veo-3.1-fast", "kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "google/veo-3.1-fast"]
   },
   {
     "id": "cinematic-camera", "label": "Cinematic camera", "group": "Camera", "mode": "create", "icon": "clapperboard",
@@ -229,7 +229,7 @@
       { "label": "Panic", "group": "Documentary & vintage", "note": "Snorricam on a running actor", "fields": { "body": "ARRI Alexa 35", "lens": "premium modern spherical prime", "focal": "24mm", "aperture": "f/4", "movement": "snorricam on the actor", "shot": "medium close-up", "tempo": "chaotic, frenetic pacing", "genre": "thriller" } }
     ],
     "template": "{prompt}. {body}, {lens}, {focal}, {aperture}. {movement}. {tempo}. {shot}. {lighting}. {grade}. {era}. {genre}. Cinematic, photorealistic.",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "dolly-zoom-in", "label": "Dolly zoom in", "group": "Camera", "mode": "create", "icon": "zoom-in",
@@ -240,7 +240,7 @@
       { "key": "speed", "label": "Speed", "type": "choice", "options": ["slow", "steady", "fast"], "default": "steady" }
     ],
     "template": "Dolly zoom (vertigo effect) on {subject}: the camera dollies in at a {speed} pace while the lens zooms out, the background stretches away and the subject stays the same size in frame. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5", "google/veo-3.1-fast"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "crash-zoom-in", "label": "Crash zoom in", "group": "Camera", "mode": "create", "icon": "scan-face",
@@ -248,7 +248,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
     "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "the man's eyes" }],
     "template": "Crash zoom: the camera snaps in very fast onto {subject}, with motion blur, then holds on the close-up. {prompt}",
-    "models": ["bytedance/seedance-2.5", "kwaivgi/kling-v3.0-pro"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "earth-zoom-out", "label": "Earth zoom out", "group": "Camera", "mode": "create", "icon": "earth",
@@ -256,7 +256,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
     "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "a woman on a rooftop in Paris" }],
     "template": "Continuous zoom out starting close on {subject}, rising through the city, the clouds and the atmosphere until the whole Earth is seen from orbit. One unbroken move. {prompt}",
-    "models": ["google/veo-3.1-fast", "kwaivgi/kling-v3.0-pro"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "fpv-drone", "label": "FPV drone", "group": "Camera", "mode": "create", "icon": "plane",
@@ -264,7 +264,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
     "fields": [{ "key": "path", "label": "Flight path", "type": "text", "placeholder": "dives off the cliff, skims the waves, rises over the boat" }],
     "template": "FPV drone shot, fast and fluid, wide lens with slight fisheye: {path}. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "orbit", "label": "Orbit", "group": "Camera", "mode": "create", "icon": "rotate-3d",
@@ -276,7 +276,7 @@
       { "key": "arc", "label": "Arc", "type": "choice", "options": ["a quarter turn", "a half turn", "a full 360°"], "default": "a half turn" }
     ],
     "template": "The camera orbits {direction} around {subject}, {arc}, at a steady distance, the subject kept centered. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "bytedance/seedance-2.5"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "handheld", "label": "Handheld", "group": "Camera", "mode": "create", "icon": "hand",
@@ -284,7 +284,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
     "fields": [{ "key": "action", "label": "Action", "type": "text", "placeholder": "she walks through the market, looks back" }],
     "template": "Handheld camera, natural micro-shake, documentary style, following the action: {action}. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "static", "label": "Static shot", "group": "Camera", "mode": "create", "icon": "square",
@@ -292,7 +292,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
     "fields": [{ "key": "action", "label": "What happens", "type": "text", "placeholder": "steam rises from the coffee cup" }],
     "template": "Static locked-off camera on a tripod, no camera movement at all. {action}. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "set-on-fire", "label": "Set on fire", "group": "VFX", "mode": "create", "icon": "flame",
@@ -300,7 +300,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
     "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "the car" }],
     "template": "{subject} catches fire: realistic flames spread across it, embers and smoke rise, the light of the fire flickers on the surroundings. {prompt}",
-    "models": ["black-forest-labs/flux-3-video", "kwaivgi/kling-v3.0-pro"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "disintegration", "label": "Disintegration", "group": "VFX", "mode": "create", "icon": "wind",
@@ -308,7 +308,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
     "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "the man in the suit" }],
     "template": "{subject} disintegrates into fine dust particles that drift away on the wind, starting from the edges, until nothing is left. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "freeze", "label": "Freeze", "group": "VFX", "mode": "create", "icon": "snowflake",
@@ -316,7 +316,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
     "fields": [{ "key": "subject", "label": "Subject", "type": "text", "placeholder": "the woman's face" }],
     "template": "Frost crystals spread over {subject} until it is frozen solid in clear ice, cold mist around it. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "turn-to-metal", "label": "Turn to metal", "group": "VFX", "mode": "create", "icon": "gem",
@@ -327,7 +327,7 @@
       { "key": "end", "label": "Then", "type": "choice", "options": ["holds", "melts"], "default": "holds" }
     ],
     "template": "{subject} turns into liquid-polished chrome metal from head to toe, reflections sliding over it, then it {end}. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "explosion", "label": "Explosion", "group": "VFX", "mode": "create", "icon": "bomb",
@@ -335,7 +335,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
     "fields": [{ "key": "where", "label": "Where", "type": "text", "placeholder": "the building behind him" }],
     "template": "A cinematic explosion bursts from {where}: fireball, shockwave, debris, the subject stays in frame. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5", "alibaba/wan-3.0"]
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
   },
   {
     "id": "talking-avatar", "label": "Talking avatar", "group": "Characters", "mode": "create", "icon": "message-circle",
@@ -346,7 +346,8 @@
     ],
     "fields": [{ "key": "motion", "label": "Attitude", "type": "text", "placeholder": "calm, nods now and then" }],
     "template": "The person speaks the audio, natural lip-sync and facial expressions, {motion}. {prompt}",
-    "models": ["heygen/avatar-iv"]
+    "models": ["heygen/avatar-iv"],
+    "kie": { "models": ["kwaivgi/kling-ai-avatar-pro", "bytedance/omnihuman-1.5", "bytedance/omnihuman-2.0"], "also": ["kwaivgi/kling-ai-avatar-standard", "meigen-ai/infinitalk"] }
   },
   {
     "id": "free-edit", "label": "Custom edit", "group": "Custom", "mode": "edit", "icon": "wand",
@@ -360,7 +361,9 @@
     "template": "{prompt}. Change only that, keep everything else of the video identical.",
     "keyframe": {"template": "{prompt}. Change only that, keep everything else of the image identical.", "apply": "{prompt}, as the keyframe shows. Change only that, keep everything else of the video identical."},
     "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.0-mini"],
-    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"],
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit"] },
+    "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
     "id": "restyle", "label": "Restyle", "group": "Style", "mode": "edit", "icon": "paintbrush",
@@ -373,7 +376,9 @@
     "template": "Redraw every frame of the video in the style of {style}. Keep the motion, camera move, framing, timing, poses and expressions exactly as filmed; only the look changes. {references} {prompt}",
     "keyframe": {"tool": "restyle", "apply": "Redraw every frame of the video in the look of the keyframe: {style}. Keep the motion, camera move, framing, timing, poses and expressions exactly as filmed; only the look changes. {prompt}"},
     "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.0-mini"],
-    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"],
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit"] },
+    "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
     "id": "extend", "label": "Extend", "group": "Custom", "mode": "edit", "icon": "fast-forward",
@@ -388,7 +393,8 @@
       { "key": "next", "label": "What happens", "type": "text", "placeholder": "she turns and walks away" }
     ],
     "template": "{next}. {join}. Same characters, place and light as the video. {prompt}",
-    "models": ["kwaivgi/kling-v3.0-pro", "google/veo-3.1-fast", "bytedance/seedance-2.5"],
+    "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "google/veo-3.1-fast"],
+    "why": {"minimax/hailuo-3": "Continues from the frame at a fraction of the price, both frames, sound"},
     "local": "extend"
   },
   {
@@ -400,7 +406,8 @@
       { "key": "factor", "label": "Factor", "type": "choice", "options": ["1.5", "2", "3"], "default": "2" }
     ],
     "template": "{prompt}",
-    "models": ["black-forest-labs/flux-video-upscale"]
+    "models": ["black-forest-labs/flux-video-upscale"],
+    "kie": { "models": ["topaz/video-upscale"] }
   },
   {
     "id": "relight-atmosphere", "label": "Relight & atmosphere", "group": "Light & color", "mode": "edit", "icon": "sun",
@@ -421,7 +428,9 @@
     ],
     "template": "Relight the video: {light}. Light and shadows follow the 3D scene through the whole shot, nothing else changes. {prompt}",
     "keyframe": {"tool": "relight", "apply": "Relight the whole video as the keyframe shows: {light}. Light and shadows follow the 3D scene through the whole shot, nothing else changes. {prompt}"},
-    "models": ["runway/aleph-2", "black-forest-labs/flux-video-edit"]
+    "models": ["runway/aleph-2", "black-forest-labs/flux-video-edit"],
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "alibaba/wan-2.7-video-edit", "kwaivgi/kling-v3.0-omni-transformation"] },
+    "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
     "id": "recolor", "label": "Recolor", "group": "Light & color", "mode": "edit", "icon": "palette",
@@ -465,7 +474,9 @@
     ],
     "template": "Recolor the video: {grade}, {temperature}, {saturation}, {contrast}, {exposure}, {items}. Keep the motion, framing, timing, light direction and everything else identical. {prompt}",
     "keyframe": {"template": "Recolor the image: {grade}, {temperature}, {saturation}, {contrast}, {exposure}, {items}. Keep the framing, light direction and everything else identical. {prompt}", "apply": "Recolor the whole video as the keyframe shows: {grade}, {temperature}, {saturation}, {contrast}, {exposure}, {items}. Keep the motion, framing, timing, light direction and everything else identical. {prompt}"},
-    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2"]
+    "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2"],
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "alibaba/wan-2.7-video-edit", "kwaivgi/kling-v3.0-omni-transformation"] },
+    "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
     "id": "object-swap", "label": "Object swap", "group": "Characters", "mode": "edit", "icon": "replace",
@@ -484,7 +495,9 @@
     "template": "Replace {old} ({sketch}) {element} {references}, keeping its position, motion and the lighting. Everything else stays identical. {prompt}",
     "keyframe": {"template": "Replace {old} ({sketch}) {element} {references}, at the same place and size, in the same light and perspective. Everything else stays identical. {prompt}", "apply": "Replace {old} {element}, exactly as the keyframe shows it, its whole look included: clothes, colors and shape. Keep its position, motion and the lighting through the whole shot. Everything else stays identical. {prompt}", "required": true},
     "models": ["runway/aleph-2", "bytedance/seedance-2.0-mini"],
-    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"],
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit"] },
+    "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
     "id": "clean-up", "label": "Clean up", "group": "Retouch", "mode": "edit", "icon": "eraser",
@@ -497,7 +510,9 @@
     "template": "Remove {what} from the whole video and fill the background naturally. {sketch} Nothing else changes. {prompt}",
     "keyframe": {"template": "Remove {what} from the image and fill the background naturally. {sketch} Nothing else changes. {prompt}", "apply": "Remove {what} from the whole video as the keyframe shows, filling the background naturally. Nothing else changes. {prompt}"},
     "models": ["black-forest-labs/flux-video-edit", "runway/aleph-2", "bytedance/seedance-2.0-mini"],
-    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"],
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit"] },
+    "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
     "id": "inpaint", "label": "Inpaint", "group": "Retouch", "mode": "edit", "icon": "brush",
@@ -515,7 +530,9 @@
     "template": "In the video, change only {sketch}: put {change} {element} {references} there, following the camera and the motion through the whole shot, in the scene's light. No magenta in the result; everything outside that area stays identical. {prompt}",
     "keyframe": {"template": "In the image, change only {sketch}: put {change} {element} {references} there, in the scene's light and perspective. No magenta in the result; everything outside that area stays identical. {prompt}", "apply": "Put {change} {element} where the keyframe shows it, exactly as it looks there, following the camera and the motion through the whole shot, in the scene's light. Everything else stays identical. {prompt}", "required": true},
     "models": ["runway/aleph-2", "bytedance/seedance-2.0-mini"],
-    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"],
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit"] },
+    "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
     "id": "face-swap", "label": "Face swap", "group": "Characters", "mode": "edit", "icon": "scan-face",
@@ -532,7 +549,9 @@
     "template": "Replace the face of the person {who} in the video with the face of {character} {references}. Keep the head movements, expressions, eye direction, lip movements, lighting and skin tone match; hair, body, clothes and background stay identical. {prompt}",
     "keyframe": {"template": "Replace the face of the person {who} with the face of {character} {references}. Keep the head angle, expression, eye direction, lighting and skin tone match; hair, body, clothes and background stay identical. {prompt}", "apply": "Replace the face of the person {who} with the face of {character} as the keyframe shows it, keeping the head movements, expressions, eye direction and lip movements through the whole shot; hair, body, clothes and background stay identical. {prompt}", "required": true},
     "models": ["runway/aleph-2", "bytedance/seedance-2.0-mini"],
-    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"]
+    "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.5"],
+    "kie": { "models": ["bytedance/seedance-2.5", "kwaivgi/kling-4.0", "kwaivgi/kling-v3.0-omni-transformation", "alibaba/wan-2.7-video-edit"], "also": ["bytedance/seedance-2.0", "bytedance/seedance-2.0-fast", "bytedance/seedance-2.0-mini", "alibaba/happyhorse-video-edit"] },
+    "why": {"bytedance/seedance-2.5": "Edits the video itself, with its Elements' images, up to 1080p", "kwaivgi/kling-4.0": "Remakes the shot from your video, Elements beside it, at a lower price"}
   },
   {
     "id": "remove-background", "label": "Remove background", "group": "Retouch", "mode": "edit", "icon": "scissors",

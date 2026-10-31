@@ -25,8 +25,12 @@ import {
   ownPrompt,
   plain,
   priceLabel,
+  ROUTER_NAME,
   type EstimateAnswer,
   type Kind,
+  type Input as InputT,
+  type Line,
+  type Shot,
   type Model,
   type Place,
   type Spec,
@@ -48,6 +52,7 @@ import { InputSlots, slotFor, upload } from "@/components/inputs"
 import { MentionTextarea } from "@/components/mention"
 import { ToolPicker } from "@/components/tool-picker"
 import { LibraryVoices, ModelVoices, VoicePicker } from "@/components/voice-picker"
+import { AudioTags, DialogueEditor, ModelOptions, ShotsEditor } from "@/components/model-options"
 import { capsOf, ModelPicker, type Priced } from "@/components/model-picker"
 
 // what the composer of one space holds: kept per space, so switching spaces loses nothing
@@ -94,7 +99,8 @@ export function modelsFor(tool: Tool, kind: Kind, models: Model[]) {
     kind === "video"
       ? m.role === "generate" && (tool.id !== "extend" || (m.params.frames?.length ?? 0) > 0)
       : kind === "image"
-        ? (tool.mode === "create" || m.role !== "create") && can(m)
+        ? // a create tool takes the models that make an image from words (an upscaler or a cut-out needs one), an edit tool those that take one
+          (tool.mode === "create" ? m.role !== "edit" : m.role !== "create") && can(m)
         : true
   return { recommended, others: [...also, ...models.filter((m) => ok(m) && !recommended.includes(m) && !also.includes(m))] }
 }
@@ -144,6 +150,33 @@ export function Composer({
   const def = state.settings.defaults[kind]
   const modelId = eleven || local ? undefined : (value.model && fitting.some((m) => m.id === value.model) ? value.model : def && fitting.some((m) => m.id === def) ? def : fitting[0]?.id)
   const model = models.find((m) => m.id === modelId)
+  // ElevenLabs straight: a voice of the account or of the Library, whole (no clips, no « How it sounds »), or a
+  // dialogue's lines on v4 and v3
+  const direct = model?.provider === "elevenlabs"
+  // Voice before its models arrive: nothing that depends on them (no clips, no « How it sounds » shown a moment)
+  const waiting = tool.id === "voice" && !model
+  const mp = model?.params
+  // a dialogue (ElevenLabs v4 and v3, Gemini on Kie): its lines, at most so many voices
+  const dialogue = tool.id === "voice" && mp?.dialogue && Array.isArray(value.params.dialogue) ? (value.params.dialogue as Line[]) : null
+  const dialogueChars = dialogue?.reduce((n, l) => n + l.text.length, 0) ?? 0
+  const dialogueVoices = new Set(dialogue?.filter((l) => l.text.trim()).map((l) => l.voice)).size
+  // Kling's shots (on Custom): each its words and seconds, their sum the length
+  const shots = tool.id === "free" && mp?.shots && Array.isArray(value.params.shots) ? (value.params.shots as Shot[]) : null
+  const shotsTotal = shots?.reduce((n, x) => n + x.duration, 0) ?? 0
+  const shotLengths = (mp?.duration ?? []).filter((d) => !mp?.shots || d <= mp.shots.total)
+  // Seedance 2.5's final, made from a draft
+  const draftOf = kind === "video" && mp?.draft ? (value.params.draft_of as string | undefined) : undefined
+  // the model's own inputs, among the tool's right after its first frame (the photo of a talking avatar): the middle
+  // frames (Kling 4.0, Grok) between the first and the last, OmniHuman's mask of who speaks on the photo
+  const framedTool = tool.inputs.some((i) => i.key === "first_frame")
+  const modelInputs: InputT[] = !framedTool ? [] : [
+    ...(kind === "video" && mp?.mid_frames ? [{ key: "mid_frames", kind: "image" as const, label: "Middle frames", optional: true, multiple: true }] : []),
+    ...(tool.id === "talking-avatar" && mp?.masks ? [{ key: "speaker_masks", kind: "mask" as const, label: "Who speaks", optional: true }] : []),
+  ]
+  // a voice model that clones nothing (Kie's) or takes voices whole (ElevenLabs): no clips, no Library voice field
+  const noClone = model?.params.clone === false || direct || waiting
+  const toolInputs = noClone ? tool.inputs.filter((i) => i.key !== "voice_clips") : tool.inputs, first = toolInputs.findIndex((i) => i.key === "first_frame")
+  const slotTool = { ...tool, inputs: first < 0 ? toolInputs : [...toolInputs.slice(0, first + 1), ...modelInputs, ...toolInputs.slice(first + 1)] }
   // Aleph 2 on a tool with a keyframe recipe: the keyframe made from this video (kept with its time), sent with it
   const keyframing = kind === "video" && !!tool.keyframe && model?.model === "runway/aleph-2"
   const keyframe = keyframing && value.params.keyframe_video === value.inputs.video?.[0] ? value.inputs.keyframe?.[0] : undefined
@@ -158,7 +191,8 @@ export function Composer({
   // what the words can cite with @name (a voice's text is read as written), and the images those bring
   // the current workspace's Elements first in the @ list
   const ws = currentOf(state)
-  const items = kind === "audio" ? [] : mentionables(state)
+  // Kling 4.0 cites the Library's voices too (@Narrator)
+  const items = kind === "audio" ? [] : [...mentionables(state), ...(mp?.named_voices ? (state.elements ?? []).filter((e) => e.type === "voice" && e.files.length) : [])]
   // (the words' own and an element field's: the prompt holds both)
   const mentioned = cited(prompt, items).reduce((n, i) => n + i.files.length, 0)
   // the user writes the whole prompt (Custom, speech), or adds words to the one the tool builds; those are needed on
@@ -173,19 +207,25 @@ export function Composer({
   const unsaid = tool.one_of && !tool.one_of.some((k) => value.inputs[k]?.length || value.fields[k]?.trim())
   // the reference images the model takes, and those this sends: the tool's image inputs and a Library style's; an
   // input of several takes what is left (« 2 / 13 »)
-  // with a frame, OpenRouter keeps a video's frames and drops its reference images: none then
-  const framed = kind === "video" && model?.role !== "avatar" && ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0)
+  // with a frame, OpenRouter keeps a video's frames and drops its reference images (Seedance on Kie refuses both):
+  // none then, unless the model takes both (mix)
+  const framed = kind === "video" && model?.role !== "avatar" && !model?.params.mix && ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0)
   // a keyframe's images (an Element, a painted frame, references) go to the image that makes it, not to Aleph
   const maxRefs = keyframing ? undefined : framed ? 0 : model?.params.references
   const styleField = tool.fields.find((f) => f.type === "style")
   const styleImages = (styleField && state.styles?.find((s) => s.name === (value.fields[styleField.key] ?? styleField.default))?.files.length) || 0
-  const usedRefs = imageInputs(kind, tool).reduce((n, i) => n + (value.inputs[i.key]?.length ?? 0), 0) + styleImages + mentioned
+  // Kling's named elements (Kie) carry the @Elements apart from the reference images
+  const usedRefs = imageInputs(kind, tool).reduce((n, i) => n + (value.inputs[i.key]?.length ?? 0), 0) + styleImages + (kind === "video" && model?.params.elements ? 0 : mentioned)
   const overRefs = maxRefs != null ? usedRefs - maxRefs : 0
   const limits = maxRefs == null ? {} : Object.fromEntries(imageInputs(kind, tool).filter((i) => i.multiple).map((i) => [i.key, Math.max(0, (value.inputs[i.key]?.length ?? 0) + maxRefs - usedRefs)]))
+  // (and the middle frames, at most the model's count)
+  const slotLimits = { ...limits, ...(mp?.mid_frames ? { mid_frames: mp.mid_frames.max } : {}) }
 
   // a keyframe and its time go only with Aleph 2 and the video they were made from
-  const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe"))
-  const ownParams = Object.fromEntries(Object.entries(value.params).filter(([k]) => k !== "keyframe_video" && k !== "frame"))
+  // (a model's own inputs and editors go only with a model that has them)
+  const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe" && (!["mid_frames", "speaker_masks"].includes(k) || modelInputs.some((i) => i.key === k))))
+  const ownParams = Object.fromEntries(Object.entries(value.params).filter(([k]) => k !== "keyframe_video" && k !== "frame" && (k !== "dialogue" || !!dialogue) && (k !== "shots" || !!shots)
+    && (k !== "mid_times" || !!mp?.mid_frames?.timed) && (k !== "draft_of" || !!draftOf)))
   const spec: Spec = useMemo(
     () => ({
       kind,
@@ -222,8 +262,20 @@ export function Composer({
       ? "Pick a sheet"
     : unsaid
       ? tool.fields.some((f) => f.type === "element" && tool.one_of?.includes(f.key)) ? "Pick an element or add photos" : "Describe it or add photos"
+      : draftOf
+      ? null
+      : shots
+      ? !shots.some((x) => x.prompt.trim()) ? "Write the shots" : shotLengths.length && !shotLengths.includes(shotsTotal) ? `Shots last ${shotsTotal} s: ${shotLengths[0]} to ${shotLengths.at(-1)} s` : null
+      : dialogue
+      ? !dialogue.some((l) => l.text.trim()) ? "Write the lines" : dialogue.some((l) => l.text.trim() && !l.voice) ? "Pick each line's voice" : mp?.speakers && dialogueVoices > mp.speakers ? `${mp.speakers} voices at most` : direct && dialogueChars > 2000 ? "Shorten the dialogue" : null
+      : mp?.mid_frames?.timed && (value.inputs.mid_frames?.length ?? 0) > 0 && (value.inputs.mid_frames ?? []).some((_, i) => !(((value.params.mid_times as number[] | undefined)?.[i] ?? 0) > 0))
+      ? "Time each middle frame"
       : !eleven && !local && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale"
       ? kind === "audio" ? "Write the text" : "Write a prompt"
+      : direct && !value.params.voice
+        ? "Pick a voice"
+      : direct && model?.params.max_chars && value.intent.length > model.params.max_chars
+        ? "Shorten the text"
       : tool.id === "translate" && !value.fields.to?.trim()
         ? "Pick the languages"
         : tool.id === "change-voice" && !value.params.voice
@@ -258,12 +310,15 @@ export function Composer({
   const [modelPrices, setModelPrices] = useState<{ key: string; prices: Record<string, Priced> }>({ key: "", prices: {} })
   function priceModels() {
     const speech = kind === "audio" && !eleven
-    if (speech && !prompt) return
-    const listSpec = (model?: string): Spec => ({ ...probeSpec(model), batch: undefined, ...(speech ? { prompt } : {}) })
+    if (speech && !prompt && !dialogue) return
+    // a model's own options stay with it: the others are priced on their defaults
+    const listSpec = (model?: string): Spec => ({ ...probeSpec(model), batch: undefined, params: { ...spec.params, options: undefined }, ...(speech ? { prompt } : {}) })
     const key = JSON.stringify(listSpec())
     if (modelPrices.key === key) return
     setModelPrices({ key, prices: {} })
-    for (const m of fitting)
+    // only the models that can do what is asked of their own editors (shots, a dialogue, middle frames, a draft's final)
+    const can = (m: Model) => (!shots || !!m.params.shots) && (!dialogue || !!m.params.dialogue) && (!value.inputs.mid_frames?.length || !!m.params.mid_frames) && (!draftOf || !!m.params.draft)
+    for (const m of fitting.filter(can))
       api.estimate(listSpec(m.id)).then(
         (a) => setModelPrices((p) => (p.key === key ? { key, prices: { ...p.prices, [m.id]: { label: priceLabel(a), amount: a.estimate.amount } } } : p)),
         () => {}
@@ -272,7 +327,8 @@ export function Composer({
 
   // prices in the tool list: a probe estimate per tool on its recommended model, once a session
   const listed = kind === "audio" ? tools : tools.filter((t) => t.mode === mode)
-  const priceKey = (t: Tool) => `${kind}:${t.id}:${t.models?.[0] ?? ""}`
+  // (each router its own prices)
+  const priceKey = (t: Tool) => `${state.router}:${kind}:${t.id}:${t.models?.[0] ?? ""}`
   const [, setPriced] = useState(0)
   const prices = Object.fromEntries(listed.flatMap((t) => (PRICES.has(priceKey(t)) ? [[t.id, PRICES.get(priceKey(t))!]] : [])))
   function priceTools() {
@@ -345,7 +401,7 @@ export function Composer({
   const label = keyframe ? "Apply to the shot" : tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? tool.label : "Generate"
   const a = blocker ? undefined : est.answer
   const price = a ? priceLabel(a) : blocker && probe.key === probeKey ? probe.label : null
-  const ready = !busy && !!a && (eleven ? state.keys.elevenlabs : local || state.keys.openrouter)
+  const ready = !busy && !!a && (eleven ? state.keys.elevenlabs : local || state.keys[state.router])
 
   // a file pasted or dropped anywhere on the composer goes to the first input that takes it
   async function take(files: File[]) {
@@ -438,7 +494,7 @@ export function Composer({
 
         {/* the fields, those of one section under its heading (selects as tiles, two a row); Expand's margins and
             Extend's direction and join have their own panels below */}
-        {sections(tool.fields.filter((f) => f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)))).map(({ section, fields }, i) =>
+        {sections(tool.fields.filter((f) => f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)) && !((direct || waiting) && f.key === "instructions"))).map(({ section, fields }, i) =>
           section ? (
             <div key={section}>
               <Label>{section}</Label>
@@ -499,7 +555,7 @@ export function Composer({
         {tool.id === "change-voice" && (
           <VoicePicker enabled={state.keys.elevenlabs} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
         )}
-        {tool.id === "voice" && (
+        {tool.id === "voice" && !noClone && (
           <LibraryVoices
             voices={(state.elements ?? []).filter((e) => e.type === "voice" && e.files.length)}
             value={String(value.params.voice ?? "").startsWith("@") ? String(value.params.voice).slice(1) : null}
@@ -508,6 +564,62 @@ export function Composer({
               set(name ? { params: { ...value.params, voice: `@${name}` }, inputs } : { params: { ...value.params, voice: undefined }, inputs: { ...inputs, ...(voice_clips ? { voice_clips } : {}) } })
             }}
           />
+        )}
+        {tool.id === "voice" && mp?.dialogue && (
+          <Chips
+            className="grid grid-cols-2"
+            options={["one", "dialogue"] as const}
+            value={dialogue ? "dialogue" : "one"}
+            label={(m) => (m === "one" ? "One voice" : "Dialogue")}
+            onChange={(m) => {
+              const { dialogue: _, ...rest } = value.params
+              set({ params: m === "one" ? rest : { ...rest, dialogue: [{ voice: String(value.params.voice ?? ""), text: value.intent }, { voice: "", text: "" }] } })
+            }}
+          />
+        )}
+        {tool.id === "voice" && direct && !dialogue && (
+          <VoicePicker enabled={state.keys.elevenlabs} label="Voice" placeholder="Pick a voice" value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
+        )}
+        {dialogue && (
+          <DialogueEditor
+            lines={dialogue}
+            onChange={(lines) => set({ params: { ...value.params, dialogue: lines } })}
+            max={direct ? 2000 : undefined}
+            speakers={mp?.speakers}
+            tags={!!mp?.tags}
+            picker={(voice, onVoice, label) =>
+              direct ? (
+                <VoicePicker enabled={state.keys.elevenlabs} value={voice || undefined} onChange={onVoice} library={state.elements ?? []} label={label} placeholder="Pick its voice" hint="" />
+              ) : (
+                <ModelVoices model={model!.model} voices={mp?.voices ?? []} value={voice} onChange={onVoice} label={label} placeholder="Pick its voice" />
+              )
+            }
+          />
+        )}
+        {tool.id === "free" && mp?.shots && !draftOf && (
+          <Chips
+            className="grid grid-cols-2"
+            options={["one", "shots"] as const}
+            value={shots ? "shots" : "one"}
+            label={(m) => (m === "one" ? "One prompt" : "Shots")}
+            onChange={(m) => {
+              const { shots: _, ...rest } = value.params
+              set({ params: m === "one" ? rest : { ...rest, shots: [{ prompt: value.intent, duration: 3 }, { prompt: "", duration: 3 }] } })
+            }}
+          />
+        )}
+        {shots && mp?.shots && <ShotsEditor shots={shots} onChange={(s) => set({ params: { ...value.params, shots: s } })} max={mp.shots.max} each={mp.shots.each} lengths={shotLengths} />}
+        {/* with shots, the tool's files stay: its frames and references */}
+        {shots && slotTool.inputs.length > 0 && (
+          <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={slotLimits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />
+        )}
+        {draftOf && (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
+            <span className="flex-1">The final of the draft {draftOf}, in 1080p: no prompt, it is the draft&apos;s. Kie lists no price for it.</span>
+            <Button size="icon-xs" variant="ghost" aria-label="Not from the draft" title="Not from the draft" onClick={() => { const { draft_of: _, ...rest } = value.params; set({ params: rest }) }}>
+              <XIcon />
+            </Button>
+          </div>
         )}
 
         {tool.template && (
@@ -533,9 +645,9 @@ export function Composer({
               </div>
             )}
             {/* the user's own words, with the tool's files */}
-            {(takesWords || tool.inputs.length > 0) && (
+            {(takesWords || slotTool.inputs.length > 0) && !dialogue && !shots && !draftOf && (
               <div>
-                <Label hint={whole ? undefined : custom ? "added to the tool's prompt" : "optional, added to the tool's prompt"}>{kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}</Label>
+                <Label hint={direct && model?.params.max_chars ? `${value.intent.length.toLocaleString("en")} / ${model.params.max_chars.toLocaleString("en")} characters` : whole ? undefined : custom ? "added to the tool's prompt" : "optional, added to the tool's prompt"}>{kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}</Label>
                 <InputGroup className="h-auto flex-col rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
                   {takesWords && kind === "audio" && (
                     <InputGroupTextarea
@@ -560,12 +672,44 @@ export function Composer({
                       onChange={(intent) => set({ intent })}
                     />
                   )}
-                  {tool.inputs.length > 0 && (
+                  {slotTool.inputs.length > 0 && (
                     <InputGroupAddon align="block-end" className={cn("px-3 pt-3 pb-3 font-normal", takesWords && "border-t")}>
-                      <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} limits={limits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />
+                      <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} limits={slotLimits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />
                     </InputGroupAddon>
                   )}
                 </InputGroup>
+                {direct && model?.params.tags && (
+                  <div className="mt-2">
+                    <AudioTags onAdd={(t) => set({ intent: `${value.intent.trimEnd()}${value.intent.trim() ? " " : ""}${t} ` })} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Grok's middle frames: each its time in the video */}
+        {!draftOf && (
+          <div className="contents">
+            {mp?.mid_frames?.timed && (value.inputs.mid_frames?.length ?? 0) > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {(value.inputs.mid_frames ?? []).map((_, i) => (
+                  <label key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Frame {i + 1} at
+                    <Input
+                      inputMode="decimal"
+                      className="h-7 w-16 text-xs"
+                      placeholder="s"
+                      value={(value.params.mid_times as number[] | undefined)?.[i] ?? ""}
+                      onChange={(e) => {
+                        const times = [...((value.params.mid_times as number[] | undefined) ?? [])]
+                        times[i] = e.target.value === "" ? (undefined as unknown as number) : +e.target.value
+                        set({ params: { ...value.params, mid_times: times } })
+                      }}
+                    />
+                    s
+                  </label>
+                ))}
               </div>
             )}
           </div>
@@ -587,11 +731,16 @@ export function Composer({
         {model && (
           <ModelBlock
             kind={kind}
+            why={tool.why ?? {}}
             recommended={recommended}
             others={others}
             model={model}
             params={value.params}
-            onModel={(id) => set({ model: id })}
+            onModel={(id) => {
+              // a model's options are its own
+              const { options: _, ...params } = value.params
+              set({ model: id, params })
+            }}
             onParams={(params) => set({ params })}
             prices={modelPrices.prices}
             onOpenModels={priceModels}
@@ -599,9 +748,8 @@ export function Composer({
             hasImageInput={kind === "video" ? ["first_frame", "last_frame"].some((k) => (value.inputs[k]?.length ?? 0) > 0) : tool.inputs.some((i) => i.kind === "image" && (value.inputs[i.key]?.length ?? 0) > 0)}
             hasVideoInput={tool.inputs.some((i) => i.kind === "video") && !extend}
             // settings a tool's own panel sets: Extend's length and ratio (its source's), Expand's ratio (its frame's)
-            own={extend ? ["duration", "aspect_ratio"] : expand || sheets ? ["aspect_ratio"] : []}
+            own={[...(extend ? ["duration", "aspect_ratio"] : expand || sheets ? ["aspect_ratio"] : []), ...(shots ? ["duration"] : []), ...(dialogue ? ["voice"] : [])]}
             cloning={(value.inputs.voice_clips?.length ?? 0) > 0 || String(value.params.voice ?? "").startsWith("@")}
-            elevenlabs={state.keys.elevenlabs}
           />
         )}
 
@@ -639,8 +787,8 @@ export function Composer({
         {eleven && !state.keys.elevenlabs && (
           <p className="rounded-lg border p-3 text-xs text-destructive">No ElevenLabs key: set it with /plugin configure skill-video@pabrisson, then restart Claude Code.</p>
         )}
-        {!eleven && !local && !state.keys.openrouter && (
-          <p className="rounded-lg border p-3 text-xs text-destructive">No OpenRouter key: prices show, nothing can be generated. Set it with /plugin configure skill-video@pabrisson.</p>
+        {!eleven && !local && !state.keys[state.router] && (
+          <p className="rounded-lg border p-3 text-xs text-destructive">No {ROUTER_NAME[state.router]} key: prices show, nothing can be generated. Set it with /plugin configure skill-video@pabrisson, or pick the other router in Settings.</p>
         )}
       </div>
 
@@ -672,7 +820,8 @@ export function Composer({
                 <Button variant="space" className={cn("h-11 w-full min-w-0 px-4 text-[15px]", blocker && !price ? "justify-center" : "justify-between")} disabled={!ready} onClick={() => go()}>
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">{blocker ?? label}</span>
-                    {!blocker && <Kbd className="shrink-0 bg-space-foreground/15 px-1.5 text-space-foreground/80">⌘↵</Kbd>}
+                    {/* the shortcut gives way to a long price (« ≈ 49 credits »): the tooltip still says it */}
+                    {!blocker && (price?.length ?? 0) < 8 && <Kbd className="shrink-0 bg-space-foreground/15 px-1.5 text-space-foreground/80">⌘↵</Kbd>}
                   </span>
                   {price && <Price className="bg-space-foreground/15 text-space-foreground">{price}</Price>}
                 </Button>
@@ -736,10 +885,10 @@ function ModelBlock({
   hasImageInput,
   hasVideoInput,
   cloning,
-  elevenlabs,
   prices,
   onOpenModels,
   own = [],
+  why,
 }: {
   kind: Kind
   recommended: Model[]
@@ -751,13 +900,13 @@ function ModelBlock({
   hasImageInput: boolean
   hasVideoInput: boolean
   cloning: boolean
-  // an ElevenLabs key: its voices' samples to listen to
-  elevenlabs: boolean
   prices: Record<string, Priced>
   onOpenModels: () => void
   own?: string[]
+  why: Record<string, string>
 }) {
   const p = model.params, put = (k: string, v: unknown) => onParams({ ...params, [k]: v })
+  const [moreOpen, setMoreOpen] = useState(() => params.seed != null || params.options != null || (params.quality != null && params.quality !== "high"))
   const caps = capsOf(model)
   const durations = own.includes("duration") ? [] : (p.duration ?? [])
   const edit = kind === "video" && hasVideoInput
@@ -766,7 +915,7 @@ function ModelBlock({
     <div className="flex flex-col gap-4">
       <div>
         <Label>Model</Label>
-        <ModelPicker kind={kind} recommended={recommended} others={others} value={model.id} onChange={(id) => id && onModel(id)} prices={prices} onOpen={onOpenModels} />
+        <ModelPicker kind={kind} recommended={recommended} others={others} value={model.id} onChange={(id) => id && onModel(id)} prices={prices} onOpen={onOpenModels} why={why} />
         {caps.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {caps.map((c) => <Badge key={c} variant="outline" className="font-normal text-muted-foreground">{c}</Badge>)}
@@ -802,7 +951,12 @@ function ModelBlock({
           )}
         </div>
       ) : null}
-      {p.resolution?.length && model.role !== "upscale" ? (
+      {(params.options as Record<string, unknown> | undefined)?.draft ? (
+        <div>
+          <Label>Resolution</Label>
+          <p className="text-sm text-muted-foreground">480p: a draft, its 1080p final made from it later</p>
+        </div>
+      ) : p.resolution?.length && model.role !== "upscale" ? (
         <div>
           <Label>Resolution</Label>
           <Chips options={p.resolution} value={pick(p.resolution, params.resolution as string, kind === "image" ? "2K" : "1080p", kind === "image" ? "1K" : "720p")} onChange={(r) => put("resolution", r)} />
@@ -820,15 +974,22 @@ function ModelBlock({
           <Chips options={["on", "off"] as const} value={params.sound === false ? "off" : "on"} label={(s) => (s === "on" ? "On" : "Off")} onChange={(s) => put("sound", s === "on")} />
         </div>
       ) : null}
-      {kind === "audio" && p.voices?.length && !cloning ? (
-        <ModelVoices model={model.model} voices={p.voices} value={(params.voice as string) ?? p.voices[0]} onChange={(v) => put("voice", v)} elevenlabs={elevenlabs} />
+      {kind === "audio" && p.voices?.length && !cloning && !own.includes("voice") ? (
+        <ModelVoices model={model.model} voices={p.voices} value={(params.voice as string) ?? p.voices[0]} onChange={(v) => put("voice", v)} />
       ) : null}
-      {(p.quality?.length || p.seed) && (
-        <details className="group/more" open={params.seed != null || (params.quality != null && params.quality !== "high") || undefined}>
+      {p.quality?.length || p.seed || p.options?.length ? (
+        // opened by the user, or already open when something is set; never closed under them when a value goes back to its default
+        <details className="group/more" open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
           <summary className="flex list-none items-center gap-1 text-xs font-semibold tracking-wider text-foreground/70 uppercase hover:text-foreground [&::-webkit-details-marker]:hidden">
-            <ChevronRightIcon className="size-3.5 transition-transform group-open/more:rotate-90" /> More
+            <ChevronRightIcon className="size-3.5 transition-transform group-open/more:rotate-90" /> Options
+            {params.options != null && (
+              <button type="button" className="ml-auto text-[11px] font-normal tracking-normal normal-case text-muted-foreground hover:text-foreground" onClick={(e) => (e.preventDefault(), put("options", undefined))}>
+                Back to the defaults
+              </button>
+            )}
           </summary>
           <div className="mt-3 flex flex-col gap-4">
+            {p.options?.length ? <ModelOptions options={p.options} value={(params.options as Record<string, unknown>) ?? {}} onChange={(o) => put("options", o)} /> : null}
             {p.quality?.length ? (
               <div>
                 <Label>Quality</Label>
@@ -848,7 +1009,7 @@ function ModelBlock({
             )}
           </div>
         </details>
-      )}
+      ) : null}
     </div>
   )
 }

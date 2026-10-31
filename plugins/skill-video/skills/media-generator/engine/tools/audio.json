@@ -1,11 +1,13 @@
 [
   {
     "id": "voice", "label": "Voice", "group": "Voice", "mode": "create", "icon": "audio-lines",
-    "description": "Text to speech: a preset voice, a voice cloned from up to 3 clips, or a dialogue.",
+    "description": "Text to speech: a preset voice, a voice of the Library, a voice cloned from up to 3 clips, or a dialogue. ElevenLabs straight, the others by the router.",
     "inputs": [{ "key": "voice_clips", "kind": "audio", "label": "Voice to clone", "optional": true, "multiple": true }],
     "fields": [{ "key": "instructions", "label": "How it sounds", "type": "text", "placeholder": "warm, slow, a smile in the voice" }],
     "template": "{prompt}",
-    "models": ["elevenlabs/eleven-v4", "google/gemini-3.8-flash-tts", "bytedance-seed/seed-audio-1-0", "minimax/speech-2.8-hd"]
+    "models": ["eleven_v4", "google/gemini-3.8-flash-tts", "bytedance-seed/seed-audio-1-0", "minimax/speech-2.8-hd"],
+    "also": ["eleven_v3", "eleven_v4_turbo", "eleven_multilingual_v2", "eleven_flash_v2_5"],
+    "kie": { "models": ["eleven_v4", "google/gemini-3.8-flash-tts"], "also": ["eleven_v3", "eleven_v4_turbo", "eleven_multilingual_v2", "google/gemini-3.8-flash-lite-tts"] }
   },
   {
     "id": "change-voice", "label": "Change voice", "group": "Voice", "mode": "edit", "icon": "repeat",

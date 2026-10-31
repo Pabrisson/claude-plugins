@@ -14,8 +14,7 @@ import {
   StarIcon,
   Trash2Icon,
   TriangleAlertIcon,
-  type LucideIcon,
-} from "lucide-react"
+  type LucideIcon, SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -27,7 +26,7 @@ import { Viewer } from "@/components/viewer"
 import { Workspaces } from "@/components/inputs"
 
 // timeline: laid on the current workspace's timeline; shot: shown there, where it already is
-export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar" | "element" | "timeline" | "shot"
+export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar" | "element" | "timeline" | "shot" | "final"
 
 // what a result leads to, by its medium: the next tool with it as input, or the current workspace's timeline
 const TIMELINE = { b: "timeline" as const, label: "Add to timeline", icon: ListVideoIcon }
@@ -51,6 +50,9 @@ export const BRIDGES: Record<string, { b: Bridge; label: string; icon: LucideIco
 // an action a page adds to its tiles (a workspace's « Remove from workspace »)
 export type Extra = { label: string; icon: LucideIcon; run: (job: Job) => void }
 export const REMIX = { label: "Remix", icon: RefreshCwIcon }
+// a Seedance 2.5 draft (Kie): its final, made from it in 1080p within 7 days
+export const FINAL = { label: "Make the final", icon: SparklesIcon }
+export const isDraft = (j: Job) => j.status === "done" && j.provider === "kie" && (j.params?.options as Record<string, unknown> | undefined)?.draft === true && Date.now() - Date.parse(j.created) < 7 * 864e5
 export const SEND = { label: "Send to edit", icon: ScissorsIcon }
 
 export const isRunning = (j: Job) => j.status === "queued" || j.status === "running"
@@ -229,6 +231,7 @@ function Tile({
           {[
             // an imported file has nothing to remix
             ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", job, file ?? "") }]),
+            ...(isDraft(job) ? [{ ...FINAL, run: () => onBridge("final", job, file ?? "") }] : []),
             ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => ({ ...x, run: () => onBridge(x.b, job, file!) }))),
             ...(failed ? [] : [{ ...SEND, run: () => sendToEdit(file!) }]),
           ].map((a) =>

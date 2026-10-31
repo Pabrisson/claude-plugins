@@ -1,0 +1,3014 @@
+{
+  "about": "Kie.ai's image, video and speech models as media-generator offers them, read from each model's page of docs.kie.ai (its own capacities, never OpenRouter's). Kept by hand: add, remove or fix a model here. id: OpenRouter's id for the same model, so a tool's list holds for both routers; kie: the model sent to createTask, or one by mode (text, frames, refs, video, avatar); fields: the engine's names → Kie's input keys (« key[] » takes a list); values: rewrites before sending; price: rules read in order, rows of Kie's price API (api.kie.ai/client/v1/model-pricing/page), in: the input video's seconds billed too; cite: the names a model wants in its prompt. The models Kie lists and this lacks are added by providers/kie.js from its docs (read at each start of the dashboard's server and once a day).",
+  "updated": "2026-10-31",
+  "image": [
+    {
+      "id": "alibaba/wan-2.7-image-pro",
+      "lab": "Alibaba",
+      "name": "Wan 2.7 Image Pro",
+      "kie": "wan/2-7-image-pro",
+      "role": "both",
+      "resolutions": ["1K","2K","4K"],
+      "aspect_ratios": ["1:8","9:16","3:4","1:1","4:3","16:9","21:9","8:1"],
+      "max_images": 4,
+      "references": 9,
+      "quality": null,
+      "background": null,
+      "seed": true,
+      "fields": {
+        "prompt": "prompt",
+        "images": "input_urls[]",
+        "aspect_ratio": "aspect_ratio",
+        "resolution": "resolution",
+        "n": "n",
+        "seed": "seed"
+      },
+      "note": "n defaults to 4 on Kie: always send it; 4K and aspect_ratio only without input images",
+      "set": {
+        "n": 1
+      },
+      "options": ["enable_sequential","thinking_mode","color_palette"],
+      "skip": {
+        "bbox_list": "boxes drawn on each image to edit there: Inpaint's painted area does it"
+      },
+      "price": [
+        {
+          "row": "wan 2.7 image pro"
+        }
+      ]
+    },
+    {
+      "id": "black-forest-labs/flux-3-image-klein",
+      "lab": "Black Forest Labs",
+      "name": "FLUX 3 Image Klein",
+      "kie": {
+        "text": "flux-3/klein-text-to-image",
+        "refs": "flux-3/klein-edit-image"
+      },
+      "role": "both",
+      "resolutions": ["1K","2K","4K"],
+      "aspect_ratios": ["9:21","9:16","2:3","3:4","1:1","4:3","3:2","16:9","21:9","auto"],
+      "max_images": 4,
+      "references": 10,
+      "quality": null,
+      "background": null,
+      "seed": true,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "aspect_ratio": "aspect_ratio",
+        "resolution": "resolution",
+        "n": "num_images",
+        "seed": "seed"
+      },
+      "note": "auto ratio only with an input image",
+      "options": [
+        {
+          "key": "output_format",
+          "values": ["png","jpeg","webp"],
+          "default": "png"
+        },
+        "enhance_prompt"
+      ],
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1K"
+          },
+          "row": "Black Forest Labs Flux 3 Klein, image editing, 1K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "2K"
+          },
+          "row": "Black Forest Labs Flux 3 Klein, image editing, 2K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "4K"
+          },
+          "row": "Black Forest Labs Flux 3 Klein, image editing, 4K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "1K"
+          },
+          "row": "Black Forest Labs Flux 3 Klein, text to image, 1K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "2K"
+          },
+          "row": "Black Forest Labs Flux 3 Klein, text to image, 2K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "4K"
+          },
+          "row": "Black Forest Labs Flux 3 Klein, text to image, 4K"
+        }
+      ]
+    },
+    {
+      "id": "bytedance-seed/seedream-5-0-flash",
+      "lab": "ByteDance Seed",
+      "name": "Seedream 5.0 Flash",
+      "kie": {
+        "text": "seedream/5-flash-text-to-image",
+        "refs": "seedream/5-flash-image-to-image"
+      },
+      "role": "both",
+      "resolutions": ["1K","1.5K","2K"],
+      "aspect_ratios": ["9:16","2:3","3:4","1:1","4:3","3:2","16:9","21:9"],
+      "max_images": 1,
+      "references": 10,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "set": {
+        "output_format": "png"
+      },
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "aspect_ratio": "aspect_ratio",
+        "resolution": "size"
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1K"
+          },
+          "row": "seedream 5 Flash, Image to image, 1K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1.5K"
+          },
+          "row": "seedream 5 Flash, Image to image, 1.5K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "2K"
+          },
+          "row": "seedream 5 Flash, Image to image, 2K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "1K"
+          },
+          "row": "seedream 5 Flash, Text to image, 1K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "1.5K"
+          },
+          "row": "seedream 5 Flash, Text to image, 1.5K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "2K"
+          },
+          "row": "seedream 5 Flash, Text to image, 2K"
+        }
+      ],
+      "note": "aspect_ratio required"
+    },
+    {
+      "id": "bytedance-seed/seedream-5-0-lite",
+      "lab": "ByteDance Seed",
+      "name": "Seedream 5.0 Lite",
+      "kie": {
+        "text": "seedream/5-lite-text-to-image",
+        "refs": "seedream/5-lite-image-to-image"
+      },
+      "role": "both",
+      "resolutions": ["2K","4K"],
+      "aspect_ratios": ["9:16","2:3","3:4","1:1","4:3","3:2","16:9","21:9"],
+      "max_images": 1,
+      "references": 14,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "set": {
+        "output_format": "png"
+      },
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "aspect_ratio": "aspect_ratio",
+        "resolution": "quality"
+      },
+      "values": {
+        "resolution": {
+          "2K": "basic",
+          "4K": "ultra"
+        }
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "refs"
+          },
+          "row": "seedream 5.0 Lite, image-to-image"
+        },
+        {
+          "row": "seedream 5.0 Lite, text-to-image"
+        }
+      ],
+      "note": "aspect_ratio and resolution required; Kie's quality \"high\" (3K) left out: no 3K engine size"
+    },
+    {
+      "id": "bytedance-seed/seedream-5-0-pro",
+      "lab": "ByteDance Seed",
+      "name": "Seedream 5.0 Pro",
+      "kie": {
+        "text": "seedream/5-pro-text-to-image",
+        "refs": "seedream/5-pro-image-to-image"
+      },
+      "role": "both",
+      "resolutions": ["1K","2K"],
+      "aspect_ratios": ["9:16","2:3","3:4","1:1","4:3","3:2","16:9","21:9"],
+      "max_images": 1,
+      "references": 10,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "aspect_ratio": "aspect_ratio",
+        "resolution": "quality"
+      },
+      "values": {
+        "resolution": {
+          "1K": "basic",
+          "2K": "high"
+        }
+      },
+      "note": "aspect_ratio and resolution required; each input image after the first adds 0.5 credit (row \"seedream 5 Pro, input image, First image free\")",
+      "options": [
+        {
+          "key": "output_format",
+          "values": ["png","jpeg"],
+          "default": "png"
+        }
+      ],
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1K"
+          },
+          "row": "seedream 5 Pro, image-to-image, 1K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "2K"
+          },
+          "row": "seedream 5 Pro, image-to-image, 2K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "1K"
+          },
+          "row": "seedream 5 Pro, text-to-image, 1K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "2K"
+          },
+          "row": "seedream 5 Pro, text-to-image, 2K"
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-3.1-flash-lite-image",
+      "lab": "Google",
+      "name": "Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image)",
+      "kie": "nano-banana-2-lite",
+      "role": "both",
+      "resolutions": null,
+      "aspect_ratios": ["1:8","1:4","9:16","2:3","3:4","4:5","1:1","5:4","4:3","3:2","16:9","21:9","4:1","8:1","auto"],
+      "max_images": 1,
+      "references": 10,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "aspect_ratio": "aspect_ratio"
+      },
+      "price": [
+        {
+          "row": "nano-banana-2-lite, 1k"
+        }
+      ],
+      "note": "aspect_ratio required (auto allowed); one JPEG out, size set by the model"
+    },
+    {
+      "id": "google/gemini-nano-banana-2.1",
+      "lab": "Google",
+      "name": "Nano Banana 2.1",
+      "kie": "nano-banana-2-1",
+      "role": "both",
+      "resolutions": ["1K","2K","4K"],
+      "aspect_ratios": ["1:8","1:4","9:16","2:3","3:4","4:5","1:1","5:4","4:3","3:2","16:9","21:9","4:1","8:1","auto"],
+      "max_images": 1,
+      "references": 10,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_input[]",
+        "aspect_ratio": "aspect_ratio",
+        "resolution": "resolution"
+      },
+      "options": [
+        {
+          "key": "output_format",
+          "values": ["jpg","png"],
+          "default": "jpg"
+        }
+      ],
+      "price": [
+        {
+          "when": {
+            "resolution": "1K"
+          },
+          "row": "nano-banana-2-1, 1K"
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "row": "nano-banana-2-1, 2K"
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "nano-banana-2-1, 4K"
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-3-pro-image",
+      "lab": "Google",
+      "name": "Nano Banana Pro (Gemini 3 Pro Image)",
+      "kie": "nano-banana-pro",
+      "role": "both",
+      "resolutions": ["1K","2K","4K"],
+      "aspect_ratios": ["9:16","2:3","3:4","4:5","1:1","5:4","4:3","3:2","16:9","21:9","auto"],
+      "max_images": 1,
+      "references": 8,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "set": {
+        "output_format": "png"
+      },
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_input[]",
+        "aspect_ratio": "aspect_ratio",
+        "resolution": "resolution"
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "Google nano banana pro, 4K"
+        },
+        {
+          "row": "Google nano banana pro, 1/2K"
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-image-2.5-flare",
+      "lab": "OpenAI",
+      "name": "GPT Image 2.5 Flare",
+      "kie": {
+        "text": "gpt-image-2-5-flare-text-to-image",
+        "refs": "gpt-image-2-5-flare-image-to-image"
+      },
+      "role": "both",
+      "resolutions": ["1K","2K","4K"],
+      "aspect_ratios": ["9:16","16:27","2:3","3:4","8:9","1:1","9:8","4:3","3:2","27:16","16:9","21:9","auto"],
+      "max_images": 1,
+      "references": 16,
+      "quality": null,
+      "background": ["auto","transparent","opaque"],
+      "seed": false,
+      "fields": {
+        "prompt": "prompt",
+        "images": "input_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "background": "background"
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1K"
+          },
+          "row": "gpt-image-2-5-flare, image-to-image, 1K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "2K"
+          },
+          "row": "gpt-image-2-5-flare, image-to-image, 2K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "4K"
+          },
+          "row": "gpt-image-2-5-flare, image-to-image, 4K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "1K"
+          },
+          "row": "gpt-image-2-5-flare, text-to-image, 1K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "2K"
+          },
+          "row": "gpt-image-2-5-flare, text-to-image, 2K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "4K"
+          },
+          "row": "gpt-image-2-5-flare, text-to-image, 4K"
+        }
+      ],
+      "note": "background only at 1K; 27:16, 16:27, 9:8 and 8:9 at 1K only"
+    },
+    {
+      "id": "openai/gpt-image-2.5-sunburst",
+      "lab": "OpenAI",
+      "name": "GPT Image 2.5 Sunburst",
+      "kie": {
+        "text": "gpt-image-2-5-sunburst-text-to-image",
+        "refs": "gpt-image-2-5-sunburst-image-to-image"
+      },
+      "role": "both",
+      "resolutions": ["1K","2K","4K"],
+      "aspect_ratios": ["9:16","16:27","2:3","3:4","8:9","1:1","9:8","4:3","3:2","27:16","16:9","21:9","auto"],
+      "max_images": 1,
+      "references": 16,
+      "quality": null,
+      "background": ["auto","transparent","opaque"],
+      "seed": false,
+      "fields": {
+        "prompt": "prompt",
+        "images": "input_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "background": "background"
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1K"
+          },
+          "row": "gpt-image-2-5-sunburst, image-to-image, 1K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "2K"
+          },
+          "row": "gpt-image-2-5-sunburst, image-to-image, 2K"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "4K"
+          },
+          "row": "gpt-image-2-5-sunburst, image-to-image, 4K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "1K"
+          },
+          "row": "gpt-image-2-5-sunburst, text-to-image, 1K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "2K"
+          },
+          "row": "gpt-image-2-5-sunburst, text-to-image, 2K"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "4K"
+          },
+          "row": "gpt-image-2-5-sunburst, text-to-image, 4K"
+        }
+      ],
+      "note": "background only at 1K; 27:16, 16:27, 9:8 and 8:9 at 1K only"
+    },
+    {
+      "id": "qwen/qwen-image-3-pro",
+      "lab": "Qwen",
+      "name": "Qwen Image 3 Pro",
+      "kie": {
+        "text": "qwen3/pro-text-to-image",
+        "refs": "qwen3/pro-image-to-image"
+      },
+      "role": "both",
+      "resolutions": ["1K","2K"],
+      "aspect_ratios": ["9:16","2:3","3:4","1:1","4:3","3:2","16:9","21:9"],
+      "max_images": 1,
+      "references": 3,
+      "quality": null,
+      "background": null,
+      "seed": true,
+      "set": {
+        "output_format": "png"
+      },
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "image_size",
+        "seed": "seed"
+      },
+      "note": "each input image adds 0.5 credit: the refs price counts one",
+      "options": ["prompt_extend","negative_prompt"],
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1K"
+          },
+          "row": ["Qwen image 3.0 Pro, output, 1K","Qwen image 3.0 Pro, input, 1K"]
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "2K"
+          },
+          "row": ["Qwen image 3.0 Pro, output, 2K","Qwen image 3.0 Pro, input, 2K"]
+        },
+        {
+          "when": {
+            "resolution": "1K"
+          },
+          "row": "Qwen image 3.0 Pro, text to image, 1K"
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "row": "Qwen image 3.0 Pro, text to image, 2K"
+        }
+      ]
+    },
+    {
+      "id": "recraft/crisp-upscale",
+      "lab": "Recraft",
+      "name": "Crisp Upscale",
+      "kie": "recraft/crisp-upscale",
+      "role": "edit",
+      "resolutions": null,
+      "aspect_ratios": null,
+      "max_images": 1,
+      "references": 1,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "fields": {
+        "images": "image"
+      },
+      "price": [
+        {
+          "row": "Recraft Crisp Upscale, image to image"
+        }
+      ]
+    },
+    {
+      "id": "recraft/remove-background",
+      "lab": "Recraft",
+      "name": "Remove Background",
+      "kie": "recraft/remove-background",
+      "role": "edit",
+      "resolutions": null,
+      "aspect_ratios": null,
+      "max_images": 1,
+      "references": 1,
+      "quality": null,
+      "background": ["transparent"],
+      "seed": false,
+      "fields": {
+        "images": "image"
+      },
+      "price": [
+        {
+          "row": "Recraft Remove Background, image to image"
+        }
+      ],
+      "note": "PNG, JPG or WEBP, 5 MB, 16 MP and 4096 px at most, 256 px at least"
+    },
+    {
+      "id": "x-ai/grok-imagine-image-2.0",
+      "lab": "SpaceXAI",
+      "name": "Grok Imagine Image 2.0",
+      "kie": {
+        "text": "grok-imagine-image-2-0/text-to-image",
+        "refs": "grok-imagine-image-2-0/image-edit"
+      },
+      "role": "both",
+      "resolutions": null,
+      "aspect_ratios": ["9:16","2:3","1:1","3:2","16:9","auto"],
+      "max_images": 1,
+      "references": 5,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "aspect_ratio": "aspect_ratio"
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "refs"
+          },
+          "row": "grok-imagine-image-2-0, Image Edit"
+        },
+        {
+          "row": "grok-imagine-image-2-0, Text to Image"
+        }
+      ],
+      "note": "aspect_ratio required; auto only with an input image; segment edit (task_id + mask) not offered"
+    },
+    {
+      "id": "topaz/image-upscale",
+      "lab": "Topaz Labs",
+      "name": "Image Upscale",
+      "kie": "topaz/image-upscale",
+      "role": "edit",
+      "resolutions": ["2K","4K"],
+      "aspect_ratios": null,
+      "max_images": 1,
+      "references": 1,
+      "quality": null,
+      "background": null,
+      "seed": false,
+      "fields": {
+        "images": "image_url",
+        "resolution": "upscale_factor"
+      },
+      "values": {
+        "resolution": {
+          "2K": "2",
+          "4K": "4"
+        }
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "Topaz Image Upscaler, image-upscale, 4K"
+        },
+        {
+          "row": "Topaz Image Upscaler, image-upscale, 2K"
+        }
+      ],
+      "note": "the upscale factor from the size asked: 2K ×2, 4K ×4"
+    }
+  ],
+  "video": [
+    {
+      "id": "alibaba/happyhorse-1.1",
+      "lab": "Alibaba",
+      "name": "HappyHorse 1.1",
+      "kie": {
+        "text": "happyhorse-1-1/text-to-video",
+        "frames": "happyhorse-1-1/image-to-video",
+        "refs": "happyhorse-1-1/reference-to-video"
+      },
+      "role": "generate",
+      "resolutions": ["720p","1080p"],
+      "aspect_ratios": ["9:21","9:16","3:4","4:5","1:1","5:4","4:3","16:9","21:9"],
+      "durations": [3,4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame"],
+      "references": 9,
+      "videos": 0,
+      "audios": 0,
+      "sound": null,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_urls[]",
+        "images": "reference_image[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration"
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "720p"
+          },
+          "row": "HappyHorse-1.1, reference-to-video, 720p"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1080p"
+          },
+          "row": "HappyHorse-1.1, reference-to-video, 1080p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "HappyHorse-1.1, image-to-video, 720p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "HappyHorse-1.1, image-to-video, 1080p"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "HappyHorse-1.1, text-to-video, 720p"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "HappyHorse-1.1, text-to-video, 1080p"
+        }
+      ],
+      "note": "audio not documented on Kie; a frame sets the ratio; cite references as [Image 1], [Image 2]",
+      "cite": {
+        "images": "[Image {n}]"
+      }
+    },
+    {
+      "id": "alibaba/happyhorse-video-edit",
+      "lab": "Alibaba",
+      "name": "HappyHorse Video Edit",
+      "kie": "happyhorse/video-edit",
+      "role": "edit",
+      "resolutions": ["720p","1080p"],
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 5,
+      "videos": 1,
+      "audios": 0,
+      "sound": false,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "video": "video_url",
+        "images": "reference_image[]",
+        "resolution": "resolution",
+        "seed": "seed"
+      },
+      "note": "HappyHorse 1.0's edit (Kie has no 1.1 edit); video 3–60 s, 2160 px at most; audio_setting auto (model handles it) or origin, not sent",
+      "options": ["audio_setting"],
+      "price": [
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "HappyHorse-1.0, video-edit, 720p",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "HappyHorse-1.0, video-edit, 1080p",
+          "in": true
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-2.7-video-edit",
+      "lab": "Alibaba",
+      "name": "Wan 2.7 Video Edit",
+      "kie": "wan/2-7-videoedit",
+      "role": "edit",
+      "resolutions": ["720p","1080p"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9"],
+      "durations": null,
+      "frames": [],
+      "references": 1,
+      "videos": 1,
+      "audios": 0,
+      "sound": false,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "video": "video_url",
+        "images": "reference_image",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "seed": "seed"
+      },
+      "note": "video 2–10 s; audio_setting auto (model may redo the audio) or origin, not sent",
+      "options": ["negative_prompt","audio_setting","prompt_extend"],
+      "price": [
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "wan 2.7 video, videoedit, 720p"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "wan 2.7 video, videoedit, 1080p"
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-3.0",
+      "lab": "Alibaba",
+      "name": "Wan 3.0",
+      "kie": "wan/3-0-video",
+      "role": "generate",
+      "resolutions": ["480p","720p","1080p"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9"],
+      "durations": [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],
+      "frames": ["first_frame","last_frame"],
+      "references": 10,
+      "videos": 5,
+      "audios": 5,
+      "sound": true,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "images": "reference_image_urls[]",
+        "video": "reference_video_urls[]",
+        "audio": "reference_audio_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "audio",
+        "seed": "seed"
+      },
+      "values": {
+        "resolution": {
+          "480p": "480P",
+          "720p": "720P",
+          "1080p": "1080P"
+        }
+      },
+      "note": "frames and references exclusive; reference videos 1–15 s, 15 s in total, input + output ≤ 30 s; duration -1 = model picks",
+      "options": ["reference_link_urls","reference_file_urls"],
+      "price": [
+        {
+          "when": {
+            "resolution": "480p",
+            "input": "video"
+          },
+          "row": "wan 3.0 video, 480p, video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "wan 3.0 video, 480p, video"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "input": "video"
+          },
+          "row": "wan 3.0 video, 720p, video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "wan 3.0 video, 720p, video"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "input": "video"
+          },
+          "row": "wan 3.0 video, 1080p, video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "wan 3.0 video, 1080p, video"
+        }
+      ]
+    },
+    {
+      "id": "alibaba/wan-3.0-prime",
+      "lab": "Alibaba",
+      "name": "Wan 3.0 Prime",
+      "kie": "wan/3-0-video-prime",
+      "role": "generate",
+      "resolutions": ["480p","720p","1080p"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9"],
+      "durations": [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],
+      "frames": ["first_frame","last_frame"],
+      "references": 10,
+      "videos": 5,
+      "audios": 5,
+      "sound": true,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "images": "reference_image_urls[]",
+        "video": "reference_video_urls[]",
+        "audio": "reference_audio_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "audio",
+        "seed": "seed"
+      },
+      "values": {
+        "resolution": {
+          "480p": "480P",
+          "720p": "720P",
+          "1080p": "1080P"
+        }
+      },
+      "note": "the high-speed model; frames and references exclusive; reference videos 1–15 s, 15 s in total, input + output ≤ 30 s; duration -1 = model picks",
+      "options": ["reference_link_urls","reference_file_urls"],
+      "price": [
+        {
+          "when": {
+            "resolution": "480p",
+            "input": "video"
+          },
+          "row": "wan3.0 video prime, 480p, video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "wan3.0 video prime, 480p, video"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "input": "video"
+          },
+          "row": "wan3.0 video prime, 720p, video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "wan3.0 video prime, 720p, video"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "input": "video"
+          },
+          "row": "wan3.0 video prime, 1080p, video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "wan3.0 video prime, 1080p, video"
+        }
+      ]
+    },
+    {
+      "id": "bytedance/omnihuman-1.5",
+      "lab": "ByteDance",
+      "name": "OmniHuman 1.5",
+      "kie": "omnihuman-1-5",
+      "role": "avatar",
+      "resolutions": ["720p","1080p"],
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 1,
+      "videos": 0,
+      "audios": 1,
+      "sound": false,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_url",
+        "audio": "audio_url",
+        "resolution": "output_resolution",
+        "seed": "seed"
+      },
+      "values": {
+        "resolution": {
+          "720p": "720",
+          "1080p": "1080"
+        }
+      },
+      "note": "audio under 60 s (15 s or less advised); prompt 300 characters; output keeps the photo's ratio",
+      "options": ["pe_fast_mode"],
+      "masks": {
+        "key": "mask_url",
+        "max": 5
+      },
+      "price": [
+        {
+          "row": "omnihuman-1-5, lip sync"
+        }
+      ]
+    },
+    {
+      "id": "bytedance/omnihuman-2.0",
+      "lab": "ByteDance",
+      "name": "OmniHuman 2.0",
+      "kie": "omnihuman-2-0",
+      "role": "avatar",
+      "resolutions": ["720p"],
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 1,
+      "videos": 0,
+      "audios": 1,
+      "sound": false,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "audio": "audio_url"
+      },
+      "price": [
+        {
+          "row": "omnihuman-2-0, avatar video, 720p"
+        }
+      ],
+      "note": "audio 4–300 s (wav or mp3, 15 MB); enable_watermark defaults to true on Kie",
+      "set": {
+        "enable_watermark": false
+      }
+    },
+    {
+      "id": "bytedance/seedance-2.0",
+      "lab": "ByteDance",
+      "name": "Seedance 2.0",
+      "kie": "bytedance/seedance-2",
+      "role": "generate",
+      "resolutions": ["480p","720p","1080p","4K"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
+      "durations": [4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame","last_frame"],
+      "references": 9,
+      "videos": 3,
+      "audios": 3,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "images": "reference_image_urls[]",
+        "video": "reference_video_urls[]",
+        "audio": "reference_audio_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "generate_audio"
+      },
+      "values": {
+        "resolution": {
+          "4K": "4k"
+        }
+      },
+      "note": "frames and references exclusive; reference videos and audios 2–15 s, 15 s in total; duration -1 accepted (model picks), its link to the input video not documented; 4K comes out in H.265",
+      "options": ["return_last_frame","web_search"],
+      "price": [
+        {
+          "when": {
+            "resolution": "480p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2, 480p with video input",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "bytedance/seedance-2, 480p no video input"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2, 720p with video input",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "bytedance/seedance-2, 720p no video input"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2, 1080p with video input",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "bytedance/seedance-2, 1080p no video input"
+        },
+        {
+          "when": {
+            "resolution": "4K",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2, 4K with video input",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "bytedance/seedance-2, 4K no video input"
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedance-2.0-fast",
+      "lab": "ByteDance",
+      "name": "Seedance 2.0 Fast",
+      "kie": "bytedance/seedance-2-fast",
+      "role": "generate",
+      "resolutions": ["480p","720p"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
+      "durations": [4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame","last_frame"],
+      "references": 9,
+      "videos": 3,
+      "audios": 3,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "images": "reference_image_urls[]",
+        "video": "reference_video_urls[]",
+        "audio": "reference_audio_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "generate_audio"
+      },
+      "note": "frames and references exclusive; reference videos and audios 2–15 s, 15 s in total; duration -1 accepted (model picks), its link to the input video not documented",
+      "options": ["return_last_frame","web_search"],
+      "price": [
+        {
+          "when": {
+            "resolution": "480p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2 fast, 480p with video input",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "bytedance/seedance-2 fast, 480p no video input"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2 fast, 720p with video input",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "bytedance/seedance-2 fast, 720p no video input"
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedance-2.0-mini",
+      "lab": "ByteDance",
+      "name": "Seedance 2.0 Mini",
+      "kie": "bytedance/seedance-2-mini",
+      "role": "generate",
+      "resolutions": ["480p","720p"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
+      "durations": [4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame","last_frame"],
+      "references": 9,
+      "videos": 3,
+      "audios": 3,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "images": "reference_image_urls[]",
+        "video": "reference_video_urls[]",
+        "audio": "reference_audio_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "generate_audio"
+      },
+      "note": "frames and references exclusive; reference videos and audios 2–15 s, 15 s in total; duration -1 accepted (model picks), its link to the input video not documented",
+      "options": ["web_search"],
+      "price": [
+        {
+          "when": {
+            "resolution": "480p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2-mini, 480P with video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "bytedance/seedance-2-mini, 480P no video"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2-mini, 720P with video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "bytedance/seedance-2-mini, 720P no video"
+        }
+      ]
+    },
+    {
+      "id": "bytedance/seedance-2.5",
+      "lab": "ByteDance",
+      "name": "Seedance 2.5",
+      "kie": "bytedance/seedance-2-5",
+      "role": "generate",
+      "resolutions": ["480p","720p","1080p"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
+      "durations": [4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],
+      "frames": ["first_frame","last_frame"],
+      "references": 30,
+      "videos": 10,
+      "audios": 10,
+      "sound": true,
+      "seed": false,
+      "follow": true,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "images": "reference_image_urls[]",
+        "video": "reference_video_urls[]",
+        "audio": "reference_audio_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "generate_audio"
+      },
+      "note": "frames and references (images, videos, audios) exclusive; reference videos 2–30 s, 30 s in total",
+      "options": [
+        "return_last_frame",
+        {
+          "key": "output_format",
+          "values": ["mp4","mov"],
+          "default": "mp4"
+        },
+        "web_search",
+        {
+          "key": "draft",
+          "hint": "a 480p preview first; its final made from it within 7 days"
+        }
+      ],
+      "draft": {
+        "model": "bytedance/seedance-2-5-draft",
+        "resolution": "1080p",
+        "days": 7
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "480p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2-5, 480p with video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "bytedance/seedance-2-5, 480p no video"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2-5, 720p with video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "bytedance/seedance-2-5, 720p no video"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "input": "video"
+          },
+          "row": "bytedance/seedance-2-5, 1080p with video",
+          "in": true
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "bytedance/seedance-2-5, 1080p no video"
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-omni-flash-1.1",
+      "lab": "Google",
+      "name": "Gemini Omni 1.1 Flash",
+      "kie": "google/gemini-omni-flash-1-1",
+      "role": "generate",
+      "resolutions": ["360p","720p","1080p","4K"],
+      "aspect_ratios": ["9:16","16:9"],
+      "durations": [4,6,8,10],
+      "frames": ["first_frame","last_frame"],
+      "references": 7,
+      "videos": 0,
+      "audios": 0,
+      "sound": null,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "seed": "seed"
+      },
+      "values": {
+        "resolution": {
+          "4K": "4k"
+        },
+        "duration": "string"
+      },
+      "note": "audio track not documented; frames exclusive with references; video_list ({url,start,ends}), audio_ids and character_ids need other Kie calls: not offered",
+      "skip": {
+        "audio_ids": "ids made by Google's own audio tool, not by this API",
+        "character_ids": "ids made by Google's own character tool, not by this API",
+        "video_list": "parts of videos: a whole video goes as a reference"
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "360p",
+            "duration": 4
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 4s 360p no video input"
+        },
+        {
+          "when": {
+            "resolution": "360p",
+            "duration": 6
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 6s 360p no video input"
+        },
+        {
+          "when": {
+            "resolution": "360p",
+            "duration": 8
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 8s 360p no video input"
+        },
+        {
+          "when": {
+            "resolution": "360p",
+            "duration": 10
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 10s 360p no video input"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "duration": 4
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 4s 720p no video input"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "duration": 6
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 6s 720p no video input"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "duration": 8
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 8s 720p no video input"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "duration": 10
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 10s 720p no video input"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "duration": 4
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 4s 1080p no video input"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 6s 1080p no video input"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 8s 1080p no video input"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 10s 1080p no video input"
+        },
+        {
+          "when": {
+            "resolution": "4K",
+            "duration": 4
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 4s 4k no video input"
+        },
+        {
+          "when": {
+            "resolution": "4K",
+            "duration": 6
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 6s 4k no video input"
+        },
+        {
+          "when": {
+            "resolution": "4K",
+            "duration": 8
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 8s 4k no video input"
+        },
+        {
+          "when": {
+            "resolution": "4K",
+            "duration": 10
+          },
+          "row": "google/gemini-omni-flash-1-1, video, 10s 4k no video input"
+        }
+      ]
+    },
+    {
+      "id": "google/veo-3.1",
+      "lab": "Google",
+      "name": "Veo 3.1",
+      "kie": {
+        "text": {
+          "model": "veo-3-1",
+          "set": {
+            "generation_type": "TEXT_2_VIDEO"
+          }
+        },
+        "frames": {
+          "model": "veo-3-1",
+          "set": {
+            "generation_type": "FIRST_AND_LAST_FRAMES_2_VIDEO"
+          }
+        }
+      },
+      "role": "generate",
+      "resolutions": ["720p","1080p","4K"],
+      "aspect_ratios": ["9:16","16:9"],
+      "durations": [4,6,8],
+      "frames": ["first_frame","last_frame"],
+      "references": 0,
+      "videos": 0,
+      "audios": 0,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "set": {
+        "model": "veo3"
+      },
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_urls[]",
+        "last_frame": "image_urls[]",
+        "images": "image_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration"
+      },
+      "values": {
+        "resolution": {
+          "4K": "4k"
+        }
+      },
+      "note": "audio always on; no reference images on Quality",
+      "options": [
+        "enable_translation",
+        {
+          "key": "watermark",
+          "label": "Watermark text",
+          "type": "text",
+          "hint": "written on the video"
+        }
+      ],
+      "price": [
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "Google veo 3.1, image-to-video, Quality-720p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "Google veo 3.1, image-to-video, Quality-1080p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "4K"
+          },
+          "row": "Google veo 3.1, image-to-video, Quality-4K"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "Google veo 3.1, text-to-video, Quality-720p"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "Google veo 3.1, text-to-video, Quality-1080p"
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "Google veo 3.1, text-to-video, Quality-4K"
+        }
+      ]
+    },
+    {
+      "id": "google/veo-3.1-fast",
+      "lab": "Google",
+      "name": "Veo 3.1 Fast",
+      "kie": {
+        "text": {
+          "model": "veo-3-1",
+          "set": {
+            "generation_type": "TEXT_2_VIDEO"
+          }
+        },
+        "frames": {
+          "model": "veo-3-1",
+          "set": {
+            "generation_type": "FIRST_AND_LAST_FRAMES_2_VIDEO"
+          }
+        },
+        "refs": {
+          "model": "veo-3-1",
+          "set": {
+            "generation_type": "REFERENCE_2_VIDEO"
+          }
+        }
+      },
+      "role": "generate",
+      "resolutions": ["720p","1080p","4K"],
+      "aspect_ratios": ["9:16","16:9"],
+      "durations": [4,6,8],
+      "frames": ["first_frame","last_frame"],
+      "references": 3,
+      "videos": 0,
+      "audios": 0,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "set": {
+        "model": "veo3_fast"
+      },
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_urls[]",
+        "last_frame": "image_urls[]",
+        "images": "image_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration"
+      },
+      "values": {
+        "resolution": {
+          "4K": "4k"
+        }
+      },
+      "note": "audio always on; reference images: 8 s only",
+      "options": [
+        "enable_translation",
+        {
+          "key": "watermark",
+          "label": "Watermark text",
+          "type": "text",
+          "hint": "written on the video"
+        }
+      ],
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "720p"
+          },
+          "row": "Google veo 3.1, reference-to-video, Fast-720p"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1080p"
+          },
+          "row": "Google veo 3.1, reference-to-video, Fast-1080p"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "4K"
+          },
+          "row": "Google veo 3.1, reference-to-video, Fast-4k"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "Google veo 3.1, image-to-video, Fast-720p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "Google veo 3.1, image-to-video, Fast-1080p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "4K"
+          },
+          "row": "Google veo 3.1, image-to-video, Fast-4K"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "Google veo 3.1, text-to-video, Fast-720p"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "Google veo 3.1, text-to-video, Fast-1080p"
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "Google veo 3.1, text-to-video, Fast-4K"
+        }
+      ]
+    },
+    {
+      "id": "google/veo-3.1-lite",
+      "lab": "Google",
+      "name": "Veo 3.1 Lite",
+      "kie": {
+        "text": {
+          "model": "veo-3-1",
+          "set": {
+            "generation_type": "TEXT_2_VIDEO"
+          }
+        },
+        "frames": {
+          "model": "veo-3-1",
+          "set": {
+            "generation_type": "FIRST_AND_LAST_FRAMES_2_VIDEO"
+          }
+        },
+        "refs": {
+          "model": "veo-3-1",
+          "set": {
+            "generation_type": "REFERENCE_2_VIDEO"
+          }
+        }
+      },
+      "role": "generate",
+      "resolutions": ["720p","1080p","4K"],
+      "aspect_ratios": ["9:16","16:9"],
+      "durations": [4,6,8],
+      "frames": ["first_frame","last_frame"],
+      "references": 3,
+      "videos": 0,
+      "audios": 0,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "set": {
+        "model": "veo3_lite"
+      },
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_urls[]",
+        "last_frame": "image_urls[]",
+        "images": "image_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration"
+      },
+      "values": {
+        "resolution": {
+          "4K": "4k"
+        }
+      },
+      "note": "audio always on; reference images: 8 s only",
+      "options": [
+        "enable_translation",
+        {
+          "key": "watermark",
+          "label": "Watermark text",
+          "type": "text",
+          "hint": "written on the video"
+        }
+      ],
+      "price": [
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "720p"
+          },
+          "row": "Google veo 3.1, reference-to-video, Lite-720p"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1080p"
+          },
+          "row": "Google veo 3.1, reference-to-video, Lite-1080p"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "4K"
+          },
+          "row": "Google veo 3.1, reference-to-video, Lite-4k"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "Google veo 3.1, image-to-video, Lite-720p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "Google veo 3.1, image-to-video, Lite-1080p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "4K"
+          },
+          "row": "Google veo 3.1, image-to-video, Lite-4K"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "Google veo 3.1, text-to-video, Lite-720p"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "Google veo 3.1, text-to-video, Lite-1080p"
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "Google veo 3.1, text-to-video, Lite-4K"
+        }
+      ]
+    },
+    {
+      "id": "kwaivgi/kling-ai-avatar-pro",
+      "lab": "Kling",
+      "name": "AI Avatar Pro",
+      "kie": "kling/ai-avatar-pro",
+      "role": "avatar",
+      "resolutions": ["1080p"],
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 1,
+      "videos": 0,
+      "audios": 1,
+      "sound": false,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_url",
+        "audio": "audio_url"
+      },
+      "price": [
+        {
+          "row": "Kling AI Avatar, lip sync, Pro-1080p (audio up to 5 minutes)"
+        }
+      ],
+      "note": "prompt required; audio 5 min at most"
+    },
+    {
+      "id": "kwaivgi/kling-ai-avatar-standard",
+      "lab": "Kling",
+      "name": "AI Avatar Standard",
+      "kie": "kling/ai-avatar-standard",
+      "role": "avatar",
+      "resolutions": ["720p"],
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 1,
+      "videos": 0,
+      "audios": 1,
+      "sound": false,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_url",
+        "audio": "audio_url"
+      },
+      "price": [
+        {
+          "row": "Kling AI Avatar, lip sync, Standard-720p (audio up to 5 minutes)"
+        }
+      ],
+      "note": "prompt required; audio 5 min at most"
+    },
+    {
+      "id": "kwaivgi/kling-v3.0-omni",
+      "lab": "Kling",
+      "name": "Video v3.0 Omni",
+      "kie": {
+        "text": "kling-3.0-omni/text-to-video",
+        "frames": "kling-3.0-omni/image-to-video",
+        "refs": "kling-3.0-omni/reference-to-video",
+        "video": "kling-3.0-omni/reference-to-video"
+      },
+      "role": "generate",
+      "resolutions": ["720p","1080p","4K"],
+      "aspect_ratios": ["9:16","1:1","16:9"],
+      "durations": [3,4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame","last_frame"],
+      "references": 7,
+      "videos": 1,
+      "audios": 0,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "elements": {
+        "max": 7,
+        "key": "elements",
+        "images": "element_input_urls"
+      },
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_urls[]",
+        "last_frame": "image_urls[]",
+        "images": "image_urls[]",
+        "video": "video_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "audio"
+      },
+      "values": {
+        "resolution": {
+          "4K": "4k"
+        }
+      },
+      "note": "frames: no aspect_ratio (follows the frame); with a video: sound must be false, 4 images at most, video 3–15.5 s; elements [{name, description, element_input_urls (2–4 images | 1 video), element_input_audio_urls}]",
+      "options": ["prefer_multi_shots"],
+      "shots": {
+        "key": "multi_prompt",
+        "flag": "customize_multi_shots",
+        "max": 6,
+        "each": [1,12],
+        "total": 15
+      },
+      "price": [
+        {
+          "when": {
+            "input": "video",
+            "resolution": "720p"
+          },
+          "row": "kling 3.0 omni, reference-to-video, 720p with video input"
+        },
+        {
+          "when": {
+            "input": "video",
+            "resolution": "1080p"
+          },
+          "row": "kling 3.0 omni, reference-to-video, 1080p with video input"
+        },
+        {
+          "when": {
+            "input": "video",
+            "resolution": "4K"
+          },
+          "row": "kling 3.0 omni, reference-to-video, 4k with video input"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "720p",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, reference-to-video, 720p with native audio"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "720p"
+          },
+          "row": "kling 3.0 omni, reference-to-video, 720p no native audio"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1080p",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, reference-to-video, 1080p with native audio"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "1080p"
+          },
+          "row": "kling 3.0 omni, reference-to-video, 1080p no native audio"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "4K",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, reference-to-video, 4k with native audio"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "4K"
+          },
+          "row": "kling 3.0 omni, reference-to-video, 4k no native audio"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, image-to-video, 720p with native audio"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "kling 3.0 omni, image-to-video, 720p no native audio"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, image-to-video, 1080p with native audio"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "kling 3.0 omni, image-to-video, 1080p no native audio"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "4K",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, image-to-video, 4k with native audio"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "4K"
+          },
+          "row": "kling 3.0 omni, image-to-video, 4k no native audio"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "720p",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, text-to-video, 720p with native audio"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "720p"
+          },
+          "row": "kling 3.0 omni, text-to-video, 720p no native audio"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "1080p",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, text-to-video, 1080p with native audio"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "1080p"
+          },
+          "row": "kling 3.0 omni, text-to-video, 1080p no native audio"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "4K",
+            "sound": true
+          },
+          "row": "kling 3.0 omni, text-to-video, 4k with native audio"
+        },
+        {
+          "when": {
+            "mode": "text",
+            "resolution": "4K"
+          },
+          "row": "kling 3.0 omni, text-to-video, 4k no native audio"
+        }
+      ]
+    },
+    {
+      "id": "kwaivgi/kling-v3.0-omni-transformation",
+      "lab": "Kling",
+      "name": "Video v3.0 Omni Transformation",
+      "kie": "kling-3.0-omni/transformation",
+      "role": "edit",
+      "resolutions": ["720p","1080p","4K"],
+      "aspect_ratios": ["9:16","1:1","16:9"],
+      "durations": null,
+      "frames": [],
+      "references": 4,
+      "videos": 1,
+      "audios": 0,
+      "sound": false,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "elements": {
+        "max": 7,
+        "key": "elements",
+        "images": "element_input_urls"
+      },
+      "set": {
+        "audio": false
+      },
+      "fields": {
+        "prompt": "prompt",
+        "video": "video_urls[]",
+        "images": "image_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio"
+      },
+      "values": {
+        "resolution": {
+          "4K": "4k"
+        }
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "kling 3.0 omni, transformation, 720p"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "kling 3.0 omni, transformation, 1080p"
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "kling 3.0 omni, transformation, 4k"
+        }
+      ],
+      "note": "video 3–15.5 s, 700–4553 px a side; aspect_ratio only with images (else follows the video)"
+    },
+    {
+      "id": "kwaivgi/kling-v3.0-pro",
+      "lab": "Kling",
+      "name": "Video v3.0 Pro",
+      "kie": "kling-3.0/video",
+      "role": "generate",
+      "resolutions": ["720p","1080p","4K"],
+      "aspect_ratios": ["9:16","1:1","16:9"],
+      "durations": [3,4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame","last_frame"],
+      "references": 0,
+      "videos": 0,
+      "audios": 0,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "elements": {
+        "max": 3,
+        "key": "kling_elements",
+        "images": "element_input_urls"
+      },
+      "set": {
+        "multi_shots": false
+      },
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_urls[]",
+        "last_frame": "image_urls[]",
+        "resolution": "mode",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "sound"
+      },
+      "values": {
+        "resolution": {
+          "720p": "std",
+          "1080p": "pro",
+          "4K": "4K"
+        },
+        "duration": "string"
+      },
+      "note": "sound always sent (required); aspect_ratio required without a frame; kling_elements [{name, description, element_input_urls (2–4 images | 1 video), element_input_audio_urls}] ≤ 3",
+      "shots": {
+        "key": "multi_prompt",
+        "flag": "multi_shots",
+        "max": 5,
+        "each": [1,12],
+        "total": 15
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "720p",
+            "sound": true
+          },
+          "row": "Kling 3.0, video, with audio-720P"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "Kling 3.0, video, without audio-720P"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "sound": true
+          },
+          "row": "Kling 3.0, video, with audio-1080P"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "Kling 3.0, video, without audio-1080P"
+        },
+        {
+          "when": {
+            "resolution": "4K",
+            "sound": true
+          },
+          "row": "Kling 3.0, video, with audio-4K"
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "Kling 3.0, video, without audio-4K"
+        }
+      ]
+    },
+    {
+      "id": "kwaivgi/kling-v3.0-turbo",
+      "lab": "Kling",
+      "name": "Video v3.0 Turbo",
+      "kie": {
+        "text": "kling/v3-turbo-text-to-video",
+        "frames": "kling/v3-turbo-image-to-video"
+      },
+      "role": "generate",
+      "resolutions": ["720p","1080p"],
+      "aspect_ratios": ["9:16","1:1","16:9"],
+      "durations": [3,4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame"],
+      "references": 0,
+      "videos": 0,
+      "audios": 0,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration"
+      },
+      "values": {
+        "duration": "string"
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "kling 3.0 turbo, image-to-video, 720P"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "kling 3.0 turbo, image-to-video, 1080P"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "kling 3.0 turbo, text-to-video, 720P"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "kling 3.0 turbo, text-to-video, 1080P"
+        }
+      ],
+      "note": "audio always on; aspect_ratio required for text, none with a frame"
+    },
+    {
+      "id": "kwaivgi/kling-4.0",
+      "lab": "Kling",
+      "name": "Video v4.0",
+      "kie": {
+        "text": "kling-4.0/reference-to-video",
+        "frames": "kling-4.0/keyframe-to-video",
+        "refs": "kling-4.0/reference-to-video",
+        "video": "kling-4.0/reference-to-video"
+      },
+      "role": "generate",
+      "resolutions": ["720p","1080p"],
+      "aspect_ratios": ["9:16","1:1","16:9","21:9"],
+      "durations": [3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],
+      "frames": ["first_frame","last_frame"],
+      "references": 10,
+      "videos": 5,
+      "audios": 0,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "elements": {
+        "max": 7,
+        "key": "elements",
+        "images": "image_urls",
+        "tag": true,
+        "frames": false
+      },
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "images": "image_urls[]",
+        "video": "video_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration"
+      },
+      "note": "every input must be cited in the prompt (@image_1, @video_1, @first_frame, @last_frame); audio always on without a reference video; elements [{name, description, image_urls (2–4) | video_url, tag, voice_url}] ≤ 7; voices [{name, audio_url}] ≤ 3",
+      "cite": {
+        "first_frame": "@first_frame",
+        "last_frame": "@last_frame",
+        "images": "@image_{n}",
+        "video": "@video_{n}"
+      },
+      "options": ["keep_original_sound"],
+      "mid_frames": {
+        "key": "keyframe_urls",
+        "max": 8,
+        "cite": "@keyframe_{n}"
+      },
+      "named_voices": {
+        "key": "voices",
+        "max": 3
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "kling 4.0, keyframe-to-video, 720P"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "kling 4.0, keyframe-to-video, 1080P"
+        },
+        {
+          "when": {
+            "input": "video",
+            "resolution": "720p"
+          },
+          "row": "kling 4.0, reference-to-video, 720P with video input"
+        },
+        {
+          "when": {
+            "input": "video",
+            "resolution": "1080p"
+          },
+          "row": "kling 4.0, reference-to-video, 1080P with video input"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "kling 4.0, reference-to-video, 720P no video input"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "kling 4.0, reference-to-video, 1080P no video input"
+        }
+      ]
+    },
+    {
+      "id": "meigen-ai/infinitalk",
+      "lab": "MeiGen-AI",
+      "name": "InfiniteTalk",
+      "kie": "infinitalk/from-audio",
+      "role": "avatar",
+      "resolutions": ["480p","720p"],
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 1,
+      "videos": 0,
+      "audios": 1,
+      "sound": false,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_url",
+        "audio": "audio_url",
+        "resolution": "resolution",
+        "seed": "seed"
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "MeiGen-AI InfiniteTalk, lip sync, up to 15 seconds-480p"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "MeiGen-AI InfiniteTalk, lip sync, up to 15 seconds-720p"
+        }
+      ],
+      "note": "prompt required; seed 10000–1000000; audio 10 MB; Kie's price row says « up to 15 seconds »"
+    },
+    {
+      "id": "minimax/hailuo-3",
+      "lab": "MiniMax",
+      "name": "H3",
+      "kie": {
+        "text": "minimax-h3/text-to-video",
+        "frames": "minimax-h3/image-to-video",
+        "refs": "minimax-h3/reference-to-video",
+        "video": "minimax-h3/reference-to-video"
+      },
+      "role": "generate",
+      "resolutions": ["768p","2K"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
+      "durations": [4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame","last_frame"],
+      "references": 9,
+      "videos": 3,
+      "audios": 3,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "images": "reference_image_urls[]",
+        "video": "reference_video_urls[]",
+        "audio": "reference_audio_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration"
+      },
+      "values": {
+        "resolution": {
+          "768p": "768P"
+        }
+      },
+      "price": [
+        {
+          "when": {
+            "input": "video",
+            "resolution": "768p"
+          },
+          "row": "MiniMax H3, reference to video, 768p",
+          "in": true
+        },
+        {
+          "when": {
+            "input": "video",
+            "resolution": "2K"
+          },
+          "row": "MiniMax H3, reference to video, 2K",
+          "in": true
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "768p"
+          },
+          "row": "MiniMax H3, reference to video, 768p"
+        },
+        {
+          "when": {
+            "mode": "refs",
+            "resolution": "2K"
+          },
+          "row": "MiniMax H3, reference to video, 2K"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "768p"
+          },
+          "row": "MiniMax H3, image to video, 768p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "2K"
+          },
+          "row": "MiniMax H3, image to video, 2K"
+        },
+        {
+          "when": {
+            "resolution": "768p"
+          },
+          "row": "MiniMax H3, text to video, 768p"
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "row": "MiniMax H3, text to video, 2K"
+        }
+      ],
+      "note": "audio always on; aspect_ratio required for text, none with frames; reference audio needs an image or a video; each reference image past 5 adds 4 credits"
+    },
+    {
+      "id": "pixverse/pixverse-v6-max",
+      "lab": "PixVerse",
+      "name": "V6 Max",
+      "kie": {
+        "text": "pixverse-v6-max/text-to-video",
+        "frames": "pixverse-v6-max/image-to-video"
+      },
+      "role": "generate",
+      "resolutions": ["360p","540p","720p","1080p"],
+      "aspect_ratios": ["9:16","2:3","3:4","1:1","4:3","3:2","16:9","21:9"],
+      "durations": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame"],
+      "references": 0,
+      "videos": 0,
+      "audios": 0,
+      "sound": true,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_urls[]",
+        "resolution": "quality",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "generate_audio_switch",
+        "seed": "seed"
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "360p",
+            "sound": true
+          },
+          "row": "pixverse-v6-max, Text /Image to Video, 360p(with audio)"
+        },
+        {
+          "when": {
+            "resolution": "360p"
+          },
+          "row": "pixverse-v6-max, Text /Image to Video, 360p(no audio)"
+        },
+        {
+          "when": {
+            "resolution": "540p",
+            "sound": true
+          },
+          "row": "pixverse-v6-max, Text /Image to Video, 540p(with audio)"
+        },
+        {
+          "when": {
+            "resolution": "540p"
+          },
+          "row": "pixverse-v6-max, Text /Image to Video, 540p(no audio)"
+        },
+        {
+          "when": {
+            "resolution": "720p",
+            "sound": true
+          },
+          "row": "pixverse-v6-max, Text /Image to Video, 720p(with audio)"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "pixverse-v6-max, Text /Image to Video, 720p(no audio)"
+        },
+        {
+          "when": {
+            "resolution": "1080p",
+            "sound": true
+          },
+          "row": "pixverse-v6-max, Text /Image to Video, 1080p(with audio)"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "pixverse-v6-max, Text /Image to Video, 1080p(no audio)"
+        }
+      ],
+      "note": "aspect_ratio required for text, never sent with a frame; resolution and duration required"
+    },
+    {
+      "id": "x-ai/grok-imagine-video-1.5-preview",
+      "lab": "SpaceXAI",
+      "name": "Grok Imagine Video 1.5 Preview",
+      "kie": "grok-imagine-video-1-5-preview",
+      "role": "generate",
+      "resolutions": ["480p","720p","1080p"],
+      "aspect_ratios": ["9:16","2:3","3:4","1:1","4:3","3:2","16:9"],
+      "durations": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+      "frames": ["first_frame","last_frame"],
+      "references": 1,
+      "videos": 0,
+      "audios": 0,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": true,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_urls[]",
+        "first_frame": "first_frame_url",
+        "last_frame": "last_frame_url",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "enable_audio"
+      },
+      "note": "image_urls marked required (text only may be refused); no price row for 1080p; cite the image as @image1",
+      "cite": {
+        "images": "@image{n}"
+      },
+      "options": [
+        {
+          "key": "loop",
+          "covers": "loop_url"
+        }
+      ],
+      "mid_frames": {
+        "key": "keyframes",
+        "max": 4,
+        "timed": true
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "grok-imagine-video-1-5-preview, 480p"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "grok-imagine-video-1-5-preview, 720p"
+        }
+      ]
+    },
+    {
+      "id": "topaz/video-upscale",
+      "lab": "Topaz Labs",
+      "name": "Video Upscale",
+      "kie": "topaz/video-upscale",
+      "role": "upscale",
+      "resolutions": null,
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 0,
+      "videos": 1,
+      "audios": 0,
+      "sound": false,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": {
+        "factors": [1,2,4]
+      },
+      "fields": {
+        "video": "video_url",
+        "factor": "upscale_factor"
+      },
+      "values": {
+        "factor": {
+          "1": "1",
+          "2": "2",
+          "3": "4",
+          "4": "4",
+          "1.5": "2"
+        }
+      },
+      "price": [
+        {
+          "when": {
+            "factor": 4
+          },
+          "row": "Topaz Video Upscaler, upscale factor 4x"
+        },
+        {
+          "row": "Topaz Video Upscaler, upscale factor 1x/2x"
+        }
+      ],
+      "note": "mp4, mov or mkv, 50 MB at most; Topaz takes ×1, ×2, ×4: ×1.5 runs ×2, ×3 runs ×4"
+    },
+    {
+      "id": "vidu/vidu-q4",
+      "lab": "Vidu",
+      "name": "Q4",
+      "kie": {
+        "frames": "vidu-q4/image-to-video",
+        "refs": "vidu-q4/reference-to-video"
+      },
+      "role": "generate",
+      "resolutions": ["540p","720p","1080p","2K","4K"],
+      "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9"],
+      "durations": [3,4,5,6,7,8,9,10,11,12,13,14,15,16],
+      "frames": ["first_frame"],
+      "references": 15,
+      "videos": 0,
+      "audios": 3,
+      "sound": true,
+      "seed": false,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "fields": {
+        "prompt": "prompt",
+        "first_frame": "image_url",
+        "images": "reference_image_urls[]",
+        "audio": "reference_audio_urls[]",
+        "resolution": "resolution",
+        "aspect_ratio": "aspect_ratio",
+        "duration": "duration",
+        "sound": "audio"
+      },
+      "values": {
+        "resolution": {
+          "2K": "2k",
+          "4K": "4k"
+        }
+      },
+      "price": [
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "540p"
+          },
+          "row": "Vidu Q4, image-to-video, 540p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "720p"
+          },
+          "row": "Vidu Q4, image-to-video, 720p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "1080p"
+          },
+          "row": "Vidu Q4, image-to-video, 1080p"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "2K"
+          },
+          "row": "Vidu Q4, image-to-video, 2k"
+        },
+        {
+          "when": {
+            "mode": "frames",
+            "resolution": "4K"
+          },
+          "row": "Vidu Q4, image-to-video, 4k"
+        },
+        {
+          "when": {
+            "resolution": "540p"
+          },
+          "row": "Vidu Q4, reference-to-video, 540p"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "Vidu Q4, reference-to-video, 720p"
+        },
+        {
+          "when": {
+            "resolution": "1080p"
+          },
+          "row": "Vidu Q4, reference-to-video, 1080p"
+        },
+        {
+          "when": {
+            "resolution": "2K"
+          },
+          "row": "Vidu Q4, reference-to-video, 2k"
+        },
+        {
+          "when": {
+            "resolution": "4K"
+          },
+          "row": "Vidu Q4, reference-to-video, 4k"
+        }
+      ],
+      "note": "needs an image (no text-only model on Kie); aspect_ratio only with references; reference audio mp3, 3–12 s"
+    }
+  ],
+  "speech": [
+    {
+      "id": "google/gemini-3.8-flash-lite-tts",
+      "lab": "Google",
+      "name": "Gemini 3.8 Flash Lite TTS",
+      "kie": "google/gemini-3-8-flash-lite-tts",
+      "role": "speech",
+      "voices": ["Bodi","Lumi","Sadaltager","Sola","Sulafat","Varo","Zephyr","Koda","Kore","Nika","Tavi","Zeno","Algenib","Despina","Erinome","Kira","Ludo","Mako","Rasalgethi","Rina","Alnilam","Brio","Jori","Laomedeia","Rami","Veda","Achird","Enzo","Riko","Sami","Zali","Zubenelgenubi","Algieba","Aoede","Autonoe","Callirrhoe","Enceladus","Gero","Iapetus","Neno","Olin","Tari","Umbriel","Achernar","Charon","Daro","Fola","Hali","Milo","Puck","Arlo","Cleo","Fenrir","Finn","Leda","Lora","Orus","Enya","Jett","Knox","Nyla","Sadachbia","Vindemiatrix","Cruz","Elio","Gacrux","Pulcherrima","Schedar","Tova","Zuri"],
+      "dialogue": "gemini",
+      "clone": true,
+      "fields": {},
+      "note": "speakers [{speaker_id: \"Speaker 1\"|\"Speaker 2\", voice_name | replica}] (1 or 2), dialogue_turns [{speaker_id, text (10000 max), style}]; replica {source_audio_url (10–30 s WAV), consent_audio_url (consent sentence read by the same person)}; WAV 24 kHz out",
+      "options": ["temperature","filler_words"],
+      "price": [
+        {
+          "row": ["Gemini 3.8 Flash-Lite TTS, Text to speech, Input","Gemini 3.8 Flash-Lite TTS, Text to Speech, Audio Output"]
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-3.8-flash-tts",
+      "lab": "Google",
+      "name": "Gemini 3.8 Flash TTS",
+      "kie": "google/gemini-3-8-flash-tts",
+      "role": "speech",
+      "voices": ["Bodi","Lumi","Sadaltager","Sola","Sulafat","Varo","Zephyr","Koda","Kore","Nika","Tavi","Zeno","Algenib","Despina","Erinome","Kira","Ludo","Mako","Rasalgethi","Rina","Alnilam","Brio","Jori","Laomedeia","Rami","Veda","Achird","Enzo","Riko","Sami","Zali","Zubenelgenubi","Algieba","Aoede","Autonoe","Callirrhoe","Enceladus","Gero","Iapetus","Neno","Olin","Tari","Umbriel","Achernar","Charon","Daro","Fola","Hali","Milo","Puck","Arlo","Cleo","Fenrir","Finn","Leda","Lora","Orus","Enya","Jett","Knox","Nyla","Sadachbia","Vindemiatrix","Cruz","Elio","Gacrux","Pulcherrima","Schedar","Tova","Zuri"],
+      "dialogue": "gemini",
+      "clone": true,
+      "fields": {},
+      "note": "speakers [{speaker_id: \"Speaker 1\"|\"Speaker 2\", voice_name | replica}] (1 or 2), dialogue_turns [{speaker_id, text (10000 max), style}]; replica {source_audio_url (10–30 s WAV), consent_audio_url (consent sentence read by the same person)}; WAV 24 kHz out",
+      "options": ["temperature","filler_words"],
+      "price": [
+        {
+          "row": ["Gemini 3.8 Flash TTS, Text to Speech, Input","Gemini 3.8 Flash TTS, Text to Speech, Audio Output"]
+        }
+      ]
+    }
+  ]
+}

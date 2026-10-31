@@ -63,6 +63,8 @@ export type Tool = {
   models?: string[]
   // other models it runs on, not recommended: a restricted tool's « Other models »
   also?: string[]
+  // why each recommended model is recommended (the engine's tools/why.json, or the tool's own)
+  why?: Record<string, string>
   params?: Record<string, unknown>
   local?: string
   provider?: string
@@ -99,8 +101,45 @@ export type Model = {
     quality?: string[] | null
     background?: string[] | null
     voices?: string[] | null
+    // clone false when it takes no clips (Kie); "library" (ElevenLabs): the account's voices and the Library's, whole
+    clone?: boolean | "library"
+    // a dialogue's lines (ElevenLabs v4 and v3, Gemini on Kie) and how many voices it takes; audio tags in the text
+    dialogue?: boolean
+    speakers?: number
+    tags?: boolean
+    max_chars?: number | null
+    // the model's own settings, each a control of the Options block, sent as params.options when changed
+    options?: ModelOption[]
+    // its own editors (Kie): Kling's shots, the middle frames (Grok's at their times), OmniHuman's masks of who speaks,
+    // Kling 4.0's voices of the Library, Seedance 2.5's draft then its final
+    shots?: { max: number; each: [number, number]; total: number } | null
+    mid_frames?: { max: number; timed?: boolean } | null
+    masks?: number
+    named_voices?: number
+    draft?: boolean
+    // a video model that takes its frames and reference images together (Kie's Grok)
+    mix?: boolean
+    // Kling's named elements (Kie): how many @Elements it takes whole, and whether beside a frame
+    elements?: number
+    elements_with_frames?: boolean
   }
 }
+export type OptionValue = string | number | { value: string | number; label: string }
+export type ModelOption = {
+  key: string
+  label: string
+  type: "slider" | "number" | "switch" | "choice" | "select" | "text" | "file"
+  min?: number
+  max?: number
+  step?: number
+  values?: OptionValue[]
+  default?: string | number | boolean | null
+  hint?: string
+}
+// a dialogue's line: its voice (an ElevenLabs id or @name of the Library, a Gemini voice) and its words
+export type Line = { voice: string; text: string }
+// a Kling shot: its words and its seconds
+export type Shot = { prompt: string; duration: number }
 export type Estimate = {
   amount: number | null
   unit: "usd" | "credits"
@@ -148,8 +187,12 @@ export type Job = {
 // after it or right before it. mute: the result's own sound off (a talking avatar says the voice already under it)
 export type Place = { workspace: string; track: string; at: number; replace?: string; how?: "whole" | "from" | "after" | "before"; from?: number; to?: number; mute?: boolean }
 export type Limits = { threshold: number | null; cap: number | null }
+export type Router = "openrouter" | "kie"
 export type Settings = {
+  // the one router that generates
+  router: { active: Router }
   openrouter: Limits
+  kie: Limits
   elevenlabs: Limits & { plan: string | null }
   defaults: Record<Kind, string | null>
   workspace: { current: string }
@@ -164,7 +207,7 @@ export type Draft = {
 export type State = {
   home: string
   settings: Settings
-  keys: { openrouter: boolean; management: boolean; elevenlabs: boolean }
+  keys: { openrouter: boolean; management: boolean; kie: boolean; elevenlabs: boolean }
   media: Job[]
   drafts: Partial<Record<Kind, Draft>>
   styles: SavedStyle[]
@@ -173,9 +216,11 @@ export type State = {
   plans: Record<string, number>
   // the fake APIs a dev or test server was started on (none for a real one), and whether it uses them now
   fake: { on: boolean; bases: string[] }
-  // OpenRouter's catalog: when it was last read, how many models it adds to the list
-  catalog: { at: string | null; added: number }
-  month: { openrouter: number; elevenlabs: number }
+  // the active router, and its catalog: when it was last read, how many models it adds to the list (Kie: when its
+  // prices were read)
+  router: Router
+  catalog: { at: string | null; added: number; prices_at?: string | null }
+  month: { openrouter: number; kie: number; elevenlabs: number }
   workspaces: Workspace[]
 }
 // a workspace: a project's media (each job says which it is in), its Elements (linked by hand; linked adds the ones its
@@ -219,6 +264,7 @@ export type Balances = {
     month?: number | null
     account_left?: number | null
   }
+  kie?: { error?: string; credits?: number; account_left?: number }
   elevenlabs: { error?: string; left?: number; limit?: number; reset?: string }
 }
 export type LedgerLine = {
@@ -285,7 +331,7 @@ export const api = {
   tools: () => call<Record<Kind, Tool[]>>("/api/tools"),
   models: (kind: Kind) => call<Model[]>(`/api/models?kind=${kind}`),
   // OpenRouter's catalog read now: the models it adds by router kind, found: new since the last read
-  refreshModels: () => post<{ at: string; added: Record<"image" | "video" | "speech", { id: string; name: string; found: boolean }[]> }>("/api/models/refresh", {}),
+  refreshModels: () => post<{ at: string; added: Record<"image" | "video" | "speech", { id: string; name: string; found: boolean }[]>; unwired?: string[]; prices?: number }>("/api/models/refresh", {}),
   balances: (refresh = false) =>
     call<Balances>(`/api/balances${refresh ? "?refresh" : ""}`),
   ledger: () => call<LedgerLine[]>("/api/ledger"),
@@ -448,6 +494,8 @@ export function fill(tool: Tool, fields: Record<string, string>, prompt: string,
 }
 
 // the USD price of 1,000 ElevenLabs credits on the user's plan, null without a paid one
+// the routers by their ids, as the pages name them
+export const ROUTER_NAME: Record<Router, string> = { openrouter: "OpenRouter", kie: "Kie.ai" }
 export const per1000 = (s: State) => s.plans?.[s.settings.elevenlabs.plan ?? ""] || null
 
 // a price as the engine writes it: dollars, or ElevenLabs credits with their dollars on a paid plan
@@ -458,10 +506,11 @@ export function money(amount: number | null | undefined, unit: "usd" | "credits"
   return usdPer1000 ? `${credits} · ${money((amount * usdPer1000) / 1000, "usd")}` : credits
 }
 
-// an estimate as a button or a list shows it: free, per minute (ElevenLabs before the clip), or ≈ its price
+// an estimate as a button or a list shows it: free, per minute (ElevenLabs before the clip), per character (a voice
+// before its text), or ≈ its price
 export function priceLabel(a: EstimateAnswer) {
   if (a.provider === "local") return "free"
-  if (!a.estimate.known) return a.provider === "elevenlabs" ? "per minute" : "unknown cost"
+  if (!a.estimate.known) return a.estimate.detail?.match(/^per \w+/)?.[0] ?? (a.provider === "elevenlabs" ? "per minute" : "unknown cost")
   return `≈ ${a.shown}`
 }
 

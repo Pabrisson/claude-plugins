@@ -14,6 +14,11 @@ export async function startFake(dir) {
   // HeyGen's PCM: 1 s at 44.1 kHz mono
   const pcm = Buffer.alloc(44100 * 2)
   const calls = [], polls = {}, lookups = {}, names = {}, fetched = [], catalog = { down: false }
+  // Kie: its tasks, its uploads, its window of new tasks, how many 429 to answer first (busy), the credits each model
+  // bills, its price rows
+  const kie = { tasks: {}, uploads: [], window: [], busy: 0, credits: { 'fake-i2i': 12, 'fake-vid': 136, 'fake-gem': 3 },
+    prices: { 'fake img, 1K': [6, 'per image'], 'fake img, 2K': [10, 'per image'], 'fake vid, 480p no video': [28, 'per second'], 'fake vid, 480p with video': [17, 'per second'],
+      'fake vid, 1080p with video': [95, 'per second'], 'fake tts': [6, 'per 1000 characters'] } }
   // a fake cloudflared: its quick tunnel's name carries the local port, where the fake router fetches the files
   const bin = path.join(dir, 'bin')
   fs.mkdirSync(bin, { recursive: true })
@@ -122,10 +127,70 @@ setInterval(() => {}, 1e6)
     // a scoped key without the permission of dubbing; a free plan refused instant voice cloning
     if (p === '/el/v1/dubbing/project') return json({ detail: { type: 'authentication_error', code: 'unauthorized', message: 'The API key you used is missing the permission dubbing_write to execute this operation.', status: 'missing_permissions' } }, 401)
     if (p === '/el/v1/voices/add') return json({ detail: { type: 'payment_required', code: 'paid_plan_required', message: 'Your subscription does not include instant voice cloning. Please upgrade your plan.', status: 'can_not_use_instant_voice_cloning' } }, 400)
+    // its speech models (GET /v1/models, the real one's shape of 2026-10-31, cut down), text to speech and dialogue:
+    // an MP3, what it billed in character-cost
+    if (p === '/el/v1/models') {
+      const m = (model_id, name, x, more = {}) => ({ model_id, name, can_do_text_to_speech: true, can_use_style: false, can_use_speaker_boost: false, maximum_text_length_per_request: 10000,
+        model_rates: { character_cost_multiplier: x, cost_discount_multiplier: 1 }, languages: [{ language_id: 'en', name: 'English' }, { language_id: 'fr', name: 'French' }], ...more })
+      return json([m('eleven_v4', 'Eleven v4', 1), m('eleven_v4_turbo', 'Eleven v4 Turbo', 0.5), m('eleven_v3', 'Eleven v3', 1, { maximum_text_length_per_request: 5000 }),
+        m('eleven_multilingual_v2', 'Eleven Multilingual v2', 1, { can_use_style: true, can_use_speaker_boost: true }), m('eleven_flash_v2_5', 'Eleven Flash v2.5', 0.5, { maximum_text_length_per_request: 40 }),
+        { model_id: 'eleven_multilingual_sts_v2', name: 'Eleven Multilingual v2 (speech to speech)', can_do_text_to_speech: false }])
+    }
+    if (p.startsWith('/el/v1/text-to-speech/') || p === '/el/v1/text-to-dialogue') {
+      const chars = body.text?.length ?? body.inputs.reduce((n, l) => n + l.text.length, 0)
+      return bytes(mp3, 'audio/mpeg', { 'character-cost': String(Math.ceil(chars * (body.model_id === 'eleven_v4_turbo' ? 0.5 : 1))) })
+    }
     if (p === '/el/v2/voices') return json({ voices: [{ voice_id: 'v1', name: 'Arthur', category: 'premade', labels: { gender: 'male' }, verified_languages: [{ language: 'en' }] }], has_more: false })
+    // Kie.ai (under /kie, its upload under /kieup, its docs under /kiedocs, its files under /kiefiles), as it answered on
+    // 2026-10-31: HTTP 200 with its own code in the body; the 21st new task in 10 s is a 429 (kie.window)
+    const kieOk = data => json({ code: 200, msg: 'success', data })
+    if (p.startsWith('/kie/') && !p.startsWith('/kie/client/') && p !== '/kie/api/v1/playground/model-paths' && req.headers.authorization !== 'Bearer k-kie')
+      return json({ code: 401, msg: 'Unauthorized – Authentication failed.' })
+    if (p === '/kie/api/v1/chat/credit') return kieOk(1080)
+    if (p === '/kie/client/v1/model-pricing/page') {
+      const rows = Object.entries(kie.prices).map(([modelDescription, [credits, unit]]) => ({ modelDescription, interfaceType: 'image', creditPrice: String(credits), creditUnit: unit, usdPrice: String(credits * 0.005) }))
+      const page = body.pageNum, size = body.pageSize
+      if (size > 100) return json({ code: 422, msg: '分页参数不能超过100', data: null })
+      return kieOk({ records: rows.slice((page - 1) * size, page * size), total: rows.length, pages: Math.ceil(rows.length / size) })
+    }
+    if (p === '/kie/api/v1/playground/model-paths') return kieOk(['fake-t2i', 'fake-i2i', 'fake-vid', 'newlab/new-video', 'newlab/needs-mask'])
+    if (p === '/kiedocs/llms.txt') return bytes(`- [New video](${base}/kiedocs/market/newlab/new-video.md)\n- [Mask](${base}/kiedocs/market/newlab/needs-mask.md)\n`, 'text/plain')
+    if (p.startsWith('/kiedocs/market/newlab/')) {
+      const name = `newlab/${path.basename(p, '.md')}`, mask = name.endsWith('needs-mask')
+      return bytes(`# NewLab ${mask ? 'Needs Mask' : 'New Video'}\n\n\`\`\`yaml\npaths:\n  /api/v1/jobs/createTask:\n    post:\n      tags:\n        - docs/en/Market/Video Models/NewLab\n      requestBody:\n        content:\n          application/json:\n            schema:\n              properties:\n                model:\n                  type: string\n                  enum:\n                    - ${name}\n                input:\n                  type: object\n                  properties:\n                    prompt:\n                      type: string\n                    ${mask ? 'mask_url' : 'first_frame_url'}:\n                      type: string\n                    resolution:\n                      type: string\n                      enum:\n                        - 720P\n                        - 480P\n                    duration:\n                      type: string\n                      enum:\n                        - '5'\n                        - '3'\n                  required:\n                    - prompt\n${mask ? '                    - mask_url\n' : ''}\`\`\`\n`, 'text/markdown')
+    }
+    if (p === '/kieup/api/file-base64-upload' || p === '/kieup/api/file-stream-upload') {
+      const n = kie.uploads.push({ route: p, size: raw.length, type: req.headers['content-type'] })
+      return kieOk({ success: true, downloadUrl: `${base}/kiefiles/upload-${n}`, fileSize: raw.length })
+    }
+    if (p === '/kie/api/v1/jobs/createTask') {
+      const now = Date.now()
+      kie.window = kie.window.filter(t => now - t < 10e3)
+      if (kie.window.length >= 20 || kie.busy-- > 0) return json({ code: 429, msg: 'Your call frequency is too high. Please try again later.', data: null })
+      kie.window.push(now)
+      if (!body?.input) return json({ code: 422, msg: 'The input cannot be null', data: null })
+      if (body.model === 'fake-broke') return json({ code: 402, msg: 'Credits insufficient', data: null })
+      const id = `kie-task-${calls.length}`
+      kie.tasks[id] = { model: body.model, input: body.input, polls: 0 }
+      return kieOk({ taskId: id })
+    }
+    if (p === '/kie/api/v1/jobs/recordInfo') {
+      const id = u.searchParams.get('taskId'), t = kie.tasks[id]
+      if (!t) return json({ code: 422, msg: 'recordInfo is null', data: null })
+      const state = ['waiting', 'generating'][t.polls++] ?? (t.model === 'fake-fail' ? 'fail' : 'success')
+      const file = /vid|edit|avatar|kling|grok/.test(t.model) ? 'out.mp4' : /tts|gem/.test(t.model) ? 'out.mp3' : 'out.png'
+      // the last frame beside, when asked
+      return kieOk({ taskId: id, model: t.model, state, resultJson: state === 'success' ? JSON.stringify({ resultUrls: [`${base}/kiefiles/${file}`], ...(t.input?.return_last_frame ? { lastFrameUrl: `${base}/kiefiles/last.jpg` } : {}) }) : '',
+        failCode: state === 'fail' ? '500' : '', failMsg: state === 'fail' ? 'Content flagged' : '', creditsConsumed: state === 'success' ? kie.credits[t.model] ?? 10 : null })
+    }
+    if (p === '/kiefiles/out.png') return bytes(png, 'image/png')
+    if (p === '/kiefiles/last.jpg') return bytes(png, 'image/jpeg')
+    if (p === '/kiefiles/out.mp4') return bytes(mp4, 'video/mp4')
+    if (p === '/kiefiles/out.mp3') return bytes(mp3, 'audio/mpeg')
+    if (p.startsWith('/kiefiles/upload-')) return bytes(png, 'image/png')
     json({ error: { message: `fake: nothing at ${p}` } }, 404)
   })
   await new Promise(ok => server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${server.address().port}`
-  return { base, bin, calls, fetched, catalog, close: () => { server.closeAllConnections(); server.close() } }
+  return { base, bin, calls, fetched, catalog, kie, close: () => { server.closeAllConnections(); server.close() } }
 }

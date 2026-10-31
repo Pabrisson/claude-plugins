@@ -5,10 +5,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { estimateImage, estimateSpeech, estimateVideo } from '../lib/cost.js'
+import { retry429, retryAfter } from '../lib/limit.js'
+import { OPTIONS, resolveOptions, SKIP } from '../lib/options.js'
 
 const base = () => (process.env.OPENROUTER_BASE ?? 'https://openrouter.ai/api/v1').replace(/\/$/, '')
 
-async function api(route, init = {}, key = process.env.OPENROUTER_API_KEY) {
+// a 429 (a model's own limit: paid models have no platform cap) waits what it says, then tries again
+const api = (route, init = {}, key = process.env.OPENROUTER_API_KEY) => retry429(() => call(route, init, key), { wait: +(process.env.MEDIA_GENERATOR_RETRY ?? 10e3) })
+async function call(route, init, key) {
   if (!key) throw Object.assign(new Error('no OpenRouter key: /plugin configure skill-video@pabrisson, or OPENROUTER_API_KEY'), { status: 401 })
   const r = await fetch(base() + route, {
     ...init,
@@ -16,8 +20,8 @@ async function api(route, init = {}, key = process.env.OPENROUTER_API_KEY) {
   })
   if (!r.ok) {
     const text = await r.text(), message = (() => { try { return JSON.parse(text).error?.message ?? text } catch { return text } })()
-    const why = { 401: 'the key is refused', 402: 'no credits left on OpenRouter, or held by videos still running: wait for them to end', 429: 'rate limited, try again in a moment' }[r.status]
-    throw Object.assign(new Error(`OpenRouter ${route.split('?')[0]}: ${r.status}${why ? ` (${why})` : ''} ${message}`.trim()), { status: r.status })
+    const why = { 401: 'the key is refused', 402: 'no credits left on OpenRouter, or held by videos still running: wait for them to end', 429: 'rate limited by the model, tried 5 times' }[r.status]
+    throw Object.assign(new Error(`OpenRouter ${route.split('?')[0]}: ${r.status}${why ? ` (${why})` : ''} ${message}`.trim()), { status: r.status, retryAfter: r.status === 429 ? retryAfter(r.headers) : undefined })
   }
   return r
 }
@@ -48,6 +52,8 @@ const NORMALIZE = {
     return { id: m.id, ...named(m), role: !takes ? 'create' : sp.input_references?.min > 0 ? 'edit' : 'both',
       resolutions: byRes(values(sp.resolution)), aspect_ratios: byRatio(values(sp.aspect_ratio)), max_images: sp.n?.max ?? 1,
       references: takes ? sp.input_references?.max ?? 1 : 0, quality: values(sp.quality), background: values(sp.background), seed: !!sp.seed,
+      // its file format and compression, when it offers a choice
+      options: [...((values(sp.output_format)?.length ?? 0) > 1 ? [{ key: 'output_format', values: values(sp.output_format), default: values(sp.output_format)[0] }] : []), ...(sp.output_compression ? ['output_compression'] : [])],
       pricing: priced.map(e => e.pricing) }
   },
   // the catalog does not say edit or avatar: a model with no length of its own takes a video (Aleph 2, FLUX Video Edit;
@@ -56,7 +62,9 @@ const NORMALIZE = {
     resolutions: byRes(m.supported_resolutions), aspect_ratios: byRatio(m.supported_aspect_ratios), durations: m.supported_durations?.toSorted((a, b) => a - b) ?? null,
     frames: m.supported_frame_images ?? [], references: null, sound: !!m.generate_audio, seed: !!m.seed,
     upscale: m.upscale_factor ? { ...m.upscale_factor, creativity: !!m.creativity } : null, min_pixels: null,
-    pricing: Object.fromEntries(Object.entries(m.pricing_skus ?? {}).map(([k, v]) => [k, Number(v)])) }),
+    pricing: Object.fromEntries(Object.entries(m.pricing_skus ?? {}).map(([k, v]) => [k, Number(v)])) ,
+    // its provider's own settings the engine knows (allowed_passthrough_parameters), sent under its slug
+    options: (m.allowed_passthrough_parameters ?? []).filter(k => OPTIONS[k] && !SKIP[k]), slug: m.slug ?? null }),
   speech: m => ({ id: m.id, ...named(m), role: 'speech', voices: m.supported_voices?.length ? m.supported_voices : null,
     pricing: { prompt: Number(m.pricing?.prompt ?? 0), completion: Number(m.pricing?.completion ?? 0) } }),
 }
@@ -68,9 +76,12 @@ async function fetchCatalog(hand) {
     return r.json()
   })
   const [image, video, speech] = await Promise.all(['/images/models', '/videos/models', '/models?output_modalities=speech'].map(get))
-  const known = kind => new Set(hand[kind].map(m => m.id)), fresh = (kind, data) => data.filter(m => !known(kind).has(m.id))
+  // ElevenLabs is reached straight: never one of OpenRouter's catalog
+  const known = kind => new Set(hand[kind].map(m => m.id)), fresh = (kind, data) => data.filter(m => !known(kind).has(m.id) && !m.id.startsWith('elevenlabs/'))
   const images = await Promise.all(fresh('image', image.data).map(async m => NORMALIZE.image(m, (await get(`/images/models/${m.id}/endpoints`).catch(() => null))?.endpoints ?? [])))
-  return { at: new Date().toISOString(), image: images.filter(Boolean), video: fresh('video', video.data).map(NORMALIZE.video), speech: fresh('speech', speech.data).map(NORMALIZE.speech) }
+  // a new video model with settings of its own: its provider's slug, which they go under
+  const videos = await Promise.all(fresh('video', video.data).map(async m => NORMALIZE.video(m.allowed_passthrough_parameters?.length ? { ...m, slug: (await get(`/models/${m.id}/endpoints`).catch(() => null))?.data?.endpoints?.[0]?.tag } : m)))
+  return { at: new Date().toISOString(), image: images.filter(Boolean), video: videos, speech: fresh('speech', speech.data).map(NORMALIZE.speech) }
 }
 
 let catalog = null, pending = null
@@ -129,9 +140,9 @@ export default {
       ...(m.new ? { new: true, from: fromPrice(kind, m) } : {}),
       model: m.id, name: `${m.lab}: ${m.name}`, lab: m.lab, kind, role: m.role,
       params: kind === 'image'
-        ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, n: { min: 1, max: m.max_images }, references: m.references, seed: m.seed, quality: m.quality, background: m.background }
+        ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, n: { min: 1, max: m.max_images }, references: m.references, seed: m.seed, quality: m.quality, background: m.background, options: resolveOptions(m.options) }
         : kind === 'video'
-          ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, duration: m.durations, frames: m.frames, references: m.references, audio: m.sound, seed: m.seed, creativity: !!m.upscale?.creativity, factor: !!m.upscale, min_pixels: m.min_pixels }
+          ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, duration: m.durations, frames: m.frames, references: m.references, audio: m.sound, seed: m.seed, creativity: !!m.upscale?.creativity, factor: !!m.upscale, min_pixels: m.min_pixels, options: resolveOptions(m.options) }
           : { voices: m.voices },
       pricing: kind === 'image' ? m.pricing.map(pricing => ({ pricing })) : m.pricing,
     }))
@@ -144,20 +155,22 @@ export default {
   },
 
   // images come back in the answer; refs are URLs or data: URLs
-  async image({ model, prompt, refs = [], ...params }) {
-    const body = { model, prompt, ...params, ...(refs.length ? { input_references: refs.map(url => ({ type: 'image_url', image_url: { url } })) } : {}) }
+  async image({ model, prompt, refs = [], options, ...params }) {
+    const body = { model, prompt, ...params, ...options, ...(refs.length ? { input_references: refs.map(url => ({ type: 'image_url', image_url: { url } })) } : {}) }
     const j = await json('/images', { method: 'POST', body: JSON.stringify(body) })
     return { files: j.data.map(d => ({ data: Buffer.from(d.b64_json, 'base64'), type: d.media_type ?? 'image/png' })), cost: j.usage?.cost ?? null }
   },
 
   // videos are jobs: the id to poll (and to continue with previous_job_id)
-  async video({ model, prompt, frames = {}, refs = [], keyframes, ...params }) {
+  async video({ model, prompt, frames = {}, refs = [], keyframes, options, ...params }) {
+    // the provider's own settings and Aleph's keyframes go under its slug (GET /models/<id>/endpoints: its tag)
+    const slug = [...list().video, ...(catalog?.video ?? [])].find(m => m.id === model)?.slug ?? 'runway', own = { ...options, ...(keyframes ? { keyframes } : {}) }
     const frame_images = Object.entries(frames).filter(([, url]) => url).map(([frame_type, url]) => ({ type: 'image_url', image_url: { url }, frame_type }))
     const input_references = refs.map(({ kind, url }) => ({ type: `${kind}_url`, [`${kind}_url`]: { url } }))
     const body = { model, ...(prompt ? { prompt } : {}), ...params, ...(frame_images.length ? { frame_images } : {}), ...(input_references.length ? { input_references } : {}),
       // a provider's own parameters (GET /videos/models: allowed_passthrough_parameters) go under its slug: Aleph 2's
       // keyframes reach Runway only there (at the top level they were dropped, 2026-10-31)
-      ...(keyframes ? { provider: { options: { runway: { parameters: { keyframes } } } } } : {}) }
+      ...(Object.keys(own).length ? { provider: { options: { [slug]: { parameters: own } } } } : {}) }
     // Seedance 2.5's -1 (« follow the video ») is refused by OpenRouter until it takes it (2026-10-31): said so
     const j = await json('/videos', { method: 'POST', body: JSON.stringify(body) }).catch(e => {
       if (params.duration === -1 && e.status === 400) e.message += ': Seedance 2.5 edits a video once OpenRouter accepts duration -1 (github.com/OpenRouterTeam/typescript-sdk/issues/1096), till then take Seedance 2.0 Mini'

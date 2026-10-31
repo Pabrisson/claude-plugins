@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "for p in ELEVENLABS_API_KEY:elevenlabs-key OPENROUTER_API_KEY:openrouter-key OPENROUTER_MANAGEMENT_KEY:openrouter-management-key; do v=${p%%:*}; f=\"$CLAUDE_PLUGIN_DATA/${p#*:}\"; eval \"k=\\$CLAUDE_PLUGIN_OPTION_$v\"; k=$(printf %s \"$k\" | tr -d '[:space:]'); case \"$k\" in ''|*[!A-Za-z0-9_-]*) rm -f \"$f\" ;; *) mkdir -p \"$CLAUDE_PLUGIN_DATA\" && (umask 077; printf %s \"$k\" > \"$f\") && [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export %s=\"$(cat %s)\"\\n' \"$v\" \"'$f'\" >> \"$CLAUDE_ENV_FILE\" ;; esac; done; exit 0"
+            "command": "for p in ELEVENLABS_API_KEY:elevenlabs-key OPENROUTER_API_KEY:openrouter-key OPENROUTER_MANAGEMENT_KEY:openrouter-management-key KIE_API_KEY:kie-key; do v=${p%%:*}; f=\"$CLAUDE_PLUGIN_DATA/${p#*:}\"; eval \"k=\\$CLAUDE_PLUGIN_OPTION_$v\"; k=$(printf %s \"$k\" | tr -d '[:space:]'); case \"$k\" in ''|*[!A-Za-z0-9_-]*) rm -f \"$f\" ;; *) mkdir -p \"$CLAUDE_PLUGIN_DATA\" && (umask 077; printf %s \"$k\" > \"$f\") && [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export %s=\"$(cat %s)\"\\n' \"$v\" \"'$f'\" >> \"$CLAUDE_ENV_FILE\" ;; esac; done; exit 0"
           }
         ]
       }

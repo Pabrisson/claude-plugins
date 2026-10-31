@@ -30,6 +30,7 @@
       "quality": null,
       "background": null,
       "seed": false,
+      "options": [{"key":"output_format","values":["jpeg","png"],"default":"jpeg"}],
       "pricing": [
         [{"billable":"output_image","unit":"image","cost_usd":0.008,"variant":"768"},{"billable":"output_image","unit":"image","cost_usd":0.009,"variant":"1k"},{"billable":"output_image","unit":"image","cost_usd":0.011,"variant":"1.5k"},{"billable":"output_image","unit":"image","cost_usd":0.014,"variant":"2k"},{"billable":"output_image","unit":"image","cost_usd":0.036,"variant":"4k"}]
       ]
@@ -46,6 +47,7 @@
       "quality": null,
       "background": null,
       "seed": true,
+      "options": [{"key":"output_format","values":["png","jpeg"],"default":"png"}],
       "pricing": [
         [{"billable":"input_image","unit":"megapixel","cost_usd":0.06},{"billable":"output_image","unit":"megapixel","cost_usd":0.06}]
       ]
@@ -62,6 +64,7 @@
       "quality": null,
       "background": null,
       "seed": true,
+      "options": [{"key":"output_format","values":["png","jpeg"],"default":"png"}],
       "pricing": [
         [{"billable":"output_image","unit":"megapixel","cost_usd":0.014}]
       ]
@@ -78,6 +81,7 @@
       "quality": null,
       "background": null,
       "seed": true,
+      "options": [{"key":"output_format","values":["png","jpeg"],"default":"png"}],
       "pricing": [
         [{"billable":"output_image","unit":"megapixel","cost_usd":0.07}]
       ]
@@ -94,6 +98,7 @@
       "quality": null,
       "background": null,
       "seed": true,
+      "options": [{"key":"output_format","values":["png","jpeg"],"default":"png"}],
       "pricing": [
         [{"billable":"output_image","unit":"megapixel","cost_usd":0.03}]
       ]
@@ -419,6 +424,7 @@
       "quality": ["auto","low","medium","high"],
       "background": ["auto","transparent","opaque"],
       "seed": false,
+      "options": ["output_compression"],
       "pricing": [
         [{"billable":"input_image","unit":"token","cost_usd":0.00001},{"billable":"input_text","unit":"token","cost_usd":0.000005},{"billable":"output_image","unit":"token","cost_usd":0.00004}]
       ]
@@ -435,6 +441,7 @@
       "quality": ["auto","low","medium","high"],
       "background": ["auto","transparent","opaque"],
       "seed": false,
+      "options": ["output_compression"],
       "pricing": [
         [{"billable":"input_image","unit":"token","cost_usd":0.0000025},{"billable":"input_text","unit":"token","cost_usd":0.000002},{"billable":"output_image","unit":"token","cost_usd":0.000008}]
       ]
@@ -451,6 +458,7 @@
       "quality": ["auto","low","medium","high"],
       "background": ["auto","opaque"],
       "seed": false,
+      "options": ["output_compression"],
       "pricing": [
         [{"billable":"input_image","unit":"token","cost_usd":0.000008},{"billable":"input_text","unit":"token","cost_usd":0.000005},{"billable":"output_image","unit":"token","cost_usd":0.00003}]
       ]
@@ -467,6 +475,7 @@
       "quality": ["auto","low","medium","high","xhigh","max"],
       "background": ["auto","transparent","opaque"],
       "seed": false,
+      "options": ["output_compression"],
       "pricing": [
         [{"billable":"input_image","unit":"token","cost_usd":0.000008},{"billable":"input_text","unit":"token","cost_usd":0.000005},{"billable":"output_image","unit":"token","cost_usd":0.00003}]
       ]
@@ -483,6 +492,7 @@
       "quality": ["auto","low","medium","high","xhigh","max"],
       "background": ["auto","transparent","opaque"],
       "seed": false,
+      "options": ["output_compression"],
       "pricing": [
         [{"billable":"input_image","unit":"token","cost_usd":0.000008},{"billable":"input_text","unit":"token","cost_usd":0.000005},{"billable":"output_image","unit":"token","cost_usd":0.00003}]
       ]
@@ -499,6 +509,7 @@
       "quality": ["auto","low","medium","high"],
       "background": ["auto","transparent","opaque"],
       "seed": false,
+      "options": ["output_compression"],
       "pricing": [
         [{"billable":"input_image","unit":"token","cost_usd":0.00001},{"billable":"output_image","unit":"token","cost_usd":0.00004}]
       ]
@@ -515,6 +526,7 @@
       "quality": ["auto","low","medium","high"],
       "background": ["auto","transparent","opaque"],
       "seed": false,
+      "options": ["output_compression"],
       "pricing": [
         [{"billable":"input_image","unit":"token","cost_usd":0.0000025},{"billable":"output_image","unit":"token","cost_usd":0.000008}]
       ]
@@ -531,6 +543,7 @@
       "quality": ["auto","low","medium","high"],
       "background": ["auto","opaque"],
       "seed": false,
+      "options": ["output_compression"],
       "pricing": [
         [{"billable":"input_image","unit":"token","cost_usd":0.000008},{"billable":"output_image","unit":"token","cost_usd":0.00003}]
       ]
@@ -915,6 +928,7 @@
       "quality": null,
       "background": ["auto","transparent","opaque"],
       "seed": false,
+      "options": [{"key":"output_format","values":["png","jpeg","webp"],"default":"png"}],
       "pricing": [
         [{"billable":"output_image","unit":"image","cost_usd":0.13},{"billable":"output_image","unit":"image","cost_usd":0.15,"variant":"2k"},{"billable":"output_image","unit":"image","cost_usd":0.17,"variant":"4k"}]
       ]
@@ -931,6 +945,7 @@
       "quality": null,
       "background": ["auto","transparent","opaque"],
       "seed": false,
+      "options": [{"key":"output_format","values":["png","jpeg","webp"],"default":"png"}],
       "pricing": [
         [{"billable":"output_image","unit":"image","cost_usd":0.13},{"billable":"output_image","unit":"image","cost_usd":0.15,"variant":"2k"},{"billable":"output_image","unit":"image","cost_usd":0.17,"variant":"4k"}]
       ]
@@ -1031,6 +1046,9 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "atlas-cloud",
+      "options": ["negative_prompt","enable_prompt_expansion","shot_type"],
+      "skip": {"audio":"a sound for the video to follow: an audio reference in the shared inputs"},
       "pricing": {"text_to_video_duration_seconds_480p":0.04,"text_to_video_duration_seconds_720p":0.08,"image_to_video_duration_seconds_720p":0.1,"text_to_video_duration_seconds_1080p":0.12,"image_to_video_duration_seconds_1080p":0.15}
     },
     {
@@ -1047,6 +1065,9 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "atlas-cloud",
+      "options": ["negative_prompt","prompt_extend"],
+      "skip": {"audio":"a sound for the video to follow: an audio reference in the shared inputs"},
       "pricing": {"duration_seconds":0.1}
     },
     {
@@ -1095,6 +1116,8 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "black-forest-labs",
+      "options": ["safety_tolerance","draft"],
       "pricing": {"cents_per_second_output":17,"cents_per_second_output_2k":28,"cents_per_second_output_4k":41,"cents_per_second_output_720p":17,"cents_per_second_output_1080p":29,"cents_per_second_video_continuation_2k":31,"cents_per_second_video_continuation_4k":45,"cents_per_second_video_continuation_720p":41,"cents_per_second_video_continuation_1080p":53}
     },
     {
@@ -1111,6 +1134,8 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "black-forest-labs",
+      "options": ["safety_tolerance"],
       "pricing": {"cents_per_second_output":3}
     },
     {
@@ -1127,6 +1152,8 @@
       "seed": false,
       "upscale": {"min":1.5,"max":3,"creativity":true},
       "min_pixels": null,
+      "slug": "black-forest-labs",
+      "options": ["safety_tolerance"],
       "pricing": {"cents_per_megapixel_second_precise":3.5,"cents_per_megapixel_second_creative":5}
     },
     {
@@ -1143,6 +1170,7 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "seed",
       "pricing": {"video_tokens":0.0000024,"video_tokens_without_audio":0.0000012}
     },
     {
@@ -1159,6 +1187,7 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "seed",
       "pricing": {"video_tokens":0.000007,"video_tokens_4k":0.000004,"video_tokens_1080p":0.0000077,"video_tokens_without_audio":0.000007,"video_tokens_with_video_input":0.0000043,"video_tokens_4k_with_video_input":0.0000024,"video_tokens_1080p_with_video_input":0.0000047}
     },
     {
@@ -1175,6 +1204,7 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "seed",
       "pricing": {"video_tokens":0.0000042,"video_tokens_without_audio":0.0000042,"video_tokens_with_video_input":0.000002475}
     },
     {
@@ -1191,6 +1221,8 @@
       "seed": true,
       "upscale": null,
       "min_pixels": 407696,
+      "slug": "seed",
+      "skip": {"return_last_frame":"OpenRouter returns the video alone, not its last frame"},
       "pricing": {"video_tokens":0.0000035,"video_tokens_without_audio":0.0000035,"video_tokens_with_video_input":0.0000021}
     },
     {
@@ -1207,6 +1239,8 @@
       "seed": true,
       "upscale": null,
       "min_pixels": 407696,
+      "slug": "seed",
+      "options": [{"key":"output_format","values":["mp4","mov"],"default":"mp4"}],
       "pricing": {"video_tokens":0.0000107,"video_tokens_without_audio":0.0000107,"video_tokens_with_video_input":0.0000064}
     },
     {
@@ -1223,6 +1257,8 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "google-vertex",
+      "options": ["personGeneration","negativePrompt","conditioningScale","enhancePrompt"],
       "pricing": {"duration_seconds_with_audio":0.4,"duration_seconds_with_audio_4k":0.6,"duration_seconds_without_audio":0.2,"duration_seconds_without_audio_4k":0.4}
     },
     {
@@ -1239,6 +1275,8 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "google-vertex",
+      "options": ["personGeneration","negativePrompt","conditioningScale","enhancePrompt"],
       "pricing": {"duration_seconds_with_audio":0.12,"duration_seconds_with_audio_4k":0.3,"duration_seconds_without_audio":0.1,"duration_seconds_with_audio_720p":0.1,"duration_seconds_without_audio_4k":0.25,"duration_seconds_without_audio_720p":0.08}
     },
     {
@@ -1255,6 +1293,8 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "google-vertex",
+      "options": ["personGeneration","negativePrompt","conditioningScale","enhancePrompt"],
       "pricing": {"duration_seconds_with_audio":0.08,"duration_seconds_without_audio":0.05,"duration_seconds_with_audio_720p":0.05,"duration_seconds_without_audio_720p":0.03}
     },
     {
@@ -1271,6 +1311,9 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "heygen",
+      "options": [{"key":"motion_prompt","label":"Gestures","type":"text","hint":"how the person moves while speaking"},{"key":"expressiveness","label":"Expressiveness","type":"choice","values":[{"value":"low","label":"Low"},{"value":"medium","label":"Medium"},{"value":"high","label":"High"}]},{"key":"remove_background","label":"No background","type":"switch","default":false,"hint":"the person cut out"},{"key":"caption","label":"Captions","type":"switch","default":false,"hint":"the words written on the video"}],
+      "skip": {"voice_id":"the voice is the audio given","voice_settings":"settings of HeyGen's own voices: the voice is the audio given","fit":"the photo's framing, left to HeyGen","background":"a background of HeyGen's, not documented by OpenRouter","title":"a title kept on HeyGen's side only"},
       "pricing": {"duration_seconds":0.05}
     },
     {
@@ -1287,6 +1330,8 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "heygen",
+      "options": ["prompt_enhancement"],
       "pricing": {"duration_seconds_2k":0.1,"duration_seconds_480p":0.02,"duration_seconds_768p":0.036,"reference_input_images":0.04,"reference_duration_seconds_2k":0.18,"reference_duration_seconds_480p":0.07,"reference_duration_seconds_768p":0.1}
     },
     {
@@ -1303,6 +1348,8 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "atlas-cloud",
+      "options": ["negative_prompt"],
       "pricing": {"duration_seconds":0.112}
     },
     {
@@ -1319,6 +1366,8 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "atlas-cloud",
+      "options": ["negative_prompt","cfg_scale"],
       "pricing": {"duration_seconds":0.112,"duration_seconds_with_audio":0.168,"text_to_video_duration_seconds_480p":0.112,"text_to_video_duration_seconds_720p":0.112,"image_to_video_duration_seconds_720p":0.112,"text_to_video_duration_seconds_1080p":0.112,"image_to_video_duration_seconds_1080p":0.112,"measured_minimum_seconds":5}
     },
     {
@@ -1335,6 +1384,8 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "atlas-cloud",
+      "options": ["negative_prompt","cfg_scale"],
       "pricing": {"duration_seconds":0.084,"duration_seconds_with_audio":0.126,"text_to_video_duration_seconds_480p":0.084,"text_to_video_duration_seconds_720p":0.084,"image_to_video_duration_seconds_720p":0.084,"text_to_video_duration_seconds_1080p":0.084,"image_to_video_duration_seconds_1080p":0.084}
     },
     {
@@ -1351,6 +1402,7 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "minimax",
       "pricing": {"duration_seconds":0.13,"reference_images":0.04}
     },
     {
@@ -1367,6 +1419,7 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "minimax",
       "pricing": {"duration_seconds":0.08,"duration_seconds_480p":0.05,"duration_seconds_768p":0.08}
     },
     {
@@ -1383,6 +1436,8 @@
       "seed": false,
       "upscale": null,
       "min_pixels": null,
+      "slug": "minimax",
+      "options": ["prompt_optimizer","fast_pretreatment"],
       "pricing": {"duration_seconds":0.0817}
     },
     {
@@ -1399,6 +1454,8 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "runway",
+      "skip": {"keyframes":"sent by the keyframe step of the video tools (--frame)"},
       "pricing": {"cents_per_second_output":28,"minimum_cents_per_generation":140}
     },
     {
@@ -1415,6 +1472,7 @@
       "seed": true,
       "upscale": null,
       "min_pixels": null,
+      "slug": "runway",
       "pricing": {"cents_per_second_output":12}
     },
     {
@@ -1506,78 +1564,6 @@
       "role": "speech",
       "voices": ["flux-alexis-en","flux-bree-en","flux-brittany-en","flux-brooke-en","flux-bruce-en","flux-cliff-en","flux-cole-en","flux-colin-en","flux-conor-en","flux-donovan-en","flux-drew-en","flux-elise-en","flux-gemma-en","flux-haley-en","flux-hannah-en","flux-heather-en","flux-jack-en","flux-kai-en","flux-kelsey-en","flux-kit-en","flux-maeve-en","flux-marcelo-en","flux-marcus-en","flux-meena-en","flux-meghan-en","flux-miles-en","flux-naveen-en","flux-paige-en","flux-priya-en","flux-rufus-en","flux-sean-en","flux-sharon-en","flux-sienna-en","flux-tanner-en","flux-wade-en","flux-wes-en"],
       "pricing": {"prompt":0.000045,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-flash-v2",
-      "lab": "ElevenLabs",
-      "name": "Eleven Flash v2",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00004,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-flash-v2.5",
-      "lab": "ElevenLabs",
-      "name": "Eleven Flash v2.5",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00004,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-multilingual-v2",
-      "lab": "ElevenLabs",
-      "name": "Eleven Multilingual v2",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00008,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-turbo-v2",
-      "lab": "ElevenLabs",
-      "name": "Eleven Turbo v2",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00004,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-turbo-v2.5",
-      "lab": "ElevenLabs",
-      "name": "Eleven Turbo v2.5",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00004,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-v3",
-      "lab": "ElevenLabs",
-      "name": "Eleven v3",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00008,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-v3-conversational",
-      "lab": "ElevenLabs",
-      "name": "Eleven v3 Conversational",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00004,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-v4",
-      "lab": "ElevenLabs",
-      "name": "Eleven v4",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00008,"completion":0}
-    },
-    {
-      "id": "elevenlabs/eleven-v4-turbo",
-      "lab": "ElevenLabs",
-      "name": "Eleven v4 Turbo",
-      "role": "speech",
-      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
-      "pricing": {"prompt":0.00004,"completion":0}
     },
     {
       "id": "fish-audio/drama-3",

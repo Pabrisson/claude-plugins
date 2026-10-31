@@ -5,11 +5,12 @@ import { AudioLinesIcon, ImageIcon, SparklesIcon, VideoIcon } from "lucide-react
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, inWorkspace, money, per1000, type Balances, type Job, type Kind, type LedgerLine, type State, type Tool } from "@/lib/api"
+import { api, inWorkspace, money, per1000, ROUTER_NAME, type Balances, type Job, type Kind, type LedgerLine, type State, type Tool } from "@/lib/api"
 import { Chips, Label, MultiChips } from "@/components/chips"
 import { ElementsTab, type ElementDraft, type Use } from "@/components/elements"
 import { StylesTab } from "@/components/styles"
 import { isRunning, Results, type Bridge } from "@/components/results"
+import { ModelLogo } from "@/components/model-logo"
 import { Viewer } from "@/components/viewer"
 import { WorkspaceRows } from "@/components/workspace-list"
 
@@ -116,9 +117,9 @@ export function Library({
         <div>
           <Label>Made with</Label>
           <Chips
-            options={["all", "openrouter", "elevenlabs", "local"]}
+            options={["all", "kie", "openrouter", "elevenlabs", "local"]}
             value={provider}
-            label={(p) => ({ all: "All", openrouter: "OpenRouter", elevenlabs: "ElevenLabs", local: "Local" })[p] ?? p}
+            label={(p) => ({ all: "All", openrouter: "OpenRouter", kie: "Kie.ai", elevenlabs: "ElevenLabs", local: "Local" })[p] ?? p}
             onChange={setProvider}
           />
         </div>
@@ -192,7 +193,7 @@ function Bars({ days, lines, series }: { days: string[]; lines: LedgerLine[]; se
 export function Credits({ state, balances, onBridge }: { state: State; balances: Balances | null; onBridge: (b: Bridge, job: Job, file: string) => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const [period, setPeriod] = useState<Period>("month")
-  const [provider, setProvider] = useState<"both" | "openrouter" | "elevenlabs">("both")
+  const [provider, setProvider] = useState<"both" | "openrouter" | "kie" | "elevenlabs">("both")
   const [kinds, setKinds] = useState<Kind[]>(KINDS)
   const [by, setBy] = useState<string[]>(["dashboard", "claude"])
   const [ws, setWs] = useState("all")
@@ -207,7 +208,9 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
   const now = new Date(), month = now.toISOString().slice(0, 7)
   const since = period === "7d" ? new Date(now.getTime() - 6 * 864e5).toISOString().slice(0, 10) : period === "month" ? `${month}-01` : "0000"
   const lines = ledger.filter((l) => l.at.slice(0, 10) >= since && kinds.includes(l.kind) && by.includes(l.by) && inWs(l.id))
-  const or = lines.filter((l) => l.provider === "openrouter"), el = lines.filter((l) => l.provider === "elevenlabs")
+  const el = lines.filter((l) => l.provider === "elevenlabs")
+  // a card for the active router, and for the other one when it spent in this period
+  const routers = (["kie", "openrouter"] as const).filter((r) => (provider === "both" ? r === state.router || lines.some((l) => l.provider === r) : provider === r))
   const today = now.toISOString().slice(0, 10)
   const end = Date.parse(today), n = period === "7d" ? 7 : period === "month" ? new Date(end).getUTCDate() : 30
   const days = Array.from({ length: n }, (_, i) => new Date(end - (n - 1 - i) * 864e5).toISOString().slice(0, 10))
@@ -220,10 +223,15 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
     }),
   ].filter((r) => provider === "both" || r.provider === provider)
 
-  const ob = balances?.openrouter, eb = balances?.elevenlabs
-  const orSpent = sum(or), elSpent = sum(el)
-  const limits = state.settings
-  const noLimits = [limits.openrouter, limits.elevenlabs].every((l) => l.threshold == null && l.cap == null)
+  const ob = balances?.openrouter, kb = balances?.kie, eb = balances?.elevenlabs
+  const elSpent = sum(el)
+  const limits = state.settings, active = limits[state.router]
+  const noLimits = [active, limits.elevenlabs].every((l) => l.threshold == null && l.cap == null)
+  const balanceOf = (r: "openrouter" | "kie") =>
+    r === "kie"
+      ? !kb ? "Loading the balance…" : kb.error ? (kb.error === "no key" ? "No key set: see Settings" : kb.error) : `${(kb.credits ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} credits left ($${(kb.account_left ?? 0).toFixed(2)})`
+      : !ob ? "Loading the balance…" : ob.error ? (ob.error === "no key" ? "No key set: see Settings" : ob.error)
+        : [ob.account_left != null && `$${ob.account_left.toFixed(2)} left on the account`, ob.key_left != null ? `$${ob.key_left.toFixed(2)} left on this key` : "no limit on this key", ob.account_left == null && "add a management key to see the account balance"].filter(Boolean).join(" · ")
 
   return (
     <>
@@ -234,7 +242,7 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
         </div>
         <div>
           <Label>Provider</Label>
-          <Chips options={["both", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => ({ both: "Both", openrouter: "OpenRouter", elevenlabs: "ElevenLabs" })[p]} onChange={setProvider} />
+          <Chips options={["both", "kie", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => ({ both: "All", openrouter: "OpenRouter", kie: "Kie.ai", elevenlabs: "ElevenLabs" })[p]} onChange={setProvider} />
         </div>
         <div>
           <Label>Media</Label>
@@ -248,23 +256,22 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
         <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
           {noLimits
             ? "No confirmation threshold and no monthly cap are set: every click on a paid button spends. Set them in Settings."
-            : `Limits: OpenRouter ${limits.openrouter.threshold != null ? `asks above $${limits.openrouter.threshold}` : "never asks"}${limits.openrouter.cap != null ? `, caps at $${limits.openrouter.cap} a month` : ""}. ElevenLabs ${limits.elevenlabs.threshold != null ? `asks above ${limits.elevenlabs.threshold} credits` : "never asks"}${limits.elevenlabs.cap != null ? `, caps at ${limits.elevenlabs.cap} credits a month` : ""}.`}
+            : `Limits: ${ROUTER_NAME[state.router]} ${active.threshold != null ? `asks above $${active.threshold}` : "never asks"}${active.cap != null ? `, caps at $${active.cap} a month` : ""}. ElevenLabs ${limits.elevenlabs.threshold != null ? `asks above ${limits.elevenlabs.threshold} credits` : "never asks"}${limits.elevenlabs.cap != null ? `, caps at ${limits.elevenlabs.cap} credits a month` : ""}.`}
         </p>
       </Side>
       <Main title="Credits" aside={<span className="text-sm text-muted-foreground">{now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>}>
         <div className="grid gap-3.5 lg:grid-cols-2">
-          {provider !== "elevenlabs" && (
-            <div className="rounded-2xl border bg-card p-4">
-              <div className="text-sm text-muted-foreground">OpenRouter, USD</div>
+          {routers.map((r) => (
+            <div key={r} className="rounded-2xl border bg-card p-4">
+              <div className="text-sm text-muted-foreground">{ROUTER_NAME[r]}, USD{r === state.router ? " · active" : ""}</div>
               <div className="mt-1 text-3xl font-semibold tabular-nums">
-                {money(orSpent, "usd")} <span className="text-sm font-normal text-muted-foreground">spent {period === "7d" ? "in 7 days" : period === "month" ? "this month" : "in all"}</span>
+                {money(sum(lines.filter((l) => l.provider === r)), "usd")} <span className="text-sm font-normal text-muted-foreground">spent {period === "7d" ? "in 7 days" : period === "month" ? "this month" : "in all"}</span>
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                {!ob ? "Loading the balance…" : ob.error ? (ob.error === "no key" ? "No key set: see Settings" : ob.error)
-                  : [ob.account_left != null && `$${ob.account_left.toFixed(2)} left on the account`, ob.key_left != null ? `$${ob.key_left.toFixed(2)} left on this key` : "no limit on this key", ob.account_left == null && "add a management key to see the account balance"].filter(Boolean).join(" · ")}
-                {limits.openrouter.cap != null && ` · cap $${limits.openrouter.cap} a month, $${state.month.openrouter.toFixed(2)} used`}
+                {balanceOf(r)}
+                {limits[r].cap != null && ` · cap $${limits[r].cap} a month, $${state.month[r].toFixed(2)} used`}
               </div>
-              <Bars days={days} lines={or} series={KINDS.map((k) => ({ key: k, color: `var(--${k === "image" ? "img" : k === "video" ? "vid" : "aud"})` }))} />
+              <Bars days={days} lines={lines.filter((l) => l.provider === r)} series={KINDS.map((k) => ({ key: k, color: `var(--${k === "image" ? "img" : k === "video" ? "vid" : "aud"})` }))} />
               <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
                 {KINDS.map((k) => (
                   <span key={k} className="flex items-center gap-1.5">
@@ -274,8 +281,8 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
                 ))}
               </div>
             </div>
-          )}
-          {provider !== "openrouter" && (
+          ))}
+          {(provider === "both" || provider === "elevenlabs") && (
             <div className="rounded-2xl border bg-card p-4">
               <div className="text-sm text-muted-foreground">ElevenLabs, credits</div>
               <div className="mt-1 text-3xl font-semibold tabular-nums">
@@ -319,7 +326,12 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
                   {new Date(r.at).toLocaleString("en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </td>
                 <td className="p-2 whitespace-nowrap">{r.label}</td>
-                <td className="max-w-64 truncate p-2 text-muted-foreground" title={r.model}>{r.model}</td>
+                <td className="max-w-64 p-2 text-muted-foreground" title={r.model}>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <ModelLogo model={r.model} className="size-4 rounded-sm bg-transparent p-0" />
+                    <span className="truncate">{r.model}</span>
+                  </span>
+                </td>
                 <td className="p-2 text-right whitespace-nowrap tabular-nums">{money(r.estimate, r.unit, usd)}</td>
                 <td className={cn("p-2 text-right whitespace-nowrap tabular-nums", r.actual ? "font-semibold text-cost" : "text-muted-foreground")}>
                   {r.status === "running" ? "running" : `${money(r.actual, r.unit, usd)}${r.status === "failed" ? ", failed" : r.known ? "" : " (est.)"}`}

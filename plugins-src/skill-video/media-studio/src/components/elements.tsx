@@ -198,6 +198,7 @@ export function ElementsTab({
           engine={engine}
           onClose={stop}
           onSaved={(name) => (stop(), onChanged(), setOpen(name))}
+          onUse={onUse}
         />
       )}
     </>
@@ -522,7 +523,7 @@ export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: {
 }
 
 // a new Element: its type, name, words and files; saved here, or made by Claude from the same (Ask Claude)
-export function NewElement({ draft, state, tools, engine, onClose, onSaved }: { draft: ElementDraft; state: State; tools: Tool[]; engine: string; onClose: () => void; onSaved: (name: string) => void }) {
+export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUse }: { draft: ElementDraft; state: State; tools: Tool[]; engine: string; onClose: () => void; onSaved: (name: string) => void; onUse: Use }) {
   const [type, setType] = useState(draft.type)
   const [name, setName] = useState("")
   const [words, setWords] = useState(draft.words ?? "")
@@ -535,6 +536,11 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved }: { 
   const kind = medium(type), files = paths.filter((p) => mediaKind(p) === kind)
   const taken = (state.elements ?? []).some((e) => e.name === name)
   const sheets = SHEETS[type], tool = sheets && tools.find((t) => t.id === sheets.tool)
+  // an element of images has 2 at least (Kling takes 2 to 4 views of each), its own ones counted when it adds to one
+  const have = files.length + (kind === "audio" ? 0 : (state.elements ?? []).find((e) => e.name === name)?.files.length ?? 0)
+  const enough = kind === "audio" ? files.length > 0 : have >= 2
+  // the type's References tool, with what is here: the images as its photos, the words as its subject
+  const openTool = () => tool && sheets && (onClose(), onUse("image", tool.id, { inputs: files.length ? { references: files.slice(0, 4) } : {}, fields: words ? { [sheets.field]: words } : {} }))
   const hint = ELEMENT_TYPES.find((t) => t.type === type)!.hint
 
   async function save() {
@@ -627,10 +633,18 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved }: { 
           onAdd={(more) => setPaths((p) => [...p, ...more.filter((m) => !p.includes(m))])}
           onDrop={(f) => setPaths((p) => p.filter((x) => x !== f))}
         />
-        {tool && !files.length && (
-          <p className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
-            No clean images yet? {tool.label} makes them from a few photos or words: each sheet lands in the library, then « Make an element » on one brings you back here.
-          </p>
+        {kind === "image" && (
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <p className="flex-1">
+              {have >= 2 ? "Two views or more: every model gets the element well." : have === 1 ? "One more image: an element takes 2 at least (another view, another angle)." : "Two images at least: two views of it, or two angles."}
+              {tool ? ` ${tool.label} makes clean sheets from a photo or words; « Make an element » on one brings it back here.` : ""}
+            </p>
+            {tool && (
+              <Button size="sm" variant="outline" onClick={openTool} title={`Opens ${tool.label} with ${files.length ? "these images and words" : "these words"}`}>
+                <SparklesIcon /> Open {tool.label}
+              </Button>
+            )}
+          </div>
         )}
         <div className="flex flex-wrap items-center gap-2 border-t pt-4">
           <Button variant="outline" onClick={askClaude} title="Copies a request for Claude: it writes the words, makes the sheets if needed and saves the element">
@@ -638,8 +652,8 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved }: { 
           </Button>
           <span className="flex-1" />
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="space" disabled={busy || !NAME.test(name) || !files.length} onClick={save}>
-            {!name ? "Name it" : !files.length ? (kind === "audio" ? "Add a clip" : "Add an image") : taken ? `Add to @${name}` : "Save element"}
+          <Button variant="space" disabled={busy || !NAME.test(name) || !files.length || !enough} onClick={save}>
+            {!name ? "Name it" : !files.length ? (kind === "audio" ? "Add a clip" : "Add 2 images") : !enough ? "Add a 2nd image" : taken ? `Add to @${name}` : "Save element"}
           </Button>
         </div>
       </DialogContent>

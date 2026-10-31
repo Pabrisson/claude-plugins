@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job } from "@/lib/api"
+import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job, type Line, type Shot } from "@/lib/api"
 import { Label } from "@/components/chips"
 import { Thumb, Workspaces } from "@/components/inputs"
 import { ModelLogo } from "@/components/model-logo"
-import { BRIDGES, costOf, DeleteDialog, REMIX, SEND, sendToEdit, type Bridge } from "@/components/results"
+import { BRIDGES, costOf, DeleteDialog, REMIX, SEND, sendToEdit, type Bridge, FINAL, isDraft } from "@/components/results"
 import { CompareDialog } from "@/components/compare"
 
 // the settings a result was made with, in words
@@ -24,7 +24,11 @@ const PARAMS: Record<string, [string, (v: unknown) => string]> = {
   sound: ["Sound", (v) => (v ? "on" : "off")],
   voice: ["Voice", String],
   seed: ["Seed", String],
+  mid_times: ["Middle frames at", (v) => (v as number[]).map((t) => `${t} s`).join(", ")],
+  draft_of: ["Final of the draft", String],
 }
+// a model's option as the Settings list shows it: on / off, else its value
+const optionText = (v: unknown) => (v === true ? "on" : v === false ? "off" : String(v))
 const words = (k: string) => (k[0].toUpperCase() + k.slice(1)).replaceAll("_", " ")
 // an input's role, as the tools name them
 const ROLES: Record<string, string> = { sketch: "Painted", matte: "Mask (kept here)", first_frame: "First frame", last_frame: "Last frame", voice_clips: "Voice", sheet: "Sheet" }
@@ -119,7 +123,11 @@ function Body({
       .then((r) => +(r.headers.get("content-length") ?? 0))
       .then((size) => size && setKnown((all) => ({ ...all, [file]: { ...all[file], size } })), () => {})
   }, [file])
-  const params = Object.entries(job.params ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  // the shots and a dialogue's lines have their own blocks; the model's options are listed one by one
+  const shots = Array.isArray(job.params?.shots) ? (job.params.shots as Shot[]) : null
+  const lines = Array.isArray(job.params?.dialogue) ? (job.params.dialogue as Line[]) : null
+  const params = Object.entries(job.params ?? {}).filter(([k, v]) => v !== undefined && v !== null && v !== "" && !["shots", "dialogue", "options", "keyframe_video"].includes(k))
+  const options = Object.entries((job.params?.options as Record<string, unknown> | undefined) ?? {})
   // a field's words, not the dashboard's own state beside it (a light's stage: "light:rig") nor an untouched margin
   const fields = Object.entries(job.fields ?? {}).filter(([k, v]) => v && v !== "0" && !k.includes(":"))
   const inputs = Object.entries(job.inputs ?? {}).flatMap(([key, list]) => list.map((f) => ({ key, f })))
@@ -127,6 +135,7 @@ function Body({
   const made = span(job.started ?? job.created, job.finished)
   const actions = [
     ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) }]),
+    ...(isDraft(job) ? [{ ...FINAL, hint: "In 1080p, from this draft (Kie lists no price for it)", run: () => onBridge("final", file ?? "") }] : []),
     // already on the current workspace's timeline: its place there instead of « Add to timeline »
     ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => (x.b === "timeline" && ws.shots[file!] ? { ...x, label: `${ws.shots[file!]} on the timeline`, hint: "Show it in the timeline", run: () => onBridge("shot", file!) } : { ...x, run: () => onBridge(x.b, file!) }))),
     ...(failed || !file ? [] : [{ ...SEND, run: () => sendToEdit(file) }]),
@@ -258,12 +267,42 @@ function Body({
             </div>
           )}
 
-          {(params.length > 0 || fields.length > 0) && (
+          {shots && (
+            <div>
+              <Label>Shots</Label>
+              <ol className="flex flex-col gap-1.5">
+                {shots.map((x, i) => (
+                  <li key={i} className="rounded-lg bg-muted/50 px-3 py-2 text-sm leading-relaxed">
+                    <span className="mr-2 text-xs font-semibold text-muted-foreground tabular-nums">
+                      {i + 1} · {x.duration} s
+                    </span>
+                    {x.prompt}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {lines && (
+            <div>
+              <Label>Lines</Label>
+              <ol className="flex flex-col gap-1.5">
+                {lines.map((l, i) => (
+                  <li key={i} className="rounded-lg bg-muted/50 px-3 py-2 text-sm leading-relaxed">
+                    <span className="mr-2 font-mono text-xs text-muted-foreground">{l.voice}</span>
+                    {l.text}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {(params.length > 0 || fields.length > 0 || options.length > 0) && (
             <div>
               <Label>Settings</Label>
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
                 {[
                   ...params.map(([key, v]) => [PARAMS[key]?.[0] ?? words(key), PARAMS[key]?.[1](v) ?? String(v)]),
+                  ...options.map(([key, v]) => [words(key), optionText(v)]),
                   ...fields.map(([key, v]) => [words(key), v]),
                 ].map(([l, v]) => (
                   <div key={l} className="contents">

@@ -315,7 +315,7 @@ export function WorkspacePage({
         )}
       </Main>
       {shown && <ElementDialog el={shown} state={state} tools={tools.image} onClose={() => setOpen(null)} onUse={onUse} onChanged={onChanged} />}
-      {making && <NewElement draft={making} state={state} tools={tools.image} engine={engine} onClose={() => setMaking(null)} onSaved={(name) => (setMaking(null), onChanged(), setOpen(name))} />}
+      {making && <NewElement draft={making} state={state} tools={tools.image} engine={engine} onClose={() => setMaking(null)} onSaved={(name) => (setMaking(null), onChanged(), setOpen(name))} onUse={onUse} />}
     </>
   )
 }
