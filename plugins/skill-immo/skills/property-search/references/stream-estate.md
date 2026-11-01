@@ -1,5 +1,7 @@
 # Stream Estate API v1
 
+Contents: Costs · GET /documents/properties · GET /indicators/price_per_meter · Searches (alerts): no longer made
+
 Extracted from `https://docs.stream.estate/api-reference/openapi.json` (1.0.0, read on 2026-10-28) and checked with a
 v1 key the same day. The spec itself is not shipped. A v1 key does not work on the v2 (`api-v2.stream.estate`), and
 the v2 is not used.

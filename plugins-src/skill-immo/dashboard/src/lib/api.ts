@@ -1,4 +1,4 @@
-// The engine's local API (immo.mjs serve) and the shapes of a search's files (references/listing-format.md).
+// The engine's local API (immo.mjs serve) and the shapes of a search's files (references/search-files.md).
 
 export type Point = [number, number]
 export type Geometry = { type: "Polygon" | "MultiPolygon"; coordinates: unknown }

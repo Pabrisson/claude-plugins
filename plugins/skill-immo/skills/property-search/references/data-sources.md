@@ -1,5 +1,7 @@
 # Open data
 
+Contents: Notes per source · The odds map (« Prospection »)
+
 Every source below is free and needs no key. All were checked live on 2026-10-27, on 20 rue Paul Bert, Lyon 3e. The
 engine keeps each answer in the searches folder's `.cache/` for the time given (TTL). If a source changes, fix
 `lib/opendata.js` and this page.
@@ -188,8 +190,3 @@ time, about 1 s once kept.
 - Tried and dropped (2026-10-28): calibrating « a DPE without a listing → a listing » on DVF. Among the 3,480 DPE of
   2023 around rue Paul Bert, 24 % were followed by a sale at the same address and surface (±8 %) within 18 months, 177
   days later at the median (C 30 %, D 22 %, G 14 %). The user kept the recent DPE as they are.
-
-## The data.gouv.fr MCP
-
-When a data.gouv.fr MCP server is connected, Claude may use it to find and query a dataset the engine does not cover
-(the noise maps, a local dataset, a newer edition of one above). The engine does not depend on it.

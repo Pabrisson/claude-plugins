@@ -1,4 +1,4 @@
-// listings.json: one format whatever the source (references/listing-format.md). A property of Stream Estate (its v1
+// listings.json: one format whatever the source (references/search-files.md). A property of Stream Estate (its v1
 // PropertyDocument, with one advert per portal) or a listing Claude read (WebSearch, WebFetch, pasted text) becomes
 // the same object; a refresh merges the new state into the old one and says what changed.
 import { createHash } from 'node:crypto'

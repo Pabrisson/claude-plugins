@@ -113,8 +113,8 @@ The first word of `$ARGUMENTS` picks the mode. Anything else is a new search.
 |---|---|
 | `setup` | The buyer's profile |
 | `add <url \| texte>` | Add one listing |
-| `refresh [<slug>]` | What changed: new listings, price drops, offers, expiries |
-| `alert …`, `alerte …` | The search's alerts: list, make, change or turn off one |
+| `refresh [<slug>]` | What changed: new listings, price drops, offers, expiries (`references/follow-up.md`) |
+| `alert …`, `alerte …` | The search's alerts: list, make, change or turn off one (`references/follow-up.md`) |
 | `dashboard [<slug>]` | Reopen the dashboard |
 | `apply this feedback …` | Apply the prompt copied from the dashboard |
 | anything else | A new search: `<adresse \| rue \| quartier> [critères]` |
@@ -186,142 +186,15 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
   does (`source: manual`, id `m-…`, free): nothing for you to do.
 
 Without a search, ask which search it goes to, or start one from the listing's address.
+## refresh, alert and the watch
 
-## refresh
+Read `references/follow-up.md` and follow it: `refresh`, the alerts (make, change or turn off one), the « Prospection »
+map and its odds, the dashboard server's free watch and its news.
 
-`immo.mjs refresh -p <slug>`. It refreshes the free data, then, in Stream Estate mode, asks for what changed since the
-last refresh (the credits rule; it pays only for what changed).
+## Analyse, compare and messages
 
-Report the new listings, the price drops (old → new), the offers and the expiries. For assisted listings, offer to
-recheck the ones the user follows, one WebFetch each.
-
-Its DPE line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
-refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or
-a lease, so a recent one without a listing may be a home about to go on sale (ADEME does not say which). Say the new ones
-in one line; the dashboard's « Prospection » map rings them (layer « DPE récents »), and they go to its news. Two lines
-follow, `energy audits (12 months): 15, 1 new since the last refresh` and `building permits (12 months): 4, …`:
-- an energy audit is due to sell a house or a whole building rated E, F or G (it is also made for a renovation grant,
-  and ADEME does not say which): a new one is a strong sign of a sale, say it;
-- a permit is a demolition (a plot or a programme to come), homes built (a house divided, a new-build programme to buy
-  off-plan, or works next door) or a plot divided: say the new ones.
-
-Its last line, `alerts: « DPE rue Paul Bert » 2`, names the user's own alerts that fired: say them.
-
-The « Prospection » tab colors the IRIS of the map's box by the odds that a home goes on sale within 12 months (DVF
-sales over the census's homes), by the sales a year after successions and separations, by their share of vacant homes
-or by their sold price per m², from public figures per IRIS and commune (`references/data-sources.md`). Its IRIS card
-adds the second homes, the homes built before 1946, heated with oil, and whose household moved in 10 years ago or more.
-Its map shows the box's recent DPE, energy audits and building permits (never the applicant). Its « Estimations »
-switch hides the rest and shows each address of the box, in the search's zone or not, with its odds of going on sale
-soon (red to green): its DPE (those of one day count once), audits and permits of the last 12 months, its IRIS's sales
-against its tenants moving out; in the zone, a DPE a listing has does not count. An address clicked opens its block.
-« Type de bien » filters the DPE, audits and listings of both maps (never the permits).
-The weights are reasoned, not measured: say so if the user takes a % for a fact. It
-never names a person: if the user asks for the deaths or divorces of an address, say that no source gives them and that
-joining people to homes is not allowed.
-
-## The dashboard server's watch
-
-While the dashboard server runs (`dashboard` starts it, it stops once every Claude it worked for has quit), it watches
-every search, free: at its start, then every 6 hours (« Réglages »: off, 30 min, 1 h, 6 h, 12 h, 24 h; the header
-counts down to the next one, and pauses or resumes it: a pause keeps the period). It reads the zone's new DPE that no listing matches, its new energy audits and building
-permits, the same at the places of the user's alerts (outside the zone too) and, in Stream Estate mode, counts (free,
-no item returned) the listings not
-fetched yet and the fetched ones that changed on the portals since the last refresh. The news go to
-`<slug>/feed.json`; those the search's alerts take get a desktop notification (« Réglages »: on or off, sound, quiet
-hours). The counts are no news: « Suivi » shows them in a bar with « Récupérer » and « Actualiser », through the
-credits dialog. In the dashboard, the bell counts what is not read and opens the latest, and « Suivi » lists the news
-day by day, those of one watch folded: « Chercher l'annonce » puts a `[chercher]` item in the prompt (a DPE, an
-audit), « Carte » shows a DPE, an audit or a permit on « Prospection ». The watch spends no credit, but for the
-automatic fetch the user turned on.
-
-## alert
-
-The alerts are the dashboard's (« Alertes » tab, `<slug>/alerts.json`, free): they pick the news that reach « Suivi »,
-the bell, the desktop notifications and refresh's `alerts:` line. The default ones keep the follow-up (new DPE within
-the search's criteria, every new energy audit and building permit of the zone, new listings, price drops and rises,
-statuses, and the expiry of a listing the user follows: one still to sort leaves the map and the cards quietly), each
-on until turned off. The user adds their own: one event, a place, and conditions all true (a DPE class, a surface, a
-whole building, a demolition, homes built, a price, a drop of 5 % or more, a favorite…). The listings' events happen in
-the search's zone only; a new DPE, energy audit or building permit may be watched anywhere in France: a street, around
-an address, a commune (ADEME and Sitadel, free).
-
-1. `immo.mjs alerts -p <slug>` prints alerts.json, then each alert with the news it took.
-2. To make, change or turn off one the user asks for (« préviens-moi d'un nouveau DPE rue Garibaldi »): read
-   `alerts.json` in `references/listing-format.md`, write the whole file again (with the other alerts) in the
-   scratchpad, then `immo.mjs alerts -p <slug> --file <file>`. It is checked as the dashboard's. Say in one line what it
-   takes, and how many past news it took (`alerts` again); the open dashboard shows « Recharger ».
-3. A place outside the zone needs its BAN id (a street: `immo.mjs geocode "<street, town>" --type street` prints `ban
-   <insee>_<voie>` and its point), its commune code or its point; the server notes what is there at once, so only the
-   DPE published later are news.
-4. A search of skill-immo 1.6 or before may hold a Stream Estate alert (`alert` in `search.json`, pushed to ntfy.sh):
-   offer to delete it, `immo.mjs alert delete -p <slug>` (unknown cost: the credits rule). Until then the dashboard
-   cannot delete that search.
-
-## Analyse and compare
-
-`immo.mjs show -p <slug> --id <id[,id…]>` prints, per listing, what the dashboard computes:
-- its `type`, and the market badge against the sold unit price of that type (`reference.scope` says which: recent zone,
-  zone or commune);
-- `favorite`: the user starred it in the dashboard. « Mes favoris » are the listings where it is true;
-- `review`: the strong points and the points to watch (each with its source) and the questions to ask;
-- `score`: out of 100, each part (price, budget, energy, transport, travel, outdoor) and its weight;
-- `rent`: the rent of the same home, the owner's monthly cost, the gross yield, and the years before buying beats
-  renting (null: renting stays cheaper over the loan); `budget.works`, the work a DPE E, F or G calls for;
-- `messages`: its conversation with the agent or the seller, in order: `from: me` (yours and the user's, a draft until
-  `sent_at`) or `from: them` (received: a reply the user pasted, a call summed up), with `channel` and `amount`;
-- the negotiation range and its reasons;
-- the days online, the drops already made;
-- the budget against the profile (total, loan, monthly payment, debt ratio, HCSF 35 %, down payment needed);
-- the building: the registry DPE, the condominium, the risks, the sales in the same building;
-- what is within 500 m, and the travel times.
-
-For a question on the market itself, read the search's `market.json` (`references/listing-format.md`): per type the
-price trend over 1 and 3 years, the prices by number of rooms, the streets around with their median and its move, and
-`context` (the DPE classes of the zone, the property tax rate against France's, the homes authorised each year).
-
-`immo.mjs enrich -p <slug> --id <id>` fetches the building data again. A Stream Estate listing has no address, only a
-point (`location.accuracy`: `PRECISE` at the house number, `NEIGHBORHOOD` around it).
-
-Answer with the numbers, then a plain verdict. Below, at or above the market of its type, and why. What to check at the
-visit: start from `review` (its points to watch and questions), the DPE against the registry, the condominium, a G or F
-(it can no longer be let from 2025 or 2028), the risks. The negotiation margin, as a range.
-
-## Messages and the conversation
-
-Each listing keeps its conversation with the agent or the seller. The user adds what they receive in the dossier
-(« Ajouter »: a reply pasted, a call summed up), or pastes it to you.
-
-**A message the user received** (« l'agent m'a répondu… », a call): add it to the conversation as they give it,
-`immo.mjs message -p <slug> --id <id> --from them [--channel email|sms|phone|visit] [--amount <€ proposed>] [--date
-<iso>] --file <file>`, and say so in one line.
-
-**A message to write**, when the user asks for one or a `[message]` item of the dashboard does:
-- `offer`: an offer;
-- `question`: the questions for the agent;
-- `visit`: a visit request;
-- `reply`: an answer to the last message received;
-- `follow_up`: a reminder of the last message sent that got no answer;
-- `documents`: a request for the documents (full diagnostics, the minutes of the last 3 general meetings, the
-  statement of charges, the property tax notice, the pre-sale statement).
-
-1. `immo.mjs show -p <slug> --id <id>`: the whole conversation first (what was offered, answered, promised), then the
-   negotiation range, the review, the sales of the street, the notes.
-2. Write it in French, short and polite, from those facts only, following on from the conversation:
-   - an offer: its amount inside the negotiation range unless the user gave one; ask in one AskUserQuestion when neither
-     is clear (the range's low end first). Two or three arguments the data backs (time online, drops, DPE and works,
-     sales of the street), the financing in one line, how long it stays valid (10 days by default);
-   - a reply to a counter-offer: where it stands against the range and what the seller said;
-   - questions or documents: those of `review.questions` that still matter, minus what the conversation already
-     answered.
-
-   Never sign with a name the user did not give.
-3. Give the text in your answer, ready to copy. You never send anything: the user does.
-4. Always ask, in one AskUserQuestion, whether to add it to the listing's conversation: « Oui, en brouillon » first,
-   then « Oui, je l'ai déjà envoyé » and « Non ». On a yes, write it to a file in the scratchpad and run
-   `immo.mjs message -p <slug> --id <id> --kind <kind> [--amount <€>] [--to "<who>"] [--sent] --file <file>` (`--sent`
-   for « déjà envoyé »). The dossier shows it in « Conversation », with « Copier » and « Marquer envoyé »; an offer
-   marked sent moves the listing to « Offre faite ».
+Read `references/analyse-and-messages.md` and follow it: what `show` gives, how to answer on a listing or the market,
+a message received, a message to write (an offer, questions, a visit, a reply, a reminder, documents).
 
 ## Other public data: the data.gouv.fr MCP
 
@@ -368,9 +241,10 @@ Do every item in order:
 - `[annonces]`: the header's « Annonces ». « sur l'API … et sur le web »: in Stream Estate mode, `fetch -p <slug>` without
   `--spend` counts for free and stops on the estimate (exit 2): the credits rule, then `fetch --spend`; then the assisted
   mode, 5 to 10 listing pages at most. « sur le web » (no key, an OpenData search or the API off): the assisted mode only. Say what each brought.
-- `[analyser]`: `show --id`, and `enrich --id` if it has no building data.
-- `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings.
-- `[message]`: the messages section above.
+- `[analyser]`: `show --id`, and `enrich --id` if it has no building data; answer as `references/analyse-and-messages.md`
+  says.
+- `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings (`references/analyse-and-messages.md`).
+- `[message]`: `references/analyse-and-messages.md`, « Messages and the conversation ».
 - `[ajouter]`: the add mode.
 - `[chercher]`: a recent DPE of the map that no listing matches, or an energy audit (`l'annonce de l'audit énergétique
   <number> : maison 57 m², classe F…`; « immeuble entier » for a whole building). Look for its listing the assisted way: WebSearch its

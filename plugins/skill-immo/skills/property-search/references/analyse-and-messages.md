@@ -1,0 +1,96 @@
+# Analyse, compare and messages
+
+Read it before analysing or comparing listings, a question on a listing or on the market, or a message received or
+to write (an offer, questions, a visit, a reply, a reminder, documents). `immo.mjs` means `node "${CLAUDE_SKILL_DIR}/engine/immo.mjs"`, as in SKILL.md; the credits rule and the
+assisted mode are SKILL.md's.
+
+Contents: analyse and compare (`show`, `market.json`, the verdict) · messages and the conversation (one received, one to write) · `market.json`
+
+## Analyse and compare
+
+`immo.mjs show -p <slug> --id <id[,id…]>` prints, per listing, what the dashboard computes:
+- its `type`, and the market badge against the sold unit price of that type (`reference.scope` says which: recent zone,
+  zone or commune);
+- `favorite`: the user starred it in the dashboard. « Mes favoris » are the listings where it is true;
+- `review`: the strong points and the points to watch (each with its source) and the questions to ask;
+- `score`: out of 100, each part (price, budget, energy, transport, travel, outdoor) and its weight;
+- `rent`: the rent of the same home, the owner's monthly cost, the gross yield, and the years before buying beats
+  renting (null: renting stays cheaper over the loan); `budget.works`, the work a DPE E, F or G calls for;
+- `messages`: its conversation with the agent or the seller, in order: `from: me` (yours and the user's, a draft until
+  `sent_at`) or `from: them` (received: a reply the user pasted, a call summed up), with `channel` and `amount`;
+- the negotiation range and its reasons;
+- the days online, the drops already made;
+- the budget against the profile (total, loan, monthly payment, debt ratio, HCSF 35 %, down payment needed);
+- the building: the registry DPE, the condominium, the risks, the sales in the same building;
+- what is within 500 m, and the travel times.
+
+For a question on the market itself, read the search's `market.json` (« `market.json` » below): per type the
+price trend over 1 and 3 years, the prices by number of rooms, the streets around with their median and its move, and
+`context` (the DPE classes of the zone, the property tax rate against France's, the homes authorised each year).
+
+`immo.mjs enrich -p <slug> --id <id>` fetches the building data again. A Stream Estate listing has no address, only a
+point (`location.accuracy`: `PRECISE` at the house number, `NEIGHBORHOOD` around it).
+
+Answer with the numbers, then a plain verdict. Below, at or above the market of its type, and why. What to check at the
+visit: start from `review` (its points to watch and questions), the DPE against the registry, the condominium, a G or F
+(it can no longer be let from 2025 or 2028), the risks. The negotiation margin, as a range.
+
+## Messages and the conversation
+
+Each listing keeps its conversation with the agent or the seller. The user adds what they receive in the dossier
+(« Ajouter »: a reply pasted, a call summed up), or pastes it to you.
+
+**A message the user received** (« l'agent m'a répondu… », a call): add it to the conversation as they give it,
+`immo.mjs message -p <slug> --id <id> --from them [--channel email|sms|phone|visit] [--amount <€ proposed>] [--date
+<iso>] --file <file>`, and say so in one line.
+
+**A message to write**, when the user asks for one or a `[message]` item of the dashboard does:
+- `offer`: an offer;
+- `question`: the questions for the agent;
+- `visit`: a visit request;
+- `reply`: an answer to the last message received;
+- `follow_up`: a reminder of the last message sent that got no answer;
+- `documents`: a request for the documents (full diagnostics, the minutes of the last 3 general meetings, the
+  statement of charges, the property tax notice, the pre-sale statement).
+
+1. `immo.mjs show -p <slug> --id <id>`: the whole conversation first (what was offered, answered, promised), then the
+   negotiation range, the review, the sales of the street, the notes.
+2. Write it in French, short and polite, from those facts only, following on from the conversation:
+   - an offer: its amount inside the negotiation range unless the user gave one; ask in one AskUserQuestion when neither
+     is clear (the range's low end first). Two or three arguments the data backs (time online, drops, DPE and works,
+     sales of the street), the financing in one line, how long it stays valid (10 days by default);
+   - a reply to a counter-offer: where it stands against the range and what the seller said;
+   - questions or documents: those of `review.questions` that still matter, minus what the conversation already
+     answered.
+
+   Never sign with a name the user did not give.
+3. Give the text in your answer, ready to copy. You never send anything: the user does.
+4. Always ask, in one AskUserQuestion, whether to add it to the listing's conversation: « Oui, en brouillon » first,
+   then « Oui, je l'ai déjà envoyé » and « Non ». On a yes, write it to a file in the scratchpad and run
+   `immo.mjs message -p <slug> --id <id> --kind <kind> [--amount <€>] [--to "<who>"] [--sent] --file <file>` (`--sent`
+   for « déjà envoyé »). The dossier shows it in « Conversation », with « Copier » and « Marquer envoyé »; an offer
+   marked sent moves the listing to « Offre faite ».
+
+## `market.json`
+
+- `market.json`:
+  - `dvf.<type>` for each type of the search: `{ commune, zone, street, recent, years, trend, by_rooms, streets,
+    points[] }`. Each of the four first is a stats object: `count`, `median_ppm2` (the unit price: € per m², of land
+    for a plot, € a lot for a parking), `q1`, `q3`, `median_price`, `median_area` and `by_quarter[]`;
+    - `trend { zone, commune }`: each `{ to, median_ppm2, y1, y3 }`, the median of the last 12 months (to the newest
+      sale) and its move against the 12 months one and three years before (0.05 = +5 %), null under 10 sales a side;
+    - `by_rooms { scope: recent|zone, rows[] { rooms, count, median_price, median_area, median_ppm2 } }`: 5 stands for
+      5 and more, 3 sales at least a row; the zone's last two years, or its five when they hold under 30 sales;
+    - `streets[] { code_voie, name, count, median_ppm2, point, change, distance }`: the commune's streets with 5 sales
+      or more, the 40 nearest to the zone's center; `change` is the last two years against the years before;
+  - `context { dpe, tax, housing }`, each `{ error }` when its source failed:
+    - `dpe { scope: zone|commune, flat, house }`: the count of ADEME DPE per class, one per home, within the zone's
+      radius of its center (a circle or a street), else in the commune;
+    - `tax { year, city, commune, epci, epci_name, total, waste, france }`: the property tax rates in %, `total` with
+      the syndicates and GEMAPI, `waste` the household waste tax apart, `france` the average weighted by population;
+    - `housing { release, years[] { year, authorised, started } }`: the homes authorised and started (Sitadel);
+  - `rent { year, flat, flat_small, flat_large, house }`: the carte des loyers of the commune, each `{ per_m2, low,
+    high, scope, observations }` (€ per m² a month, charges included);
+  - `alsace_moselle`;
+  - `stream { type, median, average, series { "2026-10": … } }`: the asking €/m² of the zone's listings over two
+    years, filled by `market` for the search's first type.
