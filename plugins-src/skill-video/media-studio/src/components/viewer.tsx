@@ -1,5 +1,5 @@
-import { useContext, useEffect, useState } from "react"
-import { AudioLinesIcon, CaptionsIcon, ChevronLeftIcon, ChevronRightIcon, ClapperboardIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, FileAudioIcon, FolderKanbanIcon, PianoIcon, StarIcon, Trash2Icon, UserRoundPlusIcon } from "lucide-react"
+import { useContext, useEffect, useRef, useState } from "react"
+import { AudioLinesIcon, CaptionsIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClapperboardIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, FileAudioIcon, FolderKanbanIcon, PianoIcon, StarIcon, Trash2Icon, UserRoundPlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job, type Line, type Shot, type Spec } from "@/lib/api"
 import { Label } from "@/components/chips"
 import { Thumb, Workspaces } from "@/components/inputs"
@@ -68,7 +68,7 @@ async function runExtra(spec: Spec, label: string, confirm = false) {
     else toast.error(plain(err.message))
   }
 }
-const extraSpec = (tool: string, file: string, fields: Record<string, string> = {}): Spec => ({ kind: "audio", tool, prompt: "", fields, inputs: { clip: [file] }, params: {} })
+const extraSpec = (tool: string, file: string | string[], fields: Record<string, string> = {}): Spec => ({ kind: "audio", tool, prompt: "", fields, inputs: { clip: [file].flat() }, params: {} })
 
 const bytes = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`)
 const span = (a?: string, b?: string) => {
@@ -106,7 +106,7 @@ export function Viewer({
             if (e.key === "ArrowRight") go(1)
           }}
         >
-          <Body key={job.id} job={job} jobs={jobs} home={home} per1000={per1000} prev={i > 0 ? () => go(-1) : null} next={i < jobs.length - 1 ? () => go(1) : null} onBridge={(b, f) => (onId(null), onBridge(b, job, f))} onDeleted={() => onId(null)} />
+          <Body key={job.id} job={job} jobs={jobs} home={home} per1000={per1000} prev={i > 0 ? () => go(-1) : null} next={i < jobs.length - 1 ? () => go(1) : null} onBridge={(b, f) => (onId(null), onBridge(b, job, f))} onClose={() => onId(null)} />
         </DialogContent>
       )}
     </Dialog>
@@ -121,7 +121,7 @@ function Body({
   prev,
   next,
   onBridge,
-  onDeleted,
+  onClose,
 }: {
   job: Job
   jobs: Job[]
@@ -130,11 +130,14 @@ function Body({
   prev: (() => void) | null
   next: (() => void) | null
   onBridge: (b: Bridge, file: string) => void
-  onDeleted: () => void
+  onClose: () => void
 }) {
   const [out, setOut] = useState(0)
   const [confirm, setConfirm] = useState(false)
   const [comparing, setComparing] = useState(false)
+  // the download block's width: its menu takes it exactly
+  const block = useRef<HTMLDivElement>(null)
+  const [blockWidth, setBlockWidth] = useState<number>()
   const ws = useContext(Workspaces)
   // what the file itself says: its size on screen, its length, its weight; a video the browser cannot play (ProRes)
   const [known, setKnown] = useState<Record<string, { w?: number; h?: number; length?: number; size?: number; unplayable?: boolean }>>({})
@@ -162,6 +165,18 @@ function Body({
     )
   }
   const failed = job.status === "failed"
+  // the tracks Kie turns into WAV (a song's takes, a Stems' tracks): All in WAV, priced by the engine
+  const wavs = failed ? [] : (job.tool === "stems" ? job.outputs.filter((o) => mediaKind(o) === "audio") : (job.suno?.tracks ?? []).map((t) => t.file)).map((o) => outputPath(home, job, o))
+  const wavKey = wavs.join("|")
+  const [wavPrice, setWavPrice] = useState<string | null>(null)
+  useEffect(() => {
+    const all = wavKey.split("|")
+    if (all.length < 2) return
+    api.estimate(extraSpec("wav", all)).then(
+      (a) => setWavPrice([a.estimate.credits != null && `${a.estimate.credits} credits`, a.estimate.known ? a.shown : "unknown cost"].filter(Boolean).join(" · ")),
+      () => setWavPrice(null)
+    )
+  }, [wavKey])
   useEffect(() => {
     if (!file) return
     fetch(fileUrl(file), { method: "HEAD" })
@@ -188,8 +203,9 @@ function Body({
     // a sound's music tools (Kie), Stems on a song Suno made; a take's extras; a stem's notes
     ...(failed || k !== "audio" || job.provider !== "kie" ? [] : SONG.filter((x) => !x.suno || take).map((x) => ({ ...x, run: () => onBridge(x.b, file!) }))),
     ...(failed || !take ? [] : [...EXTRAS.map((x) => ({ ...x, run: () => runExtra(extraSpec(x.tool, file!), x.label) })), { label: "Make a singer", icon: UserRoundPlusIcon, hint: "Its voice and style in the Library, for Music", run: openSinger }]),
+    ...(wavs.length < 2 ? [] : [{ label: "All in WAV", icon: FileAudioIcon, hint: `${wavs.length} tracks${wavPrice ? ` · ${wavPrice}` : ""}`, run: () => (runExtra(extraSpec("wav", wavs), "All in WAV"), onClose()) }]),
     ...(failed || !voiceOnly ? [] : [{ label: "Make a singer", icon: UserRoundPlusIcon, hint: "This voice in the Library, for Music's Singer", run: openSinger }]),
-    ...(failed || job.tool !== "stems" || k !== "audio" ? [] : [{ label: "MIDI", icon: PianoIcon, hint: "This stem's notes", run: () => runExtra(extraSpec("midi", file!), "MIDI") }]),
+    ...(failed || job.tool !== "stems" || k !== "audio" ? [] : [{ label: "MIDI", icon: PianoIcon, hint: "This stem's notes", run: () => runExtra(extraSpec("midi", file!), "MIDI") }, { label: "WAV", icon: FileAudioIcon, hint: "This stem as a WAV file", run: () => runExtra(extraSpec("wav", file!), "WAV") }]),
   ]
   const ext = file?.split(".").pop()?.toUpperCase()
   const stats = [
@@ -443,11 +459,34 @@ function Body({
         <div className="flex flex-col gap-2 border-t p-4">
           <div className="flex gap-2">
             {file && (
-              <Button className="flex-1" asChild>
-                <a href={fileUrl(file)} download={file.split("/").pop()}>
-                  <DownloadIcon data-icon="inline-start" /> Download{job.outputs.length > 1 ? ` ${ext}` : ""}
-                </a>
-              </Button>
+              // one block: the file, then behind a thin inset line the arrow for every file of the result at once
+              <div ref={block} className="flex flex-1 items-center overflow-hidden rounded-md bg-primary">
+                <Button className="flex-1 rounded-none shadow-none" asChild>
+                  <a href={fileUrl(file)} download={file.split("/").pop()}>
+                    <DownloadIcon data-icon="inline-start" /> Download{job.outputs.length > 1 ? ` ${ext}` : ""}
+                  </a>
+                </Button>
+                {job.outputs.length > 1 && (
+                  <DropdownMenu onOpenChange={(o) => o && setBlockWidth(block.current?.offsetWidth)}>
+                    <span className="h-5 w-px bg-primary-foreground/20" aria-hidden />
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon" aria-label="More downloads" className="w-9 rounded-none shadow-none">
+                        <ChevronDownIcon />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="top" align="end" sideOffset={6} collisionPadding={12} style={{ width: blockWidth }}>
+                      <DropdownMenuItem asChild>
+                        <a href={`/api/media/${job.id}/zip`} download>
+                          <span className="flex flex-col">
+                            <span>Download all ({job.outputs.length})</span>
+                            <span className="text-xs text-muted-foreground">Every file of this result in a .zip</span>
+                          </span>
+                        </a>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             )}
             <Button variant="outline" size="icon" aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"} title="Favorite" onClick={() => api.media(job.id, "favorite")}>
               <StarIcon className={cn(job.favorite && "fill-current text-cost")} />
@@ -462,7 +501,7 @@ function Body({
             </p>
           )}
         </div>
-        <DeleteDialog job={job} open={confirm} onOpenChange={setConfirm} onDeleted={onDeleted} />
+        <DeleteDialog job={job} open={confirm} onOpenChange={setConfirm} onDeleted={onClose} />
         <Dialog open={!!singer} onOpenChange={(o) => !o && setSinger(null)}>
           <DialogContent className="sm:max-w-md">
             <DialogTitle>Make a singer</DialogTitle>

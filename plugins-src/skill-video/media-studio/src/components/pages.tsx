@@ -7,15 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, inWorkspace, money, per1000, ROUTER_NAME, type Balances, type Job, type Kind, type LedgerLine, type Router, type State, type Tool } from "@/lib/api"
+import { api, money, per1000, ROUTER_NAME, type Balances, type Job, type Kind, type LedgerLine, type Router, type State, type Tool } from "@/lib/api"
 import { Chips, Label, MultiChips } from "@/components/chips"
 import { ElementsTab, type ElementDraft, type Use } from "@/components/elements"
 import { StylesTab } from "@/components/styles"
-import { isRunning, Results, type Bridge } from "@/components/results"
+import { isRunning, type Bridge } from "@/components/results"
 import { ModelLogo } from "@/components/model-logo"
 import { Viewer } from "@/components/viewer"
-import { WorkspaceRows } from "@/components/workspace-list"
-import { ToolFilter, toolKey } from "@/components/tool-filter"
 
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
@@ -59,16 +57,16 @@ function WorkspaceFilter({ state, value, onChange }: { state: State; value: stri
 
 // ---------- Library ----------
 
-// the Library's tab lives in the URL (#library/elements), so a result's « Make an element » lands on it
-const TABS = ["media", "elements", "styles"] as const
+// the Library's tab lives in the URL (#library/elements, #library/styles), so a result's « Make an element » lands on it;
+// the media are on the Workspace page (« All workspaces »)
+const TABS = ["elements", "styles"] as const
 type Tab = (typeof TABS)[number]
-const tabOf = (): Tab => TABS.find((t) => t !== "media" && window.location.hash.endsWith(`/${t}`)) ?? "media"
+const tabOf = (): Tab => (window.location.hash.endsWith("/styles") ? "styles" : "elements")
 
 export function Library({
   state,
   tools,
   engine,
-  onBridge,
   draft,
   onDraftUsed,
   onUse,
@@ -77,7 +75,6 @@ export function Library({
   state: State
   tools: Record<Kind, Tool[]>
   engine: string
-  onBridge: (b: Bridge, job: Job, file: string) => void
   draft: ElementDraft | null
   onDraftUsed: () => void
   onUse: Use
@@ -89,76 +86,16 @@ export function Library({
     window.addEventListener("hashchange", on)
     return () => window.removeEventListener("hashchange", on)
   }, [])
-  const [kind, setKind] = useState<"all" | Kind>("all")
-  const [provider, setProvider] = useState("all")
-  const [favorites, setFavorites] = useState(false)
-  const [ws, setWs] = useState("all")
-  const [tool, setTool] = useState("")
-  // the other filters first: the Tool list counts what they leave
-  const pool = state.media.filter(
-    (j) => (kind === "all" || j.kind === kind) && (provider === "all" || j.provider === provider) && (!favorites || j.favorite) && (ws === "all" || inWorkspace(j, ws))
-  )
-  const jobs = tool ? pool.filter((j) => toolKey(j) === tool) : pool
   const tabs = (
-    <Chips
-      options={TABS}
-      value={tab}
-      label={(t) => ({ media: "Media", elements: "Elements", styles: "Styles" })[t]}
-      onChange={(t) => (window.location.hash = t === "media" ? "library" : `library/${t}`)}
-      className="grid grid-cols-3 [&>button]:px-1"
-    />
+    <Chips options={TABS} value={tab} label={(t) => ({ elements: "Elements", styles: "Styles" })[t]} onChange={(t) => (window.location.hash = `library/${t}`)} className="grid grid-cols-2" />
   )
-  if (tab === "elements") return <ElementsTab tabs={tabs} state={state} tools={tools.image} engine={engine} draft={draft} onDraftUsed={onDraftUsed} onUse={onUse} onChanged={onChanged} />
   if (tab === "styles")
     return <StylesTab tabs={tabs} state={state} options={tools.image.find((t) => t.id === "restyle")?.fields.find((f) => f.type === "style")?.options ?? []} engine={engine} onUse={onUse} onChanged={onChanged} />
-  return (
-    <>
-      <Side>
-        {tabs}
-        <WorkspaceRows state={state} value={ws} onPick={setWs} count={(slug) => state.media.filter((j) => slug === "all" || inWorkspace(j, slug)).length} unit="item" all />
-        <div>
-          <Label>Media</Label>
-          <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
-        </div>
-        <div>
-          <Label>Tool</Label>
-          <ToolFilter jobs={pool} value={tool} onChange={setTool} />
-        </div>
-        <div>
-          <Label>Made with</Label>
-          <Chips
-            options={["all", "kie", "openrouter", "elevenlabs", "local"]}
-            value={provider}
-            label={(p) => ({ all: "All", openrouter: "OpenRouter", kie: "Kie.ai", elevenlabs: "ElevenLabs", local: "Local" })[p] ?? p}
-            onChange={setProvider}
-          />
-        </div>
-        <div>
-          <Label>Show</Label>
-          <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? "Everything" : "Favorites")} onChange={(f) => setFavorites(f === "favorites")} />
-        </div>
-      </Side>
-      <Main title="Library" aside={<span className="text-sm text-muted-foreground">{jobs.length} items</span>}>
-        <Results
-          jobs={jobs}
-          home={state.home}
-          per1000={per1000(state)}
-          onBridge={onBridge}
-          empty={
-            state.media.length ? (
-              <p className="text-sm text-muted-foreground">Nothing matches these filters.</p>
-            ) : (
-              <NoGenerations what="What you make in Image, Video and Audio lands here, by you or by Claude; a file dropped on the page is imported here, free." />
-            )
-          }
-        />
-      </Main>
-    </>
-  )
+  return <ElementsTab tabs={tabs} state={state} tools={tools.image} engine={engine} draft={draft} onDraftUsed={onDraftUsed} onUse={onUse} onChanged={onChanged} />
 }
 
 // nothing generated in this folder yet: what lands on the page once there is, and the spaces to start in
-function NoGenerations({ what }: { what: string }) {
+export function NoGenerations({ what }: { what: string }) {
   return (
     <Empty className="border border-dashed">
       <EmptyHeader>

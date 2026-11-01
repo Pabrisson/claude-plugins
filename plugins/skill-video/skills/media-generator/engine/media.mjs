@@ -779,9 +779,20 @@ function sunoOf(file, voices = false) {
 function stemOf(file) {
   const dir = path.dirname(path.resolve(file)), job = fs.existsSync(path.join(dir, 'job.json')) ? readJob(path.basename(dir)) : null
   if (job?.tool !== 'stems' || !job.suno?.task_id) return null
-  // its file is named by Kie after the stem's id and group (<id>_Vocals.mp3, 2026-10-31)
-  const name = path.parse(file).name.toLowerCase(), item = (job.suno.data?.origin_data ?? []).find(x => [x.id, x.stem_type_group_name, x.stem_name].some(k => k && name.includes(String(k).toLowerCase().replace(/\s+/g, '_'))))
+  // its file is named by Kie after the stem's id and group (<id>_Vocals.mp3, 2026-10-31): by its id first, its group
+  // then only as its whole name (Backing_Vocals is not Vocals, 2026-11-01); one instrument taken out is named by its take
+  // (Drum_Kit-1.mp3 the instrument alone, without-Drum_Kit-1.mp3 the song without it)
+  const norm = k => String(k).toLowerCase().replace(/\s+/g, '_')
+  const name = path.parse(file).name.toLowerCase(), list = job.suno.data?.origin_data ?? [], n = +name.match(/-(\d+)$/)?.[1]
+  const item = n && list[n - 1]?.extract ? list[n - 1][name.startsWith('without-') ? 'remove' : 'extract']
+    : list.find(x => x.id && name.includes(norm(x.id))) ?? list.find(x => [x.stem_type_group_name, x.stem_name].some(k => k && name === norm(k)))
   return { task_id: job.suno.task_id, audio_id: item?.id }
+}
+// a WAV made here already from this track (each WAV job keeps its tracks' ids in job.wav)
+function wavMade({ task_id, audio_id }) {
+  for (const j of allJobs()) for (const w of j.wav ?? [])
+    if (w.task_id === task_id && w.audio_id === audio_id && fs.existsSync(path.join(mediaDir(j.id), w.file))) return path.join(mediaDir(j.id), w.file)
+  return null
 }
 // a singer of the Library: a persona of a song, or a voice of one's own made a Suno voice
 function singerOf(value) {
@@ -906,7 +917,21 @@ function audioRequest(tool, spec, m, options) {
     if (!s) throw userError(`MIDI is made from a stem of the Stems tool: ${path.basename(clip ?? '')} is not one`)
     return send({ task_id: s.task_id, audio_id: s.audio_id })
   }
-  // the tools on a song Suno made: its section, its stems, its WAV, its timed words, its video, a singer from it
+  // WAV: each Suno take or stem given, one task each (All in WAV sends every track of a result), named after its file
+  if (action === 'wav') {
+    const each = [...files('clip'), ...files('clips')].map(c => {
+      const t = stemOf(c) ?? sunoOf(c)
+      if (!t?.audio_id) throw userError(`WAV is made from a song Suno made here or one of its stems: ${path.basename(c)} is not one`)
+      // Kie names a stem <its id>_Vocals: the WAV is Vocals.wav; one made here already is copied, free (Kie makes each
+      // track's WAV once, then answers « Wav record already exists », 2026-11-01)
+      return { task_id: t.task_id, audio_id: t.audio_id, name: path.parse(c).name.replace(/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}_/i, ''), from: wavMade(t) }
+    })
+    if (!each.length && !probing) throw userError('WAV takes a song Suno made here or its stems (--in clip=<file>, several at once)')
+    const out = send({ task_id: each[0]?.task_id ?? 'probe', audio_id: each[0]?.audio_id ?? 'probe' })
+    if (each.length) out.send.each = each
+    return out
+  }
+  // the tools on a song Suno made: its section, its stems, its timed words, its video, a singer from it
   const s = suno(), ids = { task_id: s.task_id, audio_id: s.audio_id }
   if (action === 'replace') {
     const a = seconds(f.start, 'From'), b = seconds(f.end, 'To')
@@ -1220,6 +1245,13 @@ async function plan(spec) {
       ? { amount: Math.round((estimate.amount + 2 * split.amount) * 1e4) / 1e4, credits: estimate.credits != null && split.credits != null ? estimate.credits + 2 * split.credits : undefined, detail: `the song (${estimate.detail}) + its 2 voices taken apart (${split.detail} each)` }
       : { amount: null, known: false, detail: 'Kie\'s price list not read yet' })
   }
+  // WAV: one task per track not made here yet
+  const each = request.send.each
+  if (each && estimate.amount != null) {
+    const n = each.filter(t => !t.from).length, have = each.length - n
+    Object.assign(estimate, { amount: Math.round(estimate.amount * n * 1e4) / 1e4, credits: estimate.credits != null ? Math.round(estimate.credits * n * 100) / 100 : undefined,
+      detail: `${n} track${n === 1 ? '' : 's'} × ${estimate.detail}${have ? `, ${have} made here already (copied, free)` : ''}` })
+  }
   // a voice priced before its text (the tool list's price): by its characters, none to count yet
   if (probing && m.role === 'speech' && !request.estimate?.text) Object.assign(estimate, { amount: null, known: false, detail: 'per character of its text' })
   // a draft's final: priced at the model's rate, said unknown (Kie lists no price of its own for it)
@@ -1398,6 +1430,36 @@ async function matchFirst(dir, job) {
 // its name), Suno's ids kept with the job for what follows from it; its words written beside (lyrics.txt, a timed
 // lyrics.srt); a singer goes to the Library
 async function runAudio(dir, job, request, provider) {
+  // WAV: one task per track, its cost counted as it goes (a failure stops it, what was spent stays in the ledger); a
+  // track made here already is copied; each track's ids kept (job.wav) so that it is never asked twice
+  if (request.each) {
+    const { each, ...one } = request
+    Object.assign(job, { outputs: [], wav: [] })
+    let asked = 0
+    for (const [i, t] of each.entries()) {
+      const file = `${t.name}.wav`
+      progress(job, `WAV ${i + 1} of ${each.length} (${t.name})…`)
+      // made meanwhile by another job: copied too
+      const from = t.from && fs.existsSync(t.from) ? t.from : wavMade(t)
+      if (from) fs.copyFileSync(from, path.join(dir, file))
+      else {
+        let r
+        asked++
+        try { r = await provider.audio({ ...one, input: { task_id: t.task_id, audio_id: t.audio_id } }, { progress: m => progress(job, m) }) }
+        catch (e) { throw new Error(`${t.name}: ${e.message}${/already exists/i.test(e.message) ? ' (Kie made its WAV before, not in this folder: it gives no way to fetch it again)' : ''}`) }
+        const f = r.files.find(x => x.data || x.url)
+        if (!f) throw new Error(`no WAV came back for ${t.name}`)
+        fs.writeFileSync(path.join(dir, file), f.data ?? await provider.download(f.url))
+        if (r.cost != null) Object.assign(job, { actual: Math.round(((job.actual ?? 0) + r.cost) * 1e4) / 1e4, actual_known: true })
+      }
+      job.outputs.push(file)
+      job.wav.push({ file, task_id: t.task_id, audio_id: t.audio_id })
+      saveJob(job)
+    }
+    // all copied: nothing spent
+    if (!asked) Object.assign(job, { actual: 0, actual_known: true })
+    return
+  }
   progress(job, `${job.label.toLowerCase()} with ${job.name}…`)
   const r = await provider.audio(request, { progress: m => progress(job, m) })
   const names = new Map()
@@ -2179,6 +2241,14 @@ async function handle(req, res) {
       estimate: { amount: 0, unit: 'usd', known: true, detail: 'imported, free' }, actual: 0, actual_known: true, status: 'done', by: 'dashboard', created: now, finished: now, outputs: [name],
       workspaces: [currentWorkspace()] })
     return reply(res, 200, { id, kind })
+  }
+  // a result's files as one .zip (Download all: a Stems' tracks, a song's takes and covers…)
+  const zipOf = p.match(/^\/api\/media\/([\w-]+)\/zip$/)
+  if (zipOf && !post) {
+    const id = zipOf[1], dir = mediaDir(id)
+    if (!fs.existsSync(path.join(dir, 'job.json'))) return reply(res, 404, { error: 'no such generation' })
+    const entries = readJob(id).outputs.filter(o => fs.existsSync(path.join(dir, o))).map(o => ({ name: `${id}/${o}`, file: path.join(dir, o) }))
+    return await sendZip(res, id, entries).catch(() => res.destroy())
   }
   if (p.startsWith('/api/media/') && post) {
     const [, , , id, action] = p.split('/'), dir = mediaDir(path.basename(id))

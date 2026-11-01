@@ -178,6 +178,8 @@ export type Estimate = {
   unit: "usd" | "credits"
   known: boolean
   detail: string
+  // Kie's credits beside its dollars
+  credits?: number
 }
 export type Job = {
   id: string

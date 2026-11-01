@@ -184,6 +184,9 @@ setInterval(() => {}, 1e6)
       kie.window.push(now)
       if (!body?.input) return json({ code: 422, msg: 'The input cannot be null', data: null })
       if (body.model === 'fake-broke') return json({ code: 402, msg: 'Credits insufficient', data: null })
+      // a track's WAV is made once (Kie, 2026-11-01)
+      if (body.model === 'ai-music-api/convert-to-wav-format' && Object.values(kie.tasks).some(t => t.model === body.model && t.input.task_id === body.input.task_id && t.input.audio_id === body.input.audio_id))
+        return json({ code: 422, msg: 'Wav record already exists', data: null })
       const id = `kie-task-${calls.length}`
       kie.tasks[id] = { model: body.model, input: body.input, polls: 0 }
       // Suno's timed lyrics answer at once (code and data inside data), no task to follow
@@ -206,10 +209,10 @@ setInterval(() => {}, 1e6)
       if (suno && ['generate', 'extend', 'upload-and-extend-audio', 'upload-and-cover-audio', 'add-vocals', 'add-instrumental', 'replace-section', 'mashup'].includes(suno))
         return kieOk({ taskId: id, model: t.model, state, resultJson: '', creditsConsumed: done ? 12 : null,
           response: done ? { data: [1, 2].map(n => ({ id: `${id}-take-${n}`, audio_url: `${base}/kiefiles/out.mp3`, image_url: `${base}/kiefiles/out.png`, title: t.input.title ?? 'Song', tags: t.input.style ?? 'pop', prompt: '[Verse]\nla la', duration: 1 })) } : null })
-      const object = { 'separate-vocals': { origin_data: [{ id: 'stem-v', stem_name: 'vocals' }, { id: 'stem-i', stem_name: 'instrumental' }] }, 'timeStamped-lyrics': { aligned_words: [{ word: 'la', start_s: 0.2, end_s: 0.6 }, { word: 'la', start_s: 0.7, end_s: 1 }] },
+      const object = { 'separate-vocals': { origin_data: [{ id: 'stem-v', stem_name: 'vocals' }, { id: 'stem-i', stem_name: 'instrumental' }, { id: 'stem-b', stem_type_group_name: 'Backing Vocals' }] }, 'timeStamped-lyrics': { aligned_words: [{ word: 'la', start_s: 0.2, end_s: 0.6 }, { word: 'la', start_s: 0.7, end_s: 1 }] },
         'generate-persona': { personaId: 'persona-1' }, 'generate-lyrics': { lyricsData: [{ title: 'Night', text: '[Verse]\nroad' }, { title: 'Drive', text: '[Verse]\nlights' }] }, 'boost-music-style': {},
         'validation-phrase': { phrase: 'the moon sings softly' }, 'create-voice': { voiceId: 'voice-1' }, 'generate-midi-from-audio': { instruments: [{ name: 'Voice', notes: [{ pitch: 60, start: 0, end: 0.5 }] }] } }[suno]
-      const urls = { 'separate-vocals': ['vocals.mp3', 'instrumental.mp3'], 'convert-to-wav-format': ['out.wav'], 'create-music-video': ['out.mp4'], 'sounds': ['out.mp3'] }[suno]
+      const urls = { 'separate-vocals': ['vocals.mp3', 'instrumental.mp3', 'stem-b_Backing_Vocals.mp3'], 'convert-to-wav-format': ['out.wav'], 'create-music-video': ['out.mp4'], 'sounds': ['out.mp3'] }[suno]
       // Boost style's text comes among its « URLs » (2026-10-31)
       const texts = suno === 'boost-music-style' ? ['dreamy synthwave, airy female vocals, 100 BPM'] : []
       if (suno) return kieOk({ taskId: id, model: t.model, state, resultJson: done ? JSON.stringify({ resultUrls: [...(urls ?? []).map(u => `${base}/kiefiles/${u}`), ...texts], resultObject: object ?? {} }) : '', creditsConsumed: done ? 2 : null })
@@ -221,7 +224,7 @@ setInterval(() => {}, 1e6)
     if (p === '/kiefiles/out.png') return bytes(png, 'image/png')
     if (p === '/kiefiles/last.jpg') return bytes(png, 'image/jpeg')
     if (p === '/kiefiles/out.mp4') return bytes(mp4, 'video/mp4')
-    if (/^\/kiefiles\/(out|vocals|instrumental)\.(mp3|wav)$/.test(p)) return bytes(mp3, 'audio/mpeg')
+    if (/^\/kiefiles\/(out|vocals|instrumental|stem-b_Backing_Vocals)\.(mp3|wav)$/.test(p)) return bytes(mp3, 'audio/mpeg')
     if (p.startsWith('/kiefiles/upload-')) return bytes(png, 'image/png')
     json({ error: { message: `fake: nothing at ${p}` } }, 404)
   })

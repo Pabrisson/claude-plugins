@@ -431,9 +431,9 @@ function Dashboard() {
           </main>
         </>
       ) : page === "workspace" ? (
-        <WorkspacePage state={state} tools={tools} engine={engine} onBridge={bridge} onUse={use} onChanged={refresh} timelines={timelines} focus={focus} onBridgeShot={bridgeShot} onAsk={ask} />
+        <WorkspacePage state={state} tools={tools} onBridge={bridge} onChanged={refresh} timelines={timelines} focus={focus} onBridgeShot={bridgeShot} onAsk={ask} />
       ) : page === "library" ? (
-        <Library state={state} tools={tools} engine={engine} onBridge={bridge} draft={elementDraft} onDraftUsed={draftUsed} onUse={use} onChanged={refresh} />
+        <Library state={state} tools={tools} engine={engine} draft={elementDraft} onDraftUsed={draftUsed} onUse={use} onChanged={refresh} />
       ) : page === "credits" ? (
         <Credits state={state} balances={balances} onBridge={bridge} />
       ) : (
@@ -445,12 +445,12 @@ function Dashboard() {
   )
 }
 
-// a file dropped anywhere the composer does not take it goes to the library; a video passes through Edit reference
+// a file dropped anywhere the composer does not take it joins the current workspace; a video passes through Edit reference
 // first (closing it keeps the video whole), several one after the other
 async function keep(path: string, onAdded: () => void) {
   try {
     await api.import(path)
-    toast.success("Added to the library", { description: path.split("/").pop()?.replace(/^\d+-/, ""), action: { label: "Show", onClick: () => (window.location.hash = "library") } })
+    toast.success("Added to the workspace", { description: path.split("/").pop()?.replace(/^\d+-/, ""), action: { label: "Show", onClick: () => (window.location.hash = "workspace") } })
     onAdded()
   } catch (e) {
     toast.error(plain((e as Error).message))
@@ -509,7 +509,7 @@ function DropToLibrary({ onAdded }: { onAdded: () => void }) {
       {over && !taken && (
         <div className="pointer-events-none fixed inset-2 z-50 grid place-items-center rounded-2xl border-2 border-dashed border-space bg-space/10 animate-in fade-in-0">
           <span className="flex items-center gap-2 rounded-full bg-background/95 px-4 py-2 text-sm font-medium shadow-lg">
-            <LibraryBigIcon className="size-4 text-space" /> Drop to add to the library
+            <FolderKanbanIcon className="size-4 text-space" /> Drop to add to the workspace
           </span>
         </div>
       )}

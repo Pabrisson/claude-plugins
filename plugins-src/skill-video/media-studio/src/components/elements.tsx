@@ -3,6 +3,7 @@ import {
   AudioLinesIcon,
   MicVocalIcon,
   BoxIcon,
+  ChevronDownIcon,
   CopyIcon,
   FolderOpenIcon,
   LayersIcon,
@@ -27,6 +28,7 @@ import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
@@ -121,7 +123,8 @@ export function ElementsTab({
   const stop = () => (setCreating(null), onDraftUsed())
   const all = state.elements ?? []
   const q = query.trim().toLowerCase()
-  const [ws, setWs] = useState("all")
+  // the current workspace's on each arrival, « All workspaces » a click away
+  const [ws, setWs] = useState(() => currentOf(state)?.slug ?? "all")
   const inWs = (e: Element, slug: string) => slug === "all" || !!state.workspaces.find((w) => w.slug === slug)?.linked.includes(e.name)
   const list = all.filter((e) => (type === "all" || e.type === type) && inWs(e, ws) && (!q || `${e.name} ${e.words}`.toLowerCase().includes(q)))
   const shown = all.find((e) => e.name === open)
@@ -427,6 +430,42 @@ export function ConfirmDelete({ what, open, onCancel, onConfirm, text = "It leav
   )
 }
 
+// the workspaces an Element is linked to, ticked by hand at once; one where a generation only cites it stays ticked,
+// greyed (a citation is not undone)
+function ElementWorkspaces({ el, state, onChanged }: { el: Element; state: State; onChanged: () => void }) {
+  const mine = state.workspaces.filter((w) => w.linked.includes(el.name))
+  return (
+    <div>
+      <Label hint="linked to them, cited first in their prompts">Workspaces</Label>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" className="w-full justify-between font-normal sm:w-72">
+            <span className="truncate">{mine.length ? mine.map((w) => w.name).join(", ") : "No workspace"}</span>
+            <ChevronDownIcon className="text-muted-foreground" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-(--radix-dropdown-menu-trigger-width)">
+          {state.workspaces.map((w) => {
+            const hand = w.elements.includes(el.name), cited = !hand && w.linked.includes(el.name)
+            return (
+              <DropdownMenuCheckboxItem
+                key={w.slug}
+                checked={hand || cited}
+                disabled={cited}
+                onSelect={(e) => e.preventDefault()}
+                onCheckedChange={() => api.workspaces({ slug: w.slug, ...(hand ? { unlink: [el.name] } : { link: [el.name] }) }).then(onChanged, (e) => toast.error(plain(e.message)))}
+              >
+                <span className="min-w-0 flex-1 truncate">{w.name}</span>
+                {cited && <span className="text-xs text-muted-foreground" title="One of its generations cites it">cited</span>}
+              </DropdownMenuCheckboxItem>
+            )
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
 // an Element, open: its files, type and words to change, what it leads to
 export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: { el: Element; state: State; tools: Tool[]; onClose: () => void; onUse: Use; onChanged: () => void }) {
   const [words, setWords] = useState(el.words)
@@ -476,6 +515,8 @@ export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: {
           <Label hint={heard(el.type) ? "how it sounds" : "sent with every @name"}>What it is</Label>
           <Textarea value={words} placeholder={WORDS[el.type]} onChange={(e) => setWords(e.target.value)} onBlur={() => words !== el.words && save({ words })} className="min-h-16" />
         </div>
+
+        <ElementWorkspaces el={el} state={state} onChanged={onChanged} />
 
         {el.type === "character" && (
           <OwnVoice voices={(state.elements ?? []).filter((e) => e.type === "voice" && e.files.length)} value={el.voice ?? null} onChange={(v) => save({ voice: v ?? "" })} />

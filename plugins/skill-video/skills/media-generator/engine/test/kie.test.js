@@ -364,7 +364,8 @@ test('the shipped Kie list is normalized, and every tool that generates runs on 
 })
 
 // the last job of a tool, and the input of the last task Kie got
-const jobOf = tool => { const d = fs.readdirSync(at('media')).filter(x => x.includes(`-${tool}-`)).sort().at(-1); return JSON.parse(fs.readFileSync(at('media', d, 'job.json'), 'utf8')) }
+// the tool's last job by its time (two in the same second sort by their random end otherwise)
+const jobOf = tool => fs.readdirSync(at('media')).filter(x => x.includes(`-${tool}-`)).map(d => JSON.parse(fs.readFileSync(at('media', d, 'job.json'), 'utf8'))).sort((a, b) => a.created.localeCompare(b.created)).at(-1)
 const lastTask = () => tasks().at(-1).body
 
 test('music on Kie: Suno writes a song (2 takes, their covers and words, its ids kept), goes on from a take by its id or from any sound sent whole; a singer of the Library sings', async () => {
@@ -459,11 +460,27 @@ test('a Suno song\'s tools: stems and a stem\'s MIDI, its WAV, its words with th
   { const x = await cli('audio', '--tool', 'stems', '--in', `clip=${take}`, '--spend', '1'); assert.equal(x.code, 0, x.err) }
   assert.deepEqual(lastTask(), { model: 'ai-music-api/separate-vocals', input: { task_id: song.suno.task_id, audio_id: `${song.suno.task_id}-take-2`, type: 'separate_vocal' } })
   const stems = jobOf('stems')
-  assert.deepEqual(stems.outputs, ['vocals.mp3', 'instrumental.mp3'])
+  assert.deepEqual(stems.outputs, ['vocals.mp3', 'instrumental.mp3', 'stem-b_Backing_Vocals.mp3'])
   { const x = await cli('audio', '--tool', 'midi', '--in', `clip=${at('media', stems.id, 'vocals.mp3')}`, '--spend', '1'); assert.equal(x.code, 0, x.err) }
   assert.deepEqual(lastTask().input, { task_id: stems.suno.task_id, audio_id: 'stem-v' })
   { const x = await cli('audio', '--tool', 'wav', '--in', `clip=${take}`, '--spend', '1'); assert.equal(x.code, 0, x.err) }
-  assert.deepEqual(jobOf('wav').outputs, ['out.wav'])
+  assert.deepEqual(jobOf('wav').outputs, ['out-2.wav'])
+  // All in WAV: every stem in one job, one task each, by its id (Backing_Vocals is not Vocals), priced per track, each
+  // file named after its source
+  const all = ['vocals.mp3', 'instrumental.mp3', 'stem-b_Backing_Vocals.mp3'].flatMap(n => ['--in', `clip=${at('media', stems.id, n)}`])
+  const one = JSON.parse((await cli('audio', '--tool', 'wav', '--in', `clip=${at('media', stems.id, 'vocals.mp3')}`, '--estimate')).out).estimate.amount
+  assert.equal(JSON.parse((await cli('audio', '--tool', 'wav', ...all, '--estimate')).out).estimate.amount, Math.round(3 * one * 1e4) / 1e4)
+  { const x = await cli('audio', '--tool', 'wav', ...all, '--spend', '1'); assert.equal(x.code, 0, x.err) }
+  assert.deepEqual(tasks().slice(-3).map(x => x.body.input.audio_id), ['stem-v', 'stem-i', 'stem-b'])
+  assert.deepEqual([jobOf('wav').outputs, jobOf('wav').actual_known], [['vocals.wav', 'instrumental.wav', 'stem-b_Backing_Vocals.wav'], true])
+  // again, with the take: Kie makes a WAV once (422 after), so the ones made here are copied, free, and only the new one asked
+  const asked = tasks().length, again = [...all, '--in', `clip=${at('media', song.id, 'out-1.mp3')}`]
+  const e = JSON.parse((await cli('audio', '--tool', 'wav', ...again, '--estimate')).out).estimate
+  assert.equal(e.amount, one)
+  assert.match(e.detail, /3 made here already/)
+  { const x = await cli('audio', '--tool', 'wav', ...again, '--spend', '1'); assert.equal(x.code, 0, x.err) }
+  assert.deepEqual([tasks().length - asked, tasks().at(-1).body.input.audio_id], [1, `${song.suno.task_id}-take-1`])
+  assert.deepEqual(jobOf('wav').outputs, ['vocals.wav', 'instrumental.wav', 'stem-b_Backing_Vocals.wav', 'out-1.wav'])
   { const x = await cli('audio', '--tool', 'lyrics-timings', '--in', `clip=${take}`, '--spend', '1'); assert.equal(x.code, 0, x.err) }
   const t = jobOf('lyrics-timings')
   assert.equal(fs.readFileSync(at('media', t.id, 'lyrics.srt'), 'utf8').split('\n').slice(0, 3).join('|'), '1|00:00:00,200 --> 00:00:00,600|la')

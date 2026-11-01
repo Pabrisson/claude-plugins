@@ -71,8 +71,8 @@ export function NewWorkspaceDialog({ open, onClose, onChanged }: { open: boolean
 }
 
 // the workspaces as rows: their first picture, their name, how many items (and on the Workspace page what they cost);
-// the one picked is checked. On the Workspace page a click makes it the current one and each can be renamed or
-// deleted; in the Library they filter, « All workspaces » first
+// the one picked is checked, « All workspaces » first. On the Workspace page a click makes it the current one and each
+// can be renamed or deleted; in the Library's Elements they filter
 export function WorkspaceRows({
   state,
   value,
@@ -130,9 +130,9 @@ export function WorkspaceRows({
                     )}
                   </span>
                 </span>
-                {on && <CheckIcon className="size-4 shrink-0 text-foreground/70" aria-label={manage ? "Current" : "Shown"} />}
+                {on && <CheckIcon className="size-4 shrink-0 text-foreground/70" aria-label={manage && w.slug !== "all" ? "Current" : "Shown"} />}
               </button>
-              {manage && (
+              {manage && w.slug !== "all" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon-xs" variant="ghost" aria-label={`${w.name}: rename or delete`} className="mr-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100">

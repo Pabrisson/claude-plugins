@@ -161,8 +161,8 @@
   },
   {
     "id": "wav", "label": "WAV", "group": "Suno", "mode": "edit", "icon": "file-audio", "action": "wav", "hidden": true,
-    "description": "The Suno song as a WAV file.",
-    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song" }], "fields": [], "template": "",
+    "description": "Each Suno song or stem given as a WAV file, one Kie task each.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno songs or stems", "multiple": true }], "fields": [], "template": "",
     "routers": ["kie"], "models": [], "kie": { "models": ["suno/extras"] }
   },
   {

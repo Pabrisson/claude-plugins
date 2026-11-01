@@ -364,7 +364,8 @@ Dialogue, Multilingual v2, Turbo v2.5), and there is no voice change and no dubb
 - **Isolate voice** (`audio --tool isolate-voice --in clip=<audio or video>`, always ElevenLabs straight, whichever
   router, 1,000 credits a minute): the voice alone, music, noise and room taken out; a video comes back with its voice
   alone, a sound as an MP3. Kie's Voice Isolator is discontinued.
-- **A Suno song's extras** (Kie, its viewer's actions; `--in clip=<a take>`): `--tool wav` ($0.002), `--tool
+- **A Suno song's extras** (Kie, its viewer's actions; `--in clip=<a take>`): `--tool wav` ($0.002 a track; a stem of the
+  Stems tool too; several `--in clip=` make one job, a WAV per track named after it: the viewer's « All in WAV »), `--tool
   lyrics-timings` (each sung word with its time: `lyrics.srt`, `lyrics.json`, $0.0025), `--tool music-video` (an MP4
   with its cover, `--field author=… --field domain_name=…`, $0.01), `--tool midi --in clip=<a stem>` (its notes,
   `notes.json`, free), `--tool singer --field name=Nova --field description="…"` (a singer of the Library, free: Suno's

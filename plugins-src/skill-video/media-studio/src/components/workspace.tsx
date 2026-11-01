@@ -1,10 +1,9 @@
 import { useContext, useEffect, useState } from "react"
-import { AudioLinesIcon, ChevronDownIcon, MicVocalIcon, CopyIcon, DownloadIcon, FolderKanbanIcon, FolderMinusIcon, LayersIcon, LinkIcon, PlayIcon, PlusIcon, SearchIcon, UnlinkIcon } from "lucide-react"
+import { ChevronDownIcon, CopyIcon, DownloadIcon, FolderKanbanIcon, FolderMinusIcon, PlayIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
-import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,13 +17,12 @@ import {
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { api, currentOf, fileUrl, inWorkspace, mediaKind, outputPath, per1000, plain, when, type Clip, type Job, type Kind, type State, type Timeline, type Tool, type Workspace } from "@/lib/api"
+import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, when, type Clip, type Job, type Kind, type State, type Timeline, type Tool, type Workspace } from "@/lib/api"
 import { lay } from "@/lib/timeline"
 import { Chips, Label } from "@/components/chips"
-import { ElementCard, ElementDialog, NewElement, type ElementDraft, type Use } from "@/components/elements"
 import { byMedium, FilterChips, LibraryList, Listen, Section, SortSelect, SoundCover, Thumb, useSort, Workspaces, type Pick } from "@/components/inputs"
 import { factsOf, NO_FILTERS, passes, ratioOf, resOf, sorted } from "@/lib/filters"
-import { Main, Side } from "@/components/pages"
+import { Main, NoGenerations, Side } from "@/components/pages"
 import { Results, type Bridge } from "@/components/results"
 import { dragShot, lengthOf, TimelineEditor, type Ask, type useTimelines } from "@/components/timeline"
 import { NewWorkspaceDialog, WorkspaceRows } from "@/components/workspace-list"
@@ -33,8 +31,10 @@ import { ToolFilter, toolKey } from "@/components/tool-filter"
 type Timelines = ReturnType<typeof useTimelines>
 const TABS = ["assets", "timeline"] as const
 type Tab = (typeof TABS)[number]
-// the tab lives in the URL (#workspace/timeline), so « Show » on a toast lands on it
+// the tab and the view live in the URL (#workspace/timeline, #workspace/all), so « Show » on a toast lands on it; the
+// rail's #workspace always opens on the current workspace
 const tabOf = (): Tab => (window.location.hash.endsWith("/timeline") ? "timeline" : "assets")
+const allOf = () => window.location.hash === "#workspace/all"
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 
@@ -71,7 +71,7 @@ export function WorkspaceMenu({ state, onChanged }: { state: State; onChanged: (
           <DropdownMenuItem onSelect={() => setMaking(true)}>
             <PlusIcon /> New workspace…
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => (window.location.hash = "workspace")}>
+          <DropdownMenuItem onSelect={() => (window.location.hash = "workspace/all")}>
             <FolderKanbanIcon /> All workspaces
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -147,9 +147,7 @@ function Title({ ws, aside }: { ws: Workspace; aside?: React.ReactNode }) {
 export function WorkspacePage({
   state,
   tools,
-  engine,
   onBridge,
-  onUse,
   onChanged,
   timelines,
   focus,
@@ -158,9 +156,7 @@ export function WorkspacePage({
 }: {
   state: State
   tools: Record<Kind, Tool[]>
-  engine: string
   onBridge: (b: Bridge, job: Job, file: string) => void
-  onUse: Use
   onChanged: () => void
   timelines: Timelines
   // a file the timeline opens on (a result's « #2 »)
@@ -169,32 +165,38 @@ export function WorkspacePage({
   onAsk: (a: Ask) => void
 }) {
   const [tab, setTab] = useState<Tab>(tabOf)
+  // « All workspaces »: every result, the current workspace unchanged
+  const [all, setAll] = useState(allOf)
   useEffect(() => {
-    const on = () => setTab(tabOf())
+    const on = () => (setTab(tabOf()), setAll(allOf()))
     window.addEventListener("hashchange", on)
     return () => window.removeEventListener("hashchange", on)
   }, [])
-  const [kind, setKind] = useState<"all" | Kind | "elements">("all")
+  const [kind, setKind] = useState<"all" | Kind>("all")
+  const [provider, setProvider] = useState("all")
   const [favorites, setFavorites] = useState(false)
   const [tool, setTool] = useState("")
   const [query, setQuery] = useState("")
-  const [open, setOpen] = useState<string | null>(null)
-  const [making, setMaking] = useState<ElementDraft | null>(null)
   const ws = currentOf(state)
   if (!ws) return null
   const timeline = timelines.get(ws.slug) ?? ws.timeline
   const q = query.trim().toLowerCase()
-  const mine = state.media.filter((j) => inWorkspace(j, ws.slug))
+  const mine = all ? state.media : state.media.filter((j) => inWorkspace(j, ws.slug))
   // the other filters first: the Tool list counts what they leave
-  const pool = mine.filter((j) => (kind === "all" || j.kind === kind) && (!favorites || j.favorite) && (!q || `${j.prompt} ${j.label} ${j.name} ${j.outputs.join(" ")}`.toLowerCase().includes(q)))
+  const pool = mine.filter(
+    (j) => (kind === "all" || j.kind === kind) && (provider === "all" || j.provider === provider) && (!favorites || j.favorite) && (!q || `${j.prompt} ${j.label} ${j.name} ${j.outputs.join(" ")}`.toLowerCase().includes(q))
+  )
   const jobs = tool ? pool.filter((j) => toolKey(j) === tool) : pool
-  const els = (state.elements ?? []).filter((e) => ws.linked.includes(e.name) && (!q || `${e.name} ${e.words}`.toLowerCase().includes(q)))
-  const shown = state.elements.find((e) => e.name === open)
   const results = allResults(state)
-  const use = (slug: string) => slug !== ws.slug && api.workspaces({ slug, use: true }).then(onChanged, (e) => toast.error(plain(e.message)))
+  // a workspace picked becomes the current one; « All workspaces » only shows
+  const pick = (slug: string) => {
+    if (slug === "all") return (window.location.hash = "workspace/all")
+    window.location.hash = "workspace"
+    if (slug !== ws.slug) api.workspaces({ slug, use: true }).then(onChanged, (e) => toast.error(plain(e.message)))
+  }
 
   const tabs = (
-    <Chips options={TABS} value={tab} label={(t) => ({ assets: "Assets", timeline: "Timeline" })[t]} onChange={(t) => (window.location.hash = t === "assets" ? "workspace" : "workspace/timeline")} className="grid grid-cols-2" />
+    <Chips options={TABS} value={tab} label={(t) => ({ assets: "Assets", timeline: "Timeline" })[t]} onChange={(t) => t !== tab && (window.location.hash = t === "assets" ? "workspace" : "workspace/timeline")} className="grid grid-cols-2" />
   )
   const downloads = <DownloadMenu ws={ws} timeline={timeline} flush={timelines.flush} />
 
@@ -233,11 +235,10 @@ export function WorkspacePage({
       />
     )
 
-  const showEls = kind === "all" || kind === "elements"
   return (
     <>
       <Side>
-        <WorkspaceRows state={state} value={ws.slug} onPick={use} count={(slug) => state.media.filter((j) => inWorkspace(j, slug)).length} unit="item" manage onChanged={onChanged} />
+        <WorkspaceRows state={state} value={all ? "all" : ws.slug} onPick={pick} count={(slug) => state.media.filter((j) => slug === "all" || inWorkspace(j, slug)).length} unit="item" all manage onChanged={onChanged} />
         {tabs}
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -245,87 +246,67 @@ export function WorkspacePage({
         </div>
         <div>
           <Label>Media</Label>
-          <Chips options={["all", ...KINDS, "elements"] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
+          <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
         </div>
-        {kind !== "elements" && (
-          <div>
-            <Label>Tool</Label>
-            <ToolFilter jobs={pool} value={tool} onChange={setTool} />
-          </div>
-        )}
-        {kind !== "elements" && (
-          <div>
-            <Label>Show</Label>
-            <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? "Everything" : "Favorites")} onChange={(f) => setFavorites(f === "favorites")} />
-          </div>
-        )}
+        <div>
+          <Label>Tool</Label>
+          <ToolFilter jobs={pool} value={tool} onChange={setTool} />
+        </div>
+        <div>
+          <Label>Provider</Label>
+          <Chips
+            options={["all", "kie", "openrouter", "elevenlabs", "local"]}
+            value={provider}
+            label={(p) => ({ all: "All", openrouter: "OpenRouter", kie: "Kie.ai", elevenlabs: "ElevenLabs", local: "Local" })[p] ?? p}
+            onChange={setProvider}
+          />
+        </div>
+        <div>
+          <Label>Show</Label>
+          <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? "Everything" : "Favorites")} onChange={(f) => setFavorites(f === "favorites")} />
+        </div>
       </Side>
       <Main
-        title={ws.name}
+        title={all ? "All workspaces" : ws.name}
         aside={
-          <span className="flex flex-wrap items-center justify-end gap-2">
-            <AddFromLibrary ws={ws} results={results} onChanged={onChanged} />
-            <LinkElement state={state} ws={ws} onChanged={onChanged} />
-            <Button variant="outline" size="sm" onClick={() => setMaking({ type: "character", paths: [] })}>
-              <PlusIcon data-icon="inline-start" /> New element
-            </Button>
-            {downloads}
-          </span>
+          all ? (
+            <span className="text-sm text-muted-foreground">{jobs.length} items</span>
+          ) : (
+            <span className="flex flex-wrap items-center justify-end gap-2">
+              <AddFromLibrary ws={ws} results={results} onChanged={onChanged} />
+              {downloads}
+            </span>
+          )
         }
       >
-        {showEls && (els.length > 0 || kind === "elements") && (
-          <section className="flex flex-col gap-3" aria-label="Elements">
-            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Elements</h3>
-            {els.length ? (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5">
-                {els.map((el) => (
-                  <div key={el.name} className="group/el relative flex min-w-0">
-                    <ElementCard el={el} onOpen={() => setOpen(el.name)} className="w-full" />
-                    {ws.elements.includes(el.name) ? (
-                      <Button size="icon-xs" variant="secondary" aria-label={`Unlink @${el.name}`} title="Unlink from this workspace (it stays in the Library)" onClick={() => api.workspaces({ slug: ws.slug, unlink: [el.name] }).then(onChanged)} className="absolute top-2 right-2 opacity-0 group-hover/el:opacity-100 focus-visible:opacity-100">
-                        <UnlinkIcon />
-                      </Button>
-                    ) : (
-                      <span className="absolute top-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-white" title="Cited by one of its generations">cited</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+        <Results
+          jobs={jobs}
+          home={state.home}
+          per1000={per1000(state)}
+          onBridge={onBridge}
+          extra={all ? [] : [{ label: "Remove from workspace", icon: FolderMinusIcon, run: (j) => api.workspaces({ slug: ws.slug, drop: [j.id] }).then(onChanged, (e) => toast.error(plain(e.message))) }]}
+          empty={
+            mine.length ? (
+              <p className="text-sm text-muted-foreground">No media matches these filters.</p>
+            ) : all ? (
+              <NoGenerations what="What you make in Image, Video and Audio lands here, by you or by Claude; a file dropped on the page is imported here, free." />
             ) : (
-              <p className="text-sm text-muted-foreground">{q ? "No element matches." : "No element linked yet: link the Library's characters, objects, places and voices this project uses, or make a new one."}</p>
-            )}
-          </section>
-        )}
-        {kind !== "elements" && (
-          <Results
-            jobs={jobs}
-            home={state.home}
-            per1000={per1000(state)}
-            onBridge={onBridge}
-            extra={[{ label: "Remove from workspace", icon: FolderMinusIcon, run: (j) => api.workspaces({ slug: ws.slug, drop: [j.id] }).then(onChanged, (e) => toast.error(plain(e.message))) }]}
-            empty={
-              mine.length ? (
-                <p className="text-sm text-muted-foreground">No media matches these filters.</p>
-              ) : els.length ? null : (
-                <Empty className="border border-dashed">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <FolderKanbanIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>Nothing in {ws.name} yet</EmptyTitle>
-                    <EmptyDescription>What you or Claude generate while it is the current workspace lands here, and the files dropped on the page. Results already made join it from the library.</EmptyDescription>
-                  </EmptyHeader>
-                  <EmptyContent className="flex-row justify-center">
-                    <AddFromLibrary ws={ws} results={results} onChanged={onChanged} />
-                  </EmptyContent>
-                </Empty>
-              )
-            }
-          />
-        )}
+              <Empty className="border border-dashed">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <FolderKanbanIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>Nothing in {ws.name} yet</EmptyTitle>
+                  <EmptyDescription>What you or Claude generate while it is the current workspace lands here, and the files dropped on the page. Results already made join it from the library.</EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent className="flex-row justify-center">
+                  <AddFromLibrary ws={ws} results={results} onChanged={onChanged} />
+                </EmptyContent>
+              </Empty>
+            )
+          }
+        />
       </Main>
-      {shown && <ElementDialog el={shown} state={state} tools={tools.image} onClose={() => setOpen(null)} onUse={onUse} onChanged={onChanged} />}
-      {making && <NewElement draft={making} state={state} tools={tools.image} engine={engine} onClose={() => setMaking(null)} onSaved={(name) => (setMaking(null), onChanged(), setOpen(name))} onUse={onUse} />}
     </>
   )
 }
@@ -351,34 +332,6 @@ function AddFromLibrary({ ws, results, onChanged }: { ws: Workspace; results: Pi
             api.workspaces({ slug: ws.slug, ...(inWorkspace(job, ws.slug) ? { drop: [job.id] } : { add: [job.id] }) }).then(onChanged, (e) => toast.error(plain(e.message)))
           }}
         />
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-// a Library element linked to the workspace
-function LinkElement({ state, ws, onChanged }: { state: State; ws: Workspace; onChanged: () => void }) {
-  const others = (state.elements ?? []).filter((e) => !ws.linked.includes(e.name))
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={!others.length}>
-          <LinkIcon data-icon="inline-start" /> Link an element
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-80 flex-col p-0">
-        <Command className="min-h-0">
-          <CommandInput placeholder="Search the Library's elements" />
-          <CommandList className="max-h-72 min-h-0 flex-1">
-            <CommandEmpty>No element of that name.</CommandEmpty>
-            {others.map((e) => (
-              <CommandItem key={e.name} value={`${e.name} ${e.words}`} onSelect={() => api.workspaces({ slug: ws.slug, link: [e.name] }).then(onChanged, (err) => toast.error(plain(err.message)))}>
-                {e.files[0] && mediaKind(e.files[0]) === "image" ? <img src={fileUrl(e.files[0])} alt="" className="size-7 rounded-md object-cover" /> : e.type === "voice" ? <AudioLinesIcon className="size-4 text-aud" /> : e.type === "singer" ? <MicVocalIcon className="size-4 text-aud" /> : <LayersIcon className="size-4" />}
-                <span className="min-w-0 flex-1 truncate">@{e.name}</span>
-              </CommandItem>
-            ))}
-          </CommandList>
-        </Command>
       </PopoverContent>
     </Popover>
   )
