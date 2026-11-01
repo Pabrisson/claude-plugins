@@ -545,7 +545,7 @@ export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: {
           label={heard(el.type) ? "Clips" : el.type === "brand" ? "Logos" : "Images"}
           max={heard(el.type) ? 3 : undefined}
           onAdd={(paths) => save({ paths })}
-          onDrop={(f) => save({ drop: [f.split("/").pop()!] })}
+          onDrop={(f) => save({ drop: [f.split(/[\\/]/).pop()!] })}
         />
         {/* a singer of one's own Suno has not heard yet: its phrase, from here */}
         {needsPhrase(el) && (

@@ -43,7 +43,7 @@ export function SoundCover({ path, className }: { path: string; className?: stri
 // a file as a small tile: its picture, its first frame, or a sound's cover, else its icon (its name without the time an
 // upload put first)
 export function Thumb({ path, className }: { path: string; className?: string }) {
-  const k = mediaKind(path), name = path.split("/").pop()?.replace(/^\d+-/, "")
+  const k = mediaKind(path), name = path.split(/[\\/]/).pop()?.replace(/^\d+-/, "")
   if (k === "image") return <img src={fileUrl(path)} alt={name} className={cn("size-full object-cover", className)} />
   if (k === "video") return <video src={fileUrl(path)} muted preload="metadata" className={cn("size-full object-cover", className)} />
   return (
@@ -423,7 +423,7 @@ export function LibraryList({ title, items, picked, onPick, multiple, from }: { 
   const [q, setQ] = useState("")
   const words = q.trim().toLowerCase()
   const inSource = items.filter((i) => source === "library" || inWorkspace(i.job, source))
-  const list = sorted(inSource.filter((i) => passes(i, filters) && (!words || `${i.job.prompt} ${i.job.label} ${i.job.name} ${i.path.split("/").pop()}`.toLowerCase().includes(words))), sort)
+  const list = sorted(inSource.filter((i) => passes(i, filters) && (!words || `${i.job.prompt} ${i.job.label} ${i.job.name} ${i.path.split(/[\\/]/).pop()}`.toLowerCase().includes(words))), sort)
   const name = ws.list.find((w) => w.slug === source)?.name
   const active = activeFilters(filters)
   return (

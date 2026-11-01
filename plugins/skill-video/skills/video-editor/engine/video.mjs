@@ -127,11 +127,14 @@ const ratio = f => f.replace(':', 'x')
 const readJson = f => JSON.parse(fs.readFileSync(f, 'utf8'))
 const writeJson = (f, v) => fs.writeFileSync(f, JSON.stringify(v, null, 2) + '\n')
 const hash = s => createHash('sha1').update(s).digest('hex')
-const run = (bin, argv, input) => execFileSync(bin, argv, { input, stdio: [input ? 'pipe' : 'ignore', 'inherit', 'inherit'], maxBuffer: Infinity })
-const out = (bin, argv) => execFileSync(bin, argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] })
+// every program started from here hides its window: on Windows, the detached studio server has no console, and each
+// ffmpeg or uv it starts would otherwise open one of its own
+const HIDE = { windowsHide: true }
+const run = (bin, argv, input) => execFileSync(bin, argv, { ...HIDE, input, stdio: [input ? 'pipe' : 'ignore', 'inherit', 'inherit'], maxBuffer: Infinity })
+const out = (bin, argv) => execFileSync(bin, argv, { ...HIDE, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] })
 // the log of an ffmpeg pass that only analyzes (its filters print to stderr)
 const ffmpegLog = argv => {
-  const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', ...argv], { encoding: 'utf8', maxBuffer: Infinity })
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', ...argv], { ...HIDE, encoding: 'utf8', maxBuffer: Infinity })
   if (r.status) die(`ffmpeg: ${r.stderr.trim().split('\n').at(-1)}`)
   return r.stderr
 }
@@ -280,7 +283,7 @@ function centerCrop({ width: w, height: h }, r) {
 }
 
 // source/edit.json: the data the engine reads besides the scene (duration without a source, cut, poster, media, music)
-const mediaFile = (dir, m) => path.resolve(dir, String(m.src).replace(/^~(?=\/)/, os.homedir()))
+const mediaFile = (dir, m) => path.resolve(dir, String(m.src).replace(/^~(?=[\\/])/, os.homedir()))
 const loadEdit = dir => {
   const file = path.join(dir, 'source/edit.json')
   return fs.existsSync(file) ? readJson(file) : {}
@@ -459,7 +462,7 @@ async function detectFaces(dir, p) {
   if (!fs.existsSync(path.join(ENGINE, 'node_modules/@mediapipe/tasks-vision'))) {
     console.log('face_framing: installing @mediapipe/tasks-vision in the engine…')
     // through the shell: npm is npm.cmd on Windows
-    execSync('npm install --no-audit --no-fund', { cwd: ENGINE, stdio: 'inherit' })
+    execSync('npm install --no-audit --no-fund', { ...HIDE, cwd: ENGINE, stdio: 'inherit' })
   }
   const model = path.join(ENGINE, 'models/blaze_face_short_range.tflite')
   if (!fs.existsSync(model)) {
@@ -593,7 +596,7 @@ const renderSet = p => opt.draft ? [pick(opt.format ?? p.formats[0], p.formats, 
 async function playwright() {
   if (!fs.existsSync(path.join(ENGINE, 'node_modules/playwright-core'))) {
     console.log('first run: installing playwright-core in the engine…')
-    execSync('npm install --omit=optional --no-audit --no-fund', { cwd: ENGINE, stdio: 'inherit' })
+    execSync('npm install --omit=optional --no-audit --no-fund', { ...HIDE, cwd: ENGINE, stdio: 'inherit' })
   }
   return import('playwright-core')
 }
@@ -1817,7 +1820,7 @@ function watchOwner(pid) {
 // ponytail: null on Windows (no ps -o), its server runs until Windows logs off; Get-CimInstance Win32_Process if that bothers
 function claudePid() {
   try {
-    const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' }).trim().split('\n').map(l => {
+    const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { ...HIDE, encoding: 'utf8' }).trim().split('\n').map(l => {
       const [, pid, ppid, comm] = l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
       return [+pid, { ppid: +ppid, comm }]
     }))
@@ -2082,7 +2085,7 @@ async function site(url) {
 // the tools the engine needs, with the command that installs a missing one; the projects folder and its style
 function doctor() {
   // found on the PATH: it starts (its exit code does not matter)
-  const has = bin => !spawnSync(bin, ['-version'], { stdio: 'ignore' }).error
+  const has = bin => !spawnSync(bin, ['-version'], { ...HIDE, stdio: 'ignore' }).error
   const checks = [
     ['node 22 or later', +process.versions.node.split('.')[0] >= 22, byOs('brew install node', 'https://nodejs.org/en/download', 'winget install OpenJS.NodeJS.LTS')],
     ['ffmpeg and ffprobe', has('ffmpeg') && has('ffprobe'), byOs('brew install ffmpeg', 'sudo apt install ffmpeg', 'winget install Gyan.FFmpeg')],
@@ -2094,7 +2097,7 @@ function doctor() {
   console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Scribe v2 transcript, voice-over, music, sound effects)' : 'elevenlabs: no key (Whisper transcript, no voice-over, the kit makes the sound); the plugin\'s secret: /plugin configure skill-video@pabrisson')
   console.log(`projects: ${HOME}`)
   // in a git repository: nothing of what makes the videos ignored
-  const ignored = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', ...KEPT], { encoding: 'utf8' })
+  const ignored = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', ...KEPT], { ...HIDE, encoding: 'utf8' })
   if (ignored.status === 0) console.log(`warning: git ignores ${ignored.stdout.trim().split('\n').join(', ')} here: the rushes, music and effects must stay versioned, fix ${path.join(HOME, '.gitignore')}`)
   const own = soundsIn(LIBRARY).filter(k => !CATALOG[k]).length
   console.log(`sound library: ${Object.keys(CATALOG).filter(k => takesIn(LIBRARY, k).length).length} of the catalog's ${Object.keys(CATALOG).length} effects${own ? ` and ${own} of its own` : ''} in ${LIBRARY} (video.mjs sounds)`)

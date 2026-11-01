@@ -290,7 +290,7 @@ function YourStyle({ style, state, heard, onClose, onUse, onChanged }: { style: 
               <Label hint="optional, sent with it">The look in words</Label>
               <Input value={words} placeholder="loose sumi ink washes, rice paper, one red accent" onChange={(e) => setWords(e.target.value)} onBlur={() => words !== style.words && save({ words })} />
             </div>
-            <FilesEditor files={style.files} kind="image" state={state} label="Images of the look" max={5} onAdd={(paths) => save({ paths })} onDrop={(x) => save({ drop: [x.split("/").pop()!] })} />
+            <FilesEditor files={style.files} kind="image" state={state} label="Images of the look" max={5} onAdd={(paths) => save({ paths })} onDrop={(x) => save({ drop: [x.split(/[\\/]/).pop()!] })} />
           </>
         )}
         <Heard file={heard} />

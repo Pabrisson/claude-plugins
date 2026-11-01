@@ -236,7 +236,7 @@ async function doctor() {
   console.log(fs.existsSync(PROFILE_FILE) ? `profile: ${PROFILE_FILE}` : 'profile: none yet, run setup (the budget tab needs it)')
   console.log(`searches: ${HOME} (${searches().length})`)
   // in a git repository: none of what the user made ignored, the cache and the profile left out
-  const check = files => spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', ...files], { encoding: 'utf8' })
+  const check = files => spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', ...files], { encoding: 'utf8', windowsHide: true })
   const ignored = check(KEPT)
   if (ignored.status === 0) console.log(`warning: git ignores ${ignored.stdout.trim().split('\n').join(', ')} here: the searches and the credits log must stay versioned, fix ${path.join(HOME, '.gitignore')}`)
   if (check(['.cache/x.json']).status === 1 && fs.existsSync(path.join(HOME, '.git'))) console.log(`warning: git would version the cache here: add the skill's lines to ${path.join(HOME, '.gitignore')} (search writes them when there is none)`)
@@ -905,7 +905,7 @@ function runArgs(body) {
   return argv
 }
 const runEngine = (argv, env = {}) => new Promise(ok => {
-  const p = spawn(process.execPath, argv, { cwd: HOME, env: { ...process.env, IMMO_DIR: HOME, ...env } })
+  const p = spawn(process.execPath, argv, { cwd: HOME, env: { ...process.env, IMMO_DIR: HOME, ...env }, windowsHide: true })
   let out = '', err = ''
   p.stdout.on('data', d => (out += d))
   p.stderr.on('data', d => (err += d))
@@ -1248,7 +1248,7 @@ function watchOwner(pid) {
 // ponytail: null on Windows (no ps -o), its server runs until Windows logs off; Get-CimInstance Win32_Process if that bothers
 function claudePid() {
   try {
-    const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' }).trim().split('\n').map(l => {
+    const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8', windowsHide: true }).trim().split('\n').map(l => {
       const [, pid, ppid, comm] = l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
       return [+pid, { ppid: +ppid, comm }]
     }))

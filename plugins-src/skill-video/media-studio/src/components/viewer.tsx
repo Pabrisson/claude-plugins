@@ -462,7 +462,7 @@ function Body({
               // one block: the file, then behind a thin inset line the arrow for every file of the result at once
               <div ref={block} className="flex flex-1 items-center overflow-hidden rounded-md bg-primary">
                 <Button className="flex-1 rounded-none shadow-none" asChild>
-                  <a href={fileUrl(file)} download={file.split("/").pop()}>
+                  <a href={fileUrl(file)} download={file.split(/[\\/]/).pop()}>
                     <DownloadIcon data-icon="inline-start" /> Download{job.outputs.length > 1 ? ` ${ext}` : ""}
                   </a>
                 </Button>

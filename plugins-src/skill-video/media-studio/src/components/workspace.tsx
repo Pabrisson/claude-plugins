@@ -431,7 +431,7 @@ function Bin({ query, jobs, home, onAdd }: { query: string; jobs: Job[]; home: s
                     <Listen path={i.path} />
                     <span className="min-w-0 flex-1">
                       {/* its words, else its file's name (a WAV, a stem: the tool's name is under it) */}
-                      <span className="block truncate text-sm">{i.job.prompt || i.path.split("/").pop()}</span>
+                      <span className="block truncate text-sm">{i.job.prompt || i.path.split(/[\\/]/).pop()}</span>
                       <span className="block text-xs text-muted-foreground">
                         {shots[i.path] ? `${shots[i.path]} · ` : ""}
                         {i.job.label}

@@ -2,7 +2,7 @@
 name: property-search
 description: Helps the user buy property in France (a flat, a house, a plot, a parking, a shop or office). Finds what is for sale around an address, a street or a neighborhood, weighs each against the real sales of its type (DVF), its building, neighborhood, rent and the user's budget, writes offer letters, and opens a local dashboard. Listings come from the Stream Estate API (paid, the user's yes on every credit) or from WebSearch, one WebFetch per listing page, or pasted text. Use it whenever the user looks for property to buy, gives an address or a listing to assess, wants an offer or a message to a seller, or wants to be told of what comes up ("trouve-moi un appartement", "cherche une maison à …", "un terrain", "une place de parking", "analyse cette annonce", "ça vaut combien", "marge de négociation", "rédige une offre", "préviens-moi d'un nouveau DPE rue …", "crée une alerte", "j'ai rajouté 30 € sur Stream Estate", "achat immobilier"), or pastes "apply this feedback" from the dashboard.
 argument-hint: "[setup | <adresse | rue | quartier> [type] [critères] | add <url | texte> | refresh [<slug>] | alerte … | dashboard [<slug>] | apply this feedback …]"
-allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/immo.mjs *)
+allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/immo.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/immo.mjs *)
 ---
 
 # Property search
@@ -21,7 +21,8 @@ of 100 weighted by the user's priorities. You write the messages the user sends 
 reply, a reminder, a request for documents), from each listing's conversation with the agent or the seller.
 The user then works in a local dashboard, and its feedback comes back to you as a pasted prompt.
 
-`immo.mjs` below means `node ${CLAUDE_SKILL_DIR}/engine/immo.mjs`. References are in `${CLAUDE_SKILL_DIR}/references/`;
+`immo.mjs` below means `node "${CLAUDE_SKILL_DIR}/engine/immo.mjs"`, the path in double quotes (it can hold spaces or, on
+Windows, backslashes); the skill runs on macOS, Linux and Windows. References are in `${CLAUDE_SKILL_DIR}/references/`;
 read the one a step names before doing that step.
 
 Everything lives in the folder Claude Code runs in, the searches folder (`$IMMO_DIR` overrides it):

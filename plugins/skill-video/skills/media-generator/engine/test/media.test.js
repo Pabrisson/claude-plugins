@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -13,9 +13,11 @@ const engine = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'me
 const fake = await startFake(home)
 // OpenRouter's catalog checked a moment ago, adding nothing: only its own test reads the fake's
 const catalogFile = path.join(home, 'catalog.json')
+// OpenRouter as the router (Kie is the default, whatever keys are set)
+fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ router: { active: 'openrouter' } }))
 fs.writeFileSync(catalogFile, JSON.stringify({ at: new Date().toISOString(), image: [], video: [], speech: [] }))
 const env = { ...process.env, MEDIA_GENERATOR_DIR: home, MEDIA_GENERATOR_MODELS: path.join(path.dirname(engine), 'test', 'models.json'), MEDIA_GENERATOR_CATALOG: catalogFile, OPENROUTER_BASE: `${fake.base}/api/v1`, OPENROUTER_API_KEY: 'k-test', OPENROUTER_MANAGEMENT_KEY: 'k-mgmt',
-  // no Kie key: OpenRouter is the router by default
+  // no Kie key: OpenRouter's models only
   KIE_API_KEY: '',
   ELEVENLABS_BASE: `${fake.base}/el`, ELEVENLABS_API_KEY: 'k-el', MEDIA_GENERATOR_POLL: '20', VIDEO_EDITOR_POLL: '20',
   // the fake cloudflared first, and the fake public DNS
@@ -153,6 +155,8 @@ test('a tool: its template filled from the fields, its inputs sent in order', as
   // an @Element brings its images
   assert.match((await cli('elements', 'add', 'Lulu', at('a.png'))).err, /an Element takes 2 images at least, @Lulu would have 1: add a second one/)
   assert.match((await cli('elements', 'add', 'Lulu', ...two())).out, /@Lulu: other, 2 images$/m)
+  // a name Windows cannot give a folder is refused on every OS: the folder must open everywhere
+  assert.match((await cli('elements', 'add', 'Nul', ...two())).err, /an Element's name is letters, digits, - and _/)
   const e = await cli('image', '--prompt', '@Lulu in a café', '--model', 'fake/img', '--estimate')
   assert.equal(JSON.parse(e.out).prompt, 'Lulu (shown in images 1 to 2) in a café')
   // the user's words are optional on a tool with its own prompt, needed on Custom and Custom edit (only a style is not enough)
@@ -300,7 +304,7 @@ test('upscale: the video by a tunnel open for the job only, served whole with it
   const before = fake.calls.filter(c => c.path === '/api/v1/videos').length
   const no = await cliWith({ ...env, PATH: `${tools}${path.delimiter}/usr/bin${path.delimiter}/bin` }, 'video', '--tool', 'upscale', '--model', 'fake/flux-video-upscale', '--in', `video=${at('talk.mp4')}`, '--spend', '1')
   assert.equal(no.code, 1)
-  assert.match(no.err, /brew install cloudflared/)
+  assert.match(no.err, /through a Cloudflare tunnel: (brew install cloudflared|winget install Cloudflare\.cloudflared|https:\/\/github\.com\/cloudflare\/cloudflared\/releases\/latest) \(no account\)/, "this OS's install command")
   assert.equal(fake.calls.filter(c => c.path === '/api/v1/videos').length, before)
   assert.ok(!ledger().some(l => l.status === 'failed' && l.tool === 'upscale'), 'stopped before the yes: no job, no ledger line')
 })
@@ -795,16 +799,18 @@ test('workspaces: the Default one from the start, new generations join the curre
   assert.match(edit, /V2 \(video, over V1\):\n- 1\.00–2\.00 {2}.+out-1\.png, a still/)
   assert.match(edit, /V1 \(video, the base\):\n- 0\.00–2\.00 {2}.+talk\.mp4, source 0\.50–2\.50, its sound at 50 %/)
   assert.match(edit, /A1 \(audio\):\n- 0\.50–2\.00 {2}.+voice\.mp3, source 0\.00–1\.50, volume 100 %/)
-  // the .zip: its media by medium, its Elements, and with the edit its timeline and the edit in words, no render
-  const zip = at('pub.zip')
-  fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip?edit`)).arrayBuffer()))
-  execFileSync('unzip', ['-tq', zip])
-  const names = execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).trim().split('\n')
-  for (const n of [`Pub Lulu/videos/${imported['talk.mp4']}-talk.mp4`, `Pub Lulu/audio/${imported['voice.mp3']}-voice.mp3`, `Pub Lulu/images/${fox}-out-1.png`, 'Pub Lulu/elements/Fox/element.json', 'Pub Lulu/edit/timeline.json', 'Pub Lulu/edit/EDIT.md'])
-    assert.ok(names.includes(n), `${n} in ${names.join(', ')}`)
-  assert.equal(names.some(n => n.endsWith('.mp4') && n.includes('/edit/')), false)
-  assert.match(execFileSync('unzip', ['-p', zip, 'Pub Lulu/edit/EDIT.md'], { encoding: 'utf8' }), new RegExp(`\\.\\./videos/${imported['talk.mp4']}-talk\\.mp4, source 0\\.50`))
-  assert.equal(execFileSync('unzip', ['-Z1', fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip`)).arrayBuffer())) ?? zip], { encoding: 'utf8' }).includes('edit/'), false)
+  // the .zip: its media by medium, its Elements, and with the edit its timeline and the edit in words, no render (read by unzip, missing on Windows: skipped there)
+  if (!spawnSync('unzip', ['-v'], { stdio: 'ignore' }).error) {
+    const zip = at('pub.zip')
+    fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip?edit`)).arrayBuffer()))
+    execFileSync('unzip', ['-tq', zip])
+    const names = execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).trim().split('\n')
+    for (const n of [`Pub Lulu/videos/${imported['talk.mp4']}-talk.mp4`, `Pub Lulu/audio/${imported['voice.mp3']}-voice.mp3`, `Pub Lulu/images/${fox}-out-1.png`, 'Pub Lulu/elements/Fox/element.json', 'Pub Lulu/edit/timeline.json', 'Pub Lulu/edit/EDIT.md'])
+      assert.ok(names.includes(n), `${n} in ${names.join(', ')}`)
+    assert.equal(names.some(n => n.endsWith('.mp4') && n.includes('/edit/')), false)
+    assert.match(execFileSync('unzip', ['-p', zip, 'Pub Lulu/edit/EDIT.md'], { encoding: 'utf8' }), new RegExp(`\\.\\./videos/${imported['talk.mp4']}-talk\\.mp4, source 0\\.50`))
+    assert.equal(execFileSync('unzip', ['-Z1', fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip`)).arrayBuffer())) ?? zip], { encoding: 'utf8' }).includes('edit/'), false)
+  }
   // the CLI shows it to Claude; removed, its media stay and leave it, the Default one is current again and stays
   assert.match((await cli('workspaces', 'show', 'pub-lulu')).out, /Pub Lulu \(pub-lulu, current\): 3 files[\s\S]+elements: @Fox[\s\S]+V1 \(video/)
   assert.equal((await post('/api/workspaces', { slug: 'default', remove: true })).code, 400)

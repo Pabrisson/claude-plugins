@@ -1,7 +1,7 @@
 // node src/lib/filters.check.ts: the pickers' filters and sorts
 import assert from "node:assert/strict"
 import type { Job } from "./api.ts"
-import { activeFilters, NO_FILTERS, passes, ratioOf, resOf, sorted } from "./filters.ts"
+import { activeFilters, factsOf, NO_FILTERS, passes, ratioOf, resOf, sorted } from "./filters.ts"
 
 const item = (id: string, file: string, meta: { w?: number; h?: number; dur?: number }, favorite = false, tool = "free") => ({ path: `/m/${id}/${file}`, job: { id, label: id, tool, favorite, meta: { [file]: meta } } as unknown as Job })
 // newest first, as the engine lists them
@@ -30,4 +30,6 @@ assert.equal(ids(sorted(list, "shortest")), "adbc")
 assert.equal(ids(sorted(list, "sharpest")), "dcba")
 assert.equal(ids(sorted(list, "softest")), "bcda")
 assert.equal(ids(sorted(list, "name")), "abcd")
+// a Windows path, as the engine sends it there, finds its file's facts the same
+assert.deepEqual(factsOf({ path: "C:\\proj\\media\\d\\a.mp4", job: list[0].job }), { w: 1920, h: 1080, dur: 4 })
 console.log("filters: ok")

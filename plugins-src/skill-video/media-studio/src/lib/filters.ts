@@ -4,7 +4,7 @@ import { mediaKind, type Job } from "./api.ts"
 import { RATIOS } from "./timeline.ts"
 
 // what a result's file is, as the engine measured it: its size and length
-export const factsOf = (i: { path: string; job: Job }) => i.job.meta?.[i.path.split("/").pop()!] ?? {}
+export const factsOf = (i: { path: string; job: Job }) => i.job.meta?.[i.path.split(/[\\/]/).pop()!] ?? {}
 // its format and quality, for the filters and the captions
 export const RATIO_CHIPS = ["all", ...Object.keys(RATIOS), "other"]
 export const RES_CHIPS = ["all", "≤480p", "720p", "1080p", "2K", "4K"]
@@ -38,7 +38,7 @@ export const SORTS: [Sort, string][] = [["newest", "Newest"], ["oldest", "Oldest
 export function sorted<T extends { path: string; job: Job }>(items: T[], sort: Sort): T[] {
   if (sort === "newest") return items
   if (sort === "oldest") return [...items].reverse()
-  const name = (i: T) => `${i.job.label} ${i.path.split("/").pop()}`
+  const name = (i: T) => `${i.job.label} ${i.path.split(/[\\/]/).pop()}`
   if (sort === "name") return [...items].sort((a, b) => name(a).localeCompare(name(b)))
   const value = (i: T) => {
     const { w, h, dur } = factsOf(i)

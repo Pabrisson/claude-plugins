@@ -288,7 +288,7 @@ function Dashboard() {
       }
       if (a.how === "freeze") {
         const frame = (await api.frame(c.path, false, fileAt(a.time))).path, made = await api.import(frame)
-        timelines.change(ws.slug, (t) => freeze(t, c.id, a.time, { path: `${home}/media/${made.id}/${frame.split("/").pop()!.replace(/^\d+-/, "")}`, job: made.id }))
+        timelines.change(ws.slug, (t) => freeze(t, c.id, a.time, { path: `${home}/media/${made.id}/${frame.split(/[\\/]/).pop()!.replace(/^\d+-/, "")}`, job: made.id }))
         refresh()
         return toast.success("Freeze frame laid", { description: "Free, from this machine." })
       }
@@ -451,7 +451,7 @@ function Dashboard() {
 async function keep(path: string, onAdded: () => void) {
   try {
     await api.import(path)
-    toast.success("Added to the workspace", { description: path.split("/").pop()?.replace(/^\d+-/, ""), action: { label: "Show", onClick: () => (window.location.hash = "workspace") } })
+    toast.success("Added to the workspace", { description: path.split(/[\\/]/).pop()?.replace(/^\d+-/, ""), action: { label: "Show", onClick: () => (window.location.hash = "workspace") } })
     onAdded()
   } catch (e) {
     toast.error(plain((e as Error).message))
@@ -522,7 +522,7 @@ function DropToLibrary({ onAdded }: { onAdded: () => void }) {
 function Header({ state, balances, onChanged }: { state: State; balances: Balances | null; onChanged: () => void }) {
   const { resolvedTheme, setTheme } = useTheme()
   const ob = balances?.openrouter, kb = balances?.kie, eb = balances?.elevenlabs
-  const folder = state.home.split("/").filter(Boolean).pop()
+  const folder = state.home.split(/[\\/]/).filter(Boolean).pop()
   return (
     <header className="col-span-full flex items-center gap-3 border-b px-4">
       <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-linear-to-br from-img via-vid to-aud text-white" aria-hidden>

@@ -150,7 +150,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
           className={cn("flex w-full max-w-lg flex-col items-center gap-4 rounded-2xl px-6 py-14 text-center text-white/90 ring-1 ring-white/10 transition-colors", sound === s ? "bg-aud/15 ring-2 ring-aud" : "hover:bg-white/5")}
         >
           <AudioLinesIcon className={cn("size-12", sound === s ? "text-aud" : "text-white/40")} aria-hidden />
-          <p className="line-clamp-5 text-[15px] leading-snug">{it.text ? `“${it.text}”` : it.path.split("/").pop()}</p>
+          <p className="line-clamp-5 text-[15px] leading-snug">{it.text ? `“${it.text}”` : it.path.split(/[\\/]/).pop()}</p>
           <span className="text-xs text-white/60">{sound === s ? "You hear this one" : `Click or press ${s.toUpperCase()} to hear this one`}</span>
         </button>
       </>

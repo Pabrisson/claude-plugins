@@ -39,10 +39,10 @@ execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=6', at
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', at('short.mp4')])
 test.after(() => { fake.close(); fs.rmSync(home, { recursive: true, force: true }) })
 
-test('the router: Kie by default (OpenRouter with only its key), the one picked after; only its models; its catalog and prices read from its API and docs', async () => {
+test('the router: Kie by default (even with OpenRouter\'s key alone), the one picked after; only its models; its catalog and prices read from its API and docs', async () => {
   assert.match((await cli('models', 'image')).out, /kie:fake\/kimg/)
   const orOnly = await new Promise(ok => { const c = spawn(process.execPath, [engine, 'models', 'image'], { cwd: home, env: { ...env, KIE_API_KEY: '' } }); let out = ''; c.stdout.on('data', d => (out += d)); c.on('close', () => ok(out)) })
-  assert.match(orOnly, /openrouter:fake\/img/)
+  assert.match(orOnly, /kie:fake\/kimg/)
   assert.match((await cli('setup', 'set', 'router.active=nope')).err, /router\.active is one of openrouter, kie/)
   { const x = await cli('setup', 'set', 'router.active=openrouter'); assert.equal(x.code, 0, x.err) }
   assert.match((await cli('models', 'image')).out, /openrouter:fake\/img/)

@@ -80,7 +80,7 @@ export function ModelOptions({ options, value, onChange }: { options: ModelOptio
               {value[o.key] ? (
                 <div className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm">
                   <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate">{String(value[o.key]).split("/").pop()?.replace(/^\d+-/, "")}</span>
+                  <span className="min-w-0 flex-1 truncate">{String(value[o.key]).split(/[\\/]/).pop()?.replace(/^\d+-/, "")}</span>
                   <Button size="icon-xs" variant="ghost" aria-label={`Remove the ${o.label.toLowerCase()}`} onClick={() => put(o, undefined)}>
                     <XIcon />
                   </Button>

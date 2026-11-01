@@ -177,7 +177,7 @@ test('the scene knows the resolution it draws, by name and in pixels', { timeout
   assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path.join(home, 'res/files/versions/v1-9x16.mp4')], { encoding: 'utf8' }), /^720,1280/)
 })
 
-test('a chunk whose page Chrome loses renders again on a new page', { timeout: 120000 }, async () => {
+test('a chunk whose page Chrome loses renders again on a new page', { timeout: 120000, skip: process.platform === 'win32' && 'its renderers are found with pgrep and ps' }, async () => {
   cli('init', 'crash', '--formats', '16:9', '--renders', '720p', '--fps', '30', '--rules', 'none')
   fs.writeFileSync(path.join(home, 'crash/source/edit.json'), JSON.stringify({ duration: 8 }))
   // 25 ms a frame: the render lasts long enough to lose its page
@@ -191,9 +191,12 @@ test('a chunk whose page Chrome loses renders again on a new page', { timeout: 1
   child.stderr.on('data', d => (log += d))
   const exited = new Promise(ok => child.on('exit', ok)), done = () => { try { return JSON.parse(read('crash/.cache/progress.json')).steps.at(-1).done } catch { return 0 } }
   while (!(done() >= 1)) await new Promise(ok => setTimeout(ok, 50))
-  // the renderers of that render's Chrome die
-  const below = pid => spawnSync('pgrep', ['-P', `${pid}`], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean).flatMap(x => [x, ...below(x)])
-  for (const pid of below(child.pid)) if (/--type=renderer/.test(spawnSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf8' }).stdout)) process.kill(+pid, 'SIGKILL')
+  // the renderers of that render's Chrome die: --type=renderer on macOS; on Linux forks of the sandboxed zygote, which
+  // keep its command line (--type=zygote, without --no-zygote-sandbox)
+  const args = pid => spawnSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf8' }).stdout
+  const below = pid => spawnSync('pgrep', ['-P', `${pid}`], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean).flatMap(x => [[x, pid], ...below(x)])
+  const zygote = a => /--type=zygote/.test(a) && !/--no-zygote-sandbox/.test(a)
+  for (const [pid, parent] of below(child.pid)) if (/--type=renderer/.test(args(pid)) || (zygote(args(pid)) && zygote(args(parent)))) process.kill(+pid, 'SIGKILL')
   assert.equal(await exited, 0, log)
   assert.match(log, /Chrome lost a page at frame \d+, rendering that chunk again/)
   assert.match(log, /240 frames, 4\/4 chunks rendered/)

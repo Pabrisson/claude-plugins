@@ -100,7 +100,7 @@ function trackFor(t: Timeline, kind: Track["kind"], want?: string): [Timeline, s
   const id = `${kind[0]}${uid()}`
   return [{ ...t, tracks: kind === "video" ? [...t.tracks.filter((x) => x.kind === "video"), { id, kind }, ...t.tracks.filter((x) => x.kind !== "video")] : [...t.tracks, { id, kind }] }, id]
 }
-export const clipOf = (shot: Shot, track: string, dur?: number, id = uid()): Clip => ({ id, track, job: shot.job, file: shot.path.split("/").pop()!, path: shot.path, at: 0, in: 0, out: dur ?? STILL, ...(dur ? { dur } : {}) })
+export const clipOf = (shot: Shot, track: string, dur?: number, id = uid()): Clip => ({ id, track, job: shot.job, file: shot.path.split(/[\\/]/).pop()!, path: shot.path, at: 0, in: 0, out: dur ?? STILL, ...(dur ? { dur } : {}) })
 
 // a file laid on the timeline: at a time on a track, else after the last clip of its track; dur, its length (none for
 // a still); id, to know it again (a drag's preview)
@@ -120,7 +120,7 @@ export function layOnNewTrack(t: Timeline, shot: Shot, dur?: number, at = 0, id?
 // new track when it is gone)
 export function place(t: Timeline, shot: Shot, p: Place, dur?: number): Timeline {
   const old = p.replace ? t.clips.find((c) => c.id === p.replace) : null
-  const file = { job: shot.job, file: shot.path.split("/").pop()!, path: shot.path, ...(p.mute ? { volume: 0 } : {}) }
+  const file = { job: shot.job, file: shot.path.split(/[\\/]/).pop()!, path: shot.path, ...(p.mute ? { volume: 0 } : {}) }
   if (old && (p.how === "after" || p.how === "before")) {
     const after = p.how === "after"
     return put(t, { ...clipOf(shot, old.track, dur), ...file }, old.track, after ? endOf(old) : old.at, onTrack(t, old.track).indexOf(old) + Number(after))

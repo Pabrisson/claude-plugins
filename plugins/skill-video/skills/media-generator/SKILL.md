@@ -2,21 +2,22 @@
 name: media-generator
 description: Generates and edits images, videos and voices with AI models through model routers (Kie.ai by default, or OpenRouter, one active at a time), like Higgsfield but local and with every cost shown. Image create and edit (cinematic camera, relight, inpaint, upscale, face swap, character swap, expand, new angle, edit text, remove background, restyle in a preset or own style, reference sheets of a character, an outfit, an object, a place or a pose), video create and edit (cinematic camera with camera moves, animate an image, first and last frame, camera moves like dolly zoom, crash zoom, FPV drone, orbit, VFX like fire or disintegration, talking avatar, lip sync, several keyframes, reference videos and voices, spoken lines, extend, upscale, relight, recolor, restyle, object swap, face swap, inpaint, clean up, reframe, and on this machine for free: remove background, depth map, FPS boost, SDR to HDR), text to speech with preset or cloned voices and dialogues (ElevenLabs straight, Gemini…), voice change and dubbing into other languages (ElevenLabs), music and songs (Suno, Lyria) with their extends, covers, vocals, stems and lyrics, sound effects, a voice isolated, speech to video. Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles, cited with @name in every prompt. Gathers each project in a workspace, with a timeline to lay its shots and sounds on and hand to video-editor. Opens a local dashboard. Use it whenever the user wants an image, a video clip or a voice generated or transformed by AI ("génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "upscale", "redessine-la en style anime", "crée un style avec ces images", "crée le personnage Lulu avec ces photos", "fais une fiche personnage", "garde ce produit comme élément", "crée la voix du narrateur", "fais-la parler", "voix off", "change la voix de cette vidéo", "traduis cette vidéo en anglais", "double en espagnol", "crée une musique", "une chanson sur…", "prolonge ce morceau", "sépare la voix", "un bruitage de pluie", "fais-le chanter sur cette musique", "ouvre le générateur", "crée un workspace", "combien j'ai dépensé"), or pastes a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
-allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
+allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/media.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
 
 # Media generator
 
 You generate and edit images, videos and voices for the user with AI models. The models sit behind a router,
-one active at a time: Kie.ai by default, or OpenRouter (each one key for many labs; OpenRouter when only its key is
-set; the user picks it in Settings › Router, or `media.mjs setup set router.active=kie|openrouter` when they ask).
+one active at a time: Kie.ai by default, or OpenRouter (each one key for many labs; Kie.ai is the one active until the
+user picks another in Settings › Router, or `media.mjs setup set router.active=kie|openrouter` when they ask).
 ElevenLabs is never reached through a router while its key is set: its voices (Voice, dialogues), the voice change and
 dubbing go straight to its API, with its own key and credits, whichever router is active. Suno's models come by Kie,
 Lyria's by OpenRouter. Every generation costs money,
 so the user always sees the price first and says yes. A local dashboard does the same with clicks.
 
-`media.mjs` below means `node ${CLAUDE_SKILL_DIR}/engine/media.mjs`: write it out in full in every command (a shell
-variable holding `node …` does not run under zsh). Everything lives in the folder Claude Code runs in
+`media.mjs` below means `node "${CLAUDE_SKILL_DIR}/engine/media.mjs"`: write it out in full in every command, the
+path in double quotes (it can hold spaces or, on Windows, backslashes; a shell variable holding `node …` does not run
+under zsh). The skill runs on macOS, Linux and Windows. Everything lives in the folder Claude Code runs in
 (`$MEDIA_GENERATOR_DIR` overrides it):
 - `media/<id>/`: one folder per generation, with its outputs (`out-1.png`, `out.mp4`, `out.mp3`, `dub-en.mp4`, a song's `out-1.mp3` and `cover-1.jpg`…), its
   inputs (`in-*`) and its `job.json`;
@@ -33,7 +34,8 @@ another language. The dashboard is in English.
 ## Before anything
 
 Run `media.mjs doctor` once per conversation.
-- A missing tool: give its install command and stop.
+- A missing tool: give the install command `doctor` prints (it is this OS's: brew, apt or a download page, winget) and
+  stop. On Windows, Claude Code must be restarted after a winget install to see the new PATH.
 - `openrouter: no key`: nothing can be generated. Tell the user to set it with `/plugin configure skill-video@pabrisson`
   (a key from openrouter.ai/keys), then restart the session. `tools`, `models` and the dashboard still work.
 - `active router: …, without its key`: the router picked in Settings has no key. Same as above for that router (a
@@ -41,10 +43,10 @@ Run `media.mjs doctor` once per conversation.
 - `elevenlabs: no key`: no voice change and no translation; Voice takes the router's ElevenLabs voices. Everything else
   works.
 - `missing cloudflared`: a video or a voice cannot reach OpenRouter (video edits, upscale, talking avatar). Give
-  `brew install cloudflared` (no account needed). Everything else works, and Kie needs none (it takes the files by its
+  the command `doctor` prints (no account needed). Everything else works, and Kie needs none (it takes the files by its
   own upload).
-- `missing uv`: no Depth map and no Remove background for videos (they run models on this machine). Give `brew install
-  uv`. Everything else works. With uv, the models download by themselves at their first use (330 MB, once), or ahead
+- `missing uv`: no Depth map and no Remove background for videos (they run models on this machine). Give the command
+  `doctor` prints. Everything else works. With uv, the models download by themselves at their first use (330 MB, once), or ahead
   with `media.mjs setup vision`.
 
 ## Modes

@@ -2,7 +2,7 @@
 name: video-editor
 description: Claude as a video editor for any genre. Edits footage (one or several rushes, local files or URLs, plus B-roll) into a short, a long YouTube video, an interview or podcast clip, a tutorial, a montage on music (travel, vlog, event), a brand film…, or creates a motion-design video from scratch when there is no footage. Renders every chosen format (9:16, 16:9, 1:1, 4:5) in every chosen resolution (4K, 2K, 1080p, 720p) locally and fast, with captions, synthesized music and sound effects, a local review studio and a style that learns. Use it whenever the user wants to edit, cut, assemble or make a video of any kind ("monte cette vidéo", "monte mes rushes", "fais-moi un short", "crée une vidéo", "montage", "motion design", "video editing"), or gives video files or links to work on. Also use it when they paste "apply this feedback" from the studio, or ask for variations, the video style setup or editing rule packs.
 argument-hint: "[setup | <video files or URLs…> [content sources…] [studio] | apply this feedback … | variations <element> | preview | rules …]"
-allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/video.mjs *)
+allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/video.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/video.mjs *)
 ---
 
 # Video editor
@@ -12,7 +12,8 @@ a long YouTube video, an interview, a tutorial, a montage on music, a brand film
 serve the footage, as the genre calls for. Or a brief becomes a motion-design video with no footage at all. A local
 engine renders it. The user reviews it in a local studio, and their feedback comes back to you as a pasted prompt.
 
-`video.mjs` below means `node ${CLAUDE_SKILL_DIR}/engine/video.mjs`. References are in
+`video.mjs` below means `node "${CLAUDE_SKILL_DIR}/engine/video.mjs"`, the path in double quotes (it can hold spaces or,
+on Windows, backslashes); the skill runs on macOS, Linux and Windows. References are in
 `${CLAUDE_SKILL_DIR}/references/`; read the one a step names before doing that step.
 
 Everything lives in the project Claude Code runs in, the projects folder (`$VIDEO_EDITOR_DIR` overrides it):

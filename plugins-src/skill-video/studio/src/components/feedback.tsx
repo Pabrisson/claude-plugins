@@ -98,7 +98,7 @@ function PickBadge({ label, color, icon: Icon, onRemove, onClick }: { label: str
 function Thumb({ img }: { img: Image }) {
   return (
     <span className="relative block">
-      <img src={`review/${img.path.split("/").pop()}`} alt="Attached frame" className="size-20 rounded-md object-cover ring-1 ring-foreground/10" />
+      <img src={`review/${img.path.split(/[\\/]/).pop()}`} alt="Attached frame" className="size-20 rounded-md object-cover ring-1 ring-foreground/10" />
       {img.ratio && (
         <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 font-mono text-[10px] text-white">{img.ratio}</span>
       )}
@@ -290,7 +290,7 @@ function Item({
         {c.images.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {c.images.map((img) => (
-              <a key={img.path} href={`review/${img.path.split("/").pop()}`} target="_blank" onClick={(e) => e.stopPropagation()}>
+              <a key={img.path} href={`review/${img.path.split(/[\\/]/).pop()}`} target="_blank" onClick={(e) => e.stopPropagation()}>
                 <Thumb img={img} />
               </a>
             ))}

@@ -9,6 +9,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +28,17 @@ const PORT = +(process.env.MEDIA_GENERATOR_PORT ?? 41287)
 const STUDIO = path.join(ENGINE, 'studio/dist')
 const VIDEO = path.join(ENGINE, '../../video-editor/engine/video.mjs')
 const KINDS = ['image', 'video', 'audio']
+// a tool's install command on this OS (macOS, Linux, Windows), the same as video-editor's doctor gives
+const byOs = (mac, linux, win) => ({ darwin: mac, win32: win })[process.platform] ?? linux
+const INSTALL = {
+  node: byOs('brew install node', 'https://nodejs.org/en/download', 'winget install OpenJS.NodeJS.LTS'),
+  ffmpeg: byOs('brew install ffmpeg', 'sudo apt install ffmpeg', 'winget install Gyan.FFmpeg'),
+  uv: byOs('brew install uv', 'curl -LsSf https://astral.sh/uv/install.sh | sh', 'winget install astral-sh.uv'),
+  cloudflared: byOs('brew install cloudflared', 'https://github.com/cloudflare/cloudflared/releases/latest', 'winget install Cloudflare.cloudflared'),
+}
+// every program started from here hides its window: on Windows, a detached run or server has no console, and each
+// ffmpeg, uv or node it starts would otherwise open one of its own
+const HIDE = { windowsHide: true }
 
 const { values: opt, positionals: [cmd, ...args] } = parseArgs({
   allowPositionals: true,
@@ -74,7 +86,7 @@ async function tunnel(files) {
     return i >= 0 ? sendFile(req, res, files[i]) : reply(res, 404, { error: 'not found' })
   })
   await new Promise(ok => server.listen(0, '127.0.0.1', ok))
-  const cf = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${server.address().port}`], { stdio: ['ignore', 'ignore', 'pipe'] })
+  const cf = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${server.address().port}`], { ...HIDE, stdio: ['ignore', 'ignore', 'pipe'] })
   const close = () => { cf.kill(); server.close(); server.closeAllConnections() }
   process.once('exit', close)
   try {
@@ -105,18 +117,18 @@ const probed = new Map()
 function probe(file) {
   const st = fs.statSync(file), key = `${file}:${st.mtimeMs}:${st.size}`
   if (probed.has(key)) return { ...probed.get(key) }
-  const j = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height,avg_frame_rate', '-of', 'json', file], { encoding: 'utf8' }))
+  const j = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,width,height,avg_frame_rate', '-of', 'json', file], { ...HIDE, encoding: 'utf8' }))
   const v = j.streams.find(s => s.codec_type === 'video'), [a, b] = String(v?.avg_frame_rate ?? '0/1').split('/').map(Number)
   probed.set(key, { duration: +(+j.format.duration || 0).toFixed(2), width: v?.width ?? null, height: v?.height ?? null, fps: b ? +(a / b).toFixed(3) : null, audio: j.streams.some(s => s.codec_type === 'audio') })
   return { ...probed.get(key) }
 }
-const ffmpeg = argv => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { stdio: ['ignore', 'ignore', 'pipe'] })
+const ffmpeg = argv => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { ...HIDE, stdio: ['ignore', 'ignore', 'pipe'] })
 
 // ---------- the folder: settings, .gitignore, tools, catalogs ----------
 
 // thresholds and caps in each provider's unit, all unset until the user sets them (Settings, or setup set)
 const SETTINGS = {
-  // the one router that generates: kie or openrouter (Settings' Router); unset, Kie (OpenRouter when only its key is set)
+  // the one router that generates: kie or openrouter (Settings' Router); unset, Kie, whatever keys are set
   router: { active: null },
   openrouter: { threshold: null, cap: null },
   kie: { threshold: null, cap: null },
@@ -132,7 +144,7 @@ const FAKE = Object.fromEntries(['OPENROUTER_BASE', 'ELEVENLABS_BASE', 'KIE_BASE
 const settings = () => {
   const s = fs.existsSync(at('settings.json')) ? readJson(at('settings.json')) : {}
   const out = Object.fromEntries(Object.entries(SETTINGS).map(([k, v]) => [k, { ...v, ...s[k] }]))
-  out.router.active ??= !process.env.KIE_API_KEY && process.env.OPENROUTER_API_KEY ? 'openrouter' : 'kie'
+  out.router.active ??= 'kie'
   out.developer.on ??= Object.keys(FAKE).length > 0
   return out
 }
@@ -152,7 +164,7 @@ function ensureHome() {
 
 const TOOLS = Object.fromEntries(KINDS.map(k => [k, JSON.parse(fs.readFileSync(path.join(ENGINE, `tools/${k}.json`), 'utf8'))]))
 // a name as a file's or a folder's: a workspace, a style preset's sample
-const slugOf = name => String(name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'workspace'
+const slugOf = name => String(name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/^(con|prn|aux|nul|com\d|lpt\d)$/, '$1-1') || 'workspace'
 const PREVIEWS = path.join(ENGINE, 'tools', 'previews')
 const LISTS = {}
 // a field's options may name a list of tools/ shared by several tools (the styles), and its default one of its labels;
@@ -173,7 +185,7 @@ function toolOf(kind, id) {
 }
 // the tools done on this machine, by their local, and what does the work: free, no router
 const LOCAL = { reframe: 'ffmpeg', fps: 'ffmpeg', hdr: 'ffmpeg', depth: 'Depth Anything V2 Small', matte: 'BiRefNet lite' }
-const hasBin = bin => !spawnSync(bin, [bin === 'uv' ? '--version' : '-version'], { stdio: 'ignore' }).error
+const hasBin = bin => !spawnSync(bin, [/^ff/.test(bin) ? '-version' : '--version'], { ...HIDE, stdio: 'ignore' }).error
 // the tools whose prompt is the user's words (a style at most after them): never sent without them
 const CUSTOM = ['free', 'free-edit']
 // the video model that carries a keyframe through a shot, and the image model that makes it unless asked (2026-10-31:
@@ -271,7 +283,7 @@ function prepared(tool, spec, keyframe = false) {
 // Audio's fields, never in words. One made before the types is « other »
 const TYPES = ['character', 'outfit', 'object', 'location', 'pose', 'brand', 'voice', 'singer', 'other']
 const heard = type => type === 'voice' || type === 'singer'
-const NAME = /^[\w-]+$/
+const NAME = /^(?!(?:con|prn|aux|nul|com\d|lpt\d)$)[\w-]+$/i
 // an Element (elements/<name>/): its images (a voice's clips) and element.json: its type, its words, a brand's colors and
 // typeface, a voice's ElevenLabs id once it is on the account, a singer's Suno persona or voice, a character's own voice
 // (a voice of the Library)
@@ -612,7 +624,7 @@ function zipEntries(slug, edit) {
     }
   for (const name of linkedElements(slug, jobs)) for (const f of fs.readdirSync(at('elements', name))) entries.push({ name: `${root}/elements/${name}/${f}`, file: at('elements', name, f) })
   if (edit) {
-    const t = w.timeline, rel = c => `../${named.get(c.path) ?? path.relative(HOME, c.path)}`
+    const t = w.timeline, rel = c => `../${named.get(c.path) ?? path.relative(HOME, c.path).split(path.sep).join('/')}`
     entries.push({ name: `${root}/edit/timeline.json`, data: Buffer.from(JSON.stringify({ ...t, clips: t.clips.map(c => ({ ...c, file: rel(c) })) }, null, 2) + '\n') })
     const text = editText(slug, rel)
     if (text) entries.push({ name: `${root}/edit/EDIT.md`, data: Buffer.from(`# ${w.name}: the edit\n\nThe files are named from this folder (edit/).\n\n${text}\n`) })
@@ -710,7 +722,7 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
       ...files('audio').map(f => ({ kind: 'audio', file: f })), ...refAudios.map(f => ({ kind: 'audio', file: f }))]
     if (video && m.params.videos === 0 && !['edit', 'upscale'].includes(m.role)) throw userError(`${m.name} takes no video: pick another model`)
     // Kie takes the files by its own upload; OpenRouter fetches them through a tunnel
-    if (refs.some(r => r.kind !== 'image') && !PROVIDERS[m.provider].upload && spawnSync('cloudflared', ['--version'], { stdio: 'ignore' }).error) throw userError('a video or a voice reaches OpenRouter through a Cloudflare tunnel: brew install cloudflared (no account)')
+    if (refs.some(r => r.kind !== 'image') && !PROVIDERS[m.provider].upload && !hasBin('cloudflared')) throw userError(`a video or a voice reaches OpenRouter through a Cloudflare tunnel: ${INSTALL.cloudflared} (no account)`)
     const upscale = m.role === 'upscale', edit = !!video, still = files('first_frame')[0] ?? files('last_frame')[0]
     // a keyframe (Aleph 2): an edited frame at its time in the video, 5 MB at most as a data: URI
     const keyframe = files('keyframe')[0]
@@ -831,7 +843,7 @@ function singerOf(value) {
 function sungWindow(file) {
   const total = probe(file).duration, len = Math.min(30, total)
   if (total < 10) throw userError(`a singer is made from 10 s of singing at least: ${path.basename(file)} lasts ${total.toFixed(1)} s`)
-  const log = spawnSync('ffmpeg', ['-hide_banner', '-i', file, '-af', 'silencedetect=noise=-35dB:d=0.4', '-f', 'null', '-'], { encoding: 'utf8' }).stderr ?? ''
+  const log = spawnSync('ffmpeg', ['-hide_banner', '-i', file, '-af', 'silencedetect=noise=-35dB:d=0.4', '-f', 'null', '-'], { ...HIDE, encoding: 'utf8' }).stderr ?? ''
   const starts = [...log.matchAll(/silence_start: ([\d.]+)/g)].map(m => +m[1]), ends = [...log.matchAll(/silence_end: ([\d.]+)/g)].map(m => +m[1])
   const quiet = starts.map((s, i) => [s, ends[i] ?? total])
   const sung = a => len - quiet.reduce((n, [x, y]) => n + Math.max(0, Math.min(a + len, y) - Math.max(a, x)), 0)
@@ -1127,7 +1139,7 @@ function elevenArgs(tool, spec) {
 }
 function videoMjs(argv) {
   if (!fs.existsSync(VIDEO)) throw userError(`video-editor's engine is missing (${VIDEO})`)
-  const r = spawnSync(process.execPath, [VIDEO, ...argv], { encoding: 'utf8', cwd: fs.existsSync(HOME) ? HOME : undefined, maxBuffer: 64e6, env: process.env })
+  const r = spawnSync(process.execPath, [VIDEO, ...argv], { ...HIDE, encoding: 'utf8', cwd: fs.existsSync(HOME) ? HOME : undefined, maxBuffer: 64e6, env: process.env })
   if (r.error) throw r.error
   return r
 }
@@ -1706,17 +1718,17 @@ async function runLocal(dir, job) {
 
 // vision.py (uv, ONNX models fetched once into ~/.cache/media-generator): its « frame 12/96 » lines become the job's note
 const VISION = path.join(ENGINE, 'vision.py')
-const VISION_DIR = process.env.MEDIA_GENERATOR_VISION_DIR ?? path.join(process.env.HOME ?? '', '.cache/media-generator/models')
+const VISION_DIR = process.env.MEDIA_GENERATOR_VISION_DIR ?? path.join(os.homedir(), '.cache', 'media-generator', 'models')
 function vision(job, argv) {
   return new Promise((ok, ko) => {
-    const p = spawn('uv', ['run', '--quiet', VISION, ...argv], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const p = spawn('uv', ['run', '--quiet', VISION, ...argv], { ...HIDE, stdio: ['ignore', 'pipe', 'pipe'] })
     let err = '', last = 0
     p.stdout.on('data', d => {
       const line = String(d).trim().split('\n').pop()
       if (Date.now() - last > 1000 || /^(fetch|load)/.test(line)) { last = Date.now(); progress(job, line) }
     })
     p.stderr.on('data', d => { err += d })
-    p.on('error', e => ko(e.code === 'ENOENT' ? new Error('uv is missing: brew install uv') : e))
+    p.on('error', e => ko(e.code === 'ENOENT' ? new Error(`uv is missing: ${INSTALL.uv}`) : e))
     p.on('exit', code => (code === 0 ? ok() : ko(new Error(err.trim().split('\n').pop() || `vision.py stopped (${code})`))))
   })
 }
@@ -1976,8 +1988,8 @@ async function credits() {
 function setup(sub, ...rest) {
   const s = settings()
   if (sub === 'vision') {
-    if (!hasBin('uv')) die('uv is missing: brew install uv')
-    const r = spawnSync('uv', ['run', '--quiet', VISION, 'fetch'], { stdio: 'inherit' })
+    if (!hasBin('uv')) die(`uv is missing: ${INSTALL.uv}`)
+    const r = spawnSync('uv', ['run', '--quiet', VISION, 'fetch'], { ...HIDE, stdio: 'inherit' })
     if (r.status !== 0) die('the vision models could not be fetched')
     return
   }
@@ -2094,28 +2106,28 @@ function workspaces(sub, slug, ...rest) {
 }
 
 function doctor() {
-  const has = bin => !spawnSync(bin, ['-version'], { stdio: 'ignore' }).error
-  const checks = [['node 22 or later', +process.versions.node.split('.')[0] >= 22, 'brew install node'], ['ffmpeg and ffprobe', has('ffmpeg') && has('ffprobe'), 'brew install ffmpeg'],
+  const has = hasBin
+  const checks = [['node 22 or later', +process.versions.node.split('.')[0] >= 22, INSTALL.node], ['ffmpeg and ffprobe', has('ffmpeg') && has('ffprobe'), INSTALL.ffmpeg],
     ['the dashboard is built', fs.existsSync(path.join(STUDIO, 'index.html')), 'npm run build in plugins-src/skill-video/media-studio']]
   for (const [name, ok, fix] of checks) console.log(`${ok ? 'ok     ' : 'MISSING'} ${name}${ok ? '' : `: ${fix}`}`)
   // optional: only a video or a voice sent to OpenRouter needs it, the rest works without
   console.log(has('cloudflared') ? 'ok      cloudflared (videos and voices sent to OpenRouter by a tunnel)'
-    : 'missing cloudflared: brew install cloudflared (no account), for a video or a voice sent to OpenRouter (video edits, upscale, talking avatar); everything else works')
+    : `missing cloudflared: ${INSTALL.cloudflared} (no account), for a video or a voice sent to OpenRouter (video edits, upscale, talking avatar); everything else works`)
   // optional too: Depth map and Remove background run ONNX models here, fetched once (vision.py)
   const fetched = fs.existsSync(path.join(VISION_DIR, 'depth-anything-v2-small.onnx')) && fs.existsSync(path.join(VISION_DIR, 'birefnet-lite.onnx'))
-  console.log(!has('uv') ? 'missing uv: brew install uv, for Depth map and Remove background (run here, free); everything else works'
+  console.log(!has('uv') ? `missing uv: ${INSTALL.uv}, for Depth map and Remove background (run here, free); everything else works`
     : fetched ? 'ok      uv and the vision models (Depth map, Remove background)'
       : 'ok      uv; the vision models are not fetched yet: media.mjs setup vision (330 MB, once), or at their first use')
   console.log(process.env.OPENROUTER_API_KEY ? 'openrouter: key set' : 'openrouter: no key, nothing can be generated; the plugin\'s secret: /plugin configure skill-video@pabrisson')
   console.log(process.env.OPENROUTER_MANAGEMENT_KEY ? 'openrouter management key: set (the account\'s balance)' : 'openrouter management key: not set (the key\'s own limit only)')
-  console.log(process.env.KIE_API_KEY ? 'kie: key set' : 'kie: no key (the default router; OpenRouter is used while only its key is set)')
+  console.log(process.env.KIE_API_KEY ? 'kie: key set' : 'kie: no key (the default router: with OpenRouter\'s key alone, switch the router in Settings › Router)')
   console.log(`active router: ${PROVIDERS[active()].label}${PROVIDERS[active()].key() ? '' : ', without its key: nothing can be generated'}`)
   console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Voice and dialogues straight from ElevenLabs, change voice, translate)' : 'elevenlabs: no key, no voice change or translation (the routers\' ElevenLabs voices stay)')
   const s = settings()
   console.log(`limits: ${['openrouter', 'kie', 'elevenlabs'].map(p => `${p} threshold ${s[p].threshold ?? 'none'}, cap ${s[p].cap ?? 'none'}`).join(' · ')}`)
   console.log(`folder: ${HOME}`)
   if (fs.existsSync(at('media'))) {
-    const kept = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', 'media/x', 'elements/x', 'styles/x', 'workspaces/x', 'ledger.jsonl', 'settings.json'], { encoding: 'utf8' })
+    const kept = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', 'media/x', 'elements/x', 'styles/x', 'workspaces/x', 'ledger.jsonl', 'settings.json'], { ...HIDE, encoding: 'utf8' })
     if (kept.status === 0) console.log(`warning: git ignores ${kept.stdout.trim().split('\n').join(', ')}: the media and the ledger must stay versioned, fix ${at('.gitignore')}`)
   }
   if (checks.some(c => !c[1])) process.exit(1)
@@ -2138,7 +2150,7 @@ function sendFile(req, res, file) {
 }
 
 // a generation started from the dashboard runs in its own process: it finishes even if the page or the server goes
-const startRun = id => spawn(process.execPath, [SELF, 'run', id], { cwd: HOME, env: { ...process.env, MEDIA_GENERATOR_DIR: HOME, MEDIA_GENERATOR_QUIET: '1' }, detached: true, stdio: 'ignore' }).unref()
+const startRun = id => spawn(process.execPath, [SELF, 'run', id], { cwd: HOME, env: { ...process.env, MEDIA_GENERATOR_DIR: HOME, MEDIA_GENERATOR_QUIET: '1' }, detached: true, ...HIDE, stdio: 'ignore' }).unref()
 
 // what each result's files are, measured once: their size and length (the bin's filters, a clip's length)
 let metaCache = null
@@ -2476,7 +2488,7 @@ function watchOwner(pid) {
 // ponytail: null on Windows (no ps -o), its server then runs until stopped
 function claudePid() {
   try {
-    const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' }).trim().split('\n').map(l => {
+    const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { ...HIDE, encoding: 'utf8' }).trim().split('\n').map(l => {
       const [, pid, ppid, comm] = l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
       return [+pid, { ppid: +ppid, comm }]
     }))
@@ -2495,7 +2507,7 @@ async function findServer() {
   const log = fs.openSync(at('.cache', 'server.log'), 'a')
   for (; i < ports.length; i++) {
     if (lives[i]) continue
-    spawn(process.execPath, [SELF, 'serve'], { cwd: HOME, env: { ...process.env, MEDIA_GENERATOR_DIR: HOME, MEDIA_GENERATOR_PORT: `${ports[i]}` }, detached: true, stdio: ['ignore', log, log] }).unref()
+    spawn(process.execPath, [SELF, 'serve'], { cwd: HOME, env: { ...process.env, MEDIA_GENERATOR_DIR: HOME, MEDIA_GENERATOR_PORT: `${ports[i]}` }, detached: true, ...HIDE, stdio: ['ignore', log, log] }).unref()
     let live = null
     for (let k = 0; k < 50 && !(live = await ping(ports[i])); k++) await sleep(100)
     if (live?.home === HOME) return base(ports[i])
@@ -2507,7 +2519,7 @@ async function studio() {
   const url = await findServer(), owner = claudePid()
   if (owner) await fetch(url + `__media-generator/owner?pid=${owner}`, { method: 'POST' }).catch(() => {})
   console.log(`dashboard: ${url}`)
-  if (opt.open) spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open', [url], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
+  if (opt.open) spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open', [url], { detached: true, ...HIDE, stdio: 'ignore' }).on('error', () => {}).unref()
 }
 
 const commands = {

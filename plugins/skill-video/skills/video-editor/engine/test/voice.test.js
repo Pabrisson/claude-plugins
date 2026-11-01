@@ -19,18 +19,21 @@ const calls = at('eleven.log'), mock = at('eleven.mjs')
 fs.writeFileSync(mock, `import fs from 'node:fs'
   // the subscription's count moves a few reads after the spend, as ElevenLabs' lags 10 to 20 s
   let used = 1000, pending = 0, reads = 0
+  // what another job spends on the account at the same time (ELEVEN_FAKE_BUSY credits, with a voice change)
+  const busy = +(process.env.ELEVEN_FAKE_BUSY ?? 0)
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url), form = init.body instanceof FormData ? Object.fromEntries([...new Set(init.body.keys())].map(k => [k, init.body.getAll(k).map(v => typeof v === 'string' ? v : 'blob:' + v.size)])) : init.body
     fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ u, method: init.method ?? 'GET', form }) + '\\n')
     if (u.endsWith('/v1/user/subscription')) { if (pending && ++reads > 2) [used, pending, reads] = [used + pending, 0, 0]; return Response.json({ character_count: used, character_limit: 10000 }) }
     // a free plan refuses the formats of the Creator tier
     if (u.includes('output_format=mp3_44100_192')) return Response.json({ detail: { code: 'subscription_required', message: "Output format 'mp3_44100_192' is only available on the Creator tier and above.", status: 'output_format_not_allowed' } }, { status: 403 })
-    if (u.includes('/v1/voice-changer/')) { pending += 50; return new Response(fs.readFileSync(${JSON.stringify(at('voice.mp3'))}), { headers: { 'content-type': 'audio/mpeg' } }) }
+    if (u.includes('/v1/voice-changer/')) { pending += 50 + busy; return new Response(fs.readFileSync(${JSON.stringify(at('voice.mp3'))}), { headers: { 'content-type': 'audio/mpeg' } }) }
     if (u.endsWith('/v1/voices/add')) return Response.json({ voice_id: 'cloned-1' })
     if (u.endsWith('/v1/dubbing/project')) return Response.json({ project_id: 'p1', status: 'queued', language_ids: ['l-en'] })
     if (u.endsWith('/v1/dubbing/project/p1')) return Response.json({ project_id: 'p1', status: 'ready', language_ids: ['l-en'] })
     if (u.endsWith('/v1/dubbing/project/p1/language')) return Response.json({ language_id: 'l-' + JSON.parse(init.body).target_language, status: 'queued' })
-    if (/\\/language\\/l-\\w+$/.test(u)) { pending += 300; return Response.json({ status: 'completed', outputs: { lossless_audio: 'https://signed/' + u.split('/').pop() + '.flac', subtitles: 'https://signed/' + u.split('/').pop() + '.vtt' } }) }
+    // a language dubbed: about 3,000 credits a minute (150 for 3 s), a little over the estimate so the count read is what is said
+    if (/\\/language\\/l-\\w+$/.test(u)) { pending += 160; return Response.json({ status: 'completed', outputs: { lossless_audio: 'https://signed/' + u.split('/').pop() + '.flac', subtitles: 'https://signed/' + u.split('/').pop() + '.vtt' } }) }
     if (u.endsWith('.flac')) return new Response(fs.readFileSync(${JSON.stringify(at('dub.flac'))}))
     if (u.endsWith('.vtt')) return new Response('WEBVTT\\n\\n00:00.000 --> 00:01.000\\nHello\\n')
     return Response.json({ detail: { message: 'unexpected ' + u } }, { status: 404 })
@@ -57,6 +60,15 @@ test('voice-change: the estimate first, nothing sent without --spend; then the s
   assert.deepEqual(sent.form.model_id, ['eleven_multilingual_sts_v2'])
   assert.deepEqual(sent.form.remove_background_noise, ['true'])
   assert.deepEqual(streams(at('out/talk.mp4')).streams.map(s => s.codec_type).sort(), ['audio', 'video'])
+})
+
+test('spent: an account that moved far more than the estimate (another job spent meanwhile) leaves the estimate said', () => {
+  process.env.ELEVEN_FAKE_BUSY = '1000'
+  try {
+    const r = cli('voice-change', 'talk.mp4', '--voice', 'v1', '--spend', '50', '--out', 'out/busy.mp4')
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stdout, /spent: about 50 credits \(estimated: the account moved by 1050 meanwhile\)/)
+  } finally { delete process.env.ELEVEN_FAKE_BUSY }
 })
 
 test('voice-change on a long sound: pieces of at most 290 s, cut in its silences', { timeout: 60000 }, () => {
@@ -95,7 +107,7 @@ test('dub: one project, a language target each, every language back on the video
     assert.deepEqual(streams(at(`dubs/dub-${lang}.mp4`)).streams.map(s => s.codec_type).sort(), ['audio', 'video'])
     assert.match(fs.readFileSync(at(`dubs/dub-${lang}.vtt`), 'utf8'), /WEBVTT/)
   }
-  assert.match(r.stdout, /spent: 600 credits/)
+  assert.match(r.stdout, /spent: 320 credits/)
 })
 
 test('credits estimates the voice changer and dubbing at their rates', () => {
