@@ -1,5 +1,8 @@
 # The style: `.style/style.json`
 
+Contents: the files of `.style/` · the keys of `style.json` · what is not here · The setup mode (the `setup` mode
+of SKILL.md)
+
 The style is **who the user is and what their videos look and sound like**. Each project has its own: it lives in
 `.style/` at the root of the projects folder (the project Claude Code runs in, next to the videos), never in the
 plugin, whose updates replace its folder:
@@ -48,11 +51,35 @@ Any field left out takes the engine default below. `style set` parses a value as
 What is not here: how to edit (cuts, pace, captions on or off, motion density) belongs to the rule packs
 (`rules-format.md`), and how one video looks belongs to its Direction in About.md.
 
-## The setup interview
+## The setup mode
 
-For a brand, run `video.mjs site <url>` first and read what it saved: the palette, fonts, logo and symbols come from
-there. Otherwise ask in the user's language, a few questions at a time (AskUserQuestion where the answers are
-choices), and offer sensible defaults: name and handle; language; niche and audience; CTA line and button texts;
-palette (propose two or three palettes, or take their brand colors); font (Inter, or a file they give, or a free font
-you download into `.style/fonts/`); the mood of the music, in their words; the names the transcript must spell right. Then one `style set` with every answer, a
-`style note` per preference they stated, and show the resulting STYLE.md.
+The style belongs to this project folder.
+
+When the request is about a brand, a product or a site, take its identity from there first, and look at it rather
+than reading it. Run `video.mjs site <url>`: it saves one screenshot per screen of the page, the colors it paints
+ranked by surface, its fonts and every inline SVG into `.style/site/`. Read every screenshot and `svgs.jpg`, then
+propose in one confirmation:
+- the whole palette the site uses, each color named by its role: `paper` and `ink`, plus `coal` for its dark
+  sections, `accent-dark`… (not five colors picked out of it);
+- its fonts and logo;
+- its **symbols**, the graphic devices that come back: a pictogram, the logo's shape, a pattern, how it writes its
+  buttons;
+- its tone and claims.
+
+Otherwise, interview the user briefly in their language, a few questions at a time, using AskUserQuestion where the
+answers are choices, and offer sensible defaults. Cover:
+- name and handle;
+- language;
+- niche and audience;
+- CTA line and button texts;
+- palette (propose two or three palettes, or take their brand colors);
+- font (Inter, or a file they give, or a free font you download into `.style/fonts/`);
+- the mood of the music, in their words;
+- the names the transcript must spell right: brands, products, people (`creator.vocabulary`).
+
+Then write everything with one `video.mjs style set a.b=value …`. Add a `style note "…"` only for a preference the
+user stated, such as the music's mood when they give one. Show the resulting STYLE.md.
+
+The style is material: who the user is, and the brand's colors, type and symbols. Every video follows its notes, so
+a creative direction you chose never goes there. How a video looks is invented in its own Direction (step 6), and how
+to edit (pace, cuts, captions) belongs to the rule packs.

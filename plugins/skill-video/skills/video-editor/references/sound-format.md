@@ -1,5 +1,7 @@
 # The sound: `source/sound.py`
 
+Contents: The kit · The effects: the library · With ElevenLabs · Composing for the picture · Checking (you cannot listen, so measure) · A skeleton
+
 You compose the music of each video in code, the way the scene is written, and you give it its effects: the
 projects folder's library has the common ones ready, and you design the others, as many as the video needs.
 `source/sound.py` is a Python module (numpy and the standard library only) whose

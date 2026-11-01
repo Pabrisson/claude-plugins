@@ -1,5 +1,7 @@
 # Rule packs: `rules/<name>.md`
 
+Contents: Format · Params the engine reads · Params `check` measures · Writing a pack (`rules new`, `rules edit`) · The rules mode
+
 A pack says **how to edit**: cuts, pace, captions, music, motion density, and the checklists of the self-review. It
 is one Markdown file; adding a pack is dropping a file, with no change to the engine or the skill. A video follows
 one pack, or none.

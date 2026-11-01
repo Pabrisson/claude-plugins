@@ -1852,9 +1852,14 @@ async function cmdModels(kind = 'video') {
   console.log(`${list.length - direct} ${kind} models on ${PROVIDERS[active()].label}, the active router (the engine's list, providers/${active()}-models.json${added ? `, plus ${added} new from its catalog: their references unknown, ${active() === 'kie' ? 'their price unknown' : 'priced as listed'}` : ''})`)
 }
 
-// how a field is given on the command line: an option's label (Auto for an empty one), several in order, words
-function fieldHelp(f) {
-  const list = f.options?.map(o => (typeof o === 'object' ? o.label ?? o.value : o) || 'Auto').join('|')
+// how a field is given on the command line: an option's label (Auto for an empty one), several in order, words. A long
+// list already printed above (the 82 preset styles…) points at it instead: the output stays short in Claude's context
+function fieldHelp(f, seen, where) {
+  let list = f.options?.map(o => (typeof o === 'object' ? o.label ?? o.value : o) || 'Auto').join('|')
+  if (seen && list?.length > 120) {
+    if (seen.has(list)) list = `<the ${f.options.length} choices of ${seen.get(list)} above>`
+    else seen.set(list, `${where}'s ${f.key}`)
+  }
   if (f.type === 'multi') return `--field ${f.key}="<one>, then <another>" (${list})`
   if (f.type === 'sheets') return `--field ${f.key}="<one>, <another>" (${list}; default ${f.default})`
   if (f.type === 'light') return `--field ${f.key}=<the light in words>${list ? `|${list}` : ''}`
@@ -1867,13 +1872,18 @@ function fieldHelp(f) {
 }
 
 function cmdTools(kind) {
+  const seen = new Map()
   for (const k of kind ? [kind] : KINDS) {
     const list = TOOLS[k].filter(t => !opt.search || `${t.id} ${t.label} ${t.group} ${t.description}`.toLowerCase().includes(opt.search.toLowerCase()))
     if (opt.json) { console.log(JSON.stringify(list)); continue }
     for (const t of list) {
-      const ins = t.inputs.map(i => `--in ${i.key}=<${i.kind}>${i.optional ? '?' : ''}`).join(' '), fields = t.fields.map(fieldHelp).join(' ')
+      const ins = t.inputs.map(i => `--in ${i.key}=<${i.kind}>${i.optional ? '?' : ''}`).join(' '), fields = t.fields.map(f => fieldHelp(f, seen, `${k} ${t.id}`)).join(' ')
       const { models: ms, also, why } = toolModels(t)
-      console.log(`${k} ${t.id} (${t.mode}, ${t.group}${t.routers ? `, ${t.routers.map(r => PROVIDERS[r].label).join(' or ')} only` : ''}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${ms ? `\n    models: ${ms.map(m => `${m}${why[m] ? ` (${why[m]})` : ''}`).join(', ')}` : ''}${also ? `\n    also: ${also.join(', ')}` : ''}`)
+      // the same recommended models as a tool above: named once, pointed at after
+      let rec = ms && ms.map(m => `${m}${why[m] ? ` (${why[m]})` : ''}`).join(', ')
+      if (rec && seen.has(rec)) rec = `the same as ${seen.get(rec)}`
+      else if (rec) seen.set(rec, `${k} ${t.id}`)
+      console.log(`${k} ${t.id} (${t.mode}, ${t.group}${t.routers ? `, ${t.routers.map(r => PROVIDERS[r].label).join(' or ')} only` : ''}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${rec ? `\n    models: ${rec}` : ''}${also ? `\n    also: ${also.join(', ')}` : ''}`)
     }
   }
 }

@@ -393,6 +393,13 @@ test('styles: Restyle redraws in a style, Custom adds one if asked; a Library st
   const t = await cli('tools', 'image', '--search', 'restyle')
   assert.match(t.out, /image restyle \(edit, Style\)/)
   assert.match(t.out, /--field style=Hand-painted cel\|.*\|Knitted yarn world\|.*\|<a style of the Library>/)
+  // a long list is printed once: the next tools with the same choices point at it, the output stays short in Claude's context
+  const sheets = (await cli('tools', 'image', '--search', 'references')).out
+  assert.equal(sheets.match(/Knitted yarn world/g).length, 1, sheets)
+  assert.match(sheets, /--field style=<the \d+ choices of image \S+'s style above>\|<a style of the Library>/)
+  const cams = (await cli('tools', 'video', '--search', 'camera')).out, first = cams.match(/^video (\S+)[^\n]*\n(?:    [^\n]*\n)*?    models: (?!the same)/m)
+  assert.ok(first, cams)
+  assert.match(cams, new RegExp(`models: the same as video ${first[1]}\\n`))
   const i = await est('image', '--tool', 'restyle', '--model', 'fake/img', '--in', `image=${at('a.png')}`, '--field', 'style=Knitted yarn world')
   assert.match(i.prompt, /^Redraw the first image in the style of a knitted yarn world: .+ Keep its composition/)
   const v = await est('video', '--tool', 'restyle', '--model', 'fake/vid', '--in', `video=${at('talk.mp4')}`, '--field', 'style=claymation')

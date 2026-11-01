@@ -1,5 +1,7 @@
 # Review studio feedback
 
+Contents: `files/reviews/vN.json` · The Copy prompt · `files/sound/vN.json` · `files/video/vN.json` · Applying it
+
 Before the first version, the studio shows what is being done, from the project's `.cache/progress.json`: the
 engine's steps (with the renders' progress) and Claude's (`video.mjs status`). It reloads by itself when the first
 version lands. While the next version is made (a step started since the version shown still runs), a card above the

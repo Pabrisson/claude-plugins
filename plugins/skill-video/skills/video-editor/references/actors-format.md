@@ -1,5 +1,7 @@
 # Optional actors: `actors/*.json`
 
+Contents: Keys · Fields · text · card · counter · logo · image · media · arrow · chip · bar · stamp · cta
+
 Actors are ready-made, declarative elements (text, card, counter, logo, image, media, arrow, chip, bar, stamp, cta)
 for the parts of a video that do not need a hand-built scene. They exist only when the project has an **`actors/`
 folder**: every `actors/*.json` there (an array of actors, or one) is drawn on a full-stage canvas over the scene,

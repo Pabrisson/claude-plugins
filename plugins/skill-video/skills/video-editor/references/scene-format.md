@@ -1,5 +1,7 @@
 # The scene: `source/scene.js`
 
+Contents: Rules the render depends on · What the scene receives · `source/edit.json` · The transcript of a video without speech · Sound · Parts · The platforms' interface (9:16) · Checking · The thumbnail · Variations
+
 The video is a web page you write. `source/scene.js` is an ES module whose default export builds the scene once,
 with anything the web offers: HTML, CSS, SVG, canvas, and a **GSAP timeline** with its plugins (SplitText,
 DrawSVG, MorphSVG, MotionPath, ScrambleText, Text, CustomEase, CustomWiggle). The engine then puts the page at
