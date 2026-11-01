@@ -579,6 +579,16 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.deepEqual((await post('/api/fake', { on: false })).body, { on: false, bases: state.fake.bases })
   assert.equal((await fetch(url + '/api/state').then(r => r.json())).fake.on, false)
   assert.equal((await post('/api/fake', { on: true })).body.on, true)
+  // developer mode: unset, on for a server started on fake APIs; turned off, the fakes off with it (the header hides
+  // them); on again, the fakes on
+  assert.equal(state.settings.developer.on, true)
+  const dev = async () => fetch(url + '/api/state').then(r => r.json()).then(s => [s.settings.developer.on, s.fake.on])
+  await post('/api/settings', { developer: { on: false } })
+  assert.deepEqual(await dev(), [false, false])
+  await post('/api/settings', { developer: { on: true } })
+  assert.deepEqual(await dev(), [true, true])
+  // another router's models, for Development's prompt
+  assert.ok((await fetch(url + '/api/models?kind=video&router=kie').then(r => r.json())).every(m => m.provider === 'kie'))
   // Settings' « Update the list »: what the catalog adds, the ones found this time apart; the models then carry them
   assert.equal(state.catalog.added, 4)
   const up = (await post('/api/models/refresh', {})).body

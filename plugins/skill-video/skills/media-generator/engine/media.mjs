@@ -122,13 +122,18 @@ const SETTINGS = {
   kie: { threshold: null, cap: null },
   elevenlabs: { threshold: null, cap: null, plan: null },
   defaults: { image: null, video: null, audio: null },
+  // the dashboard's developer mode (Settings › Development): unset, on for a server started on fake APIs
+  developer: { on: null },
   // the workspace new generations join (workspaces use, the dashboard's header)
   workspace: { current: 'default' },
 }
+// the fake APIs a dev or test server was started on ($OPENROUTER_BASE, $ELEVENLABS_BASE, $KIE_BASE…), as they were then
+const FAKE = Object.fromEntries(['OPENROUTER_BASE', 'ELEVENLABS_BASE', 'KIE_BASE', 'KIE_UPLOAD_BASE', 'KIE_DOCS'].filter(k => process.env[k]).map(k => [k, process.env[k]]))
 const settings = () => {
   const s = fs.existsSync(at('settings.json')) ? readJson(at('settings.json')) : {}
   const out = Object.fromEntries(Object.entries(SETTINGS).map(([k, v]) => [k, { ...v, ...s[k] }]))
   out.router.active ??= !process.env.KIE_API_KEY && process.env.OPENROUTER_API_KEY ? 'openrouter' : 'kie'
+  out.developer.on ??= Object.keys(FAKE).length > 0
   return out
 }
 // the USD price of 1,000 ElevenLabs credits on the user's plan, null without a paid one
@@ -180,11 +185,11 @@ const toolModels = tool => {
   return { models, also: tool[active()]?.also ?? tool.also, why: Object.fromEntries((models ?? []).map(id => [id, tool.why?.[id] ?? WHY[kind]?.[id]]).filter(([, w]) => w)) }
 }
 
-// the active router's models of a kind, their ids prefixed with the router: its list kept by hand, plus the new models
+// the active router's models of a kind (or another router's: Settings › Development), their ids prefixed with the router: its list kept by hand, plus the new models
 // of its catalog (checked once a day). Speech: ElevenLabs' own models first, straight from it (its key), and then none of
 // a router's ElevenLabs voices (without its key, the router's stay)
-async function models(kind) {
-  const name = active(), own = (await PROVIDERS[name].models(routerKind(kind))).map(m => ({ ...m, id: `${name}:${m.model}`, provider: name }))
+async function models(kind, name = active()) {
+  const own = (await PROVIDERS[name].models(routerKind(kind))).map(m => ({ ...m, id: `${name}:${m.model}`, provider: name }))
   if (kind !== 'audio') return own
   const direct = (await DIRECT.elevenlabs.models('speech').catch(() => [])).map(m => ({ ...m, id: `elevenlabs:${m.model}`, provider: 'elevenlabs' }))
   return [...direct, ...own.filter(m => !(direct.length && m.role === 'speech' && m.model.startsWith('elevenlabs/')))]
@@ -1961,13 +1966,14 @@ function setup(sub, ...rest) {
       if (sec === 'workspace') die('setup set: the workspace changes with media.mjs workspaces use <slug>')
       if (!SETTINGS[sec] || !(key in SETTINGS[sec])) die(`setup set: ${k} is not one of ${Object.entries(SETTINGS).flatMap(([a, o]) => Object.keys(o).map(b => `${a}.${b}`)).join(', ')}`)
       s[sec][key] = sec === 'router' ? (PROVIDERS[v] ? v : die(`setup set: router.active is one of ${Object.keys(PROVIDERS).join(', ')}`))
-        : v === 'none' || v === '' ? null : sec === 'defaults' ? v
+        : v === 'none' || v === '' ? null : sec === 'developer' ? (v === 'on' || v === 'off' ? v === 'on' : die('setup set: developer.on is on, off or none'))
+        : sec === 'defaults' ? v
         : key === 'plan' ? (v in PLANS ? v : die(`setup set: elevenlabs.plan is one of ${Object.keys(PLANS).join(', ')}, or none`))
         : Number.isFinite(+v) && +v >= 0 ? +v : die(`setup set: ${k} is a number, or none`)
     }
     ensureHome()
     writeJson(at('settings.json'), s)
-  } else if (sub) die('usage: setup [vision | set router.active=<openrouter|kie> openrouter.threshold=<usd> openrouter.cap=<usd> kie.threshold=<usd> kie.cap=<usd> elevenlabs.threshold=<credits> elevenlabs.cap=<credits> elevenlabs.plan=<${Object.keys(PLANS).join('|')}> defaults.video=<model>…]')
+  } else if (sub) die('usage: setup [vision | set router.active=<openrouter|kie> openrouter.threshold=<usd> openrouter.cap=<usd> kie.threshold=<usd> kie.cap=<usd> elevenlabs.threshold=<credits> elevenlabs.cap=<credits> elevenlabs.plan=<${Object.keys(PLANS).join('|')}> defaults.video=<model> developer.on=<on|off>…]')
   for (const [sec, o] of Object.entries(s)) console.log(`${sec}: ${Object.entries(o).map(([k, v]) => `${k} ${v ?? 'not set'}`).join(' · ')}`)
 }
 
@@ -2137,9 +2143,8 @@ function mediaList() {
 
 let balanceCache = { at: 0, value: null }
 
-// the fake APIs a dev or test server was started on ($OPENROUTER_BASE, $ELEVENLABS_BASE, $KIE_BASE…): the header's toggle turns
-// them off (the real APIs, with the server's keys) and on again, for this server and the runs it starts
-const FAKE = Object.fromEntries(['OPENROUTER_BASE', 'ELEVENLABS_BASE', 'KIE_BASE', 'KIE_UPLOAD_BASE', 'KIE_DOCS'].filter(k => process.env[k]).map(k => [k, process.env[k]]))
+// the fake APIs (FAKE): the header's toggle, shown in developer mode, turns them off (the real APIs, with the server's
+// keys) and on again, for this server and the runs it starts; developer mode turned on turns them on, off turns them off
 const fakeState = () => ({ on: Object.keys(FAKE).some(k => process.env[k]), bases: Object.values(FAKE) })
 function useFake(on) {
   for (const [k, v] of Object.entries(FAKE)) if (on) process.env[k] = v; else delete process.env[k]
@@ -2164,8 +2169,8 @@ async function handle(req, res) {
   // Settings' « Update the list »: the active router's catalog read now, what it adds
   if (p === '/api/models/refresh' && post) return reply(res, 200, await PROVIDERS[active()].refresh())
   if (p === '/api/models') {
-    const kind = url.searchParams.get('kind')
-    return reply(res, 200, (await models(kind)).map(({ pricing, ...m }) => m))
+    const kind = url.searchParams.get('kind'), router = url.searchParams.get('router')
+    return reply(res, 200, (await models(kind, PROVIDERS[router] ? router : active())).map(({ pricing, ...m }) => m))
   }
   if (p === '/api/balances') {
     if (Date.now() - balanceCache.at > 60e3 || url.searchParams.has('refresh')) balanceCache = { at: Date.now(), value: await balances() }
@@ -2288,13 +2293,15 @@ async function handle(req, res) {
     try { return reply(res, 200, await sunoVoice(name, { start, end, language, verify: verify && inside(HOME, verify) })) } catch (e) { return reply(res, 400, { error: e.message }) }
   }
   if (p === '/api/settings' && post) {
-    const body = await readBody(req), s = settings()
+    const body = await readBody(req), s = settings(), was = s.developer.on
     for (const sec of Object.keys(SETTINGS).filter(x => x !== 'workspace')) for (const k of Object.keys(SETTINGS[sec])) if (body[sec] && k in body[sec]) {
       const v = body[sec][k]
-      s[sec][k] = sec === 'router' ? (PROVIDERS[v] ? v : s[sec][k]) : v === null || v === '' ? null : sec === 'defaults' ? String(v) : k === 'plan' ? (v in PLANS ? v : s[sec][k]) : Number.isFinite(+v) && +v >= 0 ? +v : s[sec][k]
+      s[sec][k] = sec === 'router' ? (PROVIDERS[v] ? v : s[sec][k]) : v === null || v === '' ? null : sec === 'developer' ? !!v : sec === 'defaults' ? String(v) : k === 'plan' ? (v in PLANS ? v : s[sec][k]) : Number.isFinite(+v) && +v >= 0 ? +v : s[sec][k]
     }
     ensureHome()
     writeJson(at('settings.json'), s)
+    // developer mode turned on or off: the fake APIs with it
+    if (Object.keys(FAKE).length && settings().developer.on !== was) useFake(settings().developer.on)
     // another router: its balance in the header
     balanceCache = { at: 0, value: null }
     return reply(res, 200, s)
@@ -2408,6 +2415,8 @@ async function handle(req, res) {
 
 function serve() {
   ensureHome()
+  // a server started on fake APIs uses them in developer mode only
+  if (Object.keys(FAKE).length) useFake(settings().developer.on)
   http.createServer((req, res) => handle(req, res).catch(e => reply(res, 500, { error: e.message })))
     .listen(PORT, '127.0.0.1', () => console.log(`media-generator server on http://127.0.0.1:${PORT}/ for ${HOME}`))
   // every router's catalog read again at each start, the page not waiting for it (then once a day, or Settings' « Update

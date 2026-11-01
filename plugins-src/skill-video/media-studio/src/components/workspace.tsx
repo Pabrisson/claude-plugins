@@ -21,7 +21,7 @@ import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, whe
 import { lay } from "@/lib/timeline"
 import { Chips, Label } from "@/components/chips"
 import { byMedium, FilterChips, LibraryList, Listen, Section, SortSelect, SoundCover, Thumb, useSort, Workspaces, type Pick } from "@/components/inputs"
-import { factsOf, NO_FILTERS, passes, ratioOf, resOf, sorted } from "@/lib/filters"
+import { activeFilters, factsOf, NO_FILTERS, passes, ratioOf, resOf, sorted } from "@/lib/filters"
 import { Main, NoGenerations, Side } from "@/components/pages"
 import { Results, type Bridge } from "@/components/results"
 import { dragShot, lengthOf, TimelineEditor, type Ask, type useTimelines } from "@/components/timeline"
@@ -337,7 +337,7 @@ function AddFromLibrary({ ws, results, onChanged }: { ws: Workspace; results: Pi
   )
 }
 
-// the bin: the workspace's results, filtered (medium, format, quality, favorites) and sorted like every picker, by
+// the bin: the workspace's results, filtered (medium, then its own filters, favorites) and sorted like every picker, by
 // medium, dragged onto a track or added after the last shot with +; a result already on the timeline shows its place
 function Bin({ jobs, home, onAdd }: { jobs: Job[]; home: string; onAdd: (job: Job, path: string) => void }) {
   const { shots } = useContext(Workspaces)
@@ -388,7 +388,7 @@ function Bin({ jobs, home, onAdd }: { jobs: Job[]; home: string; onAdd: (job: Jo
         <div className="mb-2 flex items-center gap-2">
           <Label hint="drag onto a track, or +">Bin</Label>
           <span className="flex-1" />
-          {(filters.kind !== "all" || filters.ratio !== "all" || filters.res !== "all" || filters.favorites) && (
+          {activeFilters(filters) > 0 && (
             <Button size="xs" variant="ghost" className="-mt-2" onClick={() => setFilters(NO_FILTERS)}>
               Clear
             </Button>
@@ -417,7 +417,8 @@ function Bin({ jobs, home, onAdd }: { jobs: Job[]; home: string; onAdd: (job: Jo
                     <SoundCover path={i.path} className="size-9 shrink-0 rounded-md" />
                     <Listen path={i.path} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{i.job.prompt || i.job.label}</span>
+                      {/* its words, else its file's name (a WAV, a stem: the tool's name is under it) */}
+                      <span className="block truncate text-sm">{i.job.prompt || i.path.split("/").pop()}</span>
                       <span className="block text-xs text-muted-foreground">
                         {shots[i.path] ? `${shots[i.path]} · ` : ""}
                         {i.job.label}

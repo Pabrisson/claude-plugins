@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useState } from "react"
-import { CopyIcon, KeyRoundIcon, LayersIcon, LoaderCircleIcon, RefreshCwIcon, RouterIcon, TriangleAlertIcon, WalletIcon, type LucideIcon } from "lucide-react"
+import { Fragment, useEffect, useEffectEvent, useRef, useState } from "react"
+import { CodeIcon, CopyIcon, KeyRoundIcon, LayersIcon, LoaderCircleIcon, RefreshCwIcon, RouterIcon, TriangleAlertIcon, WalletIcon, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group"
-import { Kbd } from "@/components/ui/kbd"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -34,6 +33,8 @@ type Provider = (typeof PROVIDERS)[number]["id"]
 type Limit = { on: boolean; text: string }
 const LIMITS = PROVIDERS.flatMap((p) => (["threshold", "cap"] as const).map((k) => `${p.id}.${k}`))
 const COMMAND = "/plugin configure skill-video@pabrisson"
+// the section the page goes back to after a reload
+const BACK = "media-generator:settings-back"
 const KIND_NAME: Record<string, string> = { image: "Image", video: "Video", speech: "Voice" }
 // how long ago, in a few words
 const ago = (iso: string) => {
@@ -47,8 +48,39 @@ const wrong = (l: Limit) => l.on && !(l.text.trim() !== "" && Number.isFinite(+l
 // what an amount turned on still needs: a word while empty, an error once something wrong is typed
 const hint = (l: Limit) =>
   !wrong(l) ? null : l.text.trim() === "" ? <span className="text-xs text-muted-foreground">Enter an amount, or turn it off.</span> : <FieldError>Enter an amount above 0.</FieldError>
+// what this page edits of the settings, in the shape it saves them
+const project = (s: Omit<Settings, "workspace">) => ({
+  router: { active: s.router.active },
+  openrouter: { threshold: s.openrouter.threshold, cap: s.openrouter.cap },
+  kie: { threshold: s.kie.threshold, cap: s.kie.cap },
+  elevenlabs: { threshold: s.elevenlabs.threshold, cap: s.elevenlabs.cap, plan: s.elevenlabs.plan },
+  defaults: s.defaults,
+  developer: { on: s.developer.on },
+})
 const typed = (s: Settings): Record<string, Limit> =>
   Object.fromEntries(LIMITS.map((k) => { const [p, key] = k.split(".") as [Provider, "threshold" | "cap"], v = s[p][key]; return [k, { on: v != null, text: v != null ? String(v) : "" }] }))
+
+// Development's prompt for Claude Code: every model of both routers checked against its docs and wired, the ones each
+// router's catalog adds named first
+const listed = (m: Model) => `- ${m.model} (${m.name}; ${m.kind}, ${m.role}${capsOf(m).length ? `; ${capsOf(m).join(", ")}` : ""})`
+const wirePrompt = (added: Record<Router, Model[]>, engine: string) =>
+  [
+    "Check every model of media-generator (skill-video) on both of its routers, Kie.ai and OpenRouter, and wire what each one can do. Generate nothing and spend nothing: read the docs and the free routes only, no generation without my yes.",
+    "",
+    `The engine: ${engine || "media-generator's engine folder"} (model lists: providers/kie-models.json for Kie.ai, providers/openrouter-models.json for OpenRouter; tools: tools/image.json, tools/video.json, tools/audio.json, each tool's models for Kie.ai under its "kie" key where they differ).`,
+    ...ROUTERS.flatMap((r) => [
+      "",
+      added[r.id].length
+        ? `${ROUTER_NAME[r.id]}'s catalog adds ${added[r.id].length} model${added[r.id].length > 1 ? "s" : ""} its list lacks:\n${added[r.id].map(listed).join("\n")}`
+        : `${ROUTER_NAME[r.id]}'s catalog adds no model its list lacks right now.`,
+    ]),
+    "",
+    "1. Read both routers' catalogs fresh (Kie.ai: its docs pages and its price list; OpenRouter: its image, video and speech catalogs and their endpoints).",
+    "2. On each router, check every model, its list's own and its catalog's new ones, against that router's API docs: resolutions, ratios, durations, first and last frame, middle frames (keyframes), reference images (how many), omni references (reference videos and sounds: how many, how long), sound, seed, what it edits (video edit, upscale, avatar, lip sync), shots, elements, Library voices, masks of who speaks, draft, its own options, its price.",
+    "3. Wire it, router by router: each catalog model into that router's list with every capability; a wrong or missing capability of a listed model fixed; each model named in the tools that fit it on that router (a tool's models or also, its \"kie\" lists for Kie.ai), so an edit, avatar or upscale model shows in its tools too. A capability the engine or the dashboard cannot send yet: add it, or list it.",
+    "4. Run the engine tests and the dashboard's checks, rebuild the dashboard, bump the plugin's version, restart the dashboards that run.",
+    "5. Report by router, then by model: added, fixed, left as is and why.",
+  ].join("\n")
 
 // a section of the page: its title and what it is for, then its rows
 function Section({ id, icon: Icon, title, about, children }: { id: string; icon: LucideIcon; title: string; about: string; children: React.ReactNode }) {
@@ -66,25 +98,42 @@ function Section({ id, icon: Icon, title, about, children }: { id: string; icon:
   )
 }
 // a row: what the setting does on the left, its control on the right
-function Row({ title, about, htmlFor, children }: { title: string; about: React.ReactNode; htmlFor?: string; children: React.ReactNode }) {
+// end: a single button, switch or badge, set right so the text keeps the width
+function Row({ title, about, htmlFor, end, children }: { title: string; about: React.ReactNode; htmlFor?: string; end?: boolean; children: React.ReactNode }) {
   return (
-    <Field className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_20rem] md:items-start md:gap-8">
+    <Field className={cn("grid gap-3 px-5 py-4 md:items-start md:gap-8", end ? "md:grid-cols-[minmax(0,1fr)_auto]" : "md:grid-cols-[minmax(0,1fr)_20rem]")}>
       <FieldContent>
         {htmlFor ? <FieldLabel htmlFor={htmlFor}>{title}</FieldLabel> : <FieldTitle>{title}</FieldTitle>}
         <FieldDescription>{about}</FieldDescription>
       </FieldContent>
-      <div className="flex flex-col gap-2">{children}</div>
+      <div className={cn("flex flex-col gap-2", end && "items-start md:items-end")}>{children}</div>
     </Field>
   )
 }
 
-export function SettingsPage({ state, models, onSaved, onModels }: { state: State; models: Partial<Record<Kind, Model[]>>; onSaved: () => void; onModels: () => void }) {
+export function SettingsPage({ state, models, engine, onSaved, onModels }: { state: State; models: Partial<Record<Kind, Model[]>>; engine: string; onSaved: () => void; onModels: () => void }) {
   const saved = state.settings
   const [plan, setPlan] = useState(saved.elevenlabs.plan)
   const [router, setRouter] = useState<Router>(saved.router.active)
   const [defaults, setDefaults] = useState(saved.defaults)
   const [limits, setLimits] = useState(() => typed(saved))
-  const [busy, setBusy] = useState(false)
+  const [developer, setDeveloper] = useState(saved.developer.on)
+  // what this page last sent, and the settings last read: read ones other than it changed elsewhere (Claude's setup),
+  // and the page takes them
+  const read = JSON.stringify(project(saved))
+  const [sent, setSent] = useState(read)
+  const [seen, setSeen] = useState(read)
+  if (read !== seen) {
+    setSeen(read)
+    if (read !== sent) {
+      setSent(read)
+      setPlan(saved.elevenlabs.plan)
+      setRouter(saved.router.active)
+      setDefaults(saved.defaults)
+      setLimits(typed(saved))
+      setDeveloper(saved.developer.on)
+    }
+  }
   const [at, setAt] = useState("spending")
   // the active router's catalog read on a click: its loader, then the models it found that time (null before any click)
   const [checking, setChecking] = useState(false)
@@ -92,9 +141,25 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
   // the newest first: the ones just found, then by the day each first showed
   const added = KINDS.flatMap((k) => (models[k] ?? []).filter((m) => m.new)).sort((a, b) => +!!found?.includes(b.id) - +!!found?.includes(a.id) || (b.since ?? "").localeCompare(a.since ?? ""))
   const loaded = KINDS.every((k) => models[k])
-  // the models may have read the catalog (once a day): its date then comes with the state read again
+  // both routers' catalog additions, for Development's prompt: read while developer mode shows it
+  const [catalogs, setCatalogs] = useState<Record<Router, Model[]> | null>(null)
   useEffect(() => {
-    if (loaded) onSaved()
+    if (!developer) return
+    let live = true
+    Promise.all(ROUTERS.map((r) => Promise.all(KINDS.map((k) => api.models(k, r.id))).then((l) => [r.id, l.flat().filter((m) => m.new)] as const)))
+      .then((pairs) => live && setCatalogs(Object.fromEntries(pairs) as Record<Router, Model[]>), (e) => toast.error(plain((e as Error).message)))
+    return () => { live = false }
+  }, [developer])
+  // the models may have read the catalog (once a day): its date then comes with the state read again. Back from the
+  // reload developer mode makes, the page shows its section again, once the lists above it have their height
+  useEffect(() => {
+    if (!loaded) return
+    onSaved()
+    try {
+      const id = sessionStorage.getItem(BACK)
+      sessionStorage.removeItem(BACK)
+      if (id) setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }))
+    } catch { /* stays at the top */ }
   }, [loaded, onSaved])
 
   async function updateModels() {
@@ -113,43 +178,50 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
     }
   }
 
-  const next: Omit<Settings, "workspace"> = {
+  const json = JSON.stringify(project({
     router: { active: router },
     openrouter: { threshold: amount(limits["openrouter.threshold"]), cap: amount(limits["openrouter.cap"]) },
     kie: { threshold: amount(limits["kie.threshold"]), cap: amount(limits["kie.cap"]) },
     elevenlabs: { threshold: amount(limits["elevenlabs.threshold"]), cap: amount(limits["elevenlabs.cap"]), plan },
     defaults,
-  }
-  const dirty = JSON.stringify(next) !== JSON.stringify({ router: { active: saved.router.active }, openrouter: { threshold: saved.openrouter.threshold, cap: saved.openrouter.cap }, kie: { threshold: saved.kie.threshold, cap: saved.kie.cap }, elevenlabs: { threshold: saved.elevenlabs.threshold, cap: saved.elevenlabs.cap, plan: saved.elevenlabs.plan }, defaults: saved.defaults })
+    developer: { on: developer },
+  }))
   const invalid = LIMITS.some((k) => wrong(limits[k]))
 
-  async function save() {
-    if (!dirty || invalid || busy) return
-    setBusy(true)
+  // each change saved by itself, half a second after the last one; an amount turned on but not typed waits
+  const pending = useRef<string | null>(null)
+  const save = useEffectEvent(async (body: string) => {
+    pending.current = null
+    const was = JSON.parse(sent).router.active, now = JSON.parse(body).router.active
+    setSent(body)
     try {
-      await api.settings(next)
+      await api.settings(JSON.parse(body))
+      // developer mode on a server started on fakes: the APIs changed with it, the page reads them again (as the
+      // header's switch does)
+      if (state.fake?.bases?.length && JSON.parse(body).developer.on !== JSON.parse(sent).developer.on) {
+        try { sessionStorage.setItem(BACK, "dev") } catch { /* the page opens at its top */ }
+        return window.location.reload()
+      }
       // another router: its models in every list
-      if (router !== saved.router.active) {
-        toast.success(`${ROUTER_NAME[router]} is now the router: the tools show its models`)
+      if (now !== was) {
+        toast.success(`${ROUTER_NAME[now as Router]} is now the router: the tools show its models`, { id: "settings" })
         onModels()
-      } else toast.success("Settings saved")
+      } else toast.success("Settings saved", { id: "settings" })
       onSaved()
     } catch (e) {
-      toast.error(plain((e as Error).message))
-    } finally {
-      setBusy(false)
+      toast.error(`Not saved: ${plain((e as Error).message)}`, { id: "settings" })
     }
-  }
-  // ⌘S saves
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      if (e.key !== "s" || !(e.metaKey || e.ctrlKey)) return
-      e.preventDefault()
-      save()
-    }
-    window.addEventListener("keydown", on)
-    return () => window.removeEventListener("keydown", on)
   })
+  useEffect(() => {
+    if (invalid || json === sent) return
+    pending.current = json
+    const t = setTimeout(() => save(json), 500)
+    return () => clearTimeout(t)
+  }, [json, invalid, sent])
+  // leaving the page: a change still waiting is saved all the same
+  useEffect(() => () => {
+    if (pending.current) save(pending.current)
+  }, [])
 
   const put = (k: string, patch: Partial<Limit>) => setLimits((l) => ({ ...l, [k]: { ...l[k], ...patch } }))
   // the spending of the router picked here and ElevenLabs'
@@ -162,12 +234,15 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
     { set: state.keys.management, name: "OpenRouter management key", about: "Optional: the account's whole balance in the header, not only this key's." },
     { set: state.keys.elevenlabs, name: "ElevenLabs key", about: "Voice straight from ElevenLabs (Eleven v4…), Change voice and Translate, and the credits left. Without it, the router's ElevenLabs voices." },
   ]
+  // developer mode: on a server started on fake APIs, it brings the header's Fake API switch (turned on with it)
+  const fakes = !!state.fake?.bases?.length
   const nav = [
     { id: "spending", icon: WalletIcon, title: "Spending", status: noLimits ? "No limit set" : "Limits set", warn: noLimits },
     { id: "plan", icon: WalletIcon, title: "ElevenLabs plan", status: plan ? cap(plan) : "Not set", warn: false },
     { id: "models", icon: LayersIcon, title: "Default models", status: KINDS.some((k) => defaults[k]) ? `${KINDS.filter((k) => defaults[k]).length} of 3 set` : "The tools' choice", warn: false },
     { id: "keys", icon: KeyRoundIcon, title: "API keys", status: `${keys.filter((k) => k.set).length} of ${keys.length} set`, warn: !state.keys[saved.router.active] },
     { id: "router", icon: RouterIcon, title: "Router", status: `${name} active${state.catalog.at ? ` · list ${ago(state.catalog.at)}` : ""}`, warn: !state.keys[router] },
+    { id: "dev", icon: CodeIcon, title: "Development", status: !developer ? "Off" : fakes ? `On · ${state.fake.on ? "fake APIs" : "real APIs"}` : "On", warn: false },
   ]
 
   return (
@@ -261,11 +336,11 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
           </Section>
 
           <Section id="plan" icon={WalletIcon} title="ElevenLabs plan" about="Your plan prices ElevenLabs' credits in USD, everywhere a cost shows.">
-            <Row title="Plan" about="USD per 1,000 credits. Not set: costs show in credits only.">
+            <Row title="Plan" about="Not set: costs show in credits only.">
               <Chips
                 options={["none", ...Object.keys(state.plans)]}
                 value={plan ?? "none"}
-                label={(p) => (p === "none" ? "Not set" : `${cap(p)}${state.plans[p] ? ` · $${state.plans[p]}` : ""}`)}
+                label={(p) => (p === "none" ? "Not set" : cap(p))}
                 onChange={(p) => setPlan(p === "none" ? null : p)}
               />
             </Row>
@@ -289,7 +364,7 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
 
           <Section id="keys" icon={KeyRoundIcon} title="API keys" about="They stay in Claude Code, never in this folder.">
             {keys.map((k) => (
-              <Row key={k.name} title={k.name} about={k.about}>
+              <Row key={k.name} title={k.name} about={k.about} end>
                 <Badge variant={k.set ? "secondary" : "outline"} className={cn("h-6 px-2.5", k.set && "bg-done/15 text-done")}>
                   {k.set ? "Set" : "Not set"}
                 </Badge>
@@ -327,17 +402,15 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
                   </FieldLabel>
                 ))}
               </RadioGroup>
-              {router !== saved.router.active && (
-                <p className="mt-3 text-xs text-muted-foreground">Save to switch to {ROUTER_NAME[router]}{!state.keys[router] && ": without its key, prices show and nothing can be generated"}.</p>
-              )}
             </div>
             <Row
               title={`${name}'s model list`}
+              end
               about={saved.router.active === "kie"
                 ? "The list kept with media-generator, plus the models Kie adds (read from its docs), and its prices from its price list: read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."
                 : "The list kept with media-generator, plus the models OpenRouter adds to its catalog, read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."}
             >
-              <Button variant="outline" disabled={checking} onClick={updateModels} className="self-start" aria-busy={checking || undefined}>
+              <Button variant="outline" disabled={checking} onClick={updateModels} aria-busy={checking || undefined}>
                 {checking ? <LoaderCircleIcon className="animate-spin" aria-hidden /> : <RefreshCwIcon aria-hidden />}
                 {checking ? "Updating the list…" : "Update the list"}
               </Button>
@@ -384,27 +457,35 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
               )}
             </div>
           </Section>
-        </div>
 
-        {dirty && (
-          <div className="sticky bottom-0 mt-auto flex max-w-4xl items-center gap-3 rounded-xl border bg-popover/95 p-3 pl-4 shadow-lg backdrop-blur animate-in fade-in-0 slide-in-from-bottom-2">
-            <span className="flex-1 text-sm">{invalid ? <span className="text-muted-foreground">Enter the amounts turned on to save.</span> : "Unsaved changes"}</span>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setPlan(saved.elevenlabs.plan)
-                setRouter(saved.router.active)
-                setDefaults(saved.defaults)
-                setLimits(typed(saved))
-              }}
+          <Section id="dev" icon={CodeIcon} title="Development" about="For working on media-generator itself.">
+            <Row
+              title="Developer mode"
+              about={fakes
+                ? "Shows the tools below, and the header's Fake API switch, turned on with it: nothing is spent until you switch it off. Off, the real APIs, switch hidden."
+                : "Shows the tools below. This server was started without fake APIs: everything runs on the real ones."}
+              htmlFor="developer"
+              end
             >
-              Discard
-            </Button>
-            <Button disabled={invalid || busy} onClick={save}>
-              Save <Kbd className="bg-primary-foreground/15 text-primary-foreground/80">⌘S</Kbd>
-            </Button>
-          </div>
-        )}
+              <Switch id="developer" checked={developer} onCheckedChange={setDeveloper} />
+            </Row>
+            {developer && (
+              <Row
+                title="Check and wire every model"
+                end
+                about="Copies a prompt to paste in Claude Code: Claude reads the docs of every model of both routers, Kie.ai and OpenRouter (the ones their catalogs add first), checks what each one takes (reference images, omni references, video edits, avatars, shots, keyframes, elements, voices…), wires what is missing into each router's model list and the tools that fit, then runs the tests and rebuilds this dashboard. Nothing is generated, nothing is spent."
+              >
+                <Button
+                  variant="outline"
+                  disabled={!catalogs}
+                  onClick={() => navigator.clipboard.writeText(wirePrompt(catalogs!, engine)).then(() => toast.success("Prompt copied: paste it in Claude Code"))}
+                >
+                  {catalogs ? <CopyIcon aria-hidden /> : <LoaderCircleIcon className="animate-spin" aria-hidden />} Copy prompt
+                </Button>
+              </Row>
+            )}
+          </Section>
+        </div>
       </Main>
     </>
   )

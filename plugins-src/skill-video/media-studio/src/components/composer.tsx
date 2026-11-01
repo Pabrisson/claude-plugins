@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ChevronRightIcon, CopyIcon, ListVideoIcon, LoaderCircleIcon, MinusIcon, PlusIcon, RefreshCwIcon, SparklesIcon, XIcon } from "lucide-react"
+import { ChevronRightIcon, CopyIcon, EllipsisVerticalIcon, EraserIcon, ListVideoIcon, LoaderCircleIcon, MinusIcon, PlusIcon, RefreshCwIcon, SparklesIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -12,6 +12,7 @@ import { InputGroup, InputGroupAddon, InputGroupTextarea } from "@/components/ui
 import { Kbd } from "@/components/ui/kbd"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Slider } from "@/components/ui/slider"
 import {
   api,
@@ -408,6 +409,12 @@ export function Composer({
   }
 
   // Copy prompt: Claude writes the prompt that suits this model into the composer; nothing is generated
+  // the composer emptied, the tool, its model and the count kept; undone from the toast
+  function clear() {
+    const before = value
+    onChange({ ...blank(kind, tool.id), model: value.model, batch: value.batch })
+    toast("Composer cleared", { action: { label: "Undo", onClick: () => onChange(before) } })
+  }
   function copyPrompt() {
     const files = Object.entries(value.inputs).filter(([, f]) => f.length).map(([k, f]) => `${k}: ${f.join(", ")}`)
     const fields = tool.fields.map((f) => `${f.key} = ${value.fields[f.key] ?? f.default ?? ""}`)
@@ -867,23 +874,33 @@ export function Composer({
 
       <div className="border-t p-3">
         <div className="flex gap-2">
+          {/* the prompt for Claude and the composer cleared, in one menu where the copy button was */}
           {!eleven && !local && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="icon-lg" className="size-11" onClick={copyPrompt} aria-label="Copy prompt">
-                  <CopyIcon />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon-lg" className="size-11" aria-label="Prompt and composer">
+                  <EllipsisVerticalIcon />
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top" align="start" className="max-w-72 p-3 text-left">
-                <div className="flex flex-col gap-1">
-                  <p className="font-semibold">Copy prompt</p>
-                  <p className="opacity-90">
-                    Copies a request for Claude with this tool, {model ? model.name : "the model"} and your inputs. Paste it in Claude Code: Claude writes the prompt this model handles best, here in the composer.
-                  </p>
-                  <p className="font-medium">Nothing is generated, nothing is spent.</p>
-                </div>
-              </TooltipContent>
-            </Tooltip>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-72">
+                <DropdownMenuItem onSelect={copyPrompt} className="items-start">
+                  <CopyIcon className="mt-0.5" />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="font-medium">Copy prompt</span>
+                    <span className="text-xs text-muted-foreground">
+                      A request for Claude with this tool, {model ? model.name : "the model"} and your inputs: paste it in Claude Code, Claude writes the prompt this model handles best here. Nothing is generated, nothing is spent.
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={clear} className="items-start">
+                  <EraserIcon className="mt-0.5" />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="font-medium">Clear</span>
+                    <span className="text-xs text-muted-foreground">Empties the words, files and settings; keeps the tool and the model.</span>
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {!eleven && !local && !sheets && <Batch value={value.batch ?? 1} onChange={(batch) => set({ batch })} />}
           {/* the whole name on hover, the button cut short beside its price (a disabled one hovers through its span) */}

@@ -9,7 +9,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api, coverPaths, fileUrl, inWorkspace, mediaKind, outputPath, plain, when, type Input, type Job, type Tool, type Workspace } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
-import { factsOf, NO_FILTERS, passes, RATIO_CHIPS, RES_CHIPS, sorted, SORTS, type Filters, type Sort } from "@/lib/filters"
+import { activeFilters, factsOf, formatOf, NO_FILTERS, passes, RATIO_CHIPS, RES_CHIPS, SOUND_NAMES, SOUND_TYPES, soundOf, sorted, SORTS, type Filters, type Sort } from "@/lib/filters"
 import { SketchDialog } from "@/components/sketch"
 import { MaskDialog } from "@/components/mask"
 import { CutDialog } from "@/components/cut"
@@ -380,10 +380,16 @@ export function SortSelect({ value, onChange }: { value: Sort; onChange: (s: Sor
   )
 }
 const SMALL = "[&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs"
-// the filter chips of a list: a medium when it holds several, a format and a quality for pictures, the favorites
-// when there are some
+// the filter chips of a list: a medium when it holds several, then only that medium's (a picture's format and quality,
+// a sound's type and file format; none under All), the favorites when there are some. Another medium starts its
+// filters afresh
 export function FilterChips({ value, onChange, items, kinds = true }: { value: Filters; onChange: (f: Filters) => void; items: { path: string; job: Job }[]; kinds?: boolean }) {
   const media = new Set(items.map((i) => mediaKind(i.path)))
+  // the medium whose filters show: the one picked, or the list's only one
+  const kind = value.kind !== "all" ? value.kind : media.size === 1 ? [...media][0] : "all"
+  const sounds = kind === "audio" ? items.filter((i) => mediaKind(i.path) === "audio") : []
+  const types = SOUND_TYPES.filter((t) => sounds.some((i) => soundOf(i.job.tool) === t))
+  const formats = [...new Set(sounds.map((i) => formatOf(i.path)))].sort()
   const row = (label: string, chips: React.ReactNode) => (
     <div className="flex items-baseline gap-2">
       <span className="w-20 shrink-0 text-[11px] font-semibold tracking-wider text-foreground/70 uppercase">{label}</span>
@@ -392,18 +398,19 @@ export function FilterChips({ value, onChange, items, kinds = true }: { value: F
   )
   return (
     <div className="flex flex-col gap-1.5">
-      {kinds && media.size > 1 && row("Media", <Chips options={["all", "video", "image", "audio"] as const} value={value.kind} label={(k) => (k === "all" ? "All" : k[0].toUpperCase() + k.slice(1))} onChange={(kind) => onChange({ ...value, kind })} className={SMALL} />)}
-      {value.kind !== "audio" && (media.has("image") || media.has("video")) && (
+      {kinds && media.size > 1 && row("Media", <Chips options={["all", "video", "image", "audio"] as const} value={value.kind} label={(k) => (k === "all" ? "All" : k[0].toUpperCase() + k.slice(1))} onChange={(kind) => onChange({ ...NO_FILTERS, kind, favorites: value.favorites })} className={SMALL} />)}
+      {(kind === "video" || kind === "image") && (
         <>
           {row("Ratio", <Chips options={RATIO_CHIPS} value={value.ratio} label={(r) => (r === "all" ? "All" : r === "other" ? "Other" : r)} onChange={(ratio) => onChange({ ...value, ratio })} className={SMALL} />)}
           {row("Resolution", <Chips options={RES_CHIPS} value={value.res} label={(r) => (r === "all" ? "All" : r)} onChange={(res) => onChange({ ...value, res })} className={SMALL} />)}
         </>
       )}
+      {types.length > 0 && row("Type", <Chips options={["all", ...types]} value={value.type} label={(t) => (t === "all" ? "All" : SOUND_NAMES[t])} onChange={(type) => onChange({ ...value, type })} className={SMALL} />)}
+      {formats.length > 0 && row("Format", <Chips options={["all", ...formats]} value={value.format} label={(f) => (f === "all" ? "All" : f.toUpperCase())} onChange={(format) => onChange({ ...value, format })} className={SMALL} />)}
       {items.some((i) => i.job.favorite) && row("Show", <Chips options={["all", "favorites"] as const} value={value.favorites ? "favorites" : "all"} label={(o) => (o === "all" ? "All" : "Favorites")} onChange={(o) => onChange({ ...value, favorites: o === "favorites" })} className={SMALL} />)}
     </div>
   )
 }
-const activeFilters = (f: Filters) => [f.kind !== "all", f.ratio !== "all", f.res !== "all", f.favorites].filter(Boolean).length
 
 // the results in a picker: the current workspace's first (another one or the whole Library a select away), a search
 // on their words, filters folded behind a button, a sort kept in this browser, the list by medium

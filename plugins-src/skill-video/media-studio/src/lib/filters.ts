@@ -13,12 +13,22 @@ export const resOf = (w: number, h: number) => {
   const s = Math.min(w, h)
   return s <= 480 ? "≤480p" : s <= 720 ? "720p" : s <= 1080 ? "1080p" : s <= 1440 ? "2K" : "4K"
 }
-// the filters a list of results takes: a medium, a format, a quality, the favorites
-export type Filters = { kind: "all" | "image" | "video" | "audio"; ratio: string; res: string; favorites: boolean }
-export const NO_FILTERS: Filters = { kind: "all", ratio: "all", res: "all", favorites: false }
+// a sound's type, by the tool that made it (tools/audio.json's groups): a voice, a sound effect, an imported file, else
+// music (Suno's too); and a file's format, by its extension
+const VOICE_TOOLS = ["voice", "change-voice", "translate", "create-singer", "isolate-voice"]
+export const SOUND_TYPES = ["voice", "music", "sound", "import"] as const
+export const SOUND_NAMES: Record<string, string> = { voice: "Voice", music: "Music", sound: "Sound effect", import: "Imported" }
+export const soundOf = (tool: string) => (tool === "sound-effect" ? "sound" : tool === "import" ? "import" : VOICE_TOOLS.includes(tool) ? "voice" : "music")
+export const formatOf = (path: string) => path.split(".").pop()!.toLowerCase()
+// the filters a list of results takes: a medium, then its own (a picture's format and quality, a sound's type and file
+// format), the favorites
+export type Filters = { kind: "all" | "image" | "video" | "audio"; ratio: string; res: string; type: string; format: string; favorites: boolean }
+export const NO_FILTERS: Filters = { kind: "all", ratio: "all", res: "all", type: "all", format: "all", favorites: false }
+export const activeFilters = (f: Filters) => [f.kind !== "all", f.ratio !== "all", f.res !== "all", f.type !== "all", f.format !== "all", f.favorites].filter(Boolean).length
 export function passes(i: { path: string; job: Job }, f: Filters) {
   const { w, h } = factsOf(i)
   return (f.kind === "all" || mediaKind(i.path) === f.kind) && (!f.favorites || !!i.job.favorite) && (f.ratio === "all" || (!!w && !!h && ratioOf(w, h) === f.ratio)) && (f.res === "all" || (!!w && !!h && resOf(w, h) === f.res))
+    && (f.type === "all" || (mediaKind(i.path) === "audio" && soundOf(i.job.tool) === f.type)) && (f.format === "all" || formatOf(i.path) === f.format)
 }
 
 // the orders a list of results takes, within each medium; kept in this browser

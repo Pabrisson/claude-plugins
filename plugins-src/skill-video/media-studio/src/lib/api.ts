@@ -234,6 +234,8 @@ export type Settings = {
   kie: Limits
   elevenlabs: Limits & { plan: string | null }
   defaults: Record<Kind, string | null>
+  // the dashboard's developer mode: Settings › Development, and the header's Fake API switch on a server started on fakes
+  developer: { on: boolean }
   workspace: { current: string }
 }
 export type Draft = {
@@ -375,7 +377,7 @@ export const api = {
   state: () => call<State>("/api/state"),
   engine: () => call<{ engine: string }>("/__media-generator"),
   tools: () => call<Record<Kind, Tool[]>>("/api/tools"),
-  models: (kind: Kind) => call<Model[]>(`/api/models?kind=${kind}`),
+  models: (kind: Kind, router?: Router) => call<Model[]>(`/api/models?kind=${kind}${router ? `&router=${router}` : ""}`),
   // OpenRouter's catalog read now: the models it adds by router kind, found: new since the last read
   refreshModels: () => post<{ at: string; added: Record<"image" | "video" | "speech", { id: string; name: string; found: boolean }[]>; unwired?: string[]; prices?: number }>("/api/models/refresh", {}),
   balances: (refresh = false) =>

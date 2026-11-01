@@ -1,9 +1,9 @@
 // node src/lib/filters.check.ts: the pickers' filters and sorts
 import assert from "node:assert/strict"
 import type { Job } from "./api.ts"
-import { NO_FILTERS, passes, ratioOf, resOf, sorted } from "./filters.ts"
+import { activeFilters, NO_FILTERS, passes, ratioOf, resOf, sorted } from "./filters.ts"
 
-const item = (id: string, file: string, meta: { w?: number; h?: number; dur?: number }, favorite = false) => ({ path: `/m/${id}/${file}`, job: { id, label: id, favorite, meta: { [file]: meta } } as unknown as Job })
+const item = (id: string, file: string, meta: { w?: number; h?: number; dur?: number }, favorite = false, tool = "free") => ({ path: `/m/${id}/${file}`, job: { id, label: id, tool, favorite, meta: { [file]: meta } } as unknown as Job })
 // newest first, as the engine lists them
 const list = [item("d", "a.mp4", { w: 1920, h: 1080, dur: 4 }), item("c", "b.png", { w: 1024, h: 1024 }, true), item("b", "c.mp4", { w: 720, h: 1280, dur: 9 }), item("a", "v.mp3", { dur: 2 })]
 const ids = (l: typeof list) => l.map((i) => i.job.id).join("")
@@ -14,6 +14,14 @@ assert.equal(ids(list.filter((i) => passes(i, { ...NO_FILTERS, kind: "video" }))
 assert.equal(ids(list.filter((i) => passes(i, { ...NO_FILTERS, ratio: "16:9" }))), "d")
 assert.equal(ids(list.filter((i) => passes(i, { ...NO_FILTERS, res: "720p" }))), "b")
 assert.equal(ids(list.filter((i) => passes(i, { ...NO_FILTERS, favorites: true }))), "c")
+// a sound's type by its tool and its file's format; a picture is no sound of any type
+const sounds = [item("s1", "a.mp3", {}, false, "voice"), item("s2", "b.wav", {}, false, "wav"), item("s3", "c.mp3", {}, false, "sound-effect"), item("s4", "d.mp3", {}, false, "import"), list[0]]
+assert.equal(ids(sounds.filter((i) => passes(i, { ...NO_FILTERS, type: "voice" }))), "s1")
+assert.equal(ids(sounds.filter((i) => passes(i, { ...NO_FILTERS, type: "music" }))), "s2")
+assert.equal(ids(sounds.filter((i) => passes(i, { ...NO_FILTERS, type: "sound" }))), "s3")
+assert.equal(ids(sounds.filter((i) => passes(i, { ...NO_FILTERS, type: "import" }))), "s4")
+assert.equal(ids(sounds.filter((i) => passes(i, { ...NO_FILTERS, format: "mp3" }))), "s1s3s4")
+assert.equal(activeFilters({ ...NO_FILTERS, kind: "audio", format: "wav" }), 2)
 // sorts: within what is shown; a file without the length or size sorted on goes last
 assert.equal(ids(sorted(list, "newest")), "dcba")
 assert.equal(ids(sorted(list, "oldest")), "abcd")

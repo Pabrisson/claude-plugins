@@ -437,7 +437,7 @@ function Dashboard() {
       ) : page === "credits" ? (
         <Credits state={state} balances={balances} onBridge={bridge} />
       ) : (
-        <SettingsPage key={JSON.stringify(state.settings)} state={state} models={models} onSaved={refresh} onModels={() => (setModels({}), api.tools().then(setTools, () => {}), refresh())} />
+        <SettingsPage state={state} models={models} engine={engine} onSaved={refresh} onModels={() => (setModels({}), api.tools().then(setTools, () => {}), refresh())} />
       )}
       <DropToLibrary onAdded={refresh} />
     </div>
@@ -540,7 +540,8 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
       <span className="text-muted-foreground/50" aria-hidden>/</span>
       <WorkspaceMenu state={state} onChanged={onChanged} />
       <span className="flex-1" />
-      {/* the active router's balance, in dollars */}
+      {/* the balances, hidden on the fake APIs (their amounts are made up); the active router's in dollars */}
+      {!state.fake?.on && <>
       <Balance name={ROUTER_NAME[state.router]}>
         {!state.keys[state.router] ? <span className="text-muted-foreground">no key</span>
           : state.router === "kie"
@@ -562,8 +563,9 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
           : per1000(state) ? <><b className="font-semibold tabular-nums">${(((eb.left ?? 0) * per1000(state)!) / 1000).toFixed(2)}</b><small className="text-muted-foreground">left</small></>
           : <><b className="font-semibold tabular-nums">{(eb.left ?? 0).toLocaleString("en-US")}</b><small className="text-muted-foreground">credits left</small></>}
       </Balance>
-      {state.fake?.bases?.length ? (
-        // a dev or test server: the fake APIs it was started on, on or off; the page reloads on the other side
+      </>}
+      {(state.settings.developer?.on || state.fake?.on) && state.fake?.bases?.length ? (
+        // developer mode on a server started on fake APIs: the fakes on or off; the page reloads on the other side
         <span className="flex items-center gap-2">
           {state.fake.on && (
             <span className="rounded-md border border-cost/60 px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap text-cost" title={`Nothing is spent: the APIs are fakes at ${state.fake.bases.join(" and ")}`}>
