@@ -1,5 +1,5 @@
 import { useId, useRef } from "react"
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, PlusIcon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CircleDashedIcon, CircleDotIcon, CloudIcon, LayoutTemplateIcon, LightbulbIcon, PlusIcon, SlidersHorizontalIcon, SunIcon, XIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Slider } from "@/components/ui/slider"
@@ -13,12 +13,12 @@ type Mode = "preset" | "custom"
 type Rig = { mode: Mode; lights: Light[]; active: number }
 
 const QUICK = [
-  { label: "Top", az: 0, el: 80 },
-  { label: "Front", az: 0, el: 0 },
-  { label: "Right", az: 90, el: 0 },
-  { label: "Left", az: -90, el: 0 },
-  { label: "Back", az: 180, el: 0 },
-  { label: "Bottom", az: 0, el: -80 },
+  { label: "Top", az: 0, el: 80, icon: ArrowUpIcon },
+  { label: "Front", az: 0, el: 0, icon: CircleDotIcon },
+  { label: "Right", az: 90, el: 0, icon: ArrowRightIcon },
+  { label: "Left", az: -90, el: 0, icon: ArrowLeftIcon },
+  { label: "Back", az: 180, el: 0, icon: CircleDashedIcon },
+  { label: "Bottom", az: 0, el: -80, icon: ArrowDownIcon },
 ]
 const SWATCHES = [
   { color: "#ff9329", label: "Candle" },
@@ -188,6 +188,7 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
           options={["preset", "custom"] as const}
           value={rig.mode}
           label={(m) => (m === "preset" ? "Preset" : "Custom")}
+          icon={(m) => (m === "preset" ? <LayoutTemplateIcon /> : <SlidersHorizontalIcon />)}
           onChange={(mode) => save({ ...rig, mode }, mode === "preset" ? (presets.find((p) => p.value === value)?.value ?? presets[0].value) : undefined)}
         />
       )}
@@ -216,7 +217,8 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
             <Label>Quick select</Label>
             <div className="grid grid-cols-3 gap-1.5">
               {QUICK.map((q) => (
-                <button key={q.label} type="button" aria-pressed={light.az === q.az && light.el === q.el} onClick={() => put({ az: q.az, el: q.el })} className={cn(CHIP, "rounded-md", light.az === q.az && light.el === q.el ? CHIP_ON : CHIP_OFF)}>
+                <button key={q.label} type="button" aria-pressed={light.az === q.az && light.el === q.el} onClick={() => put({ az: q.az, el: q.el })} className={cn(CHIP, "inline-flex items-center justify-center gap-1.5 rounded-md", light.az === q.az && light.el === q.el ? CHIP_ON : CHIP_OFF)}>
+                  <q.icon className="size-3.5 shrink-0" />
                   {q.label}
                 </button>
               ))}
@@ -263,7 +265,8 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
             <div className="flex flex-wrap items-center gap-1.5">
               {rig.lights.map((_, i) => (
                 <span key={i} className={cn(CHIP, "flex items-center gap-1 py-0.5 pr-1", i === rig.active ? CHIP_ON : CHIP_OFF)}>
-                  <button type="button" aria-pressed={i === rig.active} onClick={() => save({ ...rig, active: i })} className="px-1">
+                  <button type="button" aria-pressed={i === rig.active} onClick={() => save({ ...rig, active: i })} className="inline-flex items-center gap-1.5 px-1">
+                    <LightbulbIcon className="size-3.5" />
                     Light {i + 1}
                   </button>
                   {i > 0 && (
@@ -286,7 +289,7 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
           ) : (
             <div>
               <Label>Light</Label>
-              <Chips className="grid grid-cols-2" options={["soft", "hard"] as const} value={light.diffuse >= 50 ? "soft" : "hard"} label={(s) => (s === "soft" ? "Soft" : "Hard")} onChange={(s) => put({ diffuse: s === "soft" ? 75 : 20 })} />
+              <Chips className="grid grid-cols-2" options={["soft", "hard"] as const} value={light.diffuse >= 50 ? "soft" : "hard"} label={(s) => (s === "soft" ? "Soft" : "Hard")} icon={(s) => (s === "soft" ? <CloudIcon /> : <SunIcon />)} onChange={(s) => put({ diffuse: s === "soft" ? 75 : 20 })} />
             </div>
           )}
           <Level label="Brightness" value={light.brightness} onChange={(brightness) => put({ brightness })} />

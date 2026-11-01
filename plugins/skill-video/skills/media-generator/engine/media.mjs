@@ -36,7 +36,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     n: { type: 'string' }, batch: { type: 'string' }, duration: { type: 'string' }, ratio: { type: 'string' }, resolution: { type: 'string' },
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' }, option: { type: 'string', multiple: true }, line: { type: 'string', multiple: true }, shot: { type: 'string', multiple: true }, say: { type: 'string', multiple: true }, 'from-draft': { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
-    search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' },
+    search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' }, for: { type: 'string' },
     type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, language: { type: 'string' }, verify: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' },
   },
 })
@@ -248,6 +248,7 @@ function prepared(tool, spec, keyframe = false) {
   const fields = { ...Object.fromEntries(tool.fields.filter(f => f.default !== undefined).map(f => [f.key, String(f.default)])), ...spec.fields }, looks = []
   for (const f of tool.fields) {
     const s = f.type === 'style' && savedStyle(fields[f.key])
+    if (s && (s.for ?? null) !== (f.for ?? null)) throw userError(`${s.name} is a ${s.for ?? 'visual'} style: ${f.label} takes a ${f.for ?? 'visual'} style (media.mjs styles)`)
     if (s) keyframe ? (fields[f.key] = s.words || s.name) : (looks.push(...s.files), (fields[f.key] = s.text))
     else if (f.type === 'element' && String(fields[f.key] ?? '').trim()) fields[f.key] = elementFields(f, fields[f.key])
     else if (fields[f.key] != null) fields[f.key] = optionValue(f, fields[f.key])
@@ -423,16 +424,19 @@ function elementFields(f, v) {
 }
 
 // a style of the Library (styles/<name>/): its images go last among the references, and the prompt cites them by
-// their place with the words on its look. A name, never a preset's value (those are sentences)
+// their place with the words on its look. A name, never a preset's value (those are sentences). A sound style (for
+// music, a voice or a sound) is its words alone, sent as they are
+const SOUND_STYLES = ['music', 'voice', 'sound']
 function savedStyle(name) {
   const d = at('styles', String(name ?? ''))
   if (!NAME.test(name ?? '') || !fs.existsSync(d)) return null
+  const { words = '', for: family } = fs.existsSync(path.join(d, 'style.json')) ? readJson(path.join(d, 'style.json')) : {}
+  if (SOUND_STYLES.includes(family)) return { name, for: family, files: [], words, text: words }
   const files = fs.readdirSync(d).filter(f => kindOfFile(f) === 'image').sort().map(f => path.join(d, f))
-  const words = fs.existsSync(path.join(d, 'style.json')) ? readJson(path.join(d, 'style.json')).words ?? '' : ''
   const [its, img] = files.length === 1 ? ['its', 'reference image'] : ['their', `${files.length} reference images`]
   return { name, files, words, text: `the last ${img}: ${its} medium, palette, line work, texture and light, never ${its} subject or content${words ? ` (${words})` : ''}` }
 }
-const savedStyles = () => (fs.existsSync(at('styles')) ? fs.readdirSync(at('styles')).sort().map(savedStyle).filter(s => s?.files.length) : [])
+const savedStyles = () => (fs.existsSync(at('styles')) ? fs.readdirSync(at('styles')).sort().map(savedStyle).filter(s => s?.files.length || s?.for) : [])
 
 // ---------- workspaces: a project's media and Elements, and its timeline ----------
 
@@ -845,22 +849,24 @@ function audioRequest(tool, spec, m, options) {
   const length = num(f.length) || undefined
   if (length && (length < 10 || length > 360)) throw userError('a length is 10 to 360 s (0: its own)')
   if (action === 'music') {
+    // Describe: the description, then the style picked (Write sends the style as Suno's own)
+    const described = () => [words('description'), words('style') && `Style: ${words('style')}`].filter(Boolean).join('\n')
     const describe = (f.mode ?? 'describe') !== 'write', refs = files('references'), vids = files('ref_videos'), sounds = files('ref_audios')
     if (m.role !== 'music') throw userError(`${m.name} makes no music`)
     if (m.provider === 'openrouter') {
       // Lyria: one prompt (the words, or the title, style and lyrics written out), images beside
       if (vids.length || sounds.length) throw userError(`${m.name} takes images only beside its words: a video or a sound goes to Suno on Kie`)
-      const prompt = describe ? words('description') : [words('title') && `Title: ${words('title')}`, words('style') && `Style: ${words('style')}`, !sung ? 'Instrumental, no vocals.' : words('lyrics') && `Lyrics:\n${words('lyrics')}`].filter(Boolean).join('\n')
+      const prompt = describe ? described() : [words('title') && `Title: ${words('title')}`, words('style') && `Style: ${words('style')}`, !sung ? 'Instrumental, no vocals.' : words('lyrics') && `Lyrics:\n${words('lyrics')}`].filter(Boolean).join('\n')
       if (!prompt && !probing) throw userError(describe ? 'describe the song (--field description="…")' : 'give its style or its lyrics (--field style="…", --field lyrics="…")')
       return { send: { model: m.model, action, input: { prompt: prompt + (describe && !sung ? ' Instrumental, no vocals.' : '') }, files: { references: refs.map(dataUrl) }, options, seed: spec.params?.seed }, estimate: { action } }
     }
     if (describe) {
-      if (!probing && !words('description') && !refs.length && !vids.length && !sounds.length) throw userError('describe the song (--field description="…") or give it images, a video or a sound (--in references=…, ref_videos=…, ref_audios=…)')
-      if (words('description').length > 3000) throw userError(`a description is 3,000 characters at most, this one has ${words('description').length}`)
+      if (!probing && !described() && !refs.length && !vids.length && !sounds.length) throw userError('describe the song (--field description="…") or give it images, a video or a sound (--in references=…, ref_videos=…, ref_audios=…)')
+      if (described().length > 3000) throw userError(`a description and its style are 3,000 characters at most, these have ${described().length}`)
       if (refs.length > 5 || vids.length > 1 || sounds.length > 1) throw userError('Describe takes 5 images, 1 video and 1 sound at most')
       for (const s of sounds) { const d = probe(s).duration; if (d < 6) throw userError(`a sound for Suno lasts 6 s at least, ${path.basename(s)} is ${d.toFixed(1)} s`) }
       const opts = Object.fromEntries(Object.entries(options).filter(([k]) => !CUSTOM_ONLY.includes(k)))
-      return send({ custom_mode: false, instrumental: !sung, prompt: words('description') || undefined, ...(sung ? singerOf(f.singer) : {}) }, { image_urls: refs, video_urls: vids, audio_urls: sounds }, opts)
+      return send({ custom_mode: false, instrumental: !sung, prompt: described() || undefined, ...(sung ? singerOf(f.singer) : {}) }, { image_urls: refs, video_urls: vids, audio_urls: sounds }, opts)
     }
     if (!probing && !words('title')) throw userError('a song written has its title (--field title="…")')
     if (!probing && !words('style') && !(sung && words('lyrics')) && !options.negative_tags) throw userError('give its style or its lyrics (--field style="…", --field lyrics="…")')
@@ -878,7 +884,7 @@ function audioRequest(tool, spec, m, options) {
     return r
   }
   if (action === 'sounds') {
-    const prompt = String(spec.prompt ?? '').trim()
+    const said = String(spec.prompt ?? '').trim(), prompt = said && [said, words('style')].filter(Boolean).join(', ')
     if (!prompt && !probing) throw userError('say what it sounds like (--prompt "…")')
     if (prompt.length > 500) throw userError(`a sound is described in 500 characters at most, this has ${prompt.length}`)
     const { sound_tempo, ...rest } = options
@@ -2004,14 +2010,15 @@ async function elements(sub, name, ...files) {
   if (!list.length) console.log('no element yet: elements add <name> <images…> --type character')
 }
 
-// styles [add|set <name> [<images…>] [--words "…"] [--from <generation>] [--drop <file>] | show <name> | remove <name>]:
-// the Library's styles, their look taken from images
+// styles [add|set <name> [<images…>] [--words "…"] [--from <generation>] [--drop <file>] | add|set <name> --for
+// music|voice|sound --words "…" | show <name> | remove <name>]: the Library's styles, a look taken from images, or a
+// sound in words (for music, a voice or a sound effect)
 function styles(sub, name, ...files) {
   try {
     const all = [...files.map(f => path.resolve(f)), ...outputsOf(opt.from, 'image')]
     if (sub === 'add') {
-      if (!NAME.test(name ?? '') || !all.length) die('usage: styles add <name> <images…> [--words "the look in words"] [--from <generation>] (letters, digits, - and _)')
-      addStyle(name, all, opt.words)
+      if (!NAME.test(name ?? '') || (!all.length && !opt.for)) die('usage: styles add <name> <images…> [--words "the look in words"] [--from <generation>], or styles add <name> --for music|voice|sound --words "the sound in words" (letters, digits, - and _)')
+      addStyle(name, all, opt.words, [], opt.for)
     } else if (sub === 'set') {
       if (!savedStyle(name)) throw userError(`no style ${name}: styles add ${name} <images…>`)
       addStyle(name, all, opt.words, opt.drop)
@@ -2020,20 +2027,27 @@ function styles(sub, name, ...files) {
       if (!s) throw userError(`no style ${name}`)
       return console.log(JSON.stringify(s, null, 2))
     } else if (sub === 'remove') fs.rmSync(at('styles', name ?? '-'), { recursive: true, force: true })
-    else if (sub) die('usage: styles [add|set <name> [<images…>] [--words "…"] [--from <generation>] [--drop <file>] | show <name> | remove <name>]')
+    else if (sub) die('usage: styles [add|set <name> [<images…>] [--words "…"] [--from <generation>] [--drop <file>] | add <name> --for music|voice|sound --words "…" | show <name> | remove <name>]')
   } catch (e) { die(e.message) }
   const list = savedStyles()
-  for (const s of list) console.log(`${s.name}: ${plural(s.files.length, 'image')}${s.words ? ` · ${s.words}` : ''}`)
-  if (!list.length) console.log('no style yet: styles add <name> <images…> [--words "…"]')
+  for (const s of list) console.log(`${s.name}: ${s.for ? `${s.for} style` : plural(s.files.length, 'image')}${s.words ? ` · ${s.words}` : ''}`)
+  if (!list.length) console.log('no style yet: styles add <name> <images…> [--words "…"], or styles add <name> --for music|voice|sound --words "…"')
 }
-function addStyle(name, files, words, drop = []) {
+// family: a sound style's (music, voice, sound), kept once made; a visual style has none
+function addStyle(name, files, words, drop = [], family) {
+  const was = savedStyle(name), kind = family ?? was?.for
+  if (family && !SOUND_STYLES.includes(family)) throw userError(`a sound style is for ${SOUND_STYLES.join(', ')} (--for music)`)
+  if (was && family && was.for !== family) throw userError(`${name} is already a ${was.for ?? 'visual'} style: pick another name`)
+  if (kind && files.length) throw userError(`${name} is a ${kind} style: its words alone, no image`)
+  const text = (words ?? was?.words ?? '').trim()
+  if (kind && !text) throw userError(`a ${kind} style is its words: --words "…"`)
   ensureHome()
   const d = at('styles', name)
   fs.mkdirSync(d, { recursive: true })
   for (const f of files) copyIn(d, f)
   for (const f of drop) fs.rmSync(path.join(d, path.basename(f)), { force: true })
   // more images keep the words already written, unless new ones come
-  writeJson(path.join(d, 'style.json'), { words: (words ?? savedStyle(name)?.words ?? '').trim() })
+  writeJson(path.join(d, 'style.json'), { words: text, ...(kind ? { for: kind } : {}) })
 }
 
 // workspaces [list | new <name> | use <slug> | rename <slug> <name> | add <slug> <generations…> | drop <slug>
@@ -2337,13 +2351,13 @@ async function handle(req, res) {
     return reply(res, 200, elementList())
   }
   if (p === '/api/styles' && post) {
-    const { name, paths, words, drop, remove } = await readBody(req)
+    const { name, paths, words, drop, remove, for: family } = await readBody(req)
     if (!NAME.test(name ?? '')) return reply(res, 400, { error: 'a name of letters, digits, - and _' })
     if (remove) fs.rmSync(at('styles', name), { recursive: true, force: true })
     else {
       const files = (paths ?? []).filter(f => inside(HOME, f) && kindOfFile(f) === 'image')
-      if (!files.length && !savedStyle(name)) return reply(res, 400, { error: 'a style takes one image or more' })
-      addStyle(name, files, words, drop)
+      if (!files.length && !family && !savedStyle(name)) return reply(res, 400, { error: 'a style takes one image or more' })
+      try { addStyle(name, files, words, drop, family) } catch (e) { return reply(res, 400, { error: e.message }) }
     }
     return reply(res, 200, savedStyles())
   }

@@ -74,8 +74,12 @@ Fields (`type`):
   « Yours »). `"options": "styles"` takes the shared list of `tools/styles.json` (Restyle and Custom use it; a
   `default` may be one of its labels); without a `default` the field is optional (Custom: a × clears it). A style of
   the Library (`styles/<name>/`, its value is its name) stands for « the last reference image(s): their medium,
-  palette… (its words) » in the prompt, and its images go last among the references.
-- An option is a value, or `{ "value", "label", "group", "note" }` (a style adds `swatch`: 3 or 4 colors for its
+  palette… (its words) » in the prompt, and its images go last among the references. A sound style: `"for":
+  "music"|"voice"|"sound"` with `"options": "music-styles"`, `"voice-styles"` or `"sound-styles"` (the gallery's sound
+  cards, the user's sound styles of that family); its value is the words sent (an action's request reads them like a
+  text field), a sound style of the Library its words; `"required": true` drops the ×.
+- An option is a value, or `{ "value", "label", "group", "note", "icon" }` (`icon`: a lucide name shown on its chip,
+  drawn by the dashboard's `ToolIcon`) (a style adds `swatch`: 3 or 4 colors for its
   card until the user has a result in it, then the card shows that result); `"value": ""` with `"label": "Auto"` leaves the field
   out of the prompt. On the command line, a label stands for its value (`--field light=Silhouette`).
 - `phrase` wraps a field's value in the template (`"Shot on {}"`), so an empty one leaves nothing behind.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ChevronRightIcon, CopyIcon, EllipsisVerticalIcon, EraserIcon, ListVideoIcon, LoaderCircleIcon, MinusIcon, PlusIcon, RefreshCwIcon, SparklesIcon, XIcon } from "lucide-react"
+import { ChevronRightIcon, CopyIcon, EllipsisVerticalIcon, EraserIcon, FilmIcon, LanguagesIcon, ListVideoIcon, LoaderCircleIcon, MessagesSquareIcon, MicIcon, MinusIcon, PencilLineIcon, PlusIcon, RefreshCwIcon, SparklesIcon, TimerIcon, TypeIcon, Volume2Icon, VolumeXIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -43,7 +43,7 @@ import {
   withLooks,
   withMentions,
 } from "@/lib/api"
-import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, Price } from "@/components/chips"
+import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, Price, valueIcon } from "@/components/chips"
 import { FieldInput, Recolors, sections, Setups } from "@/components/fields"
 import { LightRig } from "@/components/light-rig"
 import { CameraRig } from "@/components/camera-rig"
@@ -521,6 +521,7 @@ export function Composer({
           options={["create", "edit"] as const}
           value={mode}
           label={(m) => (m === "create" ? "Create" : "Edit")}
+          icon={(m) => (m === "create" ? <SparklesIcon /> : <PencilLineIcon />)}
           onChange={(m) => onChange({ ...blank(kind, firstOf(kind, m, tools)), batch: value.batch, ...(kind === "audio" && value.inputs.clip ? { inputs: { clip: value.inputs.clip } } : {}) })}
         />
         <ToolPicker
@@ -570,8 +571,9 @@ export function Composer({
                           type="button"
                           aria-pressed={on}
                           onClick={() => set({ fields: { ...value.fields, to: (on ? list.filter((x) => x !== l) : [...list, l]).join(", ") } })}
-                          className={cn(CHIP, "px-2.5 py-0.5 text-xs", on ? CHIP_ON : CHIP_OFF)}
+                          className={cn(CHIP, "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs", on ? CHIP_ON : CHIP_OFF)}
                         >
+                          <LanguagesIcon className="size-3.5" />
                           {l}
                         </button>
                       )
@@ -582,14 +584,14 @@ export function Composer({
                 <DubModels key={f.key} spec={spec} value={value.fields.quality ?? "dubbing_v1"} ready={!missing && !!value.fields.to} onChange={(q) => set({ fields: { ...value.fields, quality: q } })} />
               ) : f.type === "singer" ? (
                 <SingerField key={f.key} field={f} value={value.fields[f.key]} elements={state.elements ?? []} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v } })} />
-              ) : f.type === "lines" || (f.key === "style" && tool.action) ? (
-                // a song's words or style: Suno writes the lyrics from a theme, or the style out richer (Kie)
+              ) : f.type === "lines" ? (
+                // a song's words: Suno writes the lyrics from a theme (Kie)
                 <SongText
                   key={f.key}
                   field={f}
                   value={value.fields[f.key] ?? ""}
                   onChange={(v) => set({ fields: { ...value.fields, [f.key]: v } })}
-                  help={state.router === "kie" && tool.id === "music" ? (f.key === "lyrics" ? "lyrics" : f.key === "style" ? "boost" : undefined) : undefined}
+                  help={state.router === "kie" && tool.id === "music" && f.key === "lyrics"}
                   theme={[value.fields.title, value.fields.style].filter(Boolean).join(", ")}
                   onTitle={(title) => !value.fields.title?.trim() && set({ fields: { ...value.fields, [f.key]: value.fields[f.key] ?? "", title } })}
                 />
@@ -629,6 +631,7 @@ export function Composer({
             options={["one", "dialogue"] as const}
             value={dialogue ? "dialogue" : "one"}
             label={(m) => (m === "one" ? "One voice" : "Dialogue")}
+            icon={(m) => (m === "one" ? <MicIcon /> : <MessagesSquareIcon />)}
             onChange={(m) => {
               const { dialogue: _, ...rest } = value.params
               set({ params: m === "one" ? rest : { ...rest, dialogue: [{ voice: String(value.params.voice ?? ""), text: value.intent }, { voice: "", text: "" }] } })
@@ -660,6 +663,7 @@ export function Composer({
             options={["one", "shots"] as const}
             value={shots ? "shots" : "one"}
             label={(m) => (m === "one" ? "One prompt" : "Shots")}
+            icon={(m) => (m === "one" ? <TypeIcon /> : <FilmIcon />)}
             onChange={(m) => {
               const { shots: _, ...rest } = value.params
               set({ params: m === "one" ? rest : { ...rest, shots: [{ prompt: value.intent, duration: 3 }, { prompt: "", duration: 3 }] } })
@@ -1023,7 +1027,7 @@ function ModelBlock({
               <span className="w-10 text-right text-sm tabular-nums">{pick(durations, params.duration as number, 5)} s</span>
             </div>
           ) : (
-            <Chips options={durations} value={pick(durations, params.duration as number, 5)} label={(d) => `${d} s`} onChange={(d) => put("duration", d)} />
+            <Chips options={durations} value={pick(durations, params.duration as number, 5)} label={(d) => `${d} s`} icon={() => <TimerIcon />} onChange={(d) => put("duration", d)} />
           )}
         </div>
       )}
@@ -1035,10 +1039,11 @@ function ModelBlock({
               options={["same", ...p.aspect_ratio]}
               value={(params.aspect_ratio as string) ?? "same"}
               label={(r) => (r === "same" ? "Same as the image" : r)}
+              icon={valueIcon}
               onChange={(r) => put("aspect_ratio", r === "same" ? undefined : r)}
             />
           ) : (
-            <Chips options={p.aspect_ratio} value={pick(p.aspect_ratio, params.aspect_ratio as string, kind === "video" ? "16:9" : "1:1")} onChange={(r) => put("aspect_ratio", r)} />
+            <Chips options={p.aspect_ratio} value={pick(p.aspect_ratio, params.aspect_ratio as string, kind === "video" ? "16:9" : "1:1")} icon={valueIcon} onChange={(r) => put("aspect_ratio", r)} />
           )}
         </div>
       ) : null}
@@ -1050,7 +1055,7 @@ function ModelBlock({
       ) : p.resolution?.length && model.role !== "upscale" ? (
         <div>
           <Label>Resolution</Label>
-          <Chips options={p.resolution} value={pick(p.resolution, params.resolution as string, kind === "image" ? "2K" : "1080p", kind === "image" ? "1K" : "720p")} onChange={(r) => put("resolution", r)} />
+          <Chips options={p.resolution} value={pick(p.resolution, params.resolution as string, kind === "image" ? "2K" : "1080p", kind === "image" ? "1K" : "720p")} icon={valueIcon} onChange={(r) => put("resolution", r)} />
         </div>
       ) : kind !== "audio" && model.role !== "upscale" && model.role !== "avatar" ? (
         <div>
@@ -1062,7 +1067,7 @@ function ModelBlock({
       {kind === "video" && p.audio ? (
         <div>
           <Label>Sound</Label>
-          <Chips options={["on", "off"] as const} value={params.sound === false ? "off" : "on"} label={(s) => (s === "on" ? "On" : "Off")} onChange={(s) => put("sound", s === "on")} />
+          <Chips options={["on", "off"] as const} value={params.sound === false ? "off" : "on"} label={(s) => (s === "on" ? "On" : "Off")} icon={(s) => (s === "on" ? <Volume2Icon /> : <VolumeXIcon />)} onChange={(s) => put("sound", s === "on")} />
         </div>
       ) : null}
       {kind === "audio" && p.voices?.length && !cloning && !own.includes("voice") ? (
@@ -1084,7 +1089,7 @@ function ModelBlock({
             {p.quality?.length ? (
               <div>
                 <Label>Quality</Label>
-                <Chips options={p.quality} value={pick(p.quality, params.quality as string, "high")} onChange={(q) => put("quality", q)} />
+                <Chips options={p.quality} value={pick(p.quality, params.quality as string, "high")} icon={valueIcon} onChange={(q) => put("quality", q)} />
               </div>
             ) : null}
             {p.seed && (
@@ -1107,7 +1112,7 @@ function ModelBlock({
 
 // a song's style or words: one line or several; on Kie, Suno writes lyrics from a theme (its versions to pick from) or
 // the style out richer, each a small priced request of its own in the ledger
-function SongText({ field: f, value, onChange, help, theme, onTitle }: { field: Field; value: string; onChange: (v: string) => void; help?: "lyrics" | "boost"; theme: string; onTitle: (t: string) => void }) {
+function SongText({ field: f, value, onChange, help, theme, onTitle }: { field: Field; value: string; onChange: (v: string) => void; help?: boolean; theme: string; onTitle: (t: string) => void }) {
   const [busy, setBusy] = useState(false)
   const [about, setAbout] = useState("")
   const [versions, setVersions] = useState<{ title: string; text: string }[] | null>(null)
@@ -1115,13 +1120,7 @@ function SongText({ field: f, value, onChange, help, theme, onTitle }: { field: 
   async function run(confirm = false) {
     setBusy(true)
     try {
-      const r = await api.assist(help!, help === "lyrics" ? subject : value, confirm)
-      if (help === "lyrics") setVersions(r.texts)
-      else {
-        const before = value
-        onChange(r.texts[0].text)
-        toast.success("Style written out", { action: { label: "Undo", onClick: () => onChange(before) } })
-      }
+      setVersions((await api.assist("lyrics", subject, confirm)).texts)
     } catch (e) {
       const err = e as Error & { status?: number; body?: { shown?: string } }
       if (err.status === 409) toast(`This costs ${err.body?.shown ?? "more"}, above your threshold`, { action: { label: "Go on", onClick: () => run(true) } })
@@ -1130,27 +1129,19 @@ function SongText({ field: f, value, onChange, help, theme, onTitle }: { field: 
       setBusy(false)
     }
   }
-  const words = { id: `song-${f.key}`, value, placeholder: f.placeholder, onChange: (e: React.ChangeEvent<HTMLInputElement & HTMLTextAreaElement>) => onChange(e.target.value) }
   return (
     <div>
       <div className="flex items-center gap-2">
         <Label>{f.label}</Label>
         {help && (
-          <Button
-            size="xs"
-            variant="ghost"
-            className="-mt-1.5 ml-auto"
-            title={help === "lyrics" ? "Suno writes two versions from what it is about (a small request, in Credits)" : "Suno writes the style out richer (a small request, in Credits)"}
-            disabled={busy || (help === "lyrics" ? !subject : !value.trim())}
-            onClick={() => run()}
-          >
+          <Button size="xs" variant="ghost" className="-mt-1.5 ml-auto" title="Suno writes two versions from what it is about (a small request, in Credits)" disabled={busy || !subject} onClick={() => run()}>
             {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-            {help === "lyrics" ? "Write lyrics" : "Boost"}
+            Write lyrics
           </Button>
         )}
       </div>
-      {help === "lyrics" && <Input className="mb-2" value={about} placeholder={theme ? `About: ${theme}` : "What the song is about, for Write lyrics"} onChange={(e) => setAbout(e.target.value)} aria-label="What the song is about" />}
-      {f.type === "lines" ? <Textarea {...words} className="max-h-[calc(10lh+1rem)] min-h-28 text-sm leading-relaxed" /> : <Input {...words} />}
+      {help && <Input className="mb-2" value={about} placeholder={theme ? `About: ${theme}` : "What the song is about, for Write lyrics"} onChange={(e) => setAbout(e.target.value)} aria-label="What the song is about" />}
+      <Textarea id={`song-${f.key}`} value={value} placeholder={f.placeholder} onChange={(e) => onChange(e.target.value)} className="max-h-[calc(10lh+1rem)] min-h-28 text-sm leading-relaxed" />
       {versions && (
         <div className="mt-2 flex flex-col gap-2">
           {versions.map((v, i) => (

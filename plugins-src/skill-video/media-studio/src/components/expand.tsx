@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { fileUrl } from "@/lib/api"
-import { CHIP, CHIP_OFF, CHIP_ON, Label } from "@/components/chips"
+import { CHIP, CHIP_OFF, CHIP_ON, Label, valueIcon } from "@/components/chips"
 
 // Expand's frame: margins on each side as a share of the image (top and bottom of its height, left and right of its
 // width), the frame up to 3 times the image each way. The engine pads the image with them (media.mjs expandCanvas)
@@ -153,7 +153,8 @@ function Editor({ image, start, onDone }: { image: string; start: Margins; onDon
         {RATIOS.map((r) => {
           const on = !!img && SIDES.some((k) => m[k]) && Math.abs(Math.log(ratio / ratioOf(r))) < 0.01
           return (
-            <button key={r} type="button" aria-pressed={on} disabled={!img} onClick={() => img && set(fit(ratioOf(r), img.w, img.h))} className={cn(CHIP, "px-2.5 py-0.5 text-xs tabular-nums", on ? CHIP_ON : CHIP_OFF)}>
+            <button key={r} type="button" aria-pressed={on} disabled={!img} onClick={() => img && set(fit(ratioOf(r), img.w, img.h))} className={cn(CHIP, "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs tabular-nums", on ? CHIP_ON : CHIP_OFF)}>
+              {valueIcon(r, "size-3.5")}
               {r}
             </button>
           )

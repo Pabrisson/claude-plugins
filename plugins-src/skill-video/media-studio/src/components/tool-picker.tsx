@@ -77,7 +77,8 @@ export function ToolPicker({
           {groups.length > 1 && (
             <div className="flex flex-wrap gap-1.5 border-b p-2">
               {groups.map((g) => (
-                <button key={g} type="button" aria-pressed={group === g} onClick={() => setGroup(group === g ? null : g)} className={cn(CHIP, "px-2.5 py-0.5 text-xs", group === g ? CHIP_ON : CHIP_OFF)}>
+                <button key={g} type="button" aria-pressed={group === g} onClick={() => setGroup(group === g ? null : g)} className={cn(CHIP, "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs", group === g ? CHIP_ON : CHIP_OFF)}>
+                  <ToolIcon name={tools.find((t) => t.group === g)!.icon} className="size-3.5" />
                   {g}
                 </button>
               ))}

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { Chips, Label } from "@/components/chips"
+import { Chips, Label, valueIcon } from "@/components/chips"
 import { upload } from "@/components/inputs"
 import type { Line, ModelOption, OptionValue, Shot } from "@/lib/api"
 
@@ -51,7 +51,7 @@ export function ModelOptions({ options, value, onChange }: { options: ModelOptio
           return (
             <div key={o.key}>
               <Label hint={o.hint} stacked>{o.label}</Label>
-              <Chips options={(o.values ?? []).map(valueOf)} value={v as string | number} label={(x) => labelOf(o.values!.find((y) => valueOf(y) === x)!)} onChange={(x) => put(o, x)} />
+              <Chips options={(o.values ?? []).map(valueOf)} value={v as string | number} label={(x) => labelOf(o.values!.find((y) => valueOf(y) === x)!)} icon={valueIcon} onChange={(x) => put(o, x)} />
             </div>
           )
         if (o.type === "select")

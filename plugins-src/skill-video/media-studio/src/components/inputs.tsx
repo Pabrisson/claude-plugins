@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api, coverPaths, fileUrl, inWorkspace, mediaKind, outputPath, plain, when, type Input, type Job, type Tool, type Workspace } from "@/lib/api"
-import { Chips, Label } from "@/components/chips"
+import { Chips, Label, valueIcon } from "@/components/chips"
 import { activeFilters, factsOf, formatOf, NO_FILTERS, passes, RATIO_CHIPS, RES_CHIPS, SOUND_NAMES, SOUND_TYPES, soundOf, sorted, SORTS, type Filters, type Sort } from "@/lib/filters"
 import { SketchDialog } from "@/components/sketch"
 import { MaskDialog } from "@/components/mask"
@@ -398,16 +398,16 @@ export function FilterChips({ value, onChange, items, kinds = true }: { value: F
   )
   return (
     <div className="flex flex-col gap-1.5">
-      {kinds && media.size > 1 && row("Media", <Chips options={["all", "video", "image", "audio"] as const} value={value.kind} label={(k) => (k === "all" ? "All" : k[0].toUpperCase() + k.slice(1))} onChange={(kind) => onChange({ ...NO_FILTERS, kind, favorites: value.favorites })} className={SMALL} />)}
+      {kinds && media.size > 1 && row("Media", <Chips options={["all", "video", "image", "audio"] as const} value={value.kind} label={(k) => (k === "all" ? "All" : k[0].toUpperCase() + k.slice(1))} onChange={(kind) => onChange({ ...NO_FILTERS, kind, favorites: value.favorites })} icon={valueIcon} className={SMALL} />)}
       {(kind === "video" || kind === "image") && (
         <>
-          {row("Ratio", <Chips options={RATIO_CHIPS} value={value.ratio} label={(r) => (r === "all" ? "All" : r === "other" ? "Other" : r)} onChange={(ratio) => onChange({ ...value, ratio })} className={SMALL} />)}
-          {row("Resolution", <Chips options={RES_CHIPS} value={value.res} label={(r) => (r === "all" ? "All" : r)} onChange={(res) => onChange({ ...value, res })} className={SMALL} />)}
+          {row("Ratio", <Chips options={RATIO_CHIPS} value={value.ratio} label={(r) => (r === "all" ? "All" : r === "other" ? "Other" : r)} onChange={(ratio) => onChange({ ...value, ratio })} icon={valueIcon} className={SMALL} />)}
+          {row("Resolution", <Chips options={RES_CHIPS} value={value.res} label={(r) => (r === "all" ? "All" : r)} onChange={(res) => onChange({ ...value, res })} icon={valueIcon} className={SMALL} />)}
         </>
       )}
-      {types.length > 0 && row("Type", <Chips options={["all", ...types]} value={value.type} label={(t) => (t === "all" ? "All" : SOUND_NAMES[t])} onChange={(type) => onChange({ ...value, type })} className={SMALL} />)}
-      {formats.length > 0 && row("Format", <Chips options={["all", ...formats]} value={value.format} label={(f) => (f === "all" ? "All" : f.toUpperCase())} onChange={(format) => onChange({ ...value, format })} className={SMALL} />)}
-      {items.some((i) => i.job.favorite) && row("Show", <Chips options={["all", "favorites"] as const} value={value.favorites ? "favorites" : "all"} label={(o) => (o === "all" ? "All" : "Favorites")} onChange={(o) => onChange({ ...value, favorites: o === "favorites" })} className={SMALL} />)}
+      {types.length > 0 && row("Type", <Chips options={["all", ...types]} value={value.type} label={(t) => (t === "all" ? "All" : SOUND_NAMES[t])} onChange={(type) => onChange({ ...value, type })} icon={valueIcon} className={SMALL} />)}
+      {formats.length > 0 && row("Format", <Chips options={["all", ...formats]} value={value.format} label={(f) => (f === "all" ? "All" : f.toUpperCase())} onChange={(format) => onChange({ ...value, format })} icon={valueIcon} className={SMALL} />)}
+      {items.some((i) => i.job.favorite) && row("Show", <Chips options={["all", "favorites"] as const} value={value.favorites ? "favorites" : "all"} label={(o) => (o === "all" ? "All" : "Favorites")} onChange={(o) => onChange({ ...value, favorites: o === "favorites" })} icon={valueIcon} className={SMALL} />)}
     </div>
   )
 }

@@ -369,9 +369,9 @@ const jobOf = tool => fs.readdirSync(at('media')).filter(x => x.includes(`-${too
 const lastTask = () => tasks().at(-1).body
 
 test('music on Kie: Suno writes a song (2 takes, their covers and words, its ids kept), goes on from a take by its id or from any sound sent whole; a singer of the Library sings', async () => {
-  const w = await cli('audio', '--tool', 'music', '--field', 'mode=write', '--field', 'title=Night', '--field', 'style=synthwave', '--field', 'lyrics=[Verse] road', '--option', 'vocal_gender=Female', '--spend', '1')
+  const w = await cli('audio', '--tool', 'music', '--field', 'mode=write', '--field', 'title=Night', '--field', 'style=synthwave, 100 BPM', '--field', 'lyrics=[Verse] road', '--option', 'vocal_gender=Female', '--spend', '1')
   assert.equal(w.code, 0, w.err)
-  assert.deepEqual(lastTask(), { model: 'ai-music-api/generate', input: { custom_mode: true, instrumental: false, title: 'Night', style: 'synthwave', lyrics: '[Verse] road', model: 'V6', vocal_gender: 'f' } })
+  assert.deepEqual(lastTask(), { model: 'ai-music-api/generate', input: { custom_mode: true, instrumental: false, title: 'Night', style: 'synthwave, 100 BPM', lyrics: '[Verse] road', model: 'V6', vocal_gender: 'f' } })
   const song = jobOf('music')
   assert.deepEqual(song.outputs, ['out-1.mp3', 'out-2.mp3', 'cover-1.png', 'cover-2.png', 'lyrics.txt'])
   assert.equal(song.suno.tracks[0].audio_id, `${song.suno.task_id}-take-1`)
@@ -496,6 +496,30 @@ test('a Suno song\'s tools: stems and a stem\'s MIDI, its WAV, its words with th
   // Boost style: its text among Kie's « URLs »
   const b = await cli('boost', 'synthwave', '--spend', '0.002')
   assert.equal(b.out.trim(), 'dreamy synthwave, airy female vocals, 100 BPM', b.err)
+})
+
+test('sound styles: a preset by its label or a style of the Library sends its words; Describe adds it, a sound effect follows its words with it; another family refused', async () => {
+  { const x = await cli('audio', '--tool', 'music', '--field', 'mode=write', '--field', 'title=Night', '--field', 'style=Synthwave', '--field', 'vocals=instrumental', '--spend', '1'); assert.equal(x.code, 0, x.err) }
+  assert.match(lastTask().input.style, /^synthwave, retro 80s analog synths/)
+  // a style of the Library: its words alone, the job keeps its name
+  assert.match((await cli('styles', 'add', 'Brand', '--for', 'music', '--words', 'warm analog synths, 90 BPM')).out, /^Brand: music style · warm analog synths, 90 BPM$/m)
+  { const x = await cli('audio', '--tool', 'cover', '--in', `clip=${at('voice6.mp3')}`, '--field', 'style=Brand', '--spend', '1'); assert.equal(x.code, 0, x.err) }
+  assert.equal(lastTask().input.style, 'warm analog synths, 90 BPM')
+  assert.equal(jobOf('cover').spec.fields.style, 'Brand')
+  // Describe: the description, then the style
+  { const x = await cli('audio', '--tool', 'music', '--field', 'description=a road trip', '--field', 'style=Brand', '--spend', '1'); assert.equal(x.code, 0, x.err) }
+  assert.equal(lastTask().input.prompt, 'a road trip\nStyle: warm analog synths, 90 BPM')
+  // a sound effect: its words, then its style
+  { const x = await cli('audio', '--tool', 'sound-effect', '--prompt', 'a door slams', '--field', 'style=Cartoon', '--spend', '1'); assert.equal(x.code, 0, x.err) }
+  assert.equal(lastTask().input.prompt, 'a door slams, cartoon sound effect, exaggerated and bouncy, playful, comedic timing')
+  // a style of another family, refused; a sound style is words, never images
+  await cli('styles', 'add', 'Ink', at('a.png'))
+  assert.match((await cli('audio', '--tool', 'cover', '--in', `clip=${at('voice6.mp3')}`, '--field', 'style=Ink', '--estimate')).err, /Ink is a visual style: Style takes a music style/)
+  assert.match((await cli('audio', '--tool', 'sound-effect', '--prompt', 'x', '--field', 'style=Brand', '--estimate')).err, /Brand is a music style: Style takes a sound style/)
+  assert.match((await cli('styles', 'add', 'Brand', '--for', 'voice', '--words', 'x')).err, /Brand is already a music style/)
+  assert.match((await cli('styles', 'add', 'Hum', '--for', 'music')).err, /a music style is its words/)
+  assert.match((await cli('styles', 'add', 'Hum', at('a.png'), '--for', 'music', '--words', 'x')).err, /its words alone, no image/)
+  for (const n of ['Brand', 'Ink']) await cli('styles', 'remove', n)
 })
 
 test('Eleven v3 on Kie: one voice is a dialogue of one line, a dialogue its lines; its voices with their samples', async () => {

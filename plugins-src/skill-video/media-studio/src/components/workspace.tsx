@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react"
-import { ChevronDownIcon, CopyIcon, DownloadIcon, FolderKanbanIcon, FolderMinusIcon, PlayIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { ChevronDownIcon, CopyIcon, DownloadIcon, FolderKanbanIcon, FolderMinusIcon, ImagesIcon, ListVideoIcon, PlayIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, when, type Clip, type Job, type Kind, type State, type Timeline, type Tool, type Workspace } from "@/lib/api"
 import { lay } from "@/lib/timeline"
-import { Chips, Label } from "@/components/chips"
+import { Chips, Label, valueIcon } from "@/components/chips"
 import { byMedium, FilterChips, LibraryList, Listen, Section, SortSelect, SoundCover, Thumb, useSort, Workspaces, type Pick } from "@/components/inputs"
 import { activeFilters, factsOf, NO_FILTERS, passes, ratioOf, resOf, sorted } from "@/lib/filters"
 import { Main, NoGenerations, Side } from "@/components/pages"
@@ -177,6 +177,8 @@ export function WorkspacePage({
   const [favorites, setFavorites] = useState(false)
   const [tool, setTool] = useState("")
   const [query, setQuery] = useState("")
+  // the timeline bin's search, kept above its scrolling column
+  const [binQuery, setBinQuery] = useState("")
   const ws = currentOf(state)
   if (!ws) return null
   const timeline = timelines.get(ws.slug) ?? ws.timeline
@@ -196,7 +198,7 @@ export function WorkspacePage({
   }
 
   const tabs = (
-    <Chips options={TABS} value={tab} label={(t) => ({ assets: "Assets", timeline: "Timeline" })[t]} onChange={(t) => t !== tab && (window.location.hash = t === "assets" ? "workspace" : "workspace/timeline")} className="grid grid-cols-2" />
+    <Chips options={TABS} value={tab} label={(t) => ({ assets: "Assets", timeline: "Timeline" })[t]} icon={(t) => (t === "assets" ? <ImagesIcon /> : <ListVideoIcon />)} onChange={(t) => t !== tab && (window.location.hash = t === "assets" ? "workspace" : "workspace/timeline")} className="grid grid-cols-2" />
   )
   const downloads = <DownloadMenu ws={ws} timeline={timeline} flush={timelines.flush} />
 
@@ -227,9 +229,18 @@ export function WorkspacePage({
           />
         }
         side={
-          <Side>
-            {tabs}
-            <Bin jobs={mine} home={state.home} onAdd={(job, path) => lengthOf(path).then((dur) => timelines.change(ws.slug, (t) => lay(t, { path, job: job.id }, dur)))} />
+          <Side
+            head={
+              <>
+                {tabs}
+                <div className="relative">
+                  <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={binQuery} onChange={(e) => setBinQuery(e.target.value)} placeholder="Search the bin" aria-label="Search the bin" className="pl-8" />
+                </div>
+              </>
+            }
+          >
+            <Bin query={binQuery} jobs={mine} home={state.home} onAdd={(job, path) => lengthOf(path).then((dur) => timelines.change(ws.slug, (t) => lay(t, { path, job: job.id }, dur)))} />
           </Side>
         }
       />
@@ -237,16 +248,21 @@ export function WorkspacePage({
 
   return (
     <>
-      <Side>
+      <Side
+        head={
+          <>
+            {tabs}
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search prompts, tools, files" aria-label="Search the workspace" className="pl-8" />
+            </div>
+          </>
+        }
+      >
         <WorkspaceRows state={state} value={all ? "all" : ws.slug} onPick={pick} count={(slug) => state.media.filter((j) => slug === "all" || inWorkspace(j, slug)).length} unit="item" all manage onChanged={onChanged} />
-        {tabs}
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search prompts, tools, files" aria-label="Search the workspace" className="pl-8" />
-        </div>
         <div>
           <Label>Media</Label>
-          <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
+          <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} icon={valueIcon} onChange={setKind} />
         </div>
         <div>
           <Label>Tool</Label>
@@ -258,12 +274,13 @@ export function WorkspacePage({
             options={["all", "kie", "openrouter", "elevenlabs", "local"]}
             value={provider}
             label={(p) => ({ all: "All", openrouter: "OpenRouter", kie: "Kie.ai", elevenlabs: "ElevenLabs", local: "Local" })[p] ?? p}
+            icon={valueIcon}
             onChange={setProvider}
           />
         </div>
         <div>
           <Label>Show</Label>
-          <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? "Everything" : "Favorites")} onChange={(f) => setFavorites(f === "favorites")} />
+          <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? "Everything" : "Favorites")} icon={valueIcon} onChange={(f) => setFavorites(f === "favorites")} />
         </div>
       </Side>
       <Main
@@ -339,11 +356,11 @@ function AddFromLibrary({ ws, results, onChanged }: { ws: Workspace; results: Pi
 
 // the bin: the workspace's results, filtered (medium, then its own filters, favorites) and sorted like every picker, by
 // medium, dragged onto a track or added after the last shot with +; a result already on the timeline shows its place
-function Bin({ jobs, home, onAdd }: { jobs: Job[]; home: string; onAdd: (job: Job, path: string) => void }) {
+// query: its search, written above the scrolling column
+function Bin({ query, jobs, home, onAdd }: { query: string; jobs: Job[]; home: string; onAdd: (job: Job, path: string) => void }) {
   const { shots } = useContext(Workspaces)
   const [filters, setFilters] = useState(NO_FILTERS)
   const [sort, setSort] = useSort()
-  const [query, setQuery] = useState("")
   const q = query.trim().toLowerCase()
   const pool = jobs
     .filter((j) => j.status === "done" && (!q || `${j.prompt} ${j.label} ${j.name}`.toLowerCase().includes(q)))
@@ -379,10 +396,6 @@ function Bin({ jobs, home, onAdd }: { jobs: Job[]; home: string; onAdd: (job: Jo
   }
   return (
     <>
-      <div className="relative">
-        <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the bin" aria-label="Search the bin" className="pl-8" />
-      </div>
       <FilterChips value={filters} onChange={setFilters} items={pool} />
       <div className="flex min-h-0 flex-col">
         <div className="mb-2 flex items-center gap-2">

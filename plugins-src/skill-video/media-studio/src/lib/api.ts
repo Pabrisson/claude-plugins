@@ -21,7 +21,7 @@ export type Input = {
 }
 // an option: its value, or the value with what the dashboard shows of it (a preset light carries its lights, a style
 // the palette of its card, a References sheet its ratio)
-export type Option = string | { value: string; label?: string; group?: string; note?: string; rig?: Light[]; cam?: Cam; swatch?: string[]; ratio?: string }
+export type Option = string | { value: string; label?: string; group?: string; note?: string; icon?: string; rig?: Light[]; cam?: Cam; swatch?: string[]; ratio?: string }
 // one light around the subject: azimuth (0 front, 90 right, 180 behind) and elevation in degrees, 0–100 levels
 export type Light = { az: number; el: number; color: string; brightness: number; diffuse: number }
 // where New angle's camera goes: around the subject and up in degrees from where the picture was taken, closer (1) or
@@ -47,6 +47,8 @@ export type Field = {
   optional?: boolean
   // the tool cannot go without it (Object swap's element)
   required?: boolean
+  // a style field's sounds: music, a voice's delivery or a sound effect's (none: a visual style)
+  for?: SoundFamily
   // shown only while the tool's other fields have these values (Music's lyrics in Write, when sung)
   when?: Record<string, string>
   default?: string | number
@@ -358,7 +360,9 @@ export const ELEMENT_TYPES: { type: ElementType; label: string; plural: string; 
 ]
 export const typeLabel = (t: ElementType) => ELEMENT_TYPES.find((x) => x.type === t)!.label
 // a style of the Library: its images, the words on its look, and how a prompt cites it (media.mjs writes it)
-export type SavedStyle = { name: string; files: string[]; words: string; text: string }
+// a style of the Library: a look from images, or a sound in words (for music, a voice or a sound effect)
+export type SoundFamily = "music" | "voice" | "sound"
+export type SavedStyle = { name: string; files: string[]; words: string; text: string; for?: SoundFamily }
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, init)
@@ -404,7 +408,7 @@ export const api = {
   clone: (name: string, paths: string[]) =>
     post<{ ok: true }>("/api/voice-clone", { name, paths }),
   // Suno's help with the words (Kie, priced): lyrics from a theme (its versions), a style written out richer
-  assist: (what: "lyrics" | "boost", text: string, confirm = false) => post<{ texts: { title: string; text: string }[]; cost: number | null }>("/api/assist", { what, text, confirm }),
+  assist: (what: "lyrics", text: string, confirm = false) => post<{ texts: { title: string; text: string }[]; cost: number | null }>("/api/assist", { what, text, confirm }),
   // where a sound sings the most (Make a singer's 10 to 30 s), and recordings cleaned by the Voice Isolator (jobs of the
   // Library, priced: 409 asks first)
   sung: (path: string) => post<{ start: number; end: number; sung: number; duration: number }>("/api/sung", { path }),
@@ -413,7 +417,7 @@ export const api = {
   sunoVoice: (body: { name: string; start?: number; end?: number; language?: string; verify?: string }) => post<{ phrase?: string; task_id?: string } & Partial<Element>>("/api/elements/suno", body),
   elements: (body: { name: string; type?: ElementType; words?: string; colors?: string[]; font?: string; voice?: string; paths?: string[]; drop?: string[]; remove?: boolean; elevenlabs?: boolean; workspace?: string | null }) =>
     post<Element[]>("/api/elements", body),
-  styles: (body: { name: string; paths?: string[]; words?: string; drop?: string[]; remove?: boolean }) => post<SavedStyle[]>("/api/styles", body),
+  styles: (body: { name: string; paths?: string[]; words?: string; drop?: string[]; remove?: boolean; for?: SoundFamily }) => post<SavedStyle[]>("/api/styles", body),
   workspaces: (body: { new?: string; slug?: string; use?: boolean; name?: string; add?: string[]; drop?: string[]; link?: string[]; unlink?: string[]; timeline?: Timeline; rev?: number; remove?: boolean }) =>
     post<{ current: string; workspaces: Workspace[] }>("/api/workspaces", body),
   edit: (slug: string) => call<{ text: string | null }>(`/api/workspaces/${slug}/edit`),

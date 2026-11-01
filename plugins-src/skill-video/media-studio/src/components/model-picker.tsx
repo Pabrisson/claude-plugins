@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronDownIcon, SparklesIcon } from "lucide-react"
+import { ArrowDownNarrowWideIcon, ArrowRightToLineIcon, ChevronDownIcon, GiftIcon, ImagesIcon, LayersIcon, MessagesSquareIcon, MonitorIcon, SparklesIcon, SproutIcon, TagsIcon, TimerIcon, UsersIcon, Volume2Icon, type LucideIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -45,31 +45,31 @@ export function capsOf(m: Model) {
 }
 
 // the list's filters: those of a group exclude each other; a filter shows only when it splits the list
-type Filter = { id: string; label: string; group?: string; test: (m: Model) => boolean }
+type Filter = { id: string; label: string; icon: LucideIcon; group?: string; test: (m: Model) => boolean }
 const FILTERS: Record<Kind, Filter[]> = {
   video: [
-    { id: "d10", group: "length", label: "10 s+", test: (m) => longest(m) >= 10 },
-    { id: "d15", group: "length", label: "15 s+", test: (m) => longest(m) >= 15 },
-    { id: "d30", group: "length", label: "30 s", test: (m) => longest(m) >= 30 },
-    { id: "r1080", group: "res", label: "1080p+", test: (m) => rank(top(m)) >= rank("1080p") },
-    { id: "r2k", group: "res", label: "2K+", test: (m) => rank(top(m)) >= rank("2K") },
-    { id: "r4k", group: "res", label: "4K", test: (m) => rank(top(m)) >= rank("4K") },
-    { id: "sound", label: "Sound", test: (m) => !!m.params.audio },
-    { id: "last", label: "Last frame", test: (m) => !!m.params.frames?.includes("last_frame") },
-    { id: "seed", label: "Seed", test: (m) => !!m.params.seed },
+    { id: "d10", group: "length", label: "10 s+", icon: TimerIcon, test: (m) => longest(m) >= 10 },
+    { id: "d15", group: "length", label: "15 s+", icon: TimerIcon, test: (m) => longest(m) >= 15 },
+    { id: "d30", group: "length", label: "30 s", icon: TimerIcon, test: (m) => longest(m) >= 30 },
+    { id: "r1080", group: "res", label: "1080p+", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("1080p") },
+    { id: "r2k", group: "res", label: "2K+", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("2K") },
+    { id: "r4k", group: "res", label: "4K", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("4K") },
+    { id: "sound", label: "Sound", icon: Volume2Icon, test: (m) => !!m.params.audio },
+    { id: "last", label: "Last frame", icon: ArrowRightToLineIcon, test: (m) => !!m.params.frames?.includes("last_frame") },
+    { id: "seed", label: "Seed", icon: SproutIcon, test: (m) => !!m.params.seed },
   ],
   image: [
-    { id: "r2k", group: "res", label: "2K+", test: (m) => rank(top(m)) >= rank("2K") },
-    { id: "r4k", group: "res", label: "4K", test: (m) => rank(top(m)) >= rank("4K") },
-    { id: "refs", label: "References", test: (m) => (m.params.references ?? 0) > 0 },
-    { id: "many", label: "Several at once", test: (m) => (m.params.n?.max ?? 1) > 1 },
-    { id: "seed", label: "Seed", test: (m) => !!m.params.seed },
+    { id: "r2k", group: "res", label: "2K+", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("2K") },
+    { id: "r4k", group: "res", label: "4K", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("4K") },
+    { id: "refs", label: "References", icon: ImagesIcon, test: (m) => (m.params.references ?? 0) > 0 },
+    { id: "many", label: "Several at once", icon: LayersIcon, test: (m) => (m.params.n?.max ?? 1) > 1 },
+    { id: "seed", label: "Seed", icon: SproutIcon, test: (m) => !!m.params.seed },
   ],
   audio: [
-    { id: "voices", label: "20+ voices", test: (m) => (m.params.voices?.length ?? 0) >= 20 },
-    { id: "dialogue", label: "Dialogue", test: (m) => !!m.params.dialogue },
-    { id: "tags", label: "Audio tags", test: (m) => !!m.params.tags },
-    { id: "free", label: "No cost", test: (m) => m.model.endsWith(":free") },
+    { id: "voices", label: "20+ voices", icon: UsersIcon, test: (m) => (m.params.voices?.length ?? 0) >= 20 },
+    { id: "dialogue", label: "Dialogue", icon: MessagesSquareIcon, test: (m) => !!m.params.dialogue },
+    { id: "tags", label: "Audio tags", icon: TagsIcon, test: (m) => !!m.params.tags },
+    { id: "free", label: "No cost", icon: GiftIcon, test: (m) => m.model.endsWith(":free") },
   ],
 }
 
@@ -167,13 +167,15 @@ export function ModelPicker({
           {(filters.length > 0 || Object.keys(prices).length > 0) && (
             <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
               {filters.map((f) => (
-                <button key={f.id} type="button" aria-pressed={on.includes(f.id)} onClick={() => toggle(f)} className={cn(CHIP, "px-2.5 py-0.5 text-xs", on.includes(f.id) ? CHIP_ON : CHIP_OFF)}>
+                <button key={f.id} type="button" aria-pressed={on.includes(f.id)} onClick={() => toggle(f)} className={cn(CHIP, "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs", on.includes(f.id) ? CHIP_ON : CHIP_OFF)}>
+                  <f.icon className="size-3.5" />
                   {f.label}
                 </button>
               ))}
               <span className="flex-1" />
               {Object.keys(prices).length > 0 && (
-                <button type="button" aria-pressed={cheap} onClick={() => setCheap(!cheap)} className={cn(CHIP, "px-2.5 py-0.5 text-xs", cheap ? CHIP_ON : CHIP_OFF)}>
+                <button type="button" aria-pressed={cheap} onClick={() => setCheap(!cheap)} className={cn(CHIP, "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs", cheap ? CHIP_ON : CHIP_OFF)}>
+                  <ArrowDownNarrowWideIcon className="size-3.5" />
                   Cheapest first
                 </button>
               )}

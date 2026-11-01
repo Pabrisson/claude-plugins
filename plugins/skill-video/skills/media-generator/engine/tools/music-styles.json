@@ -1,0 +1,31 @@
+[
+  { "value": "modern pop, catchy hooks, punchy drums, bright synths, polished radio mix, 118 BPM", "label": "Modern pop", "group": "Pop & dance", "note": "Radio-ready hooks", "swatch": ["#ff5d8f", "#ffd166", "#7b2cbf", "#fff0f6"] },
+  { "value": "1980s synth-pop, analog synth arpeggios, gated reverb drums, chorus guitars, airy vocals, 112 BPM", "label": "80s synth-pop", "group": "Pop & dance", "note": "Analog synths, gated drums", "swatch": ["#ff2e88", "#00e5ff", "#2b1055", "#ffd23f"] },
+  { "value": "disco funk, slap bass groove, four-on-the-floor kick, string stabs, wah guitar, falsetto vocals, 120 BPM", "label": "Disco funk", "group": "Pop & dance", "note": "Slap bass, strings, falsetto", "swatch": ["#f4a261", "#e76f51", "#6a0572", "#ffd700"] },
+  { "value": "K-pop, high-energy dance pop, layered vocal hooks, rap verse, EDM drop, glossy production, 128 BPM", "label": "K-pop", "group": "Pop & dance", "note": "Glossy hooks and drops", "swatch": ["#ff7eb6", "#7afcff", "#b388ff", "#ffffff"] },
+
+  { "value": "deep house, warm sub bass, shuffled hi-hats, soulful chord stabs, smooth late-night groove, 122 BPM", "label": "Deep house", "group": "Electronic", "note": "Warm late-night groove", "swatch": ["#1d3557", "#457b9d", "#a8dadc", "#f1faee"] },
+  { "value": "synthwave, retro 80s analog synths, driving bassline, gated snare, neon night drive mood, 100 BPM", "label": "Synthwave", "group": "Electronic", "note": "Neon night drive", "swatch": ["#0d0221", "#ff00a0", "#00f0ff", "#ffb800"] },
+  { "value": "lo-fi hip-hop, dusty vinyl crackle, mellow jazzy piano chords, laid-back drums, chill study mood, 80 BPM", "label": "Lo-fi hip-hop", "group": "Electronic", "note": "Dusty, mellow, chill", "swatch": ["#a68a64", "#e9d8a6", "#5e548e", "#3d405b"] },
+  { "value": "ambient, slow evolving pads, soft textures, distant piano, no drums, calm and spacious", "label": "Ambient", "group": "Electronic", "note": "Evolving pads, no drums", "swatch": ["#cddafd", "#dfe7fd", "#8ecae6", "#f0efeb"] },
+  { "value": "drum and bass, fast breakbeats, rolling sub bass, atmospheric pads, energetic, 174 BPM", "label": "Drum & bass", "group": "Electronic", "note": "Fast breaks, rolling bass", "swatch": ["#00b4d8", "#03045e", "#90e0ef", "#ff006e"] },
+
+  { "value": "trap, booming 808 bass, rapid hi-hat rolls, dark minor melody, hard-hitting, 140 BPM", "label": "Trap", "group": "Hip-hop & R&B", "note": "808s and hi-hat rolls", "swatch": ["#111111", "#9d4edd", "#e0aaff", "#3c096c"] },
+  { "value": "90s boom bap hip-hop, sampled soul loop, crunchy drums, vinyl scratches, head-nodding groove, 90 BPM", "label": "Boom bap", "group": "Hip-hop & R&B", "note": "Soul samples, crunchy drums", "swatch": ["#bc6c25", "#dda15e", "#283618", "#fefae0"] },
+  { "value": "neo-soul R&B, warm Rhodes chords, smooth bass, lazy swung drums, silky vocals, 85 BPM", "label": "Neo-soul R&B", "group": "Hip-hop & R&B", "note": "Rhodes, silky vocals", "swatch": ["#6d597a", "#b56576", "#eaac8b", "#355070"] },
+
+  { "value": "indie rock, jangly guitars, driving drums, melodic bass, raw heartfelt vocals, 130 BPM", "label": "Indie rock", "group": "Rock", "note": "Jangly guitars, raw voice", "swatch": ["#e63946", "#f1faee", "#a8dadc", "#1d3557"] },
+  { "value": "punk rock, fast distorted power chords, loud drums, shouted gang vocals, raw energy, 170 BPM", "label": "Punk rock", "group": "Rock", "note": "Fast, loud, raw", "swatch": ["#ff006e", "#111111", "#fbff12", "#ffffff"] },
+  { "value": "anthemic stadium rock, big distorted guitars, pounding drums, soaring chorus, 120 BPM", "label": "Stadium rock", "group": "Rock", "note": "Huge anthem chorus", "swatch": ["#f77f00", "#d62828", "#003049", "#fcbf49"] },
+  { "value": "heavy metal, down-tuned riffs, double kick drums, shredding guitar solo, aggressive vocals, 150 BPM", "label": "Metal", "group": "Rock", "note": "Riffs, double kick", "swatch": ["#2b2d42", "#8d99ae", "#ef233c", "#0b0b0b"] },
+
+  { "value": "acoustic folk, fingerpicked guitar, soft harmonica, warm intimate vocals, organic and simple, 95 BPM", "label": "Acoustic folk", "group": "Acoustic & jazz", "note": "Fingerpicked, intimate", "swatch": ["#a3b18a", "#dad7cd", "#588157", "#bc6c25"] },
+  { "value": "French chanson, accordion, nylon guitar, upright bass, brushed drums, poetic intimate vocals sung in French", "label": "Chanson française", "group": "Acoustic & jazz", "note": "Accordion, sung in French", "swatch": ["#0055a4", "#ffffff", "#ef4135", "#f1e3c8"] },
+  { "value": "jazz piano trio, walking upright bass, brushed drums, swing feel, smoky late-night club", "label": "Jazz trio", "group": "Acoustic & jazz", "note": "Piano, upright bass, swing", "swatch": ["#3d2b1f", "#c9a227", "#1f2f3a", "#e3b778"] },
+  { "value": "bossa nova, nylon guitar, soft syncopated rhythm, gentle flute, breathy relaxed vocals, 120 BPM", "label": "Bossa nova", "group": "Acoustic & jazz", "note": "Nylon guitar, breezy", "swatch": ["#2a9d8f", "#e9c46a", "#f4a261", "#fefae0"] },
+
+  { "value": "epic orchestral, soaring strings, booming taiko drums, heroic brass, choir, cinematic build", "label": "Epic orchestral", "group": "Cinematic & game", "note": "Strings, brass, choir", "swatch": ["#14213d", "#fca311", "#e5e5e5", "#7d0000"] },
+  { "value": "cinematic trailer music, pulsing low strings, ticking clock, deep braams, rising tension, huge final hit", "label": "Trailer tension", "group": "Cinematic & game", "note": "Braams, rising tension", "swatch": ["#0b090a", "#660708", "#a4161a", "#d3d3d3"] },
+  { "value": "minimal solo piano, soft felt piano, sparse emotional melody, room reverb, intimate and melancholic", "label": "Minimal piano", "group": "Cinematic & game", "note": "Soft felt piano", "swatch": ["#f8f9fa", "#adb5bd", "#343a40", "#dee2e6"] },
+  { "value": "8-bit chiptune, square wave lead, NES-style arpeggios, noise channel drums, upbeat video game music, 150 BPM", "label": "8-bit chiptune", "group": "Cinematic & game", "note": "Square waves, game music", "swatch": ["#5fcde4", "#99e550", "#fbf236", "#222034"] }
+]

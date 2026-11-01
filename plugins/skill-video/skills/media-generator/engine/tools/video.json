@@ -130,11 +130,11 @@
         { "value": "rack focus", "group": "Special", "note": "The focus shifts from one plane to another: the near thing blurs, the far one sharpens." }
       ] },
       { "key": "tempo", "label": "Tempo", "type": "choice", "section": "Movement", "default": "", "options": [
-        { "value": "", "label": "Auto" },
-        { "value": "calm, slow pacing", "label": "Calm" },
-        { "value": "dynamic, energetic pacing", "label": "Dynamic" },
-        { "value": "chaotic, frenetic pacing", "label": "Chaotic" },
-        { "value": "one single continuous take", "label": "Single shot" }
+        { "value": "", "label": "Auto", "icon": "wand-sparkles" },
+        { "value": "calm, slow pacing", "label": "Calm", "icon": "waves" },
+        { "value": "dynamic, energetic pacing", "label": "Dynamic", "icon": "zap" },
+        { "value": "chaotic, frenetic pacing", "label": "Chaotic", "icon": "tornado" },
+        { "value": "one single continuous take", "label": "Single shot", "icon": "video" }
       ] },
       { "key": "shot", "label": "Shot size", "type": "select", "section": "Look", "default": "", "options": [
         { "value": "", "label": "Auto", "note": "The model's choice" },
@@ -237,7 +237,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
     "fields": [
       { "key": "subject", "label": "Subject", "type": "text", "placeholder": "the dancer in the red coat" },
-      { "key": "speed", "label": "Speed", "type": "choice", "options": ["slow", "steady", "fast"], "default": "steady" }
+      { "key": "speed", "label": "Speed", "type": "choice", "options": [{ "value": "slow", "icon": "turtle" }, { "value": "steady", "icon": "gauge" }, { "value": "fast", "icon": "rabbit" }], "default": "steady" }
     ],
     "template": "Dolly zoom (vertigo effect) on {subject}: the camera dollies in at a {speed} pace while the lens zooms out, the background stretches away and the subject stays the same size in frame. {prompt}",
     "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
@@ -272,8 +272,8 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image", "optional": true }],
     "fields": [
       { "key": "subject", "label": "Subject", "type": "text", "placeholder": "the sneaker on the pedestal" },
-      { "key": "direction", "label": "Direction", "type": "choice", "options": ["left", "right"], "default": "right" },
-      { "key": "arc", "label": "Arc", "type": "choice", "options": ["a quarter turn", "a half turn", "a full 360°"], "default": "a half turn" }
+      { "key": "direction", "label": "Direction", "type": "choice", "options": [{ "value": "left", "icon": "rotate-ccw" }, { "value": "right", "icon": "rotate-cw" }], "default": "right" },
+      { "key": "arc", "label": "Arc", "type": "choice", "options": [{ "value": "a quarter turn", "icon": "clock-3" }, { "value": "a half turn", "icon": "clock-6" }, { "value": "a full 360°", "icon": "circle" }], "default": "a half turn" }
     ],
     "template": "The camera orbits {direction} around {subject}, {arc}, at a steady distance, the subject kept centered. {prompt}",
     "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
@@ -324,7 +324,7 @@
     "inputs": [{ "key": "first_frame", "kind": "image", "label": "Image" }],
     "fields": [
       { "key": "subject", "label": "Subject", "type": "text", "placeholder": "the statue" },
-      { "key": "end", "label": "Then", "type": "choice", "options": ["holds", "melts"], "default": "holds" }
+      { "key": "end", "label": "Then", "type": "choice", "options": [{ "value": "holds", "icon": "pause" }, { "value": "melts", "icon": "droplets" }], "default": "holds" }
     ],
     "template": "{subject} turns into liquid-polished chrome metal from head to toe, reflections sliding over it, then it {end}. {prompt}",
     "models": ["minimax/hailuo-3", "alibaba/wan-3.0", "bytedance/seedance-2.5", "kwaivgi/kling-4.0", "heygen/heygen-video-1", "google/veo-3.1-fast"]
@@ -398,10 +398,10 @@
     "description": "Continues a video after its end (sequel) or builds what came before (prequel).",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [
-      { "key": "direction", "label": "Direction", "type": "choice", "options": ["sequel", "prequel"], "default": "sequel" },
+      { "key": "direction", "label": "Direction", "type": "choice", "options": [{ "value": "sequel", "icon": "arrow-right" }, { "value": "prequel", "icon": "arrow-left" }], "default": "sequel" },
       { "key": "join", "label": "Join", "type": "choice", "default": "seamless continuity with the video: the same shot, camera and framing", "options": [
-        { "value": "seamless continuity with the video: the same shot, camera and framing", "label": "Seamless" },
-        { "value": "a cut to a new camera angle on the same scene and moment", "label": "New shot" }
+        { "value": "seamless continuity with the video: the same shot, camera and framing", "label": "Seamless", "icon": "infinity" },
+        { "value": "a cut to a new camera angle on the same scene and moment", "label": "New shot", "icon": "scissors" }
       ] },
       { "key": "next", "label": "What happens", "type": "text", "placeholder": "she turns and walks away" }
     ],
@@ -415,8 +415,8 @@
     "description": "Sharper and larger: precise keeps the original, creative adds detail.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [
-      { "key": "creativity", "label": "Creativity", "type": "choice", "options": ["precise", "creative"], "default": "precise" },
-      { "key": "factor", "label": "Factor", "type": "choice", "options": ["1.5", "2", "3"], "default": "2" }
+      { "key": "creativity", "label": "Creativity", "type": "choice", "options": [{ "value": "precise", "icon": "crosshair" }, { "value": "creative", "icon": "sparkles" }], "default": "precise" },
+      { "key": "factor", "label": "Factor", "type": "choice", "options": [{ "value": "1.5", "icon": "scaling" }, { "value": "2", "icon": "scaling" }, { "value": "3", "icon": "scaling" }], "default": "2" }
     ],
     "template": "{prompt}",
     "models": ["black-forest-labs/flux-video-upscale"],
@@ -472,16 +472,16 @@
         { "value": "neon cyberpunk palette of magenta and cyan", "label": "Cyberpunk", "group": "Bold", "note": "Neon colors" }
       ] },
       { "key": "temperature", "label": "Temperature", "type": "choice", "default": "", "options": [
-        { "value": "a cooler, bluer white balance", "label": "Cooler" }, { "value": "", "label": "Same" }, { "value": "a warmer, more golden white balance", "label": "Warmer" }
+        { "value": "a cooler, bluer white balance", "label": "Cooler", "icon": "thermometer-snowflake" }, { "value": "", "label": "Same", "icon": "equal" }, { "value": "a warmer, more golden white balance", "label": "Warmer", "icon": "thermometer-sun" }
       ] },
       { "key": "saturation", "label": "Saturation", "type": "choice", "default": "", "options": [
-        { "value": "muted, desaturated colors", "label": "Muted" }, { "value": "", "label": "Same" }, { "value": "vivid, saturated colors", "label": "Vivid" }
+        { "value": "muted, desaturated colors", "label": "Muted", "icon": "droplet" }, { "value": "", "label": "Same", "icon": "equal" }, { "value": "vivid, saturated colors", "label": "Vivid", "icon": "droplets" }
       ] },
       { "key": "contrast", "label": "Contrast", "type": "choice", "default": "", "options": [
-        { "value": "a soft, low contrast", "label": "Softer" }, { "value": "", "label": "Same" }, { "value": "a punchy, high contrast", "label": "Punchier" }
+        { "value": "a soft, low contrast", "label": "Softer", "icon": "blend" }, { "value": "", "label": "Same", "icon": "equal" }, { "value": "a punchy, high contrast", "label": "Punchier", "icon": "contrast" }
       ] },
       { "key": "exposure", "label": "Exposure", "type": "choice", "default": "", "options": [
-        { "value": "darker overall", "label": "Darker" }, { "value": "", "label": "Same" }, { "value": "brighter overall", "label": "Brighter" }
+        { "value": "darker overall", "label": "Darker", "icon": "sun-dim" }, { "value": "", "label": "Same", "icon": "equal" }, { "value": "brighter overall", "label": "Brighter", "icon": "sun" }
       ] },
       { "key": "items", "label": "New colors", "type": "recolors", "max": 3, "optional": true, "phrase": "{}" }
     ],
@@ -581,7 +581,7 @@
     "description": "Cuts the subject out of every frame: transparent (ProRes 4444 and WebM), or on a flat color. Local and free, about 4 s a frame.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [{ "key": "background", "label": "Background", "type": "choice", "default": "transparent", "options": [
-      { "value": "transparent", "label": "Transparent" }, { "value": "green", "label": "Green screen" }, { "value": "black", "label": "Black" }, { "value": "white", "label": "White" }
+      { "value": "transparent", "label": "Transparent", "icon": "square-dashed" }, { "value": "green", "label": "Green screen", "icon": "clapperboard" }, { "value": "black", "label": "Black", "icon": "moon" }, { "value": "white", "label": "White", "icon": "sun" }
     ] }],
     "template": "",
     "local": "matte"
@@ -590,7 +590,7 @@
     "id": "depth-map", "label": "Depth map", "group": "Retouch", "mode": "edit", "icon": "layers",
     "description": "A grayscale depth video, near in white and far in black, for compositing, fog or a 3D effect. Local and free, about 0.3 s a frame.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
-    "fields": [{ "key": "near", "label": "Near is", "type": "choice", "default": "white", "options": [{ "value": "white", "label": "White" }, { "value": "black", "label": "Black" }] }],
+    "fields": [{ "key": "near", "label": "Near is", "type": "choice", "default": "white", "options": [{ "value": "white", "label": "White", "icon": "sun" }, { "value": "black", "label": "Black", "icon": "moon" }] }],
     "template": "",
     "local": "depth"
   },
@@ -599,7 +599,7 @@
     "description": "More frames, made between the existing ones: smoother motion, or a slow motion. Local and free.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [{ "key": "target", "label": "Make it", "type": "choice", "default": "60", "options": [
-      { "value": "30", "label": "30 fps" }, { "value": "60", "label": "60 fps" }, { "value": "120", "label": "120 fps" }, { "value": "slow2", "label": "Slow motion ×2" }, { "value": "slow4", "label": "Slow motion ×4" }
+      { "value": "30", "label": "30 fps", "icon": "play" }, { "value": "60", "label": "60 fps", "icon": "fast-forward" }, { "value": "120", "label": "120 fps", "icon": "zap" }, { "value": "slow2", "label": "Slow motion ×2", "icon": "turtle" }, { "value": "slow4", "label": "Slow motion ×4", "icon": "snail" }
     ] }],
     "template": "",
     "local": "fps"
@@ -609,7 +609,7 @@
     "description": "An HDR10 video (HEVC 10-bit, BT.2020 PQ) from an SDR one: highlights stretched up to the peak you pick. A conversion, it adds no detail. Local and free.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [{ "key": "peak", "label": "Highlights", "type": "choice", "default": "1000", "options": [
-      { "value": "600", "label": "Subtle" }, { "value": "1000", "label": "Bright" }, { "value": "1600", "label": "Vivid" }
+      { "value": "600", "label": "Subtle", "icon": "sun-dim" }, { "value": "1000", "label": "Bright", "icon": "sun-medium" }, { "value": "1600", "label": "Vivid", "icon": "sun" }
     ] }],
     "template": "",
     "local": "hdr"
@@ -619,7 +619,7 @@
     "description": "Another aspect ratio, cropped around the point you pick. Local and free.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [
-      { "key": "ratio", "label": "Ratio", "type": "choice", "options": ["9:16", "1:1", "4:5", "16:9"], "default": "9:16" },
+      { "key": "ratio", "label": "Ratio", "type": "choice", "options": [{ "value": "9:16", "icon": "rectangle-vertical" }, { "value": "1:1", "icon": "square" }, { "value": "4:5", "icon": "rectangle-vertical" }, { "value": "16:9", "icon": "rectangle-horizontal" }], "default": "9:16" },
       { "key": "focus", "label": "Keep around (0 left, 1 right)", "type": "number", "min": 0, "max": 1, "step": 0.05, "default": 0.5 }
     ],
     "template": "",

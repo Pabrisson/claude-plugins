@@ -22,7 +22,7 @@ variable holding `node …` does not run under zsh). Everything lives in the fol
   inputs (`in-*`) and its `job.json`;
 - `elements/<name>/`: the Library's Elements a prompt cites with `@name` (characters, outfits, objects, places, poses,
   brands; voices picked as a voice), their images or clips and `element.json` (type, words);
-- `styles/<name>/`: the user's own styles, a few images of a look and its words (`style.json`);
+- `styles/<name>/`: the user's own styles, a few images of a look and its words, or a sound style's words and family (`style.json`);
 - `ledger.jsonl`: every paid action, in the provider's unit;
 - `settings.json`: the active router, the confirmation thresholds, the monthly caps, the ElevenLabs plan and the
   default models.
@@ -120,8 +120,8 @@ is the user's own prompt; the others fill a prompt template from their fields. C
 - **Styles.** Restyle (`--tool restyle`, image and video) redraws the source in a style, what is in it and its motion
   kept; Custom takes one too, optional. `--field style=<style>`: a preset's label (`media.mjs tools image --search
   restyle` lists the 24) or the name of a style of the user's own. `media.mjs styles add <name> <images…> --words
-  "<the look in words>"` makes one from 1 to 5 images that share a look (the dashboard's Library › Styles does the
-  same); its images go last among the references and the prompt names them, `media.mjs styles` lists them. With
+  "<the look in words>"` makes one from 1 to 5 images that share a look (the dashboard's Library › Visuals does
+  the same); its images go last among the references and the prompt names them, `media.mjs styles` lists them. With
   such a style in Custom image, Recraft V4 Styles (`recraft/recraft-v4-styles`, Pro for more detail, about 1K) is
   made for it: it draws the prompt in the look of the references. Not for Restyle: it makes a new image, the
   source is not kept.
@@ -268,7 +268,8 @@ and local: no estimate, no yes.
   3. `media.mjs elements add <name> <files…> --type <type> --words "…"`; a brand adds `--colors "#hex,#hex"` and
      `--font "…"`, a voice takes audio clips. `--from <generation id>` takes a result's images or clips (several
      `--from` for several). A style: `media.mjs styles add <name> <images…> --words "<the look>"` (1 to 5 images,
-     `--from` too).
+     `--from` too); a sound style (« crée un style musique… »): `media.mjs styles add <name> --for music|voice|sound
+     --words "<how it sounds>"`, in English, an artist's sound described without their name.
   4. Photos that are not clean references (a busy background, one angle only) for a type with a References tool:
      offer its sheets first. That is a generation: its price and the user's yes (step 3 above). Then save the sheets
      that came out right, with the photos when they help.
@@ -341,6 +342,14 @@ Dialogue, Multilingual v2, Turbo v2.5), and there is no voice change and no dubb
   credits a minute per language) or `dubbing_v2` (better voices and emotion, 13,500 a minute). **No lip-sync**: say so,
   and offer Lip sync (video Edit) on the dubbed voice.
 - ElevenLabs bills credits: give them as `shown` (with their dollars when the plan is set).
+- **Sound styles.** The audio tools' Style fields take a sound style: `--field style=<style>` on Music (Write: Suno's
+  style; Describe: written after the description), Singer, Extend music, Cover, Add vocals, Add instrumental, Replace
+  section, Mashup (a music style), Sound effect (a sound style, after the words), and Voice's `--field
+  instructions=<style>` (a voice style: how it is said; ElevenLabs straight takes none, audio tags instead). A preset's
+  label (`media.mjs tools audio --search <tool>` lists them: 24 music, 13 voice, 10 sound), the name of a sound style
+  of the user's own (`media.mjs styles add <name> --for music|voice|sound --words "…"`, its words only, sent as they
+  are; the dashboard's Library › Sounds does the same), or words of one's own. A preset's label stands for its
+  words (`style=Synthwave` sends the preset's). A style of another family is refused.
 - **Music** (`audio --tool music`, Kie: Suno V6, V6 Mini, V6 Wild, $0.06 a request for 2 takes and their covers;
   OpenRouter: Lyria 3 Pro $0.08 a song, Lyria 3 Clip $0.04 for 30 s):
   - Describe (`--field description="…"`, 3,000 characters), with up to 5 images, a video and a sound (6 s or more) for
@@ -431,4 +440,4 @@ rush, or a B-roll clip in the project the prompt names.
 - **Git.** The engine writes the folder's `.gitignore`: git keeps `media/`, `elements/`, `styles/`, `ledger.jsonl` and
   `settings.json`, and leaves out `.cache/` and `.trash/` (what the dashboard deleted).
 - **A new tool** is an entry in `engine/tools/<kind>.json`: read `references/tools-format.md`. A new preset style
-  is an entry in `engine/tools/styles.json`.
+  is an entry in `engine/tools/styles.json` (visual), `music-styles.json`, `voice-styles.json` or `sound-styles.json`.

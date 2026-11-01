@@ -1,60 +1,115 @@
 import {
+  ArrowDownToDotIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
   ArrowRightToLineIcon,
   AudioLinesIcon,
   AudioWaveformIcon,
   BetweenHorizontalStartIcon,
+  BlendIcon,
   BombIcon,
   BoxIcon,
   BrushIcon,
   CameraIcon,
   CaptionsIcon,
+  CircleIcon,
   ClapperboardIcon,
+  Clock3Icon,
+  Clock6Icon,
   CombineIcon,
+  ContrastIcon,
   CropIcon,
+  CrosshairIcon,
   Disc3Icon,
+  DropletIcon,
+  DropletsIcon,
   EarthIcon,
+  EqualIcon,
   EraserIcon,
   ExpandIcon,
   FastForwardIcon,
   FileAudioIcon,
+  FileImageIcon,
+  FileTextIcon,
+  FileVideoIcon,
   FlameIcon,
+  FolderOpenIcon,
   GaugeIcon,
   GemIcon,
   GuitarIcon,
   HandIcon,
+  ImageIcon,
+  InfinityIcon,
   LanguagesIcon,
+  LaptopIcon,
   LayersIcon,
+  LayoutGridIcon,
+  LockIcon,
   MapPinIcon,
   MaximizeIcon,
   MessageCircleIcon,
+  MicIcon,
   MicVocalIcon,
+  MonitorIcon,
+  MoonIcon,
   MusicIcon,
+  NetworkIcon,
   PackageIcon,
   PaintbrushIcon,
   PaletteIcon,
+  PauseIcon,
+  PenLineIcon,
   PersonStandingIcon,
   PianoIcon,
   PlaneIcon,
   PlayIcon,
+  RabbitIcon,
+  RectangleHorizontalIcon,
+  RectangleVerticalIcon,
   RepeatIcon,
   ReplaceIcon,
   Rotate3dIcon,
+  RotateCcwIcon,
+  RotateCwIcon,
+  RouteIcon,
+  ScalingIcon,
   ScanFaceIcon,
   ScissorsIcon,
+  ShapesIcon,
   ShirtIcon,
+  SignalHighIcon,
+  SignalIcon,
+  SignalLowIcon,
+  SignalMediumIcon,
+  SnailIcon,
   SnowflakeIcon,
   SparklesIcon,
   SpeechIcon,
+  SplitIcon,
+  SquareDashedIcon,
   SquareIcon,
+  StarIcon,
+  SunDimIcon,
   SunIcon,
   SunMediumIcon,
+  ThermometerSnowflakeIcon,
+  ThermometerSunIcon,
+  ToggleLeftIcon,
+  ToggleRightIcon,
+  TornadoIcon,
+  TurtleIcon,
   TypeIcon,
   UserIcon,
   UserRoundPlusIcon,
   UsersIcon,
+  VideoIcon,
   Volume2Icon,
+  VolumeXIcon,
   WandIcon,
+  WandSparklesIcon,
+  WavesIcon,
   WindIcon,
+  ZapIcon,
   ZoomInIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -120,9 +175,69 @@ const ICONS: Record<string, LucideIcon> = {
   captions: CaptionsIcon,
   piano: PianoIcon,
   "user-round-plus": UserRoundPlusIcon,
+  "file-text": FileTextIcon,
+  "pen-line": PenLineIcon,
+  "volume-x": VolumeXIcon,
+  split: SplitIcon,
+  "arrow-down-to-dot": ArrowDownToDotIcon,
+  "arrow-left": ArrowLeftIcon,
+  "arrow-right": ArrowRightIcon,
+  blend: BlendIcon,
+  circle: CircleIcon,
+  "clock-3": Clock3Icon,
+  "clock-6": Clock6Icon,
+  contrast: ContrastIcon,
+  crosshair: CrosshairIcon,
+  droplet: DropletIcon,
+  droplets: DropletsIcon,
+  equal: EqualIcon,
+  infinity: InfinityIcon,
+  lock: LockIcon,
+  moon: MoonIcon,
+  pause: PauseIcon,
+  rabbit: RabbitIcon,
+  "rectangle-horizontal": RectangleHorizontalIcon,
+  "rectangle-vertical": RectangleVerticalIcon,
+  "rotate-ccw": RotateCcwIcon,
+  "rotate-cw": RotateCwIcon,
+  scaling: ScalingIcon,
+  snail: SnailIcon,
+  "square-dashed": SquareDashedIcon,
+  "sun-dim": SunDimIcon,
+  "thermometer-snowflake": ThermometerSnowflakeIcon,
+  "thermometer-sun": ThermometerSunIcon,
+  tornado: TornadoIcon,
+  turtle: TurtleIcon,
+  video: VideoIcon,
+  "wand-sparkles": WandSparklesIcon,
+  waves: WavesIcon,
+  zap: ZapIcon,
 }
 export function ToolIcon({ name, className }: { name: string; className?: string }) {
   return createElement(ICONS[name] ?? SparklesIcon, { className })
+}
+
+// a value's icon by what it is: a ratio by its shape, a resolution, a file format, a level, a medium, a provider, on/off…
+// ponytail: keyword heuristic, a bare 3–4 digit number reads as a resolution and an unknown word gets no icon; give the
+// option an "icon" in its catalog when one matters
+const FORMATS = (list: string, icon: LucideIcon) => Object.fromEntries(list.split(" ").map((f) => [f, icon]))
+// a provider's icon, the same wherever it is named: its chips, the header's balances, Settings, Credits
+const PROVIDER_ICONS: Record<string, LucideIcon> = { kie: RouteIcon, openrouter: NetworkIcon, elevenlabs: AudioWaveformIcon, local: LaptopIcon }
+export function ProviderIcon({ id, className }: { id: string; className?: string }) {
+  return PROVIDER_ICONS[id] ? createElement(PROVIDER_ICONS[id], { className, "aria-hidden": true }) : null
+}
+const NAMED: Record<string, LucideIcon> = {
+  all: LayoutGridIcon, favorites: StarIcon, image: ImageIcon, video: VideoIcon, audio: AudioLinesIcon, other: ShapesIcon,
+  voice: MicIcon, music: MusicIcon, sound: Volume2Icon, import: FolderOpenIcon,
+  ...PROVIDER_ICONS,
+  "": WandSparklesIcon, auto: WandSparklesIcon, same: EqualIcon, on: ToggleRightIcon, true: ToggleRightIcon, off: ToggleLeftIcon, false: ToggleLeftIcon,
+  low: SignalLowIcon, medium: SignalMediumIcon, high: SignalHighIcon, xhigh: SignalIcon, max: SignalIcon,
+  ...FORMATS("png jpg jpeg webp gif avif heic", FileImageIcon), ...FORMATS("mp4 mov webm mkv", FileVideoIcon), ...FORMATS("mp3 wav flac ogg m4a aac opus pcm", FileAudioIcon),
+}
+export function valueIcon(v: string | number, className?: string) {
+  const s = String(v).toLowerCase(), r = s.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/)
+  const icon = r ? (+r[1] > +r[2] ? RectangleHorizontalIcon : +r[1] < +r[2] ? RectangleVerticalIcon : SquareIcon) : /^≤?\d{3,4}p?$|^\d+(\.\d+)?k$/.test(s) ? MonitorIcon : Object.hasOwn(NAMED, s) ? NAMED[s] : null
+  return icon ? createElement(icon, { className }) : null
 }
 
 // a chip, and a chosen one: tinted with the space's color, not a white block that outshines the prompt
@@ -130,18 +245,23 @@ export const CHIP = "rounded-full border px-3 py-1 text-sm transition-colors dur
 export const CHIP_ON = "border-space/50 bg-space/15 font-medium text-space"
 export const CHIP_OFF = "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
 
-// single-choice chips: the dashboard's control for every list of values
+// a chip's icon before its label, sized for it
+const WITH_ICON = "inline-flex items-center justify-center gap-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0"
+
+// single-choice chips: the dashboard's control for every list of values, each with its icon
 export function Chips<T extends string | number>({
   options,
   value,
   onChange,
   label = (v) => String(v),
+  icon,
   className,
 }: {
   options: readonly T[]
   value: T | undefined
   onChange: (v: T) => void
   label?: (v: T) => string
+  icon?: (v: T) => React.ReactNode
   className?: string
 }) {
   return (
@@ -153,9 +273,10 @@ export function Chips<T extends string | number>({
           role="radio"
           aria-checked={o === value}
           onClick={() => onChange(o)}
-          className={cn(CHIP, o === value ? CHIP_ON : CHIP_OFF)}
+          className={cn(CHIP, WITH_ICON, o === value ? CHIP_ON : CHIP_OFF)}
         >
-          {label(o)}
+          {icon?.(o)}
+          <span className="min-w-0 truncate">{label(o)}</span>
         </button>
       ))}
     </div>
@@ -168,11 +289,13 @@ export function MultiChips<T extends string>({
   value,
   onChange,
   label = (v) => v,
+  icon,
 }: {
   options: readonly T[]
   value: T[]
   onChange: (v: T[]) => void
   label?: (v: T) => string
+  icon?: (v: T) => React.ReactNode
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -184,8 +307,9 @@ export function MultiChips<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(on ? value.filter((x) => x !== o) : [...value, o])}
-            className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
+            className={cn(CHIP, WITH_ICON, on ? CHIP_ON : CHIP_OFF)}
           >
+            {icon?.(o)}
             {label(o)}
           </button>
         )

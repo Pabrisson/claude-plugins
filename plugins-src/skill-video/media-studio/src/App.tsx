@@ -10,7 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, ROUTER_NAME, type Balances, type Clip, type Job, type Kind, type Model, type Page, type Place, type State, type Tool } from "@/lib/api"
 import { endOf, freeze, inside, isStill, lay, marginsTo, place, placeOf, voiceUnder } from "@/lib/timeline"
-import { Chips } from "@/components/chips"
+import { Chips, valueIcon, ProviderIcon } from "@/components/chips"
 import { blank, Composer, type Compose } from "@/components/composer"
 import { CutDialog } from "@/components/cut"
 import { upload, Workspaces } from "@/components/inputs"
@@ -397,6 +397,7 @@ function Dashboard() {
                 options={["workspace", "all"] as const}
                 value={scope}
                 label={(o) => (o === "workspace" ? ws.name : "All")}
+                icon={(o) => (o === "workspace" ? <FolderKanbanIcon /> : valueIcon(o))}
                 onChange={(o) => {
                   setScope(o)
                   try {
@@ -542,7 +543,7 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
       <span className="flex-1" />
       {/* the balances, hidden on the fake APIs (their amounts are made up); the active router's in dollars */}
       {!state.fake?.on && <>
-      <Balance name={ROUTER_NAME[state.router]}>
+      <Balance name={ROUTER_NAME[state.router]} provider={state.router}>
         {!state.keys[state.router] ? <span className="text-muted-foreground">no key</span>
           : state.router === "kie"
             ? !kb ? <span className="text-muted-foreground">…</span>
@@ -556,7 +557,7 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
       </Balance>
       {/* ElevenLabs, straight: its voices, Change voice and Translate; in dollars on a paid plan (its credits have no price
           on the free one) */}
-      <Balance name="ElevenLabs">
+      <Balance name="ElevenLabs" provider="elevenlabs">
         {!state.keys.elevenlabs ? <span className="text-muted-foreground">no key</span>
           : !eb ? <span className="text-muted-foreground">…</span>
           : eb.error ? <span className="text-muted-foreground">unavailable</span>
@@ -593,9 +594,10 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
   )
 }
 
-function Balance({ name, children }: { name: string; children: React.ReactNode }) {
+function Balance({ name, provider, children }: { name: string; provider: string; children: React.ReactNode }) {
   return (
     <span className="flex items-baseline gap-1.5 rounded-full border bg-card/50 px-3 py-1 text-sm whitespace-nowrap">
+      <ProviderIcon id={provider} className="size-3.5 shrink-0 self-center text-muted-foreground" />
       <span className="text-muted-foreground">{name}</span>
       {children}
     </span>

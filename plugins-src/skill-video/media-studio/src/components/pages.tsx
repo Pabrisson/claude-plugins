@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react"
 import { cn } from "cn"
 
-import { ArrowUpRightIcon, AudioLinesIcon, ImageIcon, SparklesIcon, VideoIcon } from "lucide-react"
+import { ArrowUpRightIcon, AudioLinesIcon, CalendarDaysIcon, CalendarRangeIcon, ImageIcon, LayoutDashboardIcon, PaletteIcon, ShapesIcon, SparklesIcon, VideoIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, money, per1000, ROUTER_NAME, type Balances, type Job, type Kind, type LedgerLine, type Router, type State, type Tool } from "@/lib/api"
-import { Chips, Label, MultiChips } from "@/components/chips"
+import { api, money, opt, per1000, ROUTER_NAME, type Balances, type Job, type Kind, type LedgerLine, type Router, type State, type Tool } from "@/lib/api"
+import { Chips, Label, MultiChips, ProviderIcon, valueIcon } from "@/components/chips"
 import { ElementsTab, type ElementDraft, type Use } from "@/components/elements"
 import { StylesTab } from "@/components/styles"
+import { type Preset } from "@/components/style-picker"
 import { isRunning, type Bridge } from "@/components/results"
 import { ModelLogo } from "@/components/model-logo"
 import { Viewer } from "@/components/viewer"
@@ -18,8 +19,15 @@ import { Viewer } from "@/components/viewer"
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 
-export function Side({ children }: { children: React.ReactNode }) {
-  return <aside className="flex min-h-0 flex-col gap-5 overflow-auto border-r bg-background p-4">{children}</aside>
+// a page's left column: its tabs and main action (head) stay put, its filters scroll under them; both keep the
+// scrollbar's room, so nothing moves when a long list brings it
+export function Side({ head, children }: { head?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <aside className="flex min-h-0 flex-col border-r bg-background">
+      {head && <div className="flex shrink-0 flex-col gap-5 overflow-hidden p-4 pb-0 [scrollbar-gutter:stable]">{head}</div>}
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4 [scrollbar-gutter:stable]", head && "pt-5")}>{children}</div>
+    </aside>
+  )
 }
 export function Main({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -57,11 +65,12 @@ function WorkspaceFilter({ state, value, onChange }: { state: State; value: stri
 
 // ---------- Library ----------
 
-// the Library's tab lives in the URL (#library/elements, #library/styles), so a result's « Make an element » lands on it;
-// the media are on the Workspace page (« All workspaces »)
-const TABS = ["elements", "styles"] as const
+// the Library's tab lives in the URL (#library/elements, #library/styles, #library/sound-styles), so a result's « Make an
+// element » lands on it; the media are on the Workspace page (« All workspaces »)
+const TABS = ["elements", "styles", "sound-styles"] as const
 type Tab = (typeof TABS)[number]
-const tabOf = (): Tab => (window.location.hash.endsWith("/styles") ? "styles" : "elements")
+const TAB_NAMES: Record<Tab, [string, typeof ShapesIcon]> = { elements: ["Elements", ShapesIcon], styles: ["Visuals", PaletteIcon], "sound-styles": ["Sounds", AudioLinesIcon] }
+const tabOf = (): Tab => TABS.find((t) => window.location.hash === `#library/${t}`) ?? "elements"
 
 export function Library({
   state,
@@ -87,10 +96,26 @@ export function Library({
     return () => window.removeEventListener("hashchange", on)
   }, [])
   const tabs = (
-    <Chips options={TABS} value={tab} label={(t) => ({ elements: "Elements", styles: "Styles" })[t]} onChange={(t) => (window.location.hash = `library/${t}`)} className="grid grid-cols-2" />
+    <Chips
+      options={TABS}
+      value={tab}
+      label={(t) => TAB_NAMES[t][0]}
+      icon={(t) => {
+        const Icon = TAB_NAMES[t][1]
+        return <Icon />
+      }}
+      onChange={(t) => (window.location.hash = `library/${t}`)}
+      className="grid grid-cols-3"
+    />
   )
   if (tab === "styles")
-    return <StylesTab tabs={tabs} state={state} options={tools.image.find((t) => t.id === "restyle")?.fields.find((f) => f.type === "style")?.options ?? []} engine={engine} onUse={onUse} onChanged={onChanged} />
+    return <StylesTab tabs={tabs} state={state} presets={(tools.image.find((t) => t.id === "restyle")?.fields.find((f) => f.type === "style")?.options ?? []).map((o) => opt(o) as Preset)} engine={engine} onUse={onUse} onChanged={onChanged} />
+  if (tab === "sound-styles") {
+    // each family's presets once, from the first tool that picks them (Music's Style, Voice's How it sounds, Sound effect's)
+    const fields = tools.audio.flatMap((t) => t.fields).filter((f) => f.type === "style" && f.for)
+    const presets = (["music", "voice", "sound"] as const).filter((family) => fields.some((f) => f.for === family)).flatMap((family) => (fields.find((f) => f.for === family)!.options ?? []).map((o) => ({ ...opt(o), for: family }) as Preset))
+    return <StylesTab tabs={tabs} state={state} presets={presets} sound engine={engine} onUse={onUse} onChanged={onChanged} />
+  }
   return <ElementsTab tabs={tabs} state={state} tools={tools.image} engine={engine} draft={draft} onDraftUsed={onDraftUsed} onUse={onUse} onChanged={onChanged} />
 }
 
@@ -206,19 +231,19 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
       <Side>
         <div>
           <Label>Period</Label>
-          <Chips options={["7d", "month", "all"] as const} value={period} label={(p) => ({ "7d": "7 days", month: "This month", all: "All" })[p]} onChange={setPeriod} />
+          <Chips options={["7d", "month", "all"] as const} value={period} label={(p) => ({ "7d": "7 days", month: "This month", all: "All" })[p]} icon={(p) => (p === "7d" ? <CalendarDaysIcon /> : p === "month" ? <CalendarRangeIcon /> : valueIcon(p))} onChange={setPeriod} />
         </div>
         <div>
           <Label>Provider</Label>
-          <Chips options={["all", "kie", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => (p === "all" ? "All" : ROUTER_OF[p])} onChange={setProvider} />
+          <Chips options={["all", "kie", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => (p === "all" ? "All" : ROUTER_OF[p])} icon={(p) => valueIcon(p)} onChange={setProvider} />
         </div>
         <div>
           <Label>Media</Label>
-          <MultiChips options={KINDS} value={kinds} label={cap} onChange={setKinds} />
+          <MultiChips options={KINDS} value={kinds} label={cap} icon={(k) => valueIcon(k)} onChange={setKinds} />
         </div>
         <div>
           <Label>By</Label>
-          <MultiChips options={["dashboard", "claude"]} value={by} label={(b) => (b === "claude" ? "Claude" : "Dashboard")} onChange={setBy} />
+          <MultiChips options={["dashboard", "claude"]} value={by} label={(b) => (b === "claude" ? "Claude" : "Dashboard")} icon={(b) => (b === "claude" ? <SparklesIcon /> : <LayoutDashboardIcon />)} onChange={setBy} />
         </div>
         <WorkspaceFilter state={state} value={ws} onChange={setWs} />
         <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
@@ -236,6 +261,7 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
             return (
               <div key={r} className="rounded-2xl border bg-card p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <ProviderIcon id={r} className="size-4 shrink-0" />
                   {ROUTER_OF[r]}
                   {r === "elevenlabs" && <span className="text-xs">· straight, not a router</span>}
                   {r === state.router && <Badge variant="secondary" className="ml-auto">Active</Badge>}
@@ -301,7 +327,12 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
                     <span className="truncate">{r.model}</span>
                   </span>
                 </td>
-                <td className="p-2 whitespace-nowrap text-muted-foreground">{ROUTER_OF[r.provider] ?? r.provider}</td>
+                <td className="p-2 whitespace-nowrap text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <ProviderIcon id={r.provider} className="size-3.5 shrink-0" />
+                    {ROUTER_OF[r.provider] ?? r.provider}
+                  </span>
+                </td>
                 <td className="p-2 text-right whitespace-nowrap tabular-nums">{money(r.estimate, r.unit, usd)}</td>
                 <td className={cn("p-2 text-right whitespace-nowrap tabular-nums", r.actual ? "font-semibold text-cost" : "text-muted-foreground")}>
                   {r.status === "running" ? "running" : `${money(r.actual, r.unit, usd)}${r.status === "failed" ? ", failed" : r.known ? "" : " (est.)"}`}

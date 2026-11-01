@@ -1,4 +1,5 @@
 import { useRef } from "react"
+import { EqualIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { opt, type Cam, type Field } from "@/lib/api"
@@ -142,7 +143,7 @@ export function CameraRig({ field, fields, onChange }: { field: Field; fields: R
       </div>
       <div>
         <Label>Distance</Label>
-        <Chips className="grid grid-cols-3" options={[-1, 0, 1] as const} value={cam.zoom as -1 | 0 | 1} label={(z) => (z < 0 ? "Farther" : z > 0 ? "Closer" : "Same")} onChange={(zoom) => put({ zoom })} />
+        <Chips className="grid grid-cols-3" options={[-1, 0, 1] as const} value={cam.zoom as -1 | 0 | 1} label={(z) => (z < 0 ? "Farther" : z > 0 ? "Closer" : "Same")} icon={(z) => (z < 0 ? <ZoomOutIcon /> : z > 0 ? <ZoomInIcon /> : <EqualIcon />)} onChange={(zoom) => put({ zoom })} />
       </div>
       <p className="-mt-1 text-xs text-muted-foreground" aria-live="polite">
         {value.charAt(0).toUpperCase() + value.slice(1)}.

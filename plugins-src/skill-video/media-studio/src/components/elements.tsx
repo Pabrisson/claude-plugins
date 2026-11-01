@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { createElement, useEffect, useRef, useState } from "react"
 import {
   AudioLinesIcon,
   MicVocalIcon,
@@ -130,16 +130,21 @@ export function ElementsTab({
   const shown = all.find((e) => e.name === open)
   return (
     <>
-      <Side>
-        {tabs}
+      <Side
+        head={
+          <>
+            {tabs}
+            <Button variant="space" onClick={() => setCreating({ type: type === "all" ? "character" : type, paths: [] })}>
+              <PlusIcon /> New element
+            </Button>
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search elements" aria-label="Search elements" className="pl-8" />
+            </div>
+          </>
+        }
+      >
         <WorkspaceRows state={state} value={ws} onPick={setWs} count={(slug) => all.filter((e) => inWs(e, slug)).length} unit="element" all />
-        <Button variant="space" onClick={() => setCreating({ type: type === "all" ? "character" : type, paths: [] })}>
-          <PlusIcon /> New element
-        </Button>
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search elements" aria-label="Search elements" className="pl-8" />
-        </div>
         <nav aria-label="Types" className="-mx-1 flex flex-col gap-0.5">
           {[{ type: "all" as const, plural: "All" }, ...ELEMENT_TYPES].map((t) => {
             const Icon = t.type === "all" ? LayersIcon : TYPE_ICON[t.type]
@@ -507,6 +512,7 @@ export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: {
             options={ELEMENT_TYPES.filter((t) => heard(t.type) === heard(el.type) && (t.type !== "other" || el.type === "other")).map((t) => t.type)}
             value={el.type}
             label={typeLabel}
+            icon={(t) => createElement(TYPE_ICON[t])}
             onChange={(type) => save({ type })}
           />
         </div>
@@ -684,7 +690,7 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
         </div>
         <div>
           <Label>Type</Label>
-          <Chips options={ELEMENT_TYPES.filter((t) => t.type !== "other").map((t) => t.type)} value={type} label={typeLabel} onChange={setType} />
+          <Chips options={ELEMENT_TYPES.filter((t) => t.type !== "other").map((t) => t.type)} value={type} label={typeLabel} icon={(t) => createElement(TYPE_ICON[t])} onChange={setType} />
           <p className="mt-1.5 text-xs text-muted-foreground">
             {hint}
             {type === "brand" ? ". No tool redraws a logo: send the real file." : ""}

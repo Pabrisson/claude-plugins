@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { ArrowLeftRightIcon, AudioLinesIcon, FolderOpenIcon, PauseIcon, PlayIcon } from "lucide-react"
+import { ArrowLeftRightIcon, AudioLinesIcon, Columns2Icon, FolderOpenIcon, PauseIcon, PlayIcon, SquareSplitHorizontalIcon, Volume2Icon, VolumeXIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -184,7 +184,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
         <DialogTitle className="text-base font-semibold">Compare</DialogTitle>
         <DialogDescription className="sr-only">Two {kind === "audio" ? "sounds" : `${kind}s`}, A against B.</DialogDescription>
         <span className="flex-1" />
-        {kind !== "audio" && <Chips options={["slider", "side"] as const} value={mode} label={(m) => (m === "slider" ? "Slider" : "Side by side")} onChange={setMode} />}
+        {kind !== "audio" && <Chips options={["slider", "side"] as const} value={mode} label={(m) => (m === "slider" ? "Slider" : "Side by side")} icon={(m) => (m === "slider" ? <SquareSplitHorizontalIcon /> : <Columns2Icon />)} onChange={setMode} />}
         <Button variant="outline" size="sm" disabled={!sides.b || !!picking} onClick={swap}>
           <ArrowLeftRightIcon data-icon="inline-start" /> Swap
         </Button>
@@ -255,7 +255,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
             </span>
             <Slider value={[t]} max={dur || 1} step={0.01} onValueChange={([v]) => seek(v)} aria-label="Position" className="flex-1" />
             <span className="text-xs text-muted-foreground">Sound</span>
-            <Chips options={SIDES} value={sound} label={(s) => s.toUpperCase()} onChange={setSound} />
+            <Chips options={SIDES} value={sound} label={(s) => s.toUpperCase()} icon={(s) => (s === sound ? <Volume2Icon /> : <VolumeXIcon />)} onChange={setSound} />
           </div>
         )}
         <div className="grid grid-cols-2 gap-5">

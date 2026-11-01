@@ -261,7 +261,7 @@
     "inputs": [{ "key": "references", "kind": "image", "label": "Product", "multiple": true }],
     "fields": [
       { "key": "set", "label": "Set", "type": "text", "placeholder": "on wet black stone, soft rim light" },
-      { "key": "angle", "label": "Angle", "type": "choice", "options": ["front", "three-quarter", "top-down", "close-up"], "default": "three-quarter" }
+      { "key": "angle", "label": "Angle", "type": "choice", "options": [{ "value": "front", "icon": "square" }, { "value": "three-quarter", "icon": "box" }, { "value": "top-down", "icon": "arrow-down-to-dot" }, { "value": "close-up", "icon": "zoom-in" }], "default": "three-quarter" }
     ],
     "template": "Professional product photo of the product in the reference images, exact shape, colors and labels kept: {set}, {angle} view. {prompt}",
     "models": ["openai/gpt-image-2.5-sunburst", "google/gemini-nano-banana-2.1", "microsoft/mai-image-2.6", "x-ai/grok-imagine-image-2.0"]
@@ -324,8 +324,8 @@
       { "key": "change", "label": "Put there", "type": "text", "placeholder": "a vase of white tulips" },
       { "key": "element", "label": "Or an element", "type": "element", "multiple": true, "types": ["character", "outfit", "object", "location", "pose", "brand", "other"], "phrase": "{}", "by_type": { "location": "{} as the setting", "pose": "the pose of {}" } },
       { "key": "outside", "label": "Outside the area", "type": "choice", "default": "exact", "options": [
-        { "value": "exact", "label": "Kept pixel-exact" },
-        { "value": "model", "label": "As the model made it" }
+        { "value": "exact", "label": "Kept pixel-exact", "icon": "lock" },
+        { "value": "model", "label": "As the model made it", "icon": "wand-sparkles" }
       ] }
     ],
     "one_of": ["change", "element", "references"],

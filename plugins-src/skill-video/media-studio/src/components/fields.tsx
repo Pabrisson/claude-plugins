@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Slider } from "@/components/ui/slider"
 import { opt, sentence, shown, type Field, type Tool } from "@/lib/api"
-import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label } from "@/components/chips"
+import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, ToolIcon } from "@/components/chips"
 import { colorWords } from "@/components/light-rig"
 import { MoveIcon, MovePreview } from "@/components/moves"
 
@@ -36,6 +36,12 @@ export function sections(fields: Field[]) {
   return out
 }
 
+// a choice's chip icon: its option's own, when the catalog gives one
+export const optionIcon = (f: Field) => (v: string) => {
+  const name = f.options?.map(opt).find((o) => o.value === v)?.icon
+  return name ? <ToolIcon name={name} /> : null
+}
+
 // one field: chips for a few values, a rich select, ordered moves, a slider, a color or words
 export function FieldInput({ field: f, value, onChange, tile }: { field: Field; value?: string; onChange: (v: string) => void; tile?: boolean }) {
   const v = value ?? (f.default != null ? String(f.default) : "")
@@ -46,7 +52,7 @@ export function FieldInput({ field: f, value, onChange, tile }: { field: Field; 
     <div>
       <Label>{f.label}</Label>
       {f.type === "choice" ? (
-        <Chips options={(f.options ?? []).map((o) => opt(o).value)} value={v} onChange={onChange} label={(o) => shown(f, o)} />
+        <Chips options={(f.options ?? []).map((o) => opt(o).value)} value={v} onChange={onChange} label={(o) => shown(f, o)} icon={optionIcon(f)} />
       ) : f.type === "number" ? (
         <div className="flex items-center gap-3">
           <Slider min={f.min ?? 0} max={f.max ?? 100} step={f.step ?? 1} value={[Number(v)]} onValueChange={([n]) => onChange(String(n))} aria-label={f.label} />

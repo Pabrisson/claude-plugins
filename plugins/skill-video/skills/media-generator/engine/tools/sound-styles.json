@@ -1,0 +1,14 @@
+[
+  { "value": "realistic foley, close-miked, dry and detailed, no music", "label": "Foley close-up", "group": "Realistic", "note": "Dry and detailed", "swatch": ["#8d6e63", "#d7ccc8", "#4e342e", "#bcaaa4"] },
+  { "value": "natural field recording, real outdoor ambience, wide stereo, subtle background life", "label": "Field recording", "group": "Realistic", "note": "Real outdoor ambience", "swatch": ["#606c38", "#dda15e", "#283618", "#fefae0"] },
+  { "value": "clean studio recording, crisp and isolated, no room noise", "label": "Studio clean", "group": "Realistic", "note": "Crisp and isolated", "swatch": ["#e9ecef", "#adb5bd", "#495057", "#f8f9fa"] },
+
+  { "value": "cinematic, big and punchy, deep low end, a long reverb tail", "label": "Cinematic impact", "group": "Cinematic", "note": "Big, deep, long tail", "swatch": ["#0b090a", "#ba181b", "#e5383b", "#d3d3d3"] },
+  { "value": "futuristic sci-fi, synthesized textures, metallic resonance, electronic glitches", "label": "Sci-fi", "group": "Cinematic", "note": "Synthetic and metallic", "swatch": ["#03045e", "#00b4d8", "#caf0f8", "#7209b7"] },
+  { "value": "dark horror, eerie and unsettling, dissonant drones, creaking textures", "label": "Horror", "group": "Cinematic", "note": "Eerie drones, creaks", "swatch": ["#1b1b1b", "#540b0e", "#6c757d", "#9e2a2b"] },
+
+  { "value": "cartoon sound effect, exaggerated and bouncy, playful, comedic timing", "label": "Cartoon", "group": "Stylized", "note": "Bouncy and comic", "swatch": ["#ffbe0b", "#fb5607", "#3a86ff", "#ff006e"] },
+  { "value": "8-bit retro game sound, chiptune square waves, crunchy lo-fi", "label": "8-bit retro", "group": "Stylized", "note": "Chiptune bleeps", "swatch": ["#5fcde4", "#99e550", "#fbf236", "#222034"] },
+  { "value": "clean user-interface sound, short, soft and modern, a subtle digital click", "label": "UI interface", "group": "Stylized", "note": "Short, soft, modern", "swatch": ["#4361ee", "#e0e7ff", "#3a0ca3", "#ffffff"] },
+  { "value": "lo-fi texture, vinyl crackle, warm tape saturation, muffled highs", "label": "Lo-fi vinyl", "group": "Stylized", "note": "Crackle and tape warmth", "swatch": ["#a68a64", "#e9d8a6", "#5e548e", "#3d405b"] }
+]

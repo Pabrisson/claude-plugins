@@ -1,11 +1,12 @@
 import { useState } from "react"
-import { ArrowLeftIcon, ArrowRightIcon, VideoIcon } from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, TimerIcon, VideoIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Slider } from "@/components/ui/slider"
 import { fileUrl, opt, shown, type Field } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
 import { FilmStrip } from "@/components/cut"
+import { optionIcon } from "@/components/fields"
 
 // Extend in clicks: which side gets the new shot (each card shows the frame it hooks on), how long it is, a timeline of
 // the result to scale, and how it joins. Nothing is dragged
@@ -90,7 +91,7 @@ export function ExtendPanel({
               <span className="w-10 text-right text-sm tabular-nums">{added} s</span>
             </div>
           ) : (
-            <Chips options={durations} value={added} label={(d) => `${d} s`} onChange={onDuration} />
+            <Chips options={durations} value={added} label={(d) => `${d} s`} icon={() => <TimerIcon />} onChange={onDuration} />
           )}
         </div>
       )}
@@ -113,7 +114,7 @@ export function ExtendPanel({
       {join && (
         <div>
           <Label>Join</Label>
-          <Chips className="grid grid-cols-2" options={(join.options ?? []).map((o) => opt(o).value)} value={fields.join ?? String(join.default ?? "")} label={(v) => shown(join, v)} onChange={(v) => onFields({ join: v })} />
+          <Chips className="grid grid-cols-2" options={(join.options ?? []).map((o) => opt(o).value)} value={fields.join ?? String(join.default ?? "")} label={(v) => shown(join, v)} icon={optionIcon(join)} onChange={(v) => onFields({ join: v })} />
         </div>
       )}
     </div>

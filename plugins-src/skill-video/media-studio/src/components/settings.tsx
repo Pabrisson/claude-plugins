@@ -1,5 +1,23 @@
-import { Fragment, useEffect, useEffectEvent, useRef, useState } from "react"
-import { CodeIcon, CopyIcon, KeyRoundIcon, LayersIcon, LoaderCircleIcon, RefreshCwIcon, RouterIcon, TriangleAlertIcon, WalletIcon, type LucideIcon } from "lucide-react"
+import { createElement, Fragment, useEffect, useEffectEvent, useRef, useState } from "react"
+import {
+  BadgeCheckIcon,
+  Building2Icon,
+  CircleOffIcon,
+  CodeIcon,
+  CopyIcon,
+  GiftIcon,
+  KeyRoundIcon,
+  LayersIcon,
+  LoaderCircleIcon,
+  PaletteIcon,
+  RefreshCwIcon,
+  RouterIcon,
+  SproutIcon,
+  TrendingUpIcon,
+  TriangleAlertIcon,
+  WalletIcon,
+  type LucideIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -11,13 +29,15 @@ import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { api, money, plain, ROUTER_NAME, type Kind, type Model, type Router, type Settings, type State } from "@/lib/api"
-import { Chips } from "@/components/chips"
+import { Chips, ProviderIcon } from "@/components/chips"
 import { capsOf, ModelPicker, NewBadge, shortName } from "@/components/model-picker"
 import { ModelLogo } from "@/components/model-logo"
 import { Main, Side } from "@/components/pages"
 
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
+// ElevenLabs' plans, each its icon (a plan the engine adds later: a wallet)
+const PLAN_ICON: Record<string, LucideIcon> = { none: CircleOffIcon, free: GiftIcon, starter: SproutIcon, creator: PaletteIcon, pro: BadgeCheckIcon, scale: TrendingUpIcon, business: Building2Icon }
 const PROVIDERS = [
   { id: "kie", name: "Kie.ai", unit: "usd", what: "Images, videos and voices, its credits counted" },
   { id: "openrouter", name: "OpenRouter", unit: "usd", what: "Images, videos and voices" },
@@ -99,11 +119,20 @@ function Section({ id, icon: Icon, title, about, children }: { id: string; icon:
 }
 // a row: what the setting does on the left, its control on the right
 // end: a single button, switch or badge, set right so the text keeps the width
-function Row({ title, about, htmlFor, end, children }: { title: string; about: React.ReactNode; htmlFor?: string; end?: boolean; children: React.ReactNode }) {
+// icon: a provider's, before its title (the API keys)
+function Row({ title, icon, about, htmlFor, end, children }: { title: string; icon?: string; about: React.ReactNode; htmlFor?: string; end?: boolean; children: React.ReactNode }) {
+  const named = icon ? (
+    <>
+      <ProviderIcon id={icon} className="size-4 shrink-0 text-muted-foreground" />
+      {title}
+    </>
+  ) : (
+    title
+  )
   return (
     <Field className={cn("grid gap-3 px-5 py-4 md:items-start md:gap-8", end ? "md:grid-cols-[minmax(0,1fr)_auto]" : "md:grid-cols-[minmax(0,1fr)_20rem]")}>
       <FieldContent>
-        {htmlFor ? <FieldLabel htmlFor={htmlFor}>{title}</FieldLabel> : <FieldTitle>{title}</FieldTitle>}
+        {htmlFor ? <FieldLabel htmlFor={htmlFor}>{named}</FieldLabel> : <FieldTitle>{named}</FieldTitle>}
         <FieldDescription>{about}</FieldDescription>
       </FieldContent>
       <div className={cn("flex flex-col gap-2", end && "items-start md:items-end")}>{children}</div>
@@ -229,10 +258,10 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
   const noLimits = spending.every((p) => !limits[`${p.id}.threshold`].on && !limits[`${p.id}.cap`].on)
   const name = ROUTER_NAME[saved.router.active]
   const keys = [
-    { set: state.keys.kie, name: "Kie.ai key", about: "Every image, video and voice model while Kie.ai is the router, and its credits left." },
-    { set: state.keys.openrouter, name: "OpenRouter key", about: "Every image, video and voice model while OpenRouter is the router. Without it, prices show and nothing can be generated." },
-    { set: state.keys.management, name: "OpenRouter management key", about: "Optional: the account's whole balance in the header, not only this key's." },
-    { set: state.keys.elevenlabs, name: "ElevenLabs key", about: "Voice straight from ElevenLabs (Eleven v4…), Change voice and Translate, and the credits left. Without it, the router's ElevenLabs voices." },
+    { set: state.keys.kie, provider: "kie", name: "Kie.ai key", about: "Every image, video and voice model while Kie.ai is the router, and its credits left." },
+    { set: state.keys.openrouter, provider: "openrouter", name: "OpenRouter key", about: "Every image, video and voice model while OpenRouter is the router. Without it, prices show and nothing can be generated." },
+    { set: state.keys.management, provider: "openrouter", name: "OpenRouter management key", about: "Optional: the account's whole balance in the header, not only this key's." },
+    { set: state.keys.elevenlabs, provider: "elevenlabs", name: "ElevenLabs key", about: "Voice straight from ElevenLabs (Eleven v4…), Change voice and Translate, and the credits left. Without it, the router's ElevenLabs voices." },
   ]
   // developer mode: on a server started on fake APIs, it brings the header's Fake API switch (turned on with it)
   const fakes = !!state.fake?.bases?.length
@@ -306,7 +335,10 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
               return (
                 <Fragment key={p.id}>
                   <div className="flex items-baseline gap-2 bg-muted/30 px-5 py-2.5">
-                    <span className="text-sm font-semibold">{p.name}</span>
+                    <span className="flex items-center gap-1.5 self-center text-sm font-semibold">
+                      <ProviderIcon id={p.id} className="size-4 shrink-0 text-muted-foreground" />
+                      {p.name}
+                    </span>
                     <span className="text-xs text-muted-foreground">{p.what}, in {usd ? "USD" : "credits"}</span>
                     <span className={cn("ml-auto text-xs", !t.on && !c.on ? "text-cost" : "text-muted-foreground")}>{summary}</span>
                   </div>
@@ -341,6 +373,7 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
                 options={["none", ...Object.keys(state.plans)]}
                 value={plan ?? "none"}
                 label={(p) => (p === "none" ? "Not set" : cap(p))}
+                icon={(p) => createElement(PLAN_ICON[p] ?? WalletIcon)}
                 onChange={(p) => setPlan(p === "none" ? null : p)}
               />
             </Row>
@@ -364,7 +397,7 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
 
           <Section id="keys" icon={KeyRoundIcon} title="API keys" about="They stay in Claude Code, never in this folder.">
             {keys.map((k) => (
-              <Row key={k.name} title={k.name} about={k.about} end>
+              <Row key={k.name} title={k.name} icon={k.provider} about={k.about} end>
                 <Badge variant={k.set ? "secondary" : "outline"} className={cn("h-6 px-2.5", k.set && "bg-done/15 text-done")}>
                   {k.set ? "Set" : "Not set"}
                 </Badge>
@@ -391,6 +424,7 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
                       <RadioGroupItem value={r.id} id={`router-${r.id}`} className="mt-0.5" />
                       <FieldContent>
                         <FieldTitle>
+                          <ProviderIcon id={r.id} className="size-4 shrink-0 text-muted-foreground" />
                           {ROUTER_NAME[r.id]}
                           {saved.router.active === r.id && <Badge variant="secondary">Active</Badge>}
                           <Badge variant="outline" className={cn(state.keys[r.id] ? "text-done" : "text-cost")}>{state.keys[r.id] ? "Key set" : "No key"}</Badge>

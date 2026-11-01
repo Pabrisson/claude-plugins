@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { AudioLinesIcon, ChevronDownIcon, XIcon } from "lucide-react"
+import { AudioLinesIcon, CakeIcon, ChevronDownIcon, MarsIcon, UserIcon, VenusIcon, XIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -107,7 +107,8 @@ function FilterChips({ label, value, options, total, onChange }: { label: string
   return (
     <div className="flex flex-wrap gap-1" role="group" aria-label={label}>
       {[...options].sort((a, b) => b[1] - a[1]).map(([v]) => (
-        <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(value === v ? "" : v)} className={cn(CHIP, "px-2 py-0 text-xs", value === v ? CHIP_ON : CHIP_OFF)}>
+        <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(value === v ? "" : v)} className={cn(CHIP, "inline-flex items-center gap-1.5 px-2 py-0 text-xs", value === v ? CHIP_ON : CHIP_OFF)}>
+          {label === "Age" ? <CakeIcon className="size-3.5" /> : v === "male" ? <MarsIcon className="size-3.5" /> : v === "female" ? <VenusIcon className="size-3.5" /> : <UserIcon className="size-3.5" />}
           {words(v)}
         </button>
       ))}

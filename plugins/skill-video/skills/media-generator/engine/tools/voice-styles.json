@@ -1,0 +1,18 @@
+[
+  { "value": "a calm, authoritative documentary narrator: measured pace, deep and warm, clear articulation, gentle pauses between ideas", "label": "Documentary narrator", "group": "Narration", "note": "Measured, deep, warm", "swatch": ["#264653", "#2a9d8f", "#e9c46a", "#f4f1de"] },
+  { "value": "a warm storyteller reading aloud: expressive, smiling, unhurried, playful emphasis on the key words", "label": "Storyteller", "group": "Narration", "note": "Expressive and smiling", "swatch": ["#f4a261", "#e76f51", "#fefae0", "#6b4e71"] },
+  { "value": "a professional news anchor: neutral and confident, crisp diction, a steady brisk pace", "label": "News anchor", "group": "Narration", "note": "Neutral, crisp, brisk", "swatch": ["#003049", "#d62828", "#eae2b7", "#ffffff"] },
+  { "value": "an audiobook reader: natural and even, intimate, subtle emotion, a steady pace for long listening", "label": "Audiobook", "group": "Narration", "note": "Even and intimate", "swatch": ["#6c584c", "#a98467", "#f0ead2", "#dde5b6"] },
+
+  { "value": "an energetic YouTuber: fast, upbeat, enthusiastic, a big smile in the voice, punchy emphasis", "label": "YouTuber hype", "group": "Energy", "note": "Fast, upbeat, punchy", "swatch": ["#ff0054", "#ffbd00", "#390099", "#ffffff"] },
+  { "value": "a lively morning radio host: bright, friendly, confident, a bouncy rhythm", "label": "Radio host", "group": "Energy", "note": "Bright and bouncy", "swatch": ["#ff9f1c", "#2ec4b6", "#ffbf69", "#cbf3f0"] },
+  { "value": "an excited sports commentator: rising intensity, rapid delivery, big emotional peaks", "label": "Sports commentator", "group": "Energy", "note": "Rising intensity", "swatch": ["#38b000", "#004b23", "#ffffff", "#ffd60a"] },
+
+  { "value": "a soft ASMR whisper: very close to the microphone, breathy, slow and soothing", "label": "ASMR whisper", "group": "Soft", "note": "Close, breathy, slow", "swatch": ["#e0c3fc", "#8ec5fc", "#fbe7f0", "#b8c0ff"] },
+  { "value": "a calm meditation guide: slow, gentle, soothing, long relaxed pauses, warm and reassuring", "label": "Meditation guide", "group": "Soft", "note": "Slow, long pauses", "swatch": ["#b7e4c7", "#74c69d", "#f1faee", "#2d6a4f"] },
+  { "value": "a friendly customer support agent: warm, patient, clear, reassuring and polite", "label": "Friendly support", "group": "Soft", "note": "Warm and patient", "swatch": ["#4cc9f0", "#4361ee", "#f1faee", "#a0c4ff"] },
+
+  { "value": "a deep movie trailer voice: low, gravelly, slow and dramatic, weighty pauses", "label": "Movie trailer", "group": "Character", "note": "Low, gravelly, dramatic", "swatch": ["#0b090a", "#bf9b30", "#3d3d3d", "#e5e5e5"] },
+  { "value": "a wise old mentor: slow, gravelly and kind, thoughtful pauses, a quiet smile", "label": "Wise mentor", "group": "Character", "note": "Slow, kind, gravelly", "swatch": ["#7f5539", "#ddb892", "#b08968", "#ede0d4"] },
+  { "value": "a menacing villain: low, slow, cold and theatrical, a hint of amusement in every line", "label": "Villain", "group": "Character", "note": "Cold and theatrical", "swatch": ["#10002b", "#5a189a", "#9d4edd", "#c1121f"] }
+]

@@ -352,6 +352,28 @@ test('the shipped styles: one list for the Restyle tools and Custom, each with i
   }
 })
 
+// the sound styles too: each list in the Style fields of its tools, a family each (music, voice, sound)
+test('the shipped sound styles: music, voice and sound, each in its tools\' Style fields, with its group, its line and its palette; a voice style is the voice\'s instructions, a music one goes after a description', async () => {
+  const tools = JSON.parse((await cli('tools', 'audio', '--json')).out)
+  const uses = { music: ['music', 'create-singer', 'extend-music', 'cover', 'add-vocals', 'add-instrumental', 'replace-section', 'mashup'], voice: ['voice'], sound: ['sound-effect'] }
+  for (const [family, ids] of Object.entries(uses)) {
+    const list = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'tools', `${family}-styles.json`), 'utf8'))
+    for (const s of list) {
+      assert.deepEqual(Object.keys(s), ['value', 'label', 'group', 'note', 'swatch'], s.label)
+      assert.ok(s.swatch.length >= 3 && s.swatch.every(c => /^#[0-9a-f]{6}$/.test(c)), `${s.label}: swatch`)
+      assert.ok(!/^[\w-]+$/.test(s.value), s.label)
+    }
+    assert.equal(new Set(list.map(s => s.label.toLowerCase())).size, list.length, `${family}: a label twice`)
+    for (const id of ids) assert.deepEqual(tools.find(t => t.id === id).fields.filter(f => f.type === 'style').map(f => [f.for, f.options]), [[family, list]], id)
+  }
+  const v = await cli('audio', '--model', 'fake/tts', '--prompt', 'Bonjour', '--field', 'instructions=ASMR whisper', '--spend', '1')
+  assert.equal(v.code, 0, v.err)
+  assert.match(sent('/api/v1/audio/speech').body.instructions, /^a soft ASMR whisper: very close/)
+  const l = await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'description=a road trip', '--field', 'style=Lo-fi hip-hop', '--spend', '0.04')
+  assert.equal(l.code, 0, l.err)
+  assert.match(sent('/api/v1/chat/completions').body.messages[0].content[0].text, /^a road trip\nStyle: lo-fi hip-hop, dusty vinyl crackle/)
+})
+
 test('styles: Restyle redraws in a style, Custom adds one if asked; a Library style sends its images last and says so', async () => {
   const est = async (...argv) => JSON.parse((await cli(...argv, '--estimate')).out)
   const t = await cli('tools', 'image', '--search', 'restyle')
@@ -531,10 +553,10 @@ test('refusals said in ElevenLabs\' words: a key without dubbing_write, a plan w
 
 test('a song on OpenRouter (Lyria): one prompt from what is written, images beside, the audio streamed back, its words kept', async () => {
   assert.match((await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'description=x', '--in', `ref_audios=${at('voice.mp3')}`, '--estimate')).err, /takes images only/)
-  const r = await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'mode=write', '--field', 'title=Night', '--field', 'style=synthwave', '--field', 'lyrics=[Verse] road', '--option', 'temperature=1.2', '--in', `references=${at('a.png')}`, '--spend', '0.04')
+  const r = await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'mode=write', '--field', 'title=Night', '--field', 'style=synthwave, 100 BPM', '--field', 'lyrics=[Verse] road', '--option', 'temperature=1.2', '--in', `references=${at('a.png')}`, '--spend', '0.04')
   assert.equal(r.code, 0, r.err)
   const body = sent('/api/v1/chat/completions').body
-  assert.deepEqual([body.modalities, body.stream, body.temperature, body.messages[0].content[0].text, body.messages[0].content[1].type], [['text', 'audio'], true, 1.2, 'Title: Night\nStyle: synthwave\nLyrics:\n[Verse] road', 'image_url'])
+  assert.deepEqual([body.modalities, body.stream, body.temperature, body.messages[0].content[0].text, body.messages[0].content[1].type], [['text', 'audio'], true, 1.2, 'Title: Night\nStyle: synthwave, 100 BPM\nLyrics:\n[Verse] road', 'image_url'])
   const id = media().find(d => d.includes('-music-'))
   assert.deepEqual(JSON.parse(fs.readFileSync(at('media', id, 'job.json'), 'utf8')).outputs, ['out.mp3', 'lyrics.txt'])
   assert.ok(probe(at('media', id, 'out.mp3')).streams.some(s => s.codec_type === 'audio'))
@@ -607,6 +629,11 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   // its words change alone, without new images
   assert.deepEqual((await post('/api/styles', { name: 'Pen', words: 'finer pen' })).body.map(s => [s.files.length, s.words]), [[1, 'finer pen']])
   assert.deepEqual((await post('/api/styles', { name: 'Pen', remove: true })).body, [])
+  // a sound style: its family and words, no image; without words, refused
+  assert.deepEqual((await post('/api/styles', { name: 'Hum', for: 'music', words: 'warm synths' })).body.map(s => [s.name, s.for, s.files.length, s.text]), [['Hum', 'music', 0, 'warm synths']])
+  assert.match((await post('/api/styles', { name: 'Hiss', for: 'sound' })).body.error, /a sound style is its words/)
+  assert.equal((await post('/api/styles', { name: 'Hum', for: 'voice', words: 'x' })).code, 400)
+  assert.deepEqual((await post('/api/styles', { name: 'Hum', remove: true })).body, [])
   // the Library's Elements: in the state, made and changed from the page; a voice refused by ElevenLabs says why
   assert.equal((await post('/api/elements', { name: 'Zoe', type: 'character', paths: [at('a.png')] })).code, 400)
   const made = await post('/api/elements', { name: 'Zoe', type: 'character', words: 'red hair', paths: [...two(), at('c.png'), '/etc/hosts'] })

@@ -3,7 +3,7 @@
     "id": "voice", "label": "Voice", "group": "Voice", "mode": "create", "icon": "audio-lines",
     "description": "Text to speech: a preset voice, a voice of the Library, a voice cloned from up to 3 clips, or a dialogue. ElevenLabs straight, the others by the router.",
     "inputs": [{ "key": "voice_clips", "kind": "audio", "label": "Voice to clone", "optional": true, "multiple": true }],
-    "fields": [{ "key": "instructions", "label": "How it sounds", "type": "text", "placeholder": "warm, slow, a smile in the voice" }],
+    "fields": [{ "key": "instructions", "label": "How it sounds", "type": "style", "options": "voice-styles", "for": "voice" }],
     "template": "{prompt}",
     "models": ["eleven_v4", "elevenlabs/eleven-v4", "google/gemini-3.8-flash-tts", "bytedance-seed/seed-audio-1-0", "minimax/speech-2.8-hd"],
     "also": ["eleven_v3", "eleven_v4_turbo", "eleven_multilingual_v2", "eleven_flash_v2_5", "elevenlabs/eleven-v3", "elevenlabs/eleven-v4-turbo", "elevenlabs/eleven-multilingual-v2", "elevenlabs/eleven-flash-v2.5"],
@@ -13,7 +13,7 @@
     "id": "change-voice", "label": "Change voice", "group": "Voice", "mode": "edit", "icon": "repeat",
     "description": "Another voice on a clip, same delivery: pauses, emotion and rhythm are kept. ElevenLabs.",
     "inputs": [{ "key": "clip", "kind": "media", "label": "Clip (audio or video)" }],
-    "fields": [{ "key": "denoise", "label": "Background noise", "type": "choice", "options": ["keep", "remove"], "default": "keep" }],
+    "fields": [{ "key": "denoise", "label": "Background noise", "type": "choice", "options": [{ "value": "keep", "icon": "volume-2" }, { "value": "remove", "icon": "volume-x" }], "default": "keep" }],
     "template": "",
     "provider": "elevenlabs"
   },
@@ -37,12 +37,12 @@
       { "key": "ref_audios", "kind": "audio", "label": "Sound", "optional": true, "when": { "mode": "describe" } }
     ],
     "fields": [
-      { "key": "mode", "label": "Mode", "type": "choice", "options": [{ "value": "describe", "label": "Describe" }, { "value": "write", "label": "Write" }], "default": "describe" },
+      { "key": "mode", "label": "Mode", "type": "choice", "options": [{ "value": "describe", "label": "Describe", "icon": "file-text" }, { "value": "write", "label": "Write", "icon": "pen-line" }], "default": "describe" },
       { "key": "description", "label": "Description", "type": "lines", "placeholder": "an upbeat summer pop song about a road trip, French lyrics", "when": { "mode": "describe" } },
       { "key": "title", "label": "Title", "type": "text", "placeholder": "Night Drive", "when": { "mode": "write" } },
-      { "key": "style", "label": "Style", "type": "text", "placeholder": "synthwave, female vocals, 100 BPM", "when": { "mode": "write" } },
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music" },
       { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "[Verse]\nCity lights are passing by…\n[Chorus]\n…", "when": { "mode": "write", "vocals": "sung" } },
-      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung" }, { "value": "instrumental", "label": "Instrumental" }], "default": "sung" },
+      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung", "icon": "mic-vocal" }, { "value": "instrumental", "label": "Instrumental", "icon": "piano" }], "default": "sung" },
       { "key": "length", "label": "Length (0: its own)", "type": "number", "min": 0, "max": 360, "step": 10, "unit": " s", "default": 0, "when": { "mode": "write" } },
       { "key": "singer", "label": "Singer", "type": "singer", "optional": true, "when": { "vocals": "sung" } }
     ],
@@ -57,15 +57,15 @@
     "fields": [
       { "key": "name", "label": "Name", "type": "text", "placeholder": "nova" },
       { "key": "voice", "label": "The voice", "type": "text", "placeholder": "a warm, breathy female pop voice, wide vibrato" },
-      { "key": "style", "label": "Style", "type": "text", "placeholder": "dreamy synth-pop, 100 BPM", "optional": true }
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music", "optional": true }
     ],
     "template": "", "routers": ["kie"], "models": [],
     "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
   },
   {
     "id": "sound-effect", "label": "Sound effect", "group": "Sound", "mode": "create", "icon": "volume-2", "action": "sounds",
-    "description": "A sound, an ambience or a loop from words; its loop, tempo and key in the model's options.",
-    "inputs": [], "fields": [], "template": "{prompt}",
+    "description": "A sound, an ambience or a loop from words, in a sound style; its loop, tempo and key in the model's options.",
+    "inputs": [], "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "sound-styles", "for": "sound" }], "template": "{prompt}",
     "routers": ["kie"], "models": [], "kie": { "models": ["suno/sounds"] }
   },
   {
@@ -74,9 +74,9 @@
     "inputs": [{ "key": "clip", "kind": "audio", "label": "Song" }],
     "fields": [
       { "key": "from", "label": "From (s)", "type": "text", "placeholder": "its end, or a second: 60" },
-      { "key": "style", "label": "Style", "type": "text", "placeholder": "its own, or: a guitar solo, slower", "optional": true },
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music", "optional": true },
       { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "the words of what follows", "optional": true, "when": { "vocals": "sung" } },
-      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung" }, { "value": "instrumental", "label": "Instrumental" }], "default": "sung" },
+      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung", "icon": "mic-vocal" }, { "value": "instrumental", "label": "Instrumental", "icon": "piano" }], "default": "sung" },
       { "key": "singer", "label": "Singer", "type": "singer", "optional": true, "when": { "vocals": "sung" } }
     ],
     "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
@@ -86,9 +86,9 @@
     "description": "The same melody in another style, with other words or another singer: any song or sound, even hummed.",
     "inputs": [{ "key": "clip", "kind": "audio", "label": "Song" }],
     "fields": [
-      { "key": "style", "label": "Style", "type": "text", "placeholder": "acoustic folk, a male voice" },
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music" },
       { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "new words, or none to keep the song's", "optional": true, "when": { "vocals": "sung" } },
-      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung" }, { "value": "instrumental", "label": "Instrumental" }], "default": "sung" },
+      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung", "icon": "mic-vocal" }, { "value": "instrumental", "label": "Instrumental", "icon": "piano" }], "default": "sung" },
       { "key": "singer", "label": "Singer", "type": "singer", "optional": true, "when": { "vocals": "sung" } }
     ],
     "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
@@ -99,7 +99,7 @@
     "inputs": [{ "key": "clip", "kind": "audio", "label": "Instrumental" }],
     "fields": [
       { "key": "title", "label": "Title", "type": "text", "placeholder": "Night Drive" },
-      { "key": "style", "label": "Style", "type": "text", "placeholder": "soft female vocals, dreamy" },
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music", "required": true },
       { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "[Verse]\n…\n[Chorus]\n…" }
     ],
     "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
@@ -110,7 +110,7 @@
     "inputs": [{ "key": "clip", "kind": "audio", "label": "Vocals" }],
     "fields": [
       { "key": "title", "label": "Title", "type": "text", "placeholder": "Night Drive" },
-      { "key": "style", "label": "Style", "type": "text", "placeholder": "piano and strings, cinematic" }
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music", "required": true }
     ],
     "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
   },
@@ -124,7 +124,7 @@
       { "key": "change", "label": "What changes", "type": "text", "placeholder": "a quieter bridge, only piano" },
       { "key": "lyrics", "label": "Its new words", "type": "lines", "placeholder": "the words sung in that part", "optional": true },
       { "key": "full_lyrics", "label": "The whole song's words", "type": "lines", "placeholder": "the song's own, with that part changed", "optional": true },
-      { "key": "style", "label": "Style", "type": "text", "placeholder": "the song's own", "optional": true },
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music", "optional": true },
       { "key": "singer", "label": "Singer", "type": "singer", "optional": true }
     ],
     "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
@@ -135,7 +135,7 @@
     "inputs": [{ "key": "clips", "kind": "audio", "label": "Two songs", "multiple": true, "count": 2 }],
     "fields": [
       { "key": "title", "label": "Title", "type": "text", "placeholder": "Night Drive Remix" },
-      { "key": "style", "label": "Style", "type": "text", "placeholder": "house, 124 BPM" },
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music", "required": true },
       { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "words of its own, or none", "optional": true },
       { "key": "length", "label": "Length (0: its own)", "type": "number", "min": 0, "max": 360, "step": 10, "unit": " s", "default": 0 },
       { "key": "singer", "label": "Singer", "type": "singer", "optional": true }
@@ -147,7 +147,7 @@
     "description": "A Suno song split in tracks: the voice and the music, up to 12 instruments, or one instrument taken out.",
     "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song" }],
     "fields": [
-      { "key": "split", "label": "Split", "type": "choice", "options": [{ "value": "separate_vocal", "label": "Voice + music" }, { "value": "split_stem", "label": "Up to 12" }, { "value": "split_stem_advanced", "label": "One instrument" }], "default": "separate_vocal" },
+      { "key": "split", "label": "Split", "type": "choice", "options": [{ "value": "separate_vocal", "label": "Voice + music", "icon": "split" }, { "value": "split_stem", "label": "Up to 12", "icon": "layers" }, { "value": "split_stem_advanced", "label": "One instrument", "icon": "guitar" }], "default": "separate_vocal" },
       { "key": "instrument", "label": "Instrument", "type": "select", "options": "stems", "default": "Lead Vocal", "when": { "split": "split_stem_advanced" } }
     ],
     "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/stems"] }
