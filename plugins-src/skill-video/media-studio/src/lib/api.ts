@@ -21,7 +21,7 @@ export type Input = {
 }
 // an option: its value, or the value with what the dashboard shows of it (a preset light carries its lights, a style
 // the palette of its card, a References sheet its ratio)
-export type Option = string | { value: string; label?: string; group?: string; note?: string; icon?: string; rig?: Light[]; cam?: Cam; swatch?: string[]; ratio?: string }
+export type Option = string | { value: string; label?: string; group?: string; note?: string; icon?: string; rig?: Light[]; cam?: Cam; swatch?: string[]; ratio?: string; preview?: string; tags?: string }
 // one light around the subject: azimuth (0 front, 90 right, 180 behind) and elevation in degrees, 0–100 levels
 export type Light = { az: number; el: number; color: string; brightness: number; diffuse: number }
 // where New angle's camera goes: around the subject and up in degrees from where the picture was taken, closer (1) or

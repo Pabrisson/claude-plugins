@@ -119,7 +119,7 @@ is the user's own prompt; the others fill a prompt template from their fields. C
   background.
 - **Styles.** Restyle (`--tool restyle`, image and video) redraws the source in a style, what is in it and its motion
   kept; Custom takes one too, optional. `--field style=<style>`: a preset's label (`media.mjs tools image --search
-  restyle` lists the 24) or the name of a style of the user's own. `media.mjs styles add <name> <images…> --words
+  restyle` lists the 82) or the name of a style of the user's own. `media.mjs styles add <name> <images…> --words
   "<the look in words>"` makes one from 1 to 5 images that share a look (the dashboard's Library › Visuals does
   the same); its images go last among the references and the prompt names them, `media.mjs styles` lists them. With
   such a style in Custom image, Recraft V4 Styles (`recraft/recraft-v4-styles`, Pro for more detail, about 1K) is
@@ -345,8 +345,9 @@ Dialogue, Multilingual v2, Turbo v2.5), and there is no voice change and no dubb
 - **Sound styles.** The audio tools' Style fields take a sound style: `--field style=<style>` on Music (Write: Suno's
   style; Describe: written after the description), Singer, Extend music, Cover, Add vocals, Add instrumental, Replace
   section, Mashup (a music style), Sound effect (a sound style, after the words), and Voice's `--field
-  instructions=<style>` (a voice style: how it is said; ElevenLabs straight takes none, audio tags instead). A preset's
-  label (`media.mjs tools audio --search <tool>` lists them: 24 music, 13 voice, 10 sound), the name of a sound style
+  instructions=<style>` (a voice style: how it is said; ElevenLabs v3 and v4 take no such words: a preset goes as its
+  audio tags before the text, a style of one's own is not sent there). A preset's
+  label (`media.mjs tools audio --search <tool>` lists them: 47 music, 18 voice, 15 sound), the name of a sound style
   of the user's own (`media.mjs styles add <name> --for music|voice|sound --words "…"`, its words only, sent as they
   are; the dashboard's Library › Sounds does the same), or words of one's own. A preset's label stands for its
   words (`style=Synthwave` sends the preset's). A style of another family is refused.

@@ -165,8 +165,8 @@ export function Composer({
   const def = state.settings.defaults[kind]
   const modelId = eleven || local ? undefined : (value.model && fitting.some((m) => m.id === value.model) ? value.model : def && fitting.some((m) => m.id === def) ? def : fitting[0]?.id)
   const model = models.find((m) => m.id === modelId)
-  // ElevenLabs straight: a voice of the account or of the Library, whole (no clips, no « How it sounds »), or a
-  // dialogue's lines on v4 and v3
+  // ElevenLabs straight: a voice of the account or of the Library, whole (no clips; « How it sounds » only on v4 and
+  // v3, a preset sent as its audio tags), or a dialogue's lines on v4 and v3
   const direct = model?.provider === "elevenlabs"
   // Voice before its models arrive: nothing that depends on them (no clips, no « How it sounds » shown a moment)
   const waiting = tool.id === "voice" && !model
@@ -540,7 +540,7 @@ export function Composer({
 
         {/* the fields, those of one section under its heading (selects as tiles, two a row); Expand's margins and
             Extend's direction and join have their own panels below */}
-        {sections(tool.fields.filter((f) => shown(f.when) && f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)) && !((direct || waiting) && f.key === "instructions"))).map(({ section, fields }, i) =>
+        {sections(tool.fields.filter((f) => shown(f.when) && f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)) && !(((direct && !mp?.tags) || waiting) && f.key === "instructions"))).map(({ section, fields }, i) =>
           section ? (
             <div key={section}>
               <Label>{section}</Label>

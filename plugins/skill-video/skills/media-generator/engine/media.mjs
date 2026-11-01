@@ -151,9 +151,18 @@ function ensureHome() {
 }
 
 const TOOLS = Object.fromEntries(KINDS.map(k => [k, JSON.parse(fs.readFileSync(path.join(ENGINE, `tools/${k}.json`), 'utf8'))]))
-// a field's options may name a list of tools/ shared by several tools (the styles), and its default one of its labels
+// a name as a file's or a folder's: a workspace, a style preset's sample
+const slugOf = name => String(name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'workspace'
+const PREVIEWS = path.join(ENGINE, 'tools', 'previews')
+const LISTS = {}
+// a field's options may name a list of tools/ shared by several tools (the styles), and its default one of its labels;
+// a preset's sample, when shipped: tools/previews/<list>/<its label as a slug>.webp (a look) or .m4a (a sound)
 for (const f of Object.values(TOOLS).flat().flatMap(t => t.fields)) if (typeof f.options === 'string') {
-  f.options = JSON.parse(fs.readFileSync(path.join(ENGINE, `tools/${f.options}.json`), 'utf8'))
+  const list = f.options
+  f.options = LISTS[list] ??= JSON.parse(fs.readFileSync(path.join(ENGINE, `tools/${list}.json`), 'utf8')).map(o => {
+    const file = ['webp', 'm4a'].map(x => `${list}/${slugOf(o.label)}.${x}`).find(x => fs.existsSync(path.join(PREVIEWS, x)))
+    return file ? { ...o, preview: `/previews/${file}` } : o
+  })
   f.default = f.options.find(o => o.label === f.default)?.value ?? f.default
 }
 function toolOf(kind, id) {
@@ -454,7 +463,6 @@ const STRIP = 20
 const RATIOS = { '16:9': [1280, 720], '9:16': [720, 1280], '1:1': [720, 720], '4:5': [720, 900] }
 const SLUG = /^[a-z0-9-]+$/
 const wsFile = slug => at('workspaces', slug, 'workspace.json')
-const slugOf = name => String(name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'workspace'
 function workspace(slug) {
   if (!SLUG.test(slug ?? '') || !fs.existsSync(wsFile(slug))) return null
   const w = readJson(wsFile(slug)), t = { ...TIMELINE, ...w.timeline }
@@ -652,6 +660,13 @@ function expandCanvas(file, fields) {
 function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
   const files = key => spec.inputs?.[key] ?? []
   const p = { ...tool.params, ...spec.params }
+  // a voice style preset on a model that reads audio tags (ElevenLabs v3, v4: they take no « how it sounds ») goes as
+  // its tags before the words, before each line of a dialogue
+  const said = tool.fields.find(f => f.key === 'instructions'), cue = m.params?.tags && said?.options?.find?.(o => o.value === optionValue(said, spec.fields?.instructions ?? ''))?.tags
+  if (cue) {
+    prompt &&= `${cue} ${prompt}`
+    p.dialogue &&= p.dialogue.map(l => (String(l.text ?? '').trim() ? { ...l, text: `${cue} ${l.text}` } : l))
+  }
   if (m.provider === 'elevenlabs') return elevenRequest(m, prompt, p, !!spec.probe)
   // the model's own settings (its Options), checked; sent only when some are asked
   const options = optionValues(m, p.options), own = Object.keys(options).length ? { options } : {}
@@ -2416,6 +2431,11 @@ async function handle(req, res) {
       } catch { return reply(res, 400, { error: 'no picture of this file' }) }
     }
     return sendFile(req, res, out)
+  }
+  // the style presets' samples, shipped with the engine
+  if (p.startsWith('/previews/')) {
+    const f = inside(PREVIEWS, path.join(PREVIEWS, decodeURIComponent(p.slice('/previews/'.length))))
+    return f && fs.existsSync(f) && fs.statSync(f).isFile() ? sendFile(req, res, f) : reply(res, 404, { error: 'not found' })
   }
   // the folder's files for the page: media, elements, styles, uploads
   if (p === '/files') {

@@ -150,7 +150,7 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
               </h3>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3.5">
                 {list.map((p) => (
-                  <StyleCard key={p.value} radio={false} on={false} title={p.label} note={p.note} onPick={() => setOpen({ preset: p })} thumb={<StyleThumb file={thumb(p)} preset={p} className="absolute inset-0" />} />
+                  <StyleCard key={p.value} radio={false} on={false} title={p.label} note={p.note} sample={sound ? p.preview : undefined} onPick={() => setOpen({ preset: p })} thumb={<StyleThumb file={thumb(p)} preset={p} className="absolute inset-0" />} />
                 ))}
               </div>
             </section>
@@ -230,11 +230,17 @@ function PresetDialog({ preset, file, heard, onClose, onUse }: { preset: Preset;
           <DialogDescription className="mt-1">
             {preset.for && `${FAMILIES[preset.for].label} · `}
             {preset.group} · {preset.note}
-            {file || preset.for ? "" : " · its card is painted from its palette until you make something in it"}
+            {file || preset.for || preset.preview ? "" : " · its card is painted from its palette until you make something in it"}
           </DialogDescription>
         </div>
         <StyleThumb file={file} preset={preset} className={cn("w-full rounded-xl border", preset.for ? "aspect-[3/1]" : "aspect-video")} />
         <p className="rounded-lg border bg-muted/40 p-3 text-sm leading-relaxed text-muted-foreground">{preset.value}</p>
+        {preset.for && preset.preview && (
+          <div>
+            <Label hint="how it sounds">Sample</Label>
+            <audio controls preload="none" src={preset.preview} className="w-full" />
+          </div>
+        )}
         <Heard file={heard} />
         <div className="flex flex-wrap gap-2 border-t pt-4">
           <UseButtons value={preset.value} family={preset.for} onUse={onUse} onClose={onClose} />

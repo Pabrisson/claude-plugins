@@ -3,6 +3,7 @@ import {
   BookOpenIcon,
   BoxIcon,
   BrushIcon,
+  CameraIcon,
   CheckIcon,
   ClapperboardIcon,
   Disc3Icon,
@@ -16,12 +17,15 @@ import {
   LayoutGridIcon,
   MicIcon,
   MicVocalIcon,
+  MonitorPlayIcon,
   MusicIcon,
   PaintbrushIcon,
   PenToolIcon,
   PianoIcon,
   PlusIcon,
   SearchIcon,
+  SkullIcon,
+  ShapesIcon,
   SparklesIcon,
   SpeechIcon,
   UserIcon,
@@ -38,6 +42,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input"
 import { fileUrl, mediaKind, opt, outputPath, type Field, type Job, type Kind, type SavedStyle, type SoundFamily } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
+import { Listen } from "@/components/inputs"
 
 export type Preset = ReturnType<typeof opt> & { swatch?: string[]; for?: SoundFamily }
 
@@ -59,10 +64,14 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   Handmade: HandIcon,
   "Painting & illustration": BrushIcon,
   "Pixel & retro": Gamepad2Icon,
+  Photographic: CameraIcon,
+  Graphic: ShapesIcon,
+  Content: MonitorPlayIcon,
   "Pop & dance": Disc3Icon,
   Electronic: KeyboardMusicIcon,
   "Hip-hop & R&B": MicVocalIcon,
   Rock: GuitarIcon,
+  Metal: SkullIcon,
   "Acoustic & jazz": PianoIcon,
   "Cinematic & game": ClapperboardIcon,
   Narration: BookOpenIcon,
@@ -107,13 +116,15 @@ function Art({ preset }: { preset: Preset }) {
   )
 }
 
-// a style's picture: the user's last result in it (a video plays under the pointer), else its painted card
+// a style's picture: the user's last result in it (a video plays under the pointer), else its sample image, else its
+// painted card
 export function StyleThumb({ file, preset, className }: { file: string | null; preset?: Preset; className?: string }) {
   const k = file ? mediaKind(file) : null
   const still = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  const sample = preset?.preview?.endsWith(".webp") ? preset.preview : null
   return (
     <span className={cn("relative block overflow-hidden bg-muted", className)}>
-      {preset && k !== "image" && k !== "video" && <Art preset={preset} />}
+      {preset && k !== "image" && k !== "video" && (sample ? <img src={sample} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" /> : <Art preset={preset} />)}
       {k === "image" && <img src={fileUrl(file!)} alt="" loading="lazy" className="absolute inset-0 size-full object-cover" />}
       {k === "video" && (
         <video
@@ -187,6 +198,7 @@ export function StyleField({
             </span>
           </span>
         </button>
+        {f.for && preset?.preview && <Listen key={preset.preview} path="" src={preset.preview} />}
         <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
           {v ? "Change" : "Choose"}
         </Button>
@@ -259,7 +271,7 @@ function Gallery({
         <div className="-mx-1 min-h-0 flex-1 overflow-auto px-1 pb-1">
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3" role="radiogroup" aria-label="Styles">
             {tab === "presets"
-              ? shown.map((p) => <StyleCard key={p.value} on={p.value === value} title={p.label} note={p.note} onPick={() => onPick(p.value)} thumb={<StyleThumb file={lastIn(p.value, p.label, kind, media, home, fieldKey)} preset={p} className="absolute inset-0" />} />)
+              ? shown.map((p) => <StyleCard key={p.value} on={p.value === value} title={p.label} note={p.note} sample={family ? p.preview : undefined} onPick={() => onPick(p.value)} thumb={<StyleThumb file={lastIn(p.value, p.label, kind, media, home, fieldKey)} preset={p} className="absolute inset-0" />} />)
               : yours.map((s) => <StyleCard key={s.name} on={s.name === value} title={s.name} note={s.words || `${s.files.length} image${s.files.length > 1 ? "s" : ""}`} onPick={() => onPick(s.name)} thumb={<StyleThumb file={s.files[0] ?? null} preset={s.for ? familyArt(s) : undefined} className="absolute inset-0" />} />)}
             {tab === "yours" && (
               <button
@@ -280,16 +292,17 @@ function Gallery({
   )
 }
 
-// a style as a card: a choice in the picker (radio), a button that opens it in the Library
-export function StyleCard({ on, title, note, thumb, onPick, radio = true }: { on: boolean; title: string; note?: string; thumb: React.ReactNode; onPick: () => void; radio?: boolean }) {
-  return (
+// a style as a card: a choice in the picker (radio), a button that opens it in the Library; a sound style's sample
+// plays from its corner
+export function StyleCard({ on, title, note, thumb, onPick, radio = true, sample }: { on: boolean; title: string; note?: string; thumb: React.ReactNode; onPick: () => void; radio?: boolean; sample?: string }) {
+  const card = (
     <button
       type="button"
       role={radio ? "radio" : undefined}
       aria-checked={radio ? on : undefined}
       onClick={onPick}
       className={cn(
-        "group/card relative aspect-video overflow-hidden rounded-xl border text-left transition-[box-shadow,border-color] duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        "group/card relative aspect-video w-full overflow-hidden rounded-xl border text-left transition-[box-shadow,border-color] duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         on ? "border-space ring-2 ring-space" : "hover:border-foreground/30"
       )}
     >
@@ -304,5 +317,15 @@ export function StyleCard({ on, title, note, thumb, onPick, radio = true }: { on
         </span>
       )}
     </button>
+  )
+  return sample ? (
+    <div className="relative">
+      {card}
+      <span className="absolute top-2 right-2">
+        <Listen path="" src={sample} />
+      </span>
+    </div>
+  ) : (
+    card
   )
 }

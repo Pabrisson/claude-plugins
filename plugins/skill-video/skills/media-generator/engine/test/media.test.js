@@ -335,9 +335,17 @@ test('rich fields: an Auto option leaves nothing in the prompt, a label stands f
 })
 
 // the styles are edited by hand: each keeps its keys, a group of the gallery, a palette for its card
-test('the shipped styles: one list for the Restyle tools and Custom, each with its group, its line and its palette', async () => {
+// a shipped list's presets as the tools give them: each with its sample, tools/previews/<list>/<its label>.<ext>
+const sampled = (options, list, ext) => options.map(({ preview, ...o }) => {
+  const slug = o.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  assert.equal(preview, `/previews/${list}/${slug}.${ext}`, `${o.label}: its sample`)
+  assert.ok(fs.statSync(path.join(path.dirname(engine), 'tools', 'previews', list, `${slug}.${ext}`)).size > 1000, `${o.label}: its sample's file`)
+  return o
+})
+
+test('the shipped styles: one list for the Restyle tools and Custom, each with its group, its line, its palette and its sample image', async () => {
   const styles = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'tools', 'styles.json'), 'utf8'))
-  const groups = ['2D animation', '3D', 'Handmade', 'Painting & illustration', 'Pixel & retro']
+  const groups = ['2D animation', '3D', 'Handmade', 'Painting & illustration', 'Pixel & retro', 'Photographic', 'Graphic']
   for (const s of styles) {
     assert.deepEqual(Object.keys(s), ['value', 'label', 'group', 'note', 'swatch'], s.label)
     assert.ok(groups.includes(s.group), `${s.label}: group ${s.group}`)
@@ -348,23 +356,25 @@ test('the shipped styles: one list for the Restyle tools and Custom, each with i
   assert.equal(new Set(styles.map(s => s.label.toLowerCase())).size, styles.length, 'a label twice')
   for (const kind of ['image', 'video']) {
     const tools = JSON.parse((await cli('tools', kind, '--json')).out)
-    for (const id of ['restyle', 'free']) assert.deepEqual(tools.find(t => t.id === id).fields.find(f => f.key === 'style').options, styles, `${kind} ${id}`)
+    for (const id of ['restyle', 'free']) assert.deepEqual(sampled(tools.find(t => t.id === id).fields.find(f => f.key === 'style').options, 'styles', 'webp'), styles, `${kind} ${id}`)
   }
 })
 
 // the sound styles too: each list in the Style fields of its tools, a family each (music, voice, sound)
-test('the shipped sound styles: music, voice and sound, each in its tools\' Style fields, with its group, its line and its palette; a voice style is the voice\'s instructions, a music one goes after a description', async () => {
+test('the shipped sound styles: music, voice and sound, each in its tools\' Style fields, with its group, its line, its palette and its sample; a voice style is the voice\'s instructions, a music one goes after a description', async () => {
   const tools = JSON.parse((await cli('tools', 'audio', '--json')).out)
   const uses = { music: ['music', 'create-singer', 'extend-music', 'cover', 'add-vocals', 'add-instrumental', 'replace-section', 'mashup'], voice: ['voice'], sound: ['sound-effect'] }
   for (const [family, ids] of Object.entries(uses)) {
     const list = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'tools', `${family}-styles.json`), 'utf8'))
     for (const s of list) {
-      assert.deepEqual(Object.keys(s), ['value', 'label', 'group', 'note', 'swatch'], s.label)
+      // a voice's: its ElevenLabs audio tags too
+      assert.deepEqual(Object.keys(s), family === 'voice' ? ['value', 'label', 'tags', 'group', 'note', 'swatch'] : ['value', 'label', 'group', 'note', 'swatch'], s.label)
+      if (family === 'voice') assert.match(s.tags, /^(\[[a-z ]+\] ?)+$/, s.label)
       assert.ok(s.swatch.length >= 3 && s.swatch.every(c => /^#[0-9a-f]{6}$/.test(c)), `${s.label}: swatch`)
       assert.ok(!/^[\w-]+$/.test(s.value), s.label)
     }
     assert.equal(new Set(list.map(s => s.label.toLowerCase())).size, list.length, `${family}: a label twice`)
-    for (const id of ids) assert.deepEqual(tools.find(t => t.id === id).fields.filter(f => f.type === 'style').map(f => [f.for, f.options]), [[family, list]], id)
+    for (const id of ids) assert.deepEqual(tools.find(t => t.id === id).fields.filter(f => f.type === 'style').map(f => [f.for, sampled(f.options, `${family}-styles`, 'm4a')]), [[family, list]], id)
   }
   const v = await cli('audio', '--model', 'fake/tts', '--prompt', 'Bonjour', '--field', 'instructions=ASMR whisper', '--spend', '1')
   assert.equal(v.code, 0, v.err)
@@ -488,6 +498,11 @@ test('ElevenLabs straight, never by the router: its models first, a voice, its o
   assert.deepEqual(tts.body, { model_id: 'eleven_v3', language_code: 'fr', seed: 7, text: '[whispers] Bonjour', voice_settings: { stability: 1, speed: 0.9 } })
   assert.equal(tts.auth, 'k-el')
   assert.deepEqual(ledger().at(-1) && [ledger().at(-1).provider, ledger().at(-1).actual, ledger().at(-1).actual_known, ledger().at(-1).unit], ['elevenlabs', 18, true, 'credits'])
+  // a voice style preset goes as its audio tags before the words (ElevenLabs takes no « how it sounds »), counted
+  const cued = JSON.parse((await cli('audio', '--prompt', 'Bonjour', '--voice', 'v1', '--field', 'instructions=ASMR whisper', '--estimate')).out)
+  assert.equal(cued.estimate.amount, '[whispers] Bonjour'.length)
+  await cli('audio', '--prompt', 'Bonjour', '--voice', 'v1', '--field', 'instructions=ASMR whisper', '--spend', String(cued.estimate.amount))
+  assert.equal(sent('/el/v1/text-to-speech/v1?output_format=mp3_44100_128').body.text, '[whispers] Bonjour')
   // no option asked, no voice settings sent: the voice's own
   await cli('audio', '--prompt', 'Salut', '--voice', 'v1', '--spend', '5')
   assert.equal(sent('/el/v1/text-to-speech/v1?output_format=mp3_44100_128').body.voice_settings, undefined)
@@ -497,6 +512,9 @@ test('ElevenLabs straight, never by the router: its models first, a voice, its o
   assert.equal(d.code, 0, d.err)
   assert.deepEqual(sent('/el/v1/text-to-dialogue?output_format=mp3_44100_128').body, { model_id: 'eleven_v4', inputs: [{ text: '[laughs] Salut !', voice_id: 'v1' }, { text: 'Bonjour.', voice_id: 'v2' }], settings: { stability: 0.3 } })
   assert.equal(ledger().at(-1).actual, 24)
+  // a style preset in a dialogue: its tags before each line
+  await cli('audio', '--line', 'v1: Salut', '--line', 'v2: Bonjour', '--field', 'instructions=Villain', '--spend', '53')
+  assert.deepEqual(sent('/el/v1/text-to-dialogue?output_format=mp3_44100_128').body.inputs.map(i => i.text), ['[menacing] [amused] Salut', '[menacing] [amused] Bonjour'])
   // a voice of the Library goes whole, put on the account first: this fake plan cannot clone
   await cli('elements', 'add', 'Lea', at('voice.mp3'), '--type', 'voice')
   const lib = await cli('audio', '--prompt', 'Bonjour', '--voice', '@Lea', '--spend', '7')
@@ -673,6 +691,10 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.deepEqual([job.status, job.by, job.outputs], ['done', 'dashboard', ['out-1.png', 'out-2.png']])
   assert.equal((await fetch(`${url}/files?path=${encodeURIComponent(at('media', job.id, 'out-1.png'))}`)).headers.get('content-type'), 'image/png')
   assert.equal((await fetch(`${url}/files?path=${encodeURIComponent('/etc/hosts')}`)).status, 404)
+  // the presets' samples, shipped with the engine, and nothing beside them
+  const sample = await fetch(`${url}/previews/sound-styles/horror.m4a`)
+  assert.deepEqual([sample.status, sample.headers.get('content-type')], [200, 'audio/mp4'])
+  assert.equal((await fetch(`${url}/previews/..%2F..%2Fmedia.mjs`)).status, 404)
   // a batch from the dashboard: its total asks first, then as many jobs
   const batch = { ...spec, params: {}, batch: 2 }
   assert.deepEqual([(await post('/api/estimate', batch)).body.shown, (await post('/api/generate', batch)).code], ['$0.08', 409])
