@@ -13,9 +13,9 @@ import { isLocal } from "@/lib/api"
 
 const needs = (t: Tool) => {
   const req = t.inputs.filter((i) => !i.optional)
-  if (!req.length) return ["prompt"]
+  if (!req.length) return [t.template ? (t.id === "voice" ? "text" : "prompt") : "words"]
   const counts = new Map<string, number>()
-  for (const i of req) counts.set(i.kind === "sketch" ? "sketch" : i.kind, (counts.get(i.kind) ?? 0) + 1)
+  for (const i of req) counts.set(i.kind === "sketch" ? "sketch" : i.kind, (counts.get(i.kind) ?? 0) + (i.count ?? 1))
   return [...counts].map(([k, n]) => (k === "sketch" ? "a sketch" : `${n} ${k === "media" ? "clip" : k}${n > 1 ? "s" : ""}`))
 }
 

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react"
-import { AudioLinesIcon, ChevronDownIcon, CopyIcon, DownloadIcon, FolderKanbanIcon, FolderMinusIcon, LayersIcon, LinkIcon, PlayIcon, PlusIcon, SearchIcon, UnlinkIcon } from "lucide-react"
+import { AudioLinesIcon, ChevronDownIcon, MicVocalIcon, CopyIcon, DownloadIcon, FolderKanbanIcon, FolderMinusIcon, LayersIcon, LinkIcon, PlayIcon, PlusIcon, SearchIcon, UnlinkIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -22,12 +22,13 @@ import { api, currentOf, fileUrl, inWorkspace, mediaKind, outputPath, per1000, p
 import { lay } from "@/lib/timeline"
 import { Chips, Label } from "@/components/chips"
 import { ElementCard, ElementDialog, NewElement, type ElementDraft, type Use } from "@/components/elements"
-import { byMedium, FilterChips, LibraryList, Listen, Section, SortSelect, Thumb, useSort, Workspaces, type Pick } from "@/components/inputs"
+import { byMedium, FilterChips, LibraryList, Listen, Section, SortSelect, SoundCover, Thumb, useSort, Workspaces, type Pick } from "@/components/inputs"
 import { factsOf, NO_FILTERS, passes, ratioOf, resOf, sorted } from "@/lib/filters"
 import { Main, Side } from "@/components/pages"
 import { Results, type Bridge } from "@/components/results"
 import { dragShot, lengthOf, TimelineEditor, type Ask, type useTimelines } from "@/components/timeline"
 import { NewWorkspaceDialog, WorkspaceRows } from "@/components/workspace-list"
+import { ToolFilter, toolKey } from "@/components/tool-filter"
 
 type Timelines = ReturnType<typeof useTimelines>
 const TABS = ["assets", "timeline"] as const
@@ -175,6 +176,7 @@ export function WorkspacePage({
   }, [])
   const [kind, setKind] = useState<"all" | Kind | "elements">("all")
   const [favorites, setFavorites] = useState(false)
+  const [tool, setTool] = useState("")
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState<string | null>(null)
   const [making, setMaking] = useState<ElementDraft | null>(null)
@@ -183,7 +185,9 @@ export function WorkspacePage({
   const timeline = timelines.get(ws.slug) ?? ws.timeline
   const q = query.trim().toLowerCase()
   const mine = state.media.filter((j) => inWorkspace(j, ws.slug))
-  const jobs = mine.filter((j) => (kind === "all" || j.kind === kind) && (!favorites || j.favorite) && (!q || `${j.prompt} ${j.label} ${j.name} ${j.outputs.join(" ")}`.toLowerCase().includes(q)))
+  // the other filters first: the Tool list counts what they leave
+  const pool = mine.filter((j) => (kind === "all" || j.kind === kind) && (!favorites || j.favorite) && (!q || `${j.prompt} ${j.label} ${j.name} ${j.outputs.join(" ")}`.toLowerCase().includes(q)))
+  const jobs = tool ? pool.filter((j) => toolKey(j) === tool) : pool
   const els = (state.elements ?? []).filter((e) => ws.linked.includes(e.name) && (!q || `${e.name} ${e.words}`.toLowerCase().includes(q)))
   const shown = state.elements.find((e) => e.name === open)
   const results = allResults(state)
@@ -243,6 +247,12 @@ export function WorkspacePage({
           <Label>Media</Label>
           <Chips options={["all", ...KINDS, "elements"] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
         </div>
+        {kind !== "elements" && (
+          <div>
+            <Label>Tool</Label>
+            <ToolFilter jobs={pool} value={tool} onChange={setTool} />
+          </div>
+        )}
         {kind !== "elements" && (
           <div>
             <Label>Show</Label>
@@ -363,7 +373,7 @@ function LinkElement({ state, ws, onChanged }: { state: State; ws: Workspace; on
             <CommandEmpty>No element of that name.</CommandEmpty>
             {others.map((e) => (
               <CommandItem key={e.name} value={`${e.name} ${e.words}`} onSelect={() => api.workspaces({ slug: ws.slug, link: [e.name] }).then(onChanged, (err) => toast.error(plain(err.message)))}>
-                {e.files[0] && mediaKind(e.files[0]) === "image" ? <img src={fileUrl(e.files[0])} alt="" className="size-7 rounded-md object-cover" /> : e.type === "voice" ? <AudioLinesIcon className="size-4 text-aud" /> : <LayersIcon className="size-4" />}
+                {e.files[0] && mediaKind(e.files[0]) === "image" ? <img src={fileUrl(e.files[0])} alt="" className="size-7 rounded-md object-cover" /> : e.type === "voice" ? <AudioLinesIcon className="size-4 text-aud" /> : e.type === "singer" ? <MicVocalIcon className="size-4 text-aud" /> : <LayersIcon className="size-4" />}
                 <span className="min-w-0 flex-1 truncate">@{e.name}</span>
               </CommandItem>
             ))}
@@ -451,6 +461,7 @@ function Bin({ jobs, home, onAdd }: { jobs: Job[]; home: string; onAdd: (job: Jo
               <div className="flex flex-col gap-1.5">
                 {sounds.map((i) => (
                   <div key={i.path} draggable onDragStart={drag(i)} onDragEnd={() => dragShot(null)} className="flex cursor-grab items-center gap-2.5 rounded-lg border px-2 py-1.5 active:cursor-grabbing">
+                    <SoundCover path={i.path} className="size-9 shrink-0 rounded-md" />
                     <Listen path={i.path} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm">{i.job.prompt || i.job.label}</span>

@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, fileUrl, inWorkspace, mediaKind, outputPath, plain, when, type Input, type Job, type Tool, type Workspace } from "@/lib/api"
+import { api, coverPaths, fileUrl, inWorkspace, mediaKind, outputPath, plain, when, type Input, type Job, type Tool, type Workspace } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
 import { factsOf, NO_FILTERS, passes, RATIO_CHIPS, RES_CHIPS, sorted, SORTS, type Filters, type Sort } from "@/lib/filters"
 import { SketchDialog } from "@/components/sketch"
@@ -33,15 +33,24 @@ export function slotFor(tool: Tool, value: Record<string, string[]>, name: strin
   return tool.inputs.find((i) => !drawn(i) && fits(i, name) && (i.multiple ? limits[i.key] == null || n(i) < limits[i.key] : !n(i)))
 }
 
-// a file as a small tile: its picture, its first frame, or a sound icon (its name without the time an upload put first)
+// a sound's picture when its job made one (a Suno take's cover), nothing when there is none
+export function SoundCover({ path, className }: { path: string; className?: string }) {
+  const all = coverPaths(path), [tried, setTried] = useState(0)
+  if (tried >= all.length) return null
+  return <img key={all[tried]} src={fileUrl(all[tried])} alt="" onError={() => setTried((n) => n + 1)} className={cn("object-cover", className)} />
+}
+
+// a file as a small tile: its picture, its first frame, or a sound's cover, else its icon (its name without the time an
+// upload put first)
 export function Thumb({ path, className }: { path: string; className?: string }) {
   const k = mediaKind(path), name = path.split("/").pop()?.replace(/^\d+-/, "")
   if (k === "image") return <img src={fileUrl(path)} alt={name} className={cn("size-full object-cover", className)} />
   if (k === "video") return <video src={fileUrl(path)} muted preload="metadata" className={cn("size-full object-cover", className)} />
   return (
-    <div className={cn("flex size-full flex-col items-center justify-center gap-1 bg-muted p-1 text-center text-xs text-muted-foreground", className)}>
+    <div className={cn("relative flex size-full flex-col items-center justify-center gap-1 bg-muted p-1 text-center text-xs text-muted-foreground", className)}>
       <AudioLinesIcon className="size-5 text-aud" />
       <span className="line-clamp-2 break-all">{name}</span>
+      <SoundCover path={path} className="absolute inset-0 size-full" />
     </div>
   )
 }
@@ -547,6 +556,7 @@ export function PickList({ items, picked, onPick, empty, className }: { items: P
               const on = picked.includes(i.path)
               return (
                 <div key={i.path} className={cn("flex items-center gap-2.5 rounded-lg border px-2 py-1.5 transition-colors hover:bg-muted/60", on && "border-space/60 bg-space/10")}>
+                  <SoundCover path={i.path} className="size-9 shrink-0 rounded-md" />
                   <Listen path={i.path} />
                   <button type="button" aria-pressed={on} onClick={() => onPick(i.path)} className="min-w-0 flex-1 text-left">
                     <span className="block truncate text-sm">{i.job.prompt || i.job.label}</span>

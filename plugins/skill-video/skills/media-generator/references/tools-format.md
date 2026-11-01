@@ -38,15 +38,21 @@ the same files: a new tool is a new entry, nothing else to code.
 | `keyframe` | A video edit Aleph 2 carries from one edited frame: `tool` (an image tool, the same fields) or `template` (Custom edit's prompt on the frame, the frame first and the tool's other images after it), `apply` (the shot's prompt naming the keyframe), `required` (Aleph 2 only with a keyframe) |
 | `params` | Settings forced for this tool, such as `{ "resolution": "4K" }` or `{ "background": "transparent" }` |
 | `local` | Done on the machine: `reframe`, `fps` (frames made by motion, ffmpeg's minterpolate), `hdr` (HDR10 from SDR) with ffmpeg, `depth` and `matte` (`vision.py`, ONNX models fetched once), all free and without a model; `extend` (a frame of the source, then the new shot joined), `expand` (the image padded with gray margins from its `margin` fields, sent at the model's closest ratio), `paste` (an inpaint's result laid back on the original inside its `matte` input, unless the field `outside` is `model`) |
-| `provider` | `elevenlabs` for the tools video-editor's engine does (change voice, translate). Voice's ElevenLabs models are named by their own ids in `models` (`eleven_v4`), reached straight whichever router is active |
+| `provider` | `elevenlabs` for the tools video-editor's engine does (change voice, translate). Voice's ElevenLabs models are named by their own ids in `models` (`eleven_v4`), reached straight whichever router is active; the routers' ElevenLabs voices (`elevenlabs/eleven-v4`) listed beside them stand in without its key |
+| `action` | A music or sound tool's task (Suno's on Kie: `music`, `extend`, `cover`, `add_vocals`, `add_instrumental`, `replace`, `mashup`, `sounds`, `stems`, `wav`, `timings`, `video`, `midi`, `persona`; `isolate`): media.mjs `audioRequest` builds it, the router's `audio()` runs it. Its models are the ones it names, no others |
+| `hidden` | Run from a result's viewer only (a Suno song's WAV, timed lyrics, music video, MIDI, singer), never in the tool list |
 | `element` | A References tool: the Element type its sheets make (`character`, `outfit`…), for the dashboard's « Make an element » |
 | `one_of` | Keys of which one at least must be given, a field or an input (`["who", "references"]`: words or photos) |
 | `routers` | The routers it runs on, when not both (`["kie"]`: Lip sync); the dashboard hides it on another one and the command says to switch |
 
+A field or an input may take `when` (`{ "mode": "write", "vocals": "sung" }`): the dashboard shows it only while the
+tool's other fields have these values (their defaults count); the engine reads it whatever.
+
 Fields (`type`):
 - **choice**: a few `options`, as chips. **select**: a long list, as a searchable button (beside the composer, grouped, a
   line on each). **multi**: several options in the order picked, joined by `, then ` (camera moves).
-- **text**, **number** (min, max, step, unit: a slider), **color**.
+- **text**, **number** (min, max, step, unit: a slider), **color**. **lines**: words on several lines (a song's lyrics).
+  **singer**: a voice of the Library made a Suno singer, its value `@name` (Music's Singer).
 - **light**: the lights around the subject, placed on a stage (`lights`: how many at most); its value is the light in
   words. With `options` (presets, each with its `rig` of lights), the dashboard offers Preset and Custom.
 - **margin**: Expand's share of the image added on one side (0 to 2), set by the dashboard's frame editor.

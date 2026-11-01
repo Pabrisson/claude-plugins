@@ -7,11 +7,11 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Label } from "@/components/chips"
 import { ElementField } from "@/components/element-field"
 import { Listen } from "@/components/inputs"
-import { cited, ELEMENT_TYPES, type Field, type Mentionable, type Model } from "@/lib/api"
+import { cited, ELEMENT_TYPES, heard, type Field, type Mentionable, type Model } from "@/lib/api"
 
 // a voice of one's own (a file) by the name the words cite it with: the one typed, else its file's
 export const voiceName = (file: string, typed?: string) => (typed || file.split("/").pop()!.replace(/^\d+-/, "").replace(/\.\w+$/, "")).replace(/[^\w]/g, "_").slice(0, 20)
-const ELEMENTS: Field = { key: "elements", label: "Elements", type: "element", multiple: true, types: ELEMENT_TYPES.map((t) => t.type).filter((t) => t !== "voice") }
+const ELEMENTS: Field = { key: "elements", label: "Elements", type: "element", multiple: true, types: ELEMENT_TYPES.map((t) => t.type).filter((t) => !heard(t)) }
 // a name out of the words, once each, with the space after it
 const drop = (text: string, name: string) => text.replace(new RegExp(`@${name}(?![\\w-])\\s?`, "g"), "")
 

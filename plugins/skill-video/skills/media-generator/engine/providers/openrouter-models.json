@@ -1066,9 +1066,9 @@
       "upscale": null,
       "min_pixels": null,
       "slug": "atlas-cloud",
+      "audio_param": "audio",
       "options": ["negative_prompt","prompt_extend"],
-      "skip": {"audio":"a sound for the video to follow: an audio reference in the shared inputs"},
-      "pricing": {"duration_seconds":0.1}
+      "pricing": {"duration_seconds":0.1,"measured_minimum_seconds":5}
     },
     {
       "id": "alibaba/wan-3.0",
@@ -1526,6 +1526,78 @@
   ],
   "speech": [
     {
+      "id": "elevenlabs/eleven-flash-v2",
+      "lab": "ElevenLabs",
+      "name": "Eleven Flash v2",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00004,"completion":0}
+    },
+    {
+      "id": "elevenlabs/eleven-flash-v2.5",
+      "lab": "ElevenLabs",
+      "name": "Eleven Flash v2.5",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00004,"completion":0}
+    },
+    {
+      "id": "elevenlabs/eleven-multilingual-v2",
+      "lab": "ElevenLabs",
+      "name": "Eleven Multilingual v2",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00008,"completion":0}
+    },
+    {
+      "id": "elevenlabs/eleven-turbo-v2",
+      "lab": "ElevenLabs",
+      "name": "Eleven Turbo v2",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00004,"completion":0}
+    },
+    {
+      "id": "elevenlabs/eleven-turbo-v2.5",
+      "lab": "ElevenLabs",
+      "name": "Eleven Turbo v2.5",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00004,"completion":0}
+    },
+    {
+      "id": "elevenlabs/eleven-v3",
+      "lab": "ElevenLabs",
+      "name": "Eleven v3",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00008,"completion":0}
+    },
+    {
+      "id": "elevenlabs/eleven-v3-conversational",
+      "lab": "ElevenLabs",
+      "name": "Eleven v3 Conversational",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00004,"completion":0}
+    },
+    {
+      "id": "elevenlabs/eleven-v4",
+      "lab": "ElevenLabs",
+      "name": "Eleven v4",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00008,"completion":0}
+    },
+    {
+      "id": "elevenlabs/eleven-v4-turbo",
+      "lab": "ElevenLabs",
+      "name": "Eleven v4 Turbo",
+      "role": "speech",
+      "voices": ["george","sarah","adam","alice","bella","bill","brian","callum","charlie","chris","daniel","eric","harry","jessica","laura","liam","lily","matilda","river","roger","will"],
+      "pricing": {"prompt":0.00004,"completion":0}
+    },
+    {
       "id": "assemblyai/assemblyai-tts-1",
       "lab": "AssemblyAI",
       "name": "TTS 1",
@@ -1756,6 +1828,36 @@
       "role": "speech",
       "voices": ["eve","ara","rex","sal","leo"],
       "pricing": {"prompt":0.000015,"completion":0}
+    },
+    {
+      "id": "google/lyria-3-pro-preview",
+      "lab": "Google",
+      "name": "Lyria 3 Pro",
+      "role": "music",
+      "voices": null,
+      "seed": true,
+      "options": ["temperature"],
+      "skip": {
+        "top_p": "the model's sampling, left at its default",
+        "max_tokens": "the song's own length",
+        "response_format": "audio, set by the engine"
+      },
+      "pricing": {"request":0.08}
+    },
+    {
+      "id": "google/lyria-3-clip-preview",
+      "lab": "Google",
+      "name": "Lyria 3 Clip",
+      "role": "music",
+      "voices": null,
+      "seed": true,
+      "options": ["temperature"],
+      "skip": {
+        "top_p": "the model's sampling, left at its default",
+        "max_tokens": "the clip's own length",
+        "response_format": "audio, set by the engine"
+      },
+      "pricing": {"request":0.04}
     }
   ]
 }

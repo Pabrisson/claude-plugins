@@ -20,18 +20,22 @@ import { SettingsPage } from "@/components/settings"
 import { isRunning, Results, type Bridge } from "@/components/results"
 import { lengthOf, useTimelines, type Ask } from "@/components/timeline"
 import { WorkspaceMenu, WorkspacePage } from "@/components/workspace"
+import { ToolFilter, toolKey } from "@/components/tool-filter"
 
+// the project first (the home page), the Library, then the spaces that make things, the money and the settings
 const RAIL = [
+  { page: "workspace", label: "Workspace", icon: FolderKanbanIcon },
+  { page: "library", label: "Library", icon: LibraryBigIcon },
+  null,
   { page: "image", label: "Image", icon: ImageIcon },
   { page: "video", label: "Video", icon: VideoIcon },
   { page: "audio", label: "Audio", icon: AudioLinesIcon },
   null,
-  { page: "workspace", label: "Workspace", icon: FolderKanbanIcon },
-  { page: "library", label: "Library", icon: LibraryBigIcon },
   { page: "credits", label: "Credits", icon: DollarSignIcon },
   { page: "settings", label: "Settings", icon: SettingsIcon },
 ] as const
 const SPACES: Kind[] = ["image", "video", "audio"]
+const TOOL_KEY = "media-generator:tool-filter"
 const ICON = { image: ImageIcon, video: VideoIcon, audio: AudioLinesIcon }
 const RUNNING_DOT = { image: "bg-img", video: "bg-vid", audio: "bg-aud" }
 
@@ -40,7 +44,7 @@ const PAGES = RAIL.flatMap((r) => (r ? [r.page] : []))
 const fromHash = (): Page => {
   // a page may name its tab after it (#library/styles)
   const h = window.location.hash.slice(1).split("/")[0]
-  return (PAGES as string[]).includes(h) ? (h as Page) : "video"
+  return (PAGES as string[]).includes(h) ? (h as Page) : "workspace"
 }
 
 // the prompts Claude wrote that the user already applied, per space (this browser only)
@@ -97,6 +101,23 @@ function Dashboard() {
   }
   const [seen, setSeen] = useState<Record<string, string>>(readSeen)
   const [scope, setScope] = useState<"workspace" | "all">(readScope)
+  // each space's Tool filter, kept for this tab
+  const [toolBy, setToolBy] = useState<Partial<Record<Kind, string>>>(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(TOOL_KEY) ?? "{}")
+    } catch {
+      return {}
+    }
+  })
+  const pickTool = (k: Kind, v: string) => {
+    const next = { ...toolBy, [k]: v }
+    setToolBy(next)
+    try {
+      sessionStorage.setItem(TOOL_KEY, JSON.stringify(next))
+    } catch {
+      /* a private window keeps it for the page */
+    }
+  }
   const timelines = useTimelines(state?.workspaces)
   // a result's file the timeline opens on (its « #2 » clicked)
   const [focus, setFocus] = useState<string | null>(null)
@@ -222,12 +243,17 @@ function Dashboard() {
       setElementDraft({
         type: job.kind === "audio" ? "voice" : (tool?.element ?? "other"),
         paths: [...set.flatMap((j) => j.outputs.filter((o) => mediaKind(o) === kind).map((o) => `${home}/media/${j.id}/${o}`)), ...(tool?.element ? (first.inputs?.references ?? []).map((f) => `${home}/media/${first.id}/${f}`) : [])],
-        words: job.fields?.who ?? job.fields?.what ?? "",
+        words: job.fields?.who ?? job.fields?.what ?? job.fields?.instructions ?? "",
       })
       window.location.hash = "library/elements"
       return
     }
-    const next = { animate: ["animate", "first_frame"], extend: ["extend", "video"], upscale: ["upscale", "video"], avatar: ["talking-avatar", "audio"] }[b]
+    // a song's own tools, the clip given
+    if (b === "extend-music" || b === "cover" || b === "stems") {
+      setCompose((c) => ({ ...c, audio: { ...blank("audio", b), inputs: { clip: [file] } } }))
+      return setPage("audio")
+    }
+    const next = { animate: ["animate", "first_frame"], extend: ["extend", "video"], upscale: ["upscale", "video"], avatar: ["talking-avatar", "audio"], s2v: ["speech-to-video", "audio"] }[b]
     setCompose((c) => ({ ...c, video: { ...blank("video", next[0]), inputs: { [next[1]]: [file] }, place: at } }))
     setPage("video")
   }
@@ -299,6 +325,9 @@ function Dashboard() {
 
   const space = SPACES.includes(page as Kind) ? (page as Kind) : null
   const ws = currentOf(state)
+  // a space's results in the scope shown, then of the tool picked
+  const spacePool = space ? state.media.filter((j) => j.kind === space && (scope === "all" || inWorkspace(j, ws.slug))) : []
+  const spaceTool = space ? (toolBy[space] ?? "") : ""
   // where each file is on the current workspace's timeline, the main track's shots first
   const tl = timelines.get(ws.slug)
   const shots: Record<string, string> = {}
@@ -362,6 +391,7 @@ function Dashboard() {
           />
           <main className="flex min-h-0 flex-col gap-4 overflow-auto bg-canvas px-6 py-5">
             <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+              <ToolFilter compact jobs={spacePool} value={spaceTool} onChange={(v) => pickTool(space!, v)} />
               Show
               <Chips
                 options={["workspace", "all"] as const}
@@ -379,7 +409,7 @@ function Dashboard() {
               />
             </div>
             <Results
-              jobs={state.media.filter((j) => j.kind === space && (scope === "all" || inWorkspace(j, ws.slug)))}
+              jobs={spaceTool ? spacePool.filter((j) => toolKey(j) === spaceTool) : spacePool}
               home={state.home}
               per1000={per1000(state)}
               onBridge={bridge}
@@ -510,23 +540,26 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
       <span className="text-muted-foreground/50" aria-hidden>/</span>
       <WorkspaceMenu state={state} onChanged={onChanged} />
       <span className="flex-1" />
-      {/* the active router's balance: Kie's in credits, their dollars beside */}
+      {/* the active router's balance, in dollars */}
       <Balance name={ROUTER_NAME[state.router]}>
         {!state.keys[state.router] ? <span className="text-muted-foreground">no key</span>
           : state.router === "kie"
             ? !kb ? <span className="text-muted-foreground">…</span>
               : kb.error ? <span className="text-muted-foreground">unavailable</span>
-              : <><b className="font-semibold tabular-nums">{(kb.credits ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</b><small className="text-muted-foreground">credits · ${(kb.account_left ?? 0).toFixed(2)}</small></>
+              : <><b className="font-semibold tabular-nums">${(kb.account_left ?? 0).toFixed(2)}</b><small className="text-muted-foreground">left</small></>
           : !ob ? <span className="text-muted-foreground">…</span>
           : ob.error ? <span className="text-muted-foreground">unavailable</span>
           : ob.account_left != null ? <><b className="font-semibold tabular-nums">${ob.account_left.toFixed(2)}</b><small className="text-muted-foreground">left</small></>
           : ob.key_left != null ? <><b className="font-semibold tabular-nums">${ob.key_left.toFixed(2)}</b><small className="text-muted-foreground">left on this key</small></>
           : <small className="text-muted-foreground">no limit on this key</small>}
       </Balance>
+      {/* ElevenLabs, straight: its voices, Change voice and Translate; in dollars on a paid plan (its credits have no price
+          on the free one) */}
       <Balance name="ElevenLabs">
         {!state.keys.elevenlabs ? <span className="text-muted-foreground">no key</span>
           : !eb ? <span className="text-muted-foreground">…</span>
           : eb.error ? <span className="text-muted-foreground">unavailable</span>
+          : per1000(state) ? <><b className="font-semibold tabular-nums">${(((eb.left ?? 0) * per1000(state)!) / 1000).toFixed(2)}</b><small className="text-muted-foreground">left</small></>
           : <><b className="font-semibold tabular-nums">{(eb.left ?? 0).toLocaleString("en-US")}</b><small className="text-muted-foreground">credits left</small></>}
       </Balance>
       {state.fake?.bases?.length ? (

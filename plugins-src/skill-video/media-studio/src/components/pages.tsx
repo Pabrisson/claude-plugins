@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react"
 import { cn } from "cn"
 
-import { AudioLinesIcon, ImageIcon, SparklesIcon, VideoIcon } from "lucide-react"
+import { ArrowUpRightIcon, AudioLinesIcon, ImageIcon, SparklesIcon, VideoIcon } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, inWorkspace, money, per1000, ROUTER_NAME, type Balances, type Job, type Kind, type LedgerLine, type State, type Tool } from "@/lib/api"
+import { api, inWorkspace, money, per1000, ROUTER_NAME, type Balances, type Job, type Kind, type LedgerLine, type Router, type State, type Tool } from "@/lib/api"
 import { Chips, Label, MultiChips } from "@/components/chips"
 import { ElementsTab, type ElementDraft, type Use } from "@/components/elements"
 import { StylesTab } from "@/components/styles"
@@ -13,6 +15,7 @@ import { isRunning, Results, type Bridge } from "@/components/results"
 import { ModelLogo } from "@/components/model-logo"
 import { Viewer } from "@/components/viewer"
 import { WorkspaceRows } from "@/components/workspace-list"
+import { ToolFilter, toolKey } from "@/components/tool-filter"
 
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
@@ -90,9 +93,12 @@ export function Library({
   const [provider, setProvider] = useState("all")
   const [favorites, setFavorites] = useState(false)
   const [ws, setWs] = useState("all")
-  const jobs = state.media.filter(
+  const [tool, setTool] = useState("")
+  // the other filters first: the Tool list counts what they leave
+  const pool = state.media.filter(
     (j) => (kind === "all" || j.kind === kind) && (provider === "all" || j.provider === provider) && (!favorites || j.favorite) && (ws === "all" || inWorkspace(j, ws))
   )
+  const jobs = tool ? pool.filter((j) => toolKey(j) === tool) : pool
   const tabs = (
     <Chips
       options={TABS}
@@ -113,6 +119,10 @@ export function Library({
         <div>
           <Label>Media</Label>
           <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} onChange={setKind} />
+        </div>
+        <div>
+          <Label>Tool</Label>
+          <ToolFilter jobs={pool} value={tool} onChange={setTool} />
         </div>
         <div>
           <Label>Made with</Label>
@@ -190,10 +200,17 @@ function Bars({ days, lines, series }: { days: string[]; lines: LedgerLine[]; se
   )
 }
 
+// a kind's color in the charts, where each provider's credits are bought, and a ledger line's provider: a router, or
+// ElevenLabs straight (its voices, Change voice, Translate)
+type Who = Router | "elevenlabs"
+const COLOR: Record<Kind, string> = { image: "var(--img)", video: "var(--vid)", audio: "var(--aud)" }
+const TOP_UP: Record<Who, string> = { kie: "https://kie.ai/billing", openrouter: "https://openrouter.ai/settings/credits", elevenlabs: "https://elevenlabs.io/app/subscription" }
+const ROUTER_OF: Record<string, string> = { ...ROUTER_NAME, local: "This machine", elevenlabs: "ElevenLabs" }
+
 export function Credits({ state, balances, onBridge }: { state: State; balances: Balances | null; onBridge: (b: Bridge, job: Job, file: string) => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const [period, setPeriod] = useState<Period>("month")
-  const [provider, setProvider] = useState<"both" | "openrouter" | "kie" | "elevenlabs">("both")
+  const [provider, setProvider] = useState<"all" | Who>("all")
   const [kinds, setKinds] = useState<Kind[]>(KINDS)
   const [by, setBy] = useState<string[]>(["dashboard", "claude"])
   const [ws, setWs] = useState("all")
@@ -204,13 +221,12 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
     api.ledger().then(setLedger, () => {})
   }, [finished])
 
-  const usd = per1000(state), plan = state.settings.elevenlabs.plan
   const now = new Date(), month = now.toISOString().slice(0, 7)
   const since = period === "7d" ? new Date(now.getTime() - 6 * 864e5).toISOString().slice(0, 10) : period === "month" ? `${month}-01` : "0000"
   const lines = ledger.filter((l) => l.at.slice(0, 10) >= since && kinds.includes(l.kind) && by.includes(l.by) && inWs(l.id))
-  const el = lines.filter((l) => l.provider === "elevenlabs")
-  // a card for the active router, and for the other one when it spent in this period
-  const routers = (["kie", "openrouter"] as const).filter((r) => (provider === "both" ? r === state.router || lines.some((l) => l.provider === r) : provider === r))
+  // a card for each router, the active one first, then ElevenLabs'
+  const routers: Who[] = [...(state.router === "kie" ? ["kie", "openrouter"] as const : ["openrouter", "kie"] as const), "elevenlabs"]
+  const usd = per1000(state)
   const today = now.toISOString().slice(0, 10)
   const end = Date.parse(today), n = period === "7d" ? 7 : period === "month" ? new Date(end).getUTCDate() : 30
   const days = Array.from({ length: n }, (_, i) => new Date(end - (n - 1 - i) * 864e5).toISOString().slice(0, 10))
@@ -221,17 +237,32 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
       const job = state.media.find((j) => j.id === l.id)
       return { key: `${l.id}-${l.at}`, at: l.at, label: l.label, model: job?.name ?? l.model, unit: l.unit, estimate: l.estimate, actual: l.actual, known: !!l.actual_known, status: l.status, by: l.by, provider: l.provider, job: job && !isRunning(job) ? job.id : null }
     }),
-  ].filter((r) => provider === "both" || r.provider === provider)
+  ].filter((r) => provider === "all" || r.provider === provider)
 
   const ob = balances?.openrouter, kb = balances?.kie, eb = balances?.elevenlabs
-  const elSpent = sum(el)
   const limits = state.settings, active = limits[state.router]
-  const noLimits = [active, limits.elevenlabs].every((l) => l.threshold == null && l.cap == null)
-  const balanceOf = (r: "openrouter" | "kie") =>
-    r === "kie"
-      ? !kb ? "Loading the balance…" : kb.error ? (kb.error === "no key" ? "No key set: see Settings" : kb.error) : `${(kb.credits ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} credits left ($${(kb.account_left ?? 0).toFixed(2)})`
-      : !ob ? "Loading the balance…" : ob.error ? (ob.error === "no key" ? "No key set: see Settings" : ob.error)
-        : [ob.account_left != null && `$${ob.account_left.toFixed(2)} left on the account`, ob.key_left != null ? `$${ob.key_left.toFixed(2)} left on this key` : "no limit on this key", ob.account_left == null && "add a management key to see the account balance"].filter(Boolean).join(" · ")
+  const noLimits = active.threshold == null && active.cap == null
+  // a balance: Kie's dollars with its credits beside, OpenRouter's account (else this key's limit) left, ElevenLabs' credits
+  // left of its month (their dollars on a paid plan)
+  const balanceOf = (r: Who) => {
+    const b = r === "kie" ? kb : r === "elevenlabs" ? eb : ob
+    const note = "text-sm font-normal text-muted-foreground"
+    if (!state.keys[r] || b?.error === "no key")
+      return <span className={note}>No key: see <a href="#settings" className="underline underline-offset-2 hover:text-foreground">Settings</a></span>
+    if (!b || b.error) return <span className={note}>{b ? b.error : "Loading the balance…"}</span>
+    if (r === "elevenlabs")
+      return (
+        <span className="text-3xl font-semibold tabular-nums" title={eb?.limit ? `${(eb.left ?? 0).toLocaleString("en-US")} of ${eb.limit.toLocaleString("en-US")} credits this month` : undefined}>
+          {(eb?.left ?? 0).toLocaleString("en-US")} <span className={note}>credits left{usd ? ` · ${money(((eb?.left ?? 0) * usd) / 1000, "usd")}` : ""}{eb?.reset ? ` · renews ${new Date(eb.reset).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</span>
+        </span>
+      )
+    const [left, words] =
+      r === "kie" ? [kb?.account_left ?? 0, `left · ${(kb?.credits ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} credits`]
+        : ob?.account_left != null ? [ob.account_left, "left"]
+        : ob?.key_left != null ? [ob.key_left, "left on this key"]
+        : [null, "no limit on this key"]
+    return left == null ? <span className={note}>{words}</span> : <span className="text-3xl font-semibold tabular-nums">${left.toFixed(2)} <span className={note}>{words}</span></span>
+  }
 
   return (
     <>
@@ -242,7 +273,7 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
         </div>
         <div>
           <Label>Provider</Label>
-          <Chips options={["both", "kie", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => ({ both: "All", openrouter: "OpenRouter", kie: "Kie.ai", elevenlabs: "ElevenLabs" })[p]} onChange={setProvider} />
+          <Chips options={["all", "kie", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => (p === "all" ? "All" : ROUTER_OF[p])} onChange={setProvider} />
         </div>
         <div>
           <Label>Media</Label>
@@ -256,55 +287,55 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
         <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
           {noLimits
             ? "No confirmation threshold and no monthly cap are set: every click on a paid button spends. Set them in Settings."
-            : `Limits: ${ROUTER_NAME[state.router]} ${active.threshold != null ? `asks above $${active.threshold}` : "never asks"}${active.cap != null ? `, caps at $${active.cap} a month` : ""}. ElevenLabs ${limits.elevenlabs.threshold != null ? `asks above ${limits.elevenlabs.threshold} credits` : "never asks"}${limits.elevenlabs.cap != null ? `, caps at ${limits.elevenlabs.cap} credits a month` : ""}.`}
+            : `Limits: ${ROUTER_NAME[state.router]} ${active.threshold != null ? `asks above $${active.threshold}` : "never asks"}${active.cap != null ? `, caps at $${active.cap} a month` : ""}.`}
         </p>
       </Side>
       <Main title="Credits" aside={<span className="text-sm text-muted-foreground">{now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>}>
-        <div className="grid gap-3.5 lg:grid-cols-2">
-          {routers.map((r) => (
-            <div key={r} className="rounded-2xl border bg-card p-4">
-              <div className="text-sm text-muted-foreground">{ROUTER_NAME[r]}, USD{r === state.router ? " · active" : ""}</div>
-              <div className="mt-1 text-3xl font-semibold tabular-nums">
-                {money(sum(lines.filter((l) => l.provider === r)), "usd")} <span className="text-sm font-normal text-muted-foreground">spent {period === "7d" ? "in 7 days" : period === "month" ? "this month" : "in all"}</span>
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {balanceOf(r)}
-                {limits[r].cap != null && ` · cap $${limits[r].cap} a month, $${state.month[r].toFixed(2)} used`}
-              </div>
-              <Bars days={days} lines={lines.filter((l) => l.provider === r)} series={KINDS.map((k) => ({ key: k, color: `var(--${k === "image" ? "img" : k === "video" ? "vid" : "aud"})` }))} />
-              <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
-                {KINDS.map((k) => (
-                  <span key={k} className="flex items-center gap-1.5">
-                    <i className="size-2 rounded-[2px]" style={{ background: `var(--${k === "image" ? "img" : k === "video" ? "vid" : "aud"})` }} />
-                    {k === "audio" ? "Voice" : cap(k)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-          {(provider === "both" || provider === "elevenlabs") && (
-            <div className="rounded-2xl border bg-card p-4">
-              <div className="text-sm text-muted-foreground">ElevenLabs, credits</div>
-              <div className="mt-1 text-3xl font-semibold tabular-nums">
-                {Math.round(elSpent).toLocaleString("en-US")} credits{" "}
-                {usd ? <span className="text-sm font-normal text-muted-foreground">{money((elSpent * usd) / 1000, "usd")}</span> : null}
-              </div>
-              {eb && !eb.error && eb.limit ? (
-                <div className="mt-3 h-1.5 overflow-hidden rounded bg-muted">
-                  <div className="h-full bg-cost" style={{ width: `${Math.min(100, (100 * (eb.limit - (eb.left ?? 0))) / eb.limit)}%` }} />
+        <div className="grid gap-3.5 lg:grid-cols-2 2xl:grid-cols-3">
+          {routers.map((r) => {
+            const mine = lines.filter((l) => l.provider === r), { cap: most, threshold } = limits[r] ?? { cap: null, threshold: null }, used = state.month[r] ?? 0
+            // ElevenLabs counts in its credits, their dollars on a paid plan; the routers in dollars
+            const unit = r === "elevenlabs" ? "credits" : "usd", show = (n: number) => money(n, unit, usd)
+            return (
+              <div key={r} className="rounded-2xl border bg-card p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {ROUTER_OF[r]}
+                  {r === "elevenlabs" && <span className="text-xs">· straight, not a router</span>}
+                  {r === state.router && <Badge variant="secondary" className="ml-auto">Active</Badge>}
                 </div>
-              ) : null}
-              <div className="mt-1.5 text-sm text-muted-foreground">
-                {!eb ? "Loading the balance…" : eb.error ? (eb.error === "no key" ? "No key set: see Settings" : eb.error)
-                  : `${(eb.left ?? 0).toLocaleString("en-US")} of ${(eb.limit ?? 0).toLocaleString("en-US")} left${eb.reset ? `, renewed ${eb.reset}` : ""}`}
-                {usd ? ` · ${cap(plan ?? "")} plan, $${usd} per 1,000 credits` : ""}
+                <div className="mt-1 flex min-h-9 items-baseline gap-3">
+                  {balanceOf(r)}
+                  <Button variant="ghost" size="xs" className="ml-auto text-muted-foreground" asChild>
+                    <a href={TOP_UP[r]} target="_blank" rel="noreferrer">
+                      Top up <ArrowUpRightIcon data-icon="inline-end" />
+                    </a>
+                  </Button>
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  <span className="font-semibold text-cost tabular-nums">{show(sum(mine))}</span> spent {period === "7d" ? "in 7 days" : period === "month" ? "this month" : "in all"}
+                </div>
+                <Bars days={days} lines={mine} series={KINDS.map((k) => ({ key: k, color: COLOR[k] }))} />
+                <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
+                  {KINDS.map((k) => (
+                    <span key={k} className="flex items-center gap-1.5">
+                      <i className="size-2 rounded-[2px]" style={{ background: COLOR[k] }} />
+                      {cap(k)}
+                    </span>
+                  ))}
+                </div>
+                {/* its limits: this month's spend against the cap, else what asks first */}
+                {most != null ? (
+                  <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground" title={`${show(used)} of ${show(most)} spent this month`}>
+                    <span className="whitespace-nowrap">cap {show(most)}</span>
+                    <Progress value={Math.min(100, (100 * used) / most)} className={cn("flex-1", used >= most && "[&>div]:bg-destructive")} aria-label="Spent this month" />
+                    <span className="tabular-nums">{Math.round((100 * used) / most)} %</span>
+                  </div>
+                ) : (
+                  <div className="mt-3 text-xs text-muted-foreground">{threshold != null ? `no cap · asks above ${show(threshold)}` : "no limit set"}</div>
+                )}
               </div>
-              <Bars days={days} lines={el} series={[{ key: "audio", color: "var(--aud)" }]} />
-              <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5"><i className="size-2 rounded-[2px] bg-aud" />Change voice and Translate</span>
-              </div>
-            </div>
-          )}
+            )
+          })}
         </div>
         <table className="w-full text-sm">
           <thead>
@@ -312,6 +343,7 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
               <th className="p-2 font-medium">When</th>
               <th className="p-2 font-medium">Action</th>
               <th className="p-2 font-medium">Model</th>
+              <th className="p-2 font-medium">Router</th>
               <th className="p-2 text-right font-medium">Estimated</th>
               <th className="p-2 text-right font-medium">Actual</th>
               <th className="p-2 font-medium">By</th>
@@ -332,6 +364,7 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
                     <span className="truncate">{r.model}</span>
                   </span>
                 </td>
+                <td className="p-2 whitespace-nowrap text-muted-foreground">{ROUTER_OF[r.provider] ?? r.provider}</td>
                 <td className="p-2 text-right whitespace-nowrap tabular-nums">{money(r.estimate, r.unit, usd)}</td>
                 <td className={cn("p-2 text-right whitespace-nowrap tabular-nums", r.actual ? "font-semibold text-cost" : "text-muted-foreground")}>
                   {r.status === "running" ? "running" : `${money(r.actual, r.unit, usd)}${r.status === "failed" ? ", failed" : r.known ? "" : " (est.)"}`}
@@ -342,12 +375,12 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={7} className="p-6 text-center text-muted-foreground">{ledger.length ? "Nothing spent in this period." : <NoGenerations what="Each paid generation lands here with its estimate and its real cost, by you or by Claude." />}</td>
+                <td colSpan={8} className="p-6 text-center text-muted-foreground">{ledger.length ? "Nothing spent in this period." : <NoGenerations what="Each paid generation lands here with its estimate and its real cost, by you or by Claude." />}</td>
               </tr>
             )}
           </tbody>
         </table>
-        <Viewer jobs={state.media.filter((j) => !isRunning(j))} id={open} onId={setOpen} home={state.home} per1000={usd} onBridge={onBridge} />
+        <Viewer jobs={state.media.filter((j) => !isRunning(j))} id={open} onId={setOpen} home={state.home} per1000={per1000(state)} onBridge={onBridge} />
       </Main>
     </>
   )

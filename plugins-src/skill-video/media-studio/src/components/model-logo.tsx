@@ -20,6 +20,7 @@ import pixverse from "@lobehub/icons-static-svg/icons/pixverse-color.svg?raw"
 import qwen from "@lobehub/icons-static-svg/icons/qwen-color.svg?raw"
 import recraft from "@lobehub/icons-static-svg/icons/recraft.svg?raw"
 import runway from "@lobehub/icons-static-svg/icons/runway.svg?raw"
+import suno from "@lobehub/icons-static-svg/icons/suno.svg?raw"
 import tencent from "@lobehub/icons-static-svg/icons/tencent-color.svg?raw"
 import topaz from "@lobehub/icons-static-svg/icons/topazlabs.svg?raw"
 import vidu from "@lobehub/icons-static-svg/icons/vidu-color.svg?raw"
@@ -29,12 +30,12 @@ import xai from "@lobehub/icons-static-svg/icons/xai.svg?raw"
 // the labs' marks (LobeHub's icons, MIT), by the model id's prefix; the one-color ones take the text's color
 const LOGOS: Record<string, string> = {
   alibaba, assemblyai, "black-forest-labs": bfl, bytedance, "bytedance-seed": bytedance, elevenlabs, "fish-audio": fishaudio, google, happyhorse, ideogram,
-  kwaivgi: kling, krea, meta, microsoft, minimax, mistralai: mistral, openai, pixverse, qwen, recraft, runway, tencent, topaz, vidu, volcengine, "x-ai": xai,
+  kwaivgi: kling, krea, meta, microsoft, minimax, mistralai: mistral, openai, pixverse, qwen, recraft, runway, suno, tencent, topaz, vidu, volcengine, "x-ai": xai,
   // a lab's brands, as Kie's catalog names its models (wan/2-7-image, hailuo/02-…, gpt-image-2-text-to-image)
   wan: alibaba, "z-image": alibaba, seedream: bytedance, omnihuman: bytedance, hailuo: minimax, "gpt-image": openai, "nano-banana": google, gemini: google,
   flux: bfl, kling, "grok-imagine": xai,
-  // ElevenLabs' own ids (eleven_v4, dubbing_v1)
-  eleven: elevenlabs, dubbing: elevenlabs,
+  // ElevenLabs' and Suno's ids of old jobs and Kie's tasks (eleven_v4, dubbing_v1, ai-music-api/generate)
+  eleven: elevenlabs, dubbing: elevenlabs, "ai-music-api": suno,
 }
 // a prefix's mark, its version left out (kling-3.0, qwen2-1, eleven_v4)
 const logoOf = (prefix: string) => LOGOS[prefix] ?? LOGOS[Object.keys(LOGOS).find((k) => prefix.startsWith(k) && /^[-_.\d]/.test(prefix.slice(k.length))) ?? ""]

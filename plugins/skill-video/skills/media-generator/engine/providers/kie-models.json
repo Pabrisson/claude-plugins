@@ -1247,6 +1247,7 @@
           "1080p": "1080"
         }
       },
+      "audio_seconds": { "max": 60 },
       "note": "audio under 60 s (15 s or less advised); prompt 300 characters; output keeps the photo's ratio",
       "options": ["pe_fast_mode"],
       "masks": {
@@ -1287,6 +1288,7 @@
           "row": "omnihuman-2-0, avatar video, 720p"
         }
       ],
+      "audio_seconds": { "min": 4, "max": 300 },
       "note": "audio 4–300 s (wav or mp3, 15 MB); enable_watermark defaults to true on Kie",
       "set": {
         "enable_watermark": false
@@ -1298,6 +1300,7 @@
       "name": "Seedance 2.0",
       "kie": "bytedance/seedance-2",
       "role": "generate",
+      "sound_or_frames": true,
       "resolutions": ["480p","720p","1080p","4K"],
       "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
       "durations": [4,5,6,7,8,9,10,11,12,13,14,15],
@@ -1395,6 +1398,7 @@
       "name": "Seedance 2.0 Fast",
       "kie": "bytedance/seedance-2-fast",
       "role": "generate",
+      "sound_or_frames": true,
       "resolutions": ["480p","720p"],
       "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
       "durations": [4,5,6,7,8,9,10,11,12,13,14,15],
@@ -1459,6 +1463,7 @@
       "name": "Seedance 2.0 Mini",
       "kie": "bytedance/seedance-2-mini",
       "role": "generate",
+      "sound_or_frames": true,
       "resolutions": ["480p","720p"],
       "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
       "durations": [4,5,6,7,8,9,10,11,12,13,14,15],
@@ -1523,6 +1528,7 @@
       "name": "Seedance 2.5",
       "kie": "bytedance/seedance-2-5",
       "role": "generate",
+      "sound_or_frames": true,
       "resolutions": ["480p","720p","1080p"],
       "aspect_ratios": ["9:16","3:4","1:1","4:3","16:9","21:9"],
       "durations": [4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],
@@ -2149,6 +2155,7 @@
           "row": "Kling AI Avatar, lip sync, Pro-1080p (audio up to 5 minutes)"
         }
       ],
+      "audio_seconds": { "max": 300 },
       "note": "prompt required; audio 5 min at most"
     },
     {
@@ -2179,6 +2186,7 @@
           "row": "Kling AI Avatar, lip sync, Standard-720p (audio up to 5 minutes)"
         }
       ],
+      "audio_seconds": { "max": 300 },
       "note": "prompt required; audio 5 min at most"
     },
     {
@@ -3197,6 +3205,97 @@
         }
       ],
       "note": "needs an image (no text-only model on Kie); aspect_ratio only with references; reference audio mp3, 3–12 s"
+    },
+    {
+      "id": "alibaba/wan-2.2-s2v-turbo",
+      "lab": "Alibaba",
+      "name": "Wan 2.2 Speech to Video",
+      "kie": "wan/2-2-a14b-speech-to-video-turbo",
+      "role": "avatar",
+      "resolutions": ["480p","580p","720p"],
+      "aspect_ratios": null,
+      "durations": null,
+      "frames": [],
+      "references": 1,
+      "videos": 0,
+      "audios": 1,
+      "sound": false,
+      "seed": true,
+      "follow": false,
+      "mix": false,
+      "upscale": null,
+      "audio_frames": {
+        "fps": 16,
+        "min": 40,
+        "max": 120,
+        "step": 4
+      },
+      "fields": {
+        "prompt": "prompt",
+        "images": "image_url",
+        "audio": "audio_url",
+        "resolution": "resolution",
+        "seed": "seed"
+      },
+      "options": [
+        "negative_prompt",
+        {
+          "key": "num_inference_steps",
+          "label": "Steps",
+          "type": "slider",
+          "min": 2,
+          "max": 40,
+          "step": 1,
+          "default": 27,
+          "hint": "more is finer and slower"
+        },
+        {
+          "key": "guidance_scale",
+          "label": "Prompt adherence",
+          "type": "slider",
+          "min": 1,
+          "max": 10,
+          "step": 0.5,
+          "default": 3.5,
+          "hint": "higher follows the words more closely"
+        },
+        {
+          "key": "shift",
+          "label": "Shift",
+          "type": "slider",
+          "min": 1,
+          "max": 10,
+          "step": 0.5,
+          "default": 5,
+          "hint": "the motion's strength"
+        }
+      ],
+      "skip": {
+        "num_frames": "set by the sound's length (16 a second, 40 to 120)",
+        "frames_per_second": "16, Kie's default: smooth at its 7.5 s at most",
+        "nsfw_checker": "the provider's safety filter, left at its default"
+      },
+      "price": [
+        {
+          "when": {
+            "resolution": "480p"
+          },
+          "row": "Wan 2.2 A14B Turbo API Speech to Video, 480p"
+        },
+        {
+          "when": {
+            "resolution": "580p"
+          },
+          "row": "Wan 2.2 A14B Turbo API Speech to Video, 580p"
+        },
+        {
+          "when": {
+            "resolution": "720p"
+          },
+          "row": "Wan 2.2 A14B Turbo API Speech to Video, 720p"
+        }
+      ],
+      "note": "an image (person or scene) and a sound: speech, singing or music; 40–120 frames at 16 fps (2.5–7.5 s), billed by the second"
     }
   ],
   "speech": [
@@ -3235,6 +3334,1526 @@
           "row": ["Gemini 3.8 Flash TTS, Text to Speech, Input","Gemini 3.8 Flash TTS, Text to Speech, Audio Output"]
         }
       ]
+    },
+    {
+      "id": "elevenlabs/eleven-v3",
+      "lab": "ElevenLabs",
+      "name": "Eleven v3 Dialogue",
+      "kie": "elevenlabs/text-to-dialogue-v3",
+      "role": "speech",
+      "voices": ["EkK5I93UQWFDigLMpZcX","Z3R5wn05IrDiVCyEkUrK","NNl6r8mD7vthiJatiJt1","YOq2y2Up4RgXP2HyXjE5","B8gJV1IhpuegLxdpXFOE","2zRM7PkgwBPiau2jvVXc","1SM7GgM6IMuvQlz2BwM3","5l5f8iK3YPeGga21rQIX","scOwDtmlUjD3prqpp97I","NOpBlnGInO9m6vDvFkFC","BZgkqPqms7Kj9ulSkVzn","wo6udizrrtpIxWGp2qJk","gU0LNdkMOQCOrPrwtbee","DGzg6RaUqxGRTHSBjfgF","x70vRnQBMBu4FAYhjJbO","Sm1seazb4gs7RSlUVw7c","P1bg08DkjqiVEzOn76yG","qDuRKMlYmrm8trt5QyBn","qXpMhyvQqiRxWQs4qSSB","TX3LPaxmHKxFdv7VOQHJ","N2lVS1w4EtoT3dr4eOWO","FGY2WhTYpPnrIDTdsKH5","kPzsL2i3teMYv0FxEYQ6","UgBBYS2sOqTuMpoF3BR0","hpp4J3VqNfWAUOO0d1Us","nPczCjzI2devNBz1zQrb","uYXf8XasLslADfZ2MB4u","gs0tAILXbY5DNrJrsM6F","DTKMou8ccj1ZaWGBiotd","vBKc2FfBKJfcZNyEt1n6","DYkrAHD8iwork3YSUBbs","56AoDkrOh6qfVPDXZ7Pt","eR40ATw9ArzDf9h3v7t7","g6xIsTj2HwM6VR4iXFCw","lcMyyd2HUfFzxdCaC4Ta","6aDn1KB0hjpdcocrUkmq","Sq93GQT4X1lKDXsQcixO","flHkNRp1BlvT73UL6gyz","9yzdeviXkFddZ4Oz8Mok","pPdl9cQBQq4p6mRkZy2Z","zYcjlYFOd3taleS0gkk3","nzeAacJi50IvxcyDnMXa","ruirxsoakN0GWmGNIo04","TC0Zp7WVFzhA8zpTlRqV","ljo9gAlSqKOvF6D8sOsX","PPzYpIqttlTYA83688JI","8JVbfL6oEdmuxKn5DK2C","iCrDUkL56s3C8sCRl7wb","wJqPPQ618aTW29mptyoc","EiNlNiXeDU1pqqOPrYMO","4YYIPFl9wE5c4L2eu2Gb","6F5Zhi321D3Oq7v1oNT4","YXpFCvM1S3JbWEJhoskW","LG95yZDEHg6fCZdQjLqj","CeNX9CMwmxDxUF5Q2Inm","aD6riP1btT197c6dACmy","mtrellq69YZsNwzUSyXh","dHd5gvgSOzSfduK4CvEg","eVItLK1UvXctxuaRV2Oq","esy0r39YPLQjOczyOib8","Tsns2HvNFKfGiNjllgqo","1U02n4nD6AdIZ9CjF053","AeRdCCKzvd23BpJoofzx","LruHrtVF6PSyGItzMNHS","1wGbFxmAM3Fgw63G1zZJ","hqfrgApggtO1785R4Fsn","MJ0RnG71ty4LH3dvNfSd"],
+      "dialogue": "list",
+      "speakers": 10,
+      "tags": true,
+      "fields": {},
+      "options": [
+        {
+          "key": "stability",
+          "label": "Stability",
+          "type": "choice",
+          "values": [
+            {
+              "value": 0,
+              "label": "Creative"
+            },
+            {
+              "value": 0.5,
+              "label": "Natural"
+            },
+            {
+              "value": 1,
+              "label": "Robust"
+            }
+          ],
+          "default": 0.5,
+          "hint": "Creative is the most expressive, Robust the steadiest"
+        },
+        {
+          "key": "language_code",
+          "label": "Language",
+          "type": "select",
+          "values": [
+            {
+              "value": "",
+              "label": "Auto"
+            },
+            {
+              "value": "af",
+              "label": "af"
+            },
+            {
+              "value": "ar",
+              "label": "ar"
+            },
+            {
+              "value": "hy",
+              "label": "hy"
+            },
+            {
+              "value": "as",
+              "label": "as"
+            },
+            {
+              "value": "az",
+              "label": "az"
+            },
+            {
+              "value": "be",
+              "label": "be"
+            },
+            {
+              "value": "bn",
+              "label": "bn"
+            },
+            {
+              "value": "bs",
+              "label": "bs"
+            },
+            {
+              "value": "bg",
+              "label": "bg"
+            },
+            {
+              "value": "ca",
+              "label": "ca"
+            },
+            {
+              "value": "ceb",
+              "label": "ceb"
+            },
+            {
+              "value": "ny",
+              "label": "ny"
+            },
+            {
+              "value": "hr",
+              "label": "hr"
+            },
+            {
+              "value": "cs",
+              "label": "cs"
+            },
+            {
+              "value": "da",
+              "label": "da"
+            },
+            {
+              "value": "nl",
+              "label": "nl"
+            },
+            {
+              "value": "en",
+              "label": "en"
+            },
+            {
+              "value": "et",
+              "label": "et"
+            },
+            {
+              "value": "fil",
+              "label": "fil"
+            },
+            {
+              "value": "fi",
+              "label": "fi"
+            },
+            {
+              "value": "fr",
+              "label": "fr"
+            },
+            {
+              "value": "gl",
+              "label": "gl"
+            },
+            {
+              "value": "ka",
+              "label": "ka"
+            },
+            {
+              "value": "de",
+              "label": "de"
+            },
+            {
+              "value": "el",
+              "label": "el"
+            },
+            {
+              "value": "gu",
+              "label": "gu"
+            },
+            {
+              "value": "ha",
+              "label": "ha"
+            },
+            {
+              "value": "he",
+              "label": "he"
+            },
+            {
+              "value": "hi",
+              "label": "hi"
+            },
+            {
+              "value": "hu",
+              "label": "hu"
+            },
+            {
+              "value": "is",
+              "label": "is"
+            },
+            {
+              "value": "id",
+              "label": "id"
+            },
+            {
+              "value": "ga",
+              "label": "ga"
+            },
+            {
+              "value": "it",
+              "label": "it"
+            },
+            {
+              "value": "ja",
+              "label": "ja"
+            },
+            {
+              "value": "jv",
+              "label": "jv"
+            },
+            {
+              "value": "kn",
+              "label": "kn"
+            },
+            {
+              "value": "kk",
+              "label": "kk"
+            },
+            {
+              "value": "ky",
+              "label": "ky"
+            },
+            {
+              "value": "ko",
+              "label": "ko"
+            },
+            {
+              "value": "lv",
+              "label": "lv"
+            },
+            {
+              "value": "ln",
+              "label": "ln"
+            },
+            {
+              "value": "lt",
+              "label": "lt"
+            },
+            {
+              "value": "lb",
+              "label": "lb"
+            },
+            {
+              "value": "mk",
+              "label": "mk"
+            },
+            {
+              "value": "ms",
+              "label": "ms"
+            },
+            {
+              "value": "ml",
+              "label": "ml"
+            },
+            {
+              "value": "zh",
+              "label": "zh"
+            },
+            {
+              "value": "mr",
+              "label": "mr"
+            },
+            {
+              "value": "ne",
+              "label": "ne"
+            },
+            {
+              "value": "no",
+              "label": "no"
+            },
+            {
+              "value": "ps",
+              "label": "ps"
+            },
+            {
+              "value": "fa",
+              "label": "fa"
+            },
+            {
+              "value": "pl",
+              "label": "pl"
+            },
+            {
+              "value": "pt",
+              "label": "pt"
+            },
+            {
+              "value": "pa",
+              "label": "pa"
+            },
+            {
+              "value": "ro",
+              "label": "ro"
+            },
+            {
+              "value": "ru",
+              "label": "ru"
+            },
+            {
+              "value": "sr",
+              "label": "sr"
+            },
+            {
+              "value": "sd",
+              "label": "sd"
+            },
+            {
+              "value": "sk",
+              "label": "sk"
+            },
+            {
+              "value": "sl",
+              "label": "sl"
+            },
+            {
+              "value": "so",
+              "label": "so"
+            },
+            {
+              "value": "es",
+              "label": "es"
+            },
+            {
+              "value": "sw",
+              "label": "sw"
+            },
+            {
+              "value": "sv",
+              "label": "sv"
+            },
+            {
+              "value": "ta",
+              "label": "ta"
+            },
+            {
+              "value": "te",
+              "label": "te"
+            },
+            {
+              "value": "th",
+              "label": "th"
+            },
+            {
+              "value": "tr",
+              "label": "tr"
+            },
+            {
+              "value": "uk",
+              "label": "uk"
+            },
+            {
+              "value": "ur",
+              "label": "ur"
+            },
+            {
+              "value": "vi",
+              "label": "vi"
+            },
+            {
+              "value": "cy",
+              "label": "cy"
+            }
+          ],
+          "default": "",
+          "hint": "read in this language; Auto follows the text"
+        }
+      ],
+      "price": [
+        {
+          "row": "Elevenlabs V3, Text to dialogue"
+        }
+      ],
+      "note": "dialogue [{text, voice}] (5,000 characters in all), one line for one voice; voice: an id of the list or a preset name; audio tags [whispers]…"
+    },
+    {
+      "id": "elevenlabs/eleven-multilingual-v2",
+      "lab": "ElevenLabs",
+      "name": "Eleven Multilingual v2",
+      "kie": "elevenlabs/text-to-speech-multilingual-v2",
+      "role": "speech",
+      "voices": ["EkK5I93UQWFDigLMpZcX","Z3R5wn05IrDiVCyEkUrK","NNl6r8mD7vthiJatiJt1","YOq2y2Up4RgXP2HyXjE5","B8gJV1IhpuegLxdpXFOE","2zRM7PkgwBPiau2jvVXc","1SM7GgM6IMuvQlz2BwM3","5l5f8iK3YPeGga21rQIX","scOwDtmlUjD3prqpp97I","NOpBlnGInO9m6vDvFkFC","BZgkqPqms7Kj9ulSkVzn","wo6udizrrtpIxWGp2qJk","gU0LNdkMOQCOrPrwtbee","DGzg6RaUqxGRTHSBjfgF","x70vRnQBMBu4FAYhjJbO","Sm1seazb4gs7RSlUVw7c","P1bg08DkjqiVEzOn76yG","qDuRKMlYmrm8trt5QyBn","qXpMhyvQqiRxWQs4qSSB","TX3LPaxmHKxFdv7VOQHJ","N2lVS1w4EtoT3dr4eOWO","FGY2WhTYpPnrIDTdsKH5","kPzsL2i3teMYv0FxEYQ6","UgBBYS2sOqTuMpoF3BR0","hpp4J3VqNfWAUOO0d1Us","nPczCjzI2devNBz1zQrb","uYXf8XasLslADfZ2MB4u","gs0tAILXbY5DNrJrsM6F","DTKMou8ccj1ZaWGBiotd","vBKc2FfBKJfcZNyEt1n6","DYkrAHD8iwork3YSUBbs","56AoDkrOh6qfVPDXZ7Pt","eR40ATw9ArzDf9h3v7t7","g6xIsTj2HwM6VR4iXFCw","lcMyyd2HUfFzxdCaC4Ta","6aDn1KB0hjpdcocrUkmq","Sq93GQT4X1lKDXsQcixO","flHkNRp1BlvT73UL6gyz","9yzdeviXkFddZ4Oz8Mok","pPdl9cQBQq4p6mRkZy2Z","zYcjlYFOd3taleS0gkk3","nzeAacJi50IvxcyDnMXa","ruirxsoakN0GWmGNIo04","TC0Zp7WVFzhA8zpTlRqV","ljo9gAlSqKOvF6D8sOsX","PPzYpIqttlTYA83688JI","8JVbfL6oEdmuxKn5DK2C","iCrDUkL56s3C8sCRl7wb","wJqPPQ618aTW29mptyoc","EiNlNiXeDU1pqqOPrYMO","4YYIPFl9wE5c4L2eu2Gb","6F5Zhi321D3Oq7v1oNT4","YXpFCvM1S3JbWEJhoskW","LG95yZDEHg6fCZdQjLqj","CeNX9CMwmxDxUF5Q2Inm","aD6riP1btT197c6dACmy","mtrellq69YZsNwzUSyXh","dHd5gvgSOzSfduK4CvEg","eVItLK1UvXctxuaRV2Oq","esy0r39YPLQjOczyOib8","Tsns2HvNFKfGiNjllgqo","1U02n4nD6AdIZ9CjF053","AeRdCCKzvd23BpJoofzx","LruHrtVF6PSyGItzMNHS","1wGbFxmAM3Fgw63G1zZJ","hqfrgApggtO1785R4Fsn","MJ0RnG71ty4LH3dvNfSd"],
+      "fields": {
+        "text": "text",
+        "voice": "voice"
+      },
+      "options": [
+        {
+          "key": "stability",
+          "label": "Stability",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "lower is more expressive, higher steadier"
+        },
+        {
+          "key": "similarity_boost",
+          "label": "Similarity",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.75,
+          "hint": "how close to the voice it stays"
+        },
+        {
+          "key": "style",
+          "label": "Style exaggeration",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0,
+          "hint": "the voice's own style, amplified"
+        },
+        {
+          "key": "speed",
+          "label": "Speed",
+          "type": "slider",
+          "min": 0.7,
+          "max": 1.2,
+          "step": 0.05,
+          "default": 1,
+          "hint": "slower or faster"
+        }
+      ],
+      "skip": {
+        "timestamps": "word timings: not kept, a voice is one clip",
+        "previous_text": "the text before this clip, for continuity across clips: one clip at a time here",
+        "next_text": "the text after this clip, for continuity across clips: one clip at a time here",
+        "language_code": "Multilingual v2 finds the language in the text (ElevenLabs refuses a code on it)"
+      },
+      "price": [
+        {
+          "row": "Elevenlabs Text to Speech, multilingual v2"
+        }
+      ],
+      "note": "text 5,000 max"
+    },
+    {
+      "id": "elevenlabs/eleven-turbo-v2.5",
+      "lab": "ElevenLabs",
+      "name": "Eleven Turbo v2.5",
+      "kie": "elevenlabs/text-to-speech-turbo-2-5",
+      "role": "speech",
+      "voices": ["EkK5I93UQWFDigLMpZcX","Z3R5wn05IrDiVCyEkUrK","NNl6r8mD7vthiJatiJt1","YOq2y2Up4RgXP2HyXjE5","B8gJV1IhpuegLxdpXFOE","2zRM7PkgwBPiau2jvVXc","1SM7GgM6IMuvQlz2BwM3","5l5f8iK3YPeGga21rQIX","scOwDtmlUjD3prqpp97I","NOpBlnGInO9m6vDvFkFC","BZgkqPqms7Kj9ulSkVzn","wo6udizrrtpIxWGp2qJk","gU0LNdkMOQCOrPrwtbee","DGzg6RaUqxGRTHSBjfgF","x70vRnQBMBu4FAYhjJbO","Sm1seazb4gs7RSlUVw7c","P1bg08DkjqiVEzOn76yG","qDuRKMlYmrm8trt5QyBn","qXpMhyvQqiRxWQs4qSSB","TX3LPaxmHKxFdv7VOQHJ","N2lVS1w4EtoT3dr4eOWO","FGY2WhTYpPnrIDTdsKH5","kPzsL2i3teMYv0FxEYQ6","UgBBYS2sOqTuMpoF3BR0","hpp4J3VqNfWAUOO0d1Us","nPczCjzI2devNBz1zQrb","uYXf8XasLslADfZ2MB4u","gs0tAILXbY5DNrJrsM6F","DTKMou8ccj1ZaWGBiotd","vBKc2FfBKJfcZNyEt1n6","DYkrAHD8iwork3YSUBbs","56AoDkrOh6qfVPDXZ7Pt","eR40ATw9ArzDf9h3v7t7","g6xIsTj2HwM6VR4iXFCw","lcMyyd2HUfFzxdCaC4Ta","6aDn1KB0hjpdcocrUkmq","Sq93GQT4X1lKDXsQcixO","flHkNRp1BlvT73UL6gyz","9yzdeviXkFddZ4Oz8Mok","pPdl9cQBQq4p6mRkZy2Z","zYcjlYFOd3taleS0gkk3","nzeAacJi50IvxcyDnMXa","ruirxsoakN0GWmGNIo04","TC0Zp7WVFzhA8zpTlRqV","ljo9gAlSqKOvF6D8sOsX","PPzYpIqttlTYA83688JI","8JVbfL6oEdmuxKn5DK2C","iCrDUkL56s3C8sCRl7wb","wJqPPQ618aTW29mptyoc","EiNlNiXeDU1pqqOPrYMO","4YYIPFl9wE5c4L2eu2Gb","6F5Zhi321D3Oq7v1oNT4","YXpFCvM1S3JbWEJhoskW","LG95yZDEHg6fCZdQjLqj","CeNX9CMwmxDxUF5Q2Inm","aD6riP1btT197c6dACmy","mtrellq69YZsNwzUSyXh","dHd5gvgSOzSfduK4CvEg","eVItLK1UvXctxuaRV2Oq","esy0r39YPLQjOczyOib8","Tsns2HvNFKfGiNjllgqo","1U02n4nD6AdIZ9CjF053","AeRdCCKzvd23BpJoofzx","LruHrtVF6PSyGItzMNHS","1wGbFxmAM3Fgw63G1zZJ","hqfrgApggtO1785R4Fsn","MJ0RnG71ty4LH3dvNfSd"],
+      "fields": {
+        "text": "text",
+        "voice": "voice"
+      },
+      "options": [
+        {
+          "key": "stability",
+          "label": "Stability",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "lower is more expressive, higher steadier"
+        },
+        {
+          "key": "similarity_boost",
+          "label": "Similarity",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.75,
+          "hint": "how close to the voice it stays"
+        },
+        {
+          "key": "style",
+          "label": "Style exaggeration",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0,
+          "hint": "the voice's own style, amplified"
+        },
+        {
+          "key": "speed",
+          "label": "Speed",
+          "type": "slider",
+          "min": 0.7,
+          "max": 1.2,
+          "step": 0.05,
+          "default": 1,
+          "hint": "slower or faster"
+        },
+        {
+          "key": "language_code",
+          "label": "Language",
+          "type": "select",
+          "values": [
+            {
+              "value": "",
+              "label": "Auto"
+            },
+            {
+              "value": "af",
+              "label": "af"
+            },
+            {
+              "value": "ar",
+              "label": "ar"
+            },
+            {
+              "value": "hy",
+              "label": "hy"
+            },
+            {
+              "value": "as",
+              "label": "as"
+            },
+            {
+              "value": "az",
+              "label": "az"
+            },
+            {
+              "value": "be",
+              "label": "be"
+            },
+            {
+              "value": "bn",
+              "label": "bn"
+            },
+            {
+              "value": "bs",
+              "label": "bs"
+            },
+            {
+              "value": "bg",
+              "label": "bg"
+            },
+            {
+              "value": "ca",
+              "label": "ca"
+            },
+            {
+              "value": "ceb",
+              "label": "ceb"
+            },
+            {
+              "value": "ny",
+              "label": "ny"
+            },
+            {
+              "value": "hr",
+              "label": "hr"
+            },
+            {
+              "value": "cs",
+              "label": "cs"
+            },
+            {
+              "value": "da",
+              "label": "da"
+            },
+            {
+              "value": "nl",
+              "label": "nl"
+            },
+            {
+              "value": "en",
+              "label": "en"
+            },
+            {
+              "value": "et",
+              "label": "et"
+            },
+            {
+              "value": "fil",
+              "label": "fil"
+            },
+            {
+              "value": "fi",
+              "label": "fi"
+            },
+            {
+              "value": "fr",
+              "label": "fr"
+            },
+            {
+              "value": "gl",
+              "label": "gl"
+            },
+            {
+              "value": "ka",
+              "label": "ka"
+            },
+            {
+              "value": "de",
+              "label": "de"
+            },
+            {
+              "value": "el",
+              "label": "el"
+            },
+            {
+              "value": "gu",
+              "label": "gu"
+            },
+            {
+              "value": "ha",
+              "label": "ha"
+            },
+            {
+              "value": "he",
+              "label": "he"
+            },
+            {
+              "value": "hi",
+              "label": "hi"
+            },
+            {
+              "value": "hu",
+              "label": "hu"
+            },
+            {
+              "value": "is",
+              "label": "is"
+            },
+            {
+              "value": "id",
+              "label": "id"
+            },
+            {
+              "value": "ga",
+              "label": "ga"
+            },
+            {
+              "value": "it",
+              "label": "it"
+            },
+            {
+              "value": "ja",
+              "label": "ja"
+            },
+            {
+              "value": "jv",
+              "label": "jv"
+            },
+            {
+              "value": "kn",
+              "label": "kn"
+            },
+            {
+              "value": "kk",
+              "label": "kk"
+            },
+            {
+              "value": "ky",
+              "label": "ky"
+            },
+            {
+              "value": "ko",
+              "label": "ko"
+            },
+            {
+              "value": "lv",
+              "label": "lv"
+            },
+            {
+              "value": "ln",
+              "label": "ln"
+            },
+            {
+              "value": "lt",
+              "label": "lt"
+            },
+            {
+              "value": "lb",
+              "label": "lb"
+            },
+            {
+              "value": "mk",
+              "label": "mk"
+            },
+            {
+              "value": "ms",
+              "label": "ms"
+            },
+            {
+              "value": "ml",
+              "label": "ml"
+            },
+            {
+              "value": "zh",
+              "label": "zh"
+            },
+            {
+              "value": "mr",
+              "label": "mr"
+            },
+            {
+              "value": "ne",
+              "label": "ne"
+            },
+            {
+              "value": "no",
+              "label": "no"
+            },
+            {
+              "value": "ps",
+              "label": "ps"
+            },
+            {
+              "value": "fa",
+              "label": "fa"
+            },
+            {
+              "value": "pl",
+              "label": "pl"
+            },
+            {
+              "value": "pt",
+              "label": "pt"
+            },
+            {
+              "value": "pa",
+              "label": "pa"
+            },
+            {
+              "value": "ro",
+              "label": "ro"
+            },
+            {
+              "value": "ru",
+              "label": "ru"
+            },
+            {
+              "value": "sr",
+              "label": "sr"
+            },
+            {
+              "value": "sd",
+              "label": "sd"
+            },
+            {
+              "value": "sk",
+              "label": "sk"
+            },
+            {
+              "value": "sl",
+              "label": "sl"
+            },
+            {
+              "value": "so",
+              "label": "so"
+            },
+            {
+              "value": "es",
+              "label": "es"
+            },
+            {
+              "value": "sw",
+              "label": "sw"
+            },
+            {
+              "value": "sv",
+              "label": "sv"
+            },
+            {
+              "value": "ta",
+              "label": "ta"
+            },
+            {
+              "value": "te",
+              "label": "te"
+            },
+            {
+              "value": "th",
+              "label": "th"
+            },
+            {
+              "value": "tr",
+              "label": "tr"
+            },
+            {
+              "value": "uk",
+              "label": "uk"
+            },
+            {
+              "value": "ur",
+              "label": "ur"
+            },
+            {
+              "value": "vi",
+              "label": "vi"
+            },
+            {
+              "value": "cy",
+              "label": "cy"
+            }
+          ],
+          "default": "",
+          "hint": "read in this language; Auto follows the text"
+        }
+      ],
+      "skip": {
+        "timestamps": "word timings: not kept, a voice is one clip",
+        "previous_text": "the text before this clip, for continuity across clips: one clip at a time here",
+        "next_text": "the text after this clip, for continuity across clips: one clip at a time here"
+      },
+      "price": [
+        {
+          "row": "Elevenlabs Text to Speech, turbo 2.5"
+        }
+      ],
+      "note": "text 5,000 max; Kie answered 500 three times on 2026-10-31 (0 credits)"
+    },
+    {
+      "id": "suno/v6",
+      "lab": "Suno",
+      "name": "V6",
+      "kie": "suno",
+      "suno": "V6",
+      "role": "music",
+      "fields": {},
+      "options": [
+        {
+          "key": "vocal_gender",
+          "label": "Voice",
+          "type": "choice",
+          "values": [
+            {
+              "value": "",
+              "label": "Any"
+            },
+            {
+              "value": "f",
+              "label": "Female"
+            },
+            {
+              "value": "m",
+              "label": "Male"
+            }
+          ],
+          "default": "",
+          "hint": "raises the odds, not a promise; Write only"
+        },
+        {
+          "key": "negative_tags",
+          "label": "Avoid",
+          "type": "text",
+          "hint": "styles or sounds kept out: heavy metal, autotune"
+        },
+        {
+          "key": "style_weight",
+          "label": "Style weight",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how closely it keeps to the style; Write only"
+        },
+        {
+          "key": "weirdness_constraint",
+          "label": "Weirdness",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how far it strays from the expected; Write only"
+        },
+        {
+          "key": "audio_weight",
+          "label": "Audio weight",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how much a given audio counts; with vocals, Write only"
+        },
+        {
+          "key": "variety",
+          "label": "Variety",
+          "type": "choice",
+          "values": [
+            {
+              "value": 0,
+              "label": "Off"
+            },
+            {
+              "value": 1,
+              "label": "Normal"
+            },
+            {
+              "value": 2,
+              "label": "High"
+            },
+            {
+              "value": 3,
+              "label": "Extra"
+            },
+            {
+              "value": 4,
+              "label": "Max"
+            }
+          ],
+          "default": 1,
+          "hint": "how different the two takes are; Write only"
+        }
+      ],
+      "skip": {
+        "persona_id": "the Singer field: a voice of the Library made a Suno singer",
+        "persona_model": "set by the Singer: a persona of a song or your own voice",
+        "custom_mode": "Describe or Write, the tool's mode",
+        "duration": "Length, the tool's field",
+        "callBackUrl": "the engine follows the task itself"
+      },
+      "price": [
+        {
+          "when": {
+            "action": "music"
+          },
+          "row": "Suno, Generate Music"
+        },
+        {
+          "when": {
+            "action": "extend"
+          },
+          "row": "Suno, Extend Music"
+        },
+        {
+          "when": {
+            "action": "upload_extend"
+          },
+          "row": "Suno, Upload and Extend Audio"
+        },
+        {
+          "when": {
+            "action": "cover"
+          },
+          "row": "Suno, upload-and-cover-audio"
+        },
+        {
+          "when": {
+            "action": "add_vocals"
+          },
+          "row": "Suno, add-vocals"
+        },
+        {
+          "when": {
+            "action": "add_instrumental"
+          },
+          "row": "Suno, add-instrumental"
+        },
+        {
+          "when": {
+            "action": "replace"
+          },
+          "row": "Suno, Replace Music Section"
+        },
+        {
+          "when": {
+            "action": "mashup"
+          },
+          "row": "Suno, Mashup"
+        }
+      ],
+      "note": "2 takes a request (each with its cover); Write: title 80, style 1,000, lyrics 5,000 characters, 10–360 s; Describe: 3,000 characters, up to 5 images, 1 video, 1 audio (6 s–30 min); files kept 14 days"
+    },
+    {
+      "id": "suno/v6-mini",
+      "lab": "Suno",
+      "name": "V6 Mini",
+      "kie": "suno",
+      "suno": "V6_MINI",
+      "role": "music",
+      "fields": {},
+      "options": [
+        {
+          "key": "vocal_gender",
+          "label": "Voice",
+          "type": "choice",
+          "values": [
+            {
+              "value": "",
+              "label": "Any"
+            },
+            {
+              "value": "f",
+              "label": "Female"
+            },
+            {
+              "value": "m",
+              "label": "Male"
+            }
+          ],
+          "default": "",
+          "hint": "raises the odds, not a promise; Write only"
+        },
+        {
+          "key": "negative_tags",
+          "label": "Avoid",
+          "type": "text",
+          "hint": "styles or sounds kept out: heavy metal, autotune"
+        },
+        {
+          "key": "style_weight",
+          "label": "Style weight",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how closely it keeps to the style; Write only"
+        },
+        {
+          "key": "weirdness_constraint",
+          "label": "Weirdness",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how far it strays from the expected; Write only"
+        },
+        {
+          "key": "audio_weight",
+          "label": "Audio weight",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how much a given audio counts; with vocals, Write only"
+        },
+        {
+          "key": "variety",
+          "label": "Variety",
+          "type": "choice",
+          "values": [
+            {
+              "value": 0,
+              "label": "Off"
+            },
+            {
+              "value": 1,
+              "label": "Normal"
+            },
+            {
+              "value": 2,
+              "label": "High"
+            },
+            {
+              "value": 3,
+              "label": "Extra"
+            },
+            {
+              "value": 4,
+              "label": "Max"
+            }
+          ],
+          "default": 1,
+          "hint": "how different the two takes are; Write only"
+        }
+      ],
+      "skip": {
+        "persona_id": "the Singer field: a voice of the Library made a Suno singer",
+        "persona_model": "set by the Singer: a persona of a song or your own voice",
+        "custom_mode": "Describe or Write, the tool's mode",
+        "duration": "Length, the tool's field",
+        "callBackUrl": "the engine follows the task itself"
+      },
+      "price": [
+        {
+          "when": {
+            "action": "music"
+          },
+          "row": "Suno, Generate Music"
+        },
+        {
+          "when": {
+            "action": "extend"
+          },
+          "row": "Suno, Extend Music"
+        },
+        {
+          "when": {
+            "action": "upload_extend"
+          },
+          "row": "Suno, Upload and Extend Audio"
+        },
+        {
+          "when": {
+            "action": "cover"
+          },
+          "row": "Suno, upload-and-cover-audio"
+        },
+        {
+          "when": {
+            "action": "add_vocals"
+          },
+          "row": "Suno, add-vocals"
+        },
+        {
+          "when": {
+            "action": "add_instrumental"
+          },
+          "row": "Suno, add-instrumental"
+        },
+        {
+          "when": {
+            "action": "replace"
+          },
+          "row": "Suno, Replace Music Section"
+        },
+        {
+          "when": {
+            "action": "mashup"
+          },
+          "row": "Suno, Mashup"
+        }
+      ],
+      "note": "as V6, lighter and faster"
+    },
+    {
+      "id": "suno/v6-wild",
+      "lab": "Suno",
+      "name": "V6 Wild",
+      "kie": "suno",
+      "suno": "V6_WILD",
+      "role": "music",
+      "fields": {},
+      "options": [
+        {
+          "key": "vocal_gender",
+          "label": "Voice",
+          "type": "choice",
+          "values": [
+            {
+              "value": "",
+              "label": "Any"
+            },
+            {
+              "value": "f",
+              "label": "Female"
+            },
+            {
+              "value": "m",
+              "label": "Male"
+            }
+          ],
+          "default": "",
+          "hint": "raises the odds, not a promise; Write only"
+        },
+        {
+          "key": "negative_tags",
+          "label": "Avoid",
+          "type": "text",
+          "hint": "styles or sounds kept out: heavy metal, autotune"
+        },
+        {
+          "key": "style_weight",
+          "label": "Style weight",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how closely it keeps to the style; Write only"
+        },
+        {
+          "key": "weirdness_constraint",
+          "label": "Weirdness",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how far it strays from the expected; Write only"
+        },
+        {
+          "key": "audio_weight",
+          "label": "Audio weight",
+          "type": "slider",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "default": 0.5,
+          "hint": "how much a given audio counts; with vocals, Write only"
+        },
+        {
+          "key": "variety",
+          "label": "Variety",
+          "type": "choice",
+          "values": [
+            {
+              "value": 0,
+              "label": "Off"
+            },
+            {
+              "value": 1,
+              "label": "Normal"
+            },
+            {
+              "value": 2,
+              "label": "High"
+            },
+            {
+              "value": 3,
+              "label": "Extra"
+            },
+            {
+              "value": 4,
+              "label": "Max"
+            }
+          ],
+          "default": 1,
+          "hint": "how different the two takes are; Write only"
+        }
+      ],
+      "skip": {
+        "persona_id": "the Singer field: a voice of the Library made a Suno singer",
+        "persona_model": "set by the Singer: a persona of a song or your own voice",
+        "custom_mode": "Describe or Write, the tool's mode",
+        "duration": "Length, the tool's field",
+        "callBackUrl": "the engine follows the task itself"
+      },
+      "price": [
+        {
+          "when": {
+            "action": "music"
+          },
+          "row": "Suno, Generate Music"
+        },
+        {
+          "when": {
+            "action": "extend"
+          },
+          "row": "Suno, Extend Music"
+        },
+        {
+          "when": {
+            "action": "upload_extend"
+          },
+          "row": "Suno, Upload and Extend Audio"
+        },
+        {
+          "when": {
+            "action": "cover"
+          },
+          "row": "Suno, upload-and-cover-audio"
+        },
+        {
+          "when": {
+            "action": "add_vocals"
+          },
+          "row": "Suno, add-vocals"
+        },
+        {
+          "when": {
+            "action": "add_instrumental"
+          },
+          "row": "Suno, add-instrumental"
+        },
+        {
+          "when": {
+            "action": "replace"
+          },
+          "row": "Suno, Replace Music Section"
+        },
+        {
+          "when": {
+            "action": "mashup"
+          },
+          "row": "Suno, Mashup"
+        }
+      ],
+      "note": "as V6, the most experimental"
+    },
+    {
+      "id": "suno/sounds",
+      "lab": "Suno",
+      "name": "Sounds",
+      "kie": "suno",
+      "suno": "V6",
+      "role": "sound",
+      "fields": {},
+      "options": [
+        {
+          "key": "version",
+          "label": "Version",
+          "type": "choice",
+          "values": [
+            {
+              "value": "V6",
+              "label": "V6"
+            },
+            {
+              "value": "V6_MINI",
+              "label": "V6 Mini"
+            },
+            {
+              "value": "V6_WILD",
+              "label": "V6 Wild"
+            }
+          ],
+          "default": "V6"
+        },
+        {
+          "key": "sound_loop",
+          "label": "Loop",
+          "type": "switch",
+          "default": false,
+          "hint": "its end runs seamlessly into its start"
+        },
+        {
+          "key": "sound_tempo",
+          "label": "Tempo (BPM)",
+          "type": "number",
+          "min": 0,
+          "max": 300,
+          "step": 1,
+          "default": 0,
+          "hint": "0: its own tempo"
+        },
+        {
+          "key": "sound_key",
+          "label": "Key",
+          "type": "select",
+          "values": [
+            {
+              "value": "Any",
+              "label": "Any"
+            },
+            {
+              "value": "C",
+              "label": "C"
+            },
+            {
+              "value": "C#",
+              "label": "C#"
+            },
+            {
+              "value": "D",
+              "label": "D"
+            },
+            {
+              "value": "D#",
+              "label": "D#"
+            },
+            {
+              "value": "E",
+              "label": "E"
+            },
+            {
+              "value": "F",
+              "label": "F"
+            },
+            {
+              "value": "F#",
+              "label": "F#"
+            },
+            {
+              "value": "G",
+              "label": "G"
+            },
+            {
+              "value": "G#",
+              "label": "G#"
+            },
+            {
+              "value": "A",
+              "label": "A"
+            },
+            {
+              "value": "A#",
+              "label": "A#"
+            },
+            {
+              "value": "B",
+              "label": "B"
+            },
+            {
+              "value": "Cm",
+              "label": "Cm"
+            },
+            {
+              "value": "C#m",
+              "label": "C#m"
+            },
+            {
+              "value": "Dm",
+              "label": "Dm"
+            },
+            {
+              "value": "D#m",
+              "label": "D#m"
+            },
+            {
+              "value": "Em",
+              "label": "Em"
+            },
+            {
+              "value": "Fm",
+              "label": "Fm"
+            },
+            {
+              "value": "F#m",
+              "label": "F#m"
+            },
+            {
+              "value": "Gm",
+              "label": "Gm"
+            },
+            {
+              "value": "G#m",
+              "label": "G#m"
+            },
+            {
+              "value": "Am",
+              "label": "Am"
+            },
+            {
+              "value": "A#m",
+              "label": "A#m"
+            },
+            {
+              "value": "Bm",
+              "label": "Bm"
+            }
+          ],
+          "default": "Any"
+        },
+        {
+          "key": "grab_lyrics",
+          "label": "Lyrics subtitles",
+          "type": "switch",
+          "default": false,
+          "hint": "its sung words with their times, when it sings"
+        }
+      ],
+      "skip": {
+        "callBackUrl": "the engine follows the task itself"
+      },
+      "price": [
+        {
+          "row": "Suno, Generate sounds"
+        }
+      ],
+      "note": "prompt 500 characters; V5 and V5.5 discontinued"
+    },
+    {
+      "id": "suno/stems",
+      "lab": "Suno",
+      "name": "Stems",
+      "kie": "suno",
+      "role": "stems",
+      "fields": {},
+      "options": [],
+      "skip": {
+        "callBackUrl": "the engine follows the task itself"
+      },
+      "price": [
+        {
+          "when": {
+            "action": "stems",
+            "type": "separate_vocal"
+          },
+          "row": "Suno, Vocal Separate"
+        },
+        {
+          "when": {
+            "action": "stems",
+            "type": "split_stem"
+          },
+          "row": "Suno, Multi-Stem Separation, without stemName"
+        },
+        {
+          "when": {
+            "action": "stems",
+            "type": "split_stem_advanced"
+          },
+          "row": "Suno, Advanced Split"
+        }
+      ],
+      "note": "a song Suno made (its task and track ids): 2 stems, up to 12, or one instrument extracted and removed; billed again for each call"
+    },
+    {
+      "id": "suno/extras",
+      "lab": "Suno",
+      "name": "Extras",
+      "kie": "suno",
+      "role": "extras",
+      "fields": {},
+      "options": [],
+      "skip": {
+        "callBackUrl": "the engine follows the task itself"
+      },
+      "price": [
+        {
+          "when": {
+            "action": "wav"
+          },
+          "row": "Suno, convert-to-wav-format"
+        },
+        {
+          "when": {
+            "action": "timings"
+          },
+          "row": "Suno, TimeStamped Lyrics"
+        },
+        {
+          "when": {
+            "action": "video"
+          },
+          "row": "Suno, create-music-video"
+        },
+        {
+          "when": {
+            "action": "midi"
+          },
+          "row": "Suno, Generate Midi From Audio"
+        },
+        {
+          "when": {
+            "action": "persona"
+          },
+          "row": "Suno, Generate Persona"
+        },
+        {
+          "when": {
+            "action": "lyrics"
+          },
+          "row": "Suno, Generate Lyrics"
+        },
+        {
+          "when": {
+            "action": "boost"
+          },
+          "row": "Suno, Boost Music Style"
+        }
+      ],
+      "note": "on a song Suno made (its task and track ids): its WAV, its words with their times, a music video, a stem's MIDI, a persona"
     }
   ]
 }

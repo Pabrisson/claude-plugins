@@ -30,6 +30,7 @@
   ],
   "speech": [
     { "id": "fake/tts", "lab": "Fake", "name": "TTS", "role": "speech", "voices": ["ava", "bo"], "pricing": { "prompt": 0.0001, "completion": 0 } },
-    { "id": "fake/pcm-tts", "lab": "Fake", "name": "PCM TTS", "role": "speech", "voices": ["ava", "bo"], "pricing": { "prompt": 0.0001, "completion": 0 } }
+    { "id": "fake/pcm-tts", "lab": "Fake", "name": "PCM TTS", "role": "speech", "voices": ["ava", "bo"], "pricing": { "prompt": 0.0001, "completion": 0 } },
+    { "id": "fake/lyria", "lab": "Fake", "name": "Lyria-like", "role": "music", "voices": null, "seed": true, "options": ["temperature"], "pricing": { "request": 0.04 } }
   ]
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ChevronRightIcon, CopyIcon, ListVideoIcon, MinusIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
+import { ChevronRightIcon, CopyIcon, ListVideoIcon, LoaderCircleIcon, MinusIcon, PlusIcon, RefreshCwIcon, SparklesIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -21,12 +21,15 @@ import {
   imageInputs,
   isLocal,
   mentionables,
+  needsPhrase,
   mentionFrom,
   ownPrompt,
   plain,
   priceLabel,
   ROUTER_NAME,
+  type Element,
   type EstimateAnswer,
+  type Field,
   type Kind,
   type Input as InputT,
   type Line,
@@ -53,7 +56,7 @@ import { LinesEditor, OmniRefs, voiceName, type SpokenLine } from "@/components/
 import { InputSlots, slotFor, upload } from "@/components/inputs"
 import { MentionTextarea } from "@/components/mention"
 import { ToolPicker } from "@/components/tool-picker"
-import { LibraryVoices, ModelVoices, VoicePicker } from "@/components/voice-picker"
+import { LibraryVoices, ModelVoices, SingerPicker, VoicePicker } from "@/components/voice-picker"
 import { AudioTags, DialogueEditor, ModelOptions, ShotsEditor } from "@/components/model-options"
 import { capsOf, ModelPicker, type Priced } from "@/components/model-picker"
 
@@ -93,6 +96,8 @@ export function modelsFor(tool: Tool, kind: Kind, models: Model[]) {
   // edits, upscales and avatars run only on the models made for them, and the ones the tool also names
   if (kind === "video" && (tool.mode === "edit" ? tool.id !== "extend" : recommended.length > 0 && recommended.every((m) => m.role !== "generate")))
     return { recommended, others: also }
+  // music, sounds and their edits run on the models they name; Voice on any voice
+  if (kind === "audio" && tool.id !== "voice") return { recommended, others: also }
   // an image tool's forced settings (Remove background's transparency, Upscale's 4K) only on the models that have them
   const can = (m: Model) =>
     (!tool.params?.background || (m.params.background ?? []).includes(String(tool.params.background))) &&
@@ -103,11 +108,18 @@ export function modelsFor(tool: Tool, kind: Kind, models: Model[]) {
       : kind === "image"
         ? // a create tool takes the models that make an image from words (an upscaler or a cut-out needs one), an edit tool those that take one
           (tool.mode === "create" ? m.role !== "edit" : m.role !== "create") && can(m)
-        : true
+        : m.role === "speech"
   return { recommended, others: [...also, ...models.filter((m) => ok(m) && !recommended.includes(m) && !also.includes(m))] }
 }
 
 const COMMON_LANGS = ["en", "fr", "es", "de", "it", "pt", "ja", "zh"]
+
+// the tool a space's mode opens on: Custom's in image and video, Voice in audio and the first of its edits
+const firstOf = (kind: Kind, mode: "create" | "edit", tools: Tool[]) =>
+  kind !== "audio" ? (mode === "create" ? "free" : "free-edit") : mode === "create" ? "voice" : (tools.find((t) => t.mode === "edit" && !t.hidden)?.id ?? "voice")
+// a field or an input shown while the tool's other fields have these values (Music's lyrics in Write, when sung)
+const shownWhen = (tool: Tool, fields: Record<string, string>) => (when?: Record<string, string>) =>
+  !when || Object.entries(when).every(([k, v]) => (fields[k] ?? String(tool.fields.find((f) => f.key === k)?.default ?? "")) === v)
 
 // where the result goes, as the composer says it (back: Extend going back in time, before its clip)
 function placeText(p: Place, kind: Kind, back: boolean) {
@@ -144,7 +156,7 @@ export function Composer({
   const tool = tools.find((t) => t.id === value.tool) ?? tools[0]
   const mode = tool.mode
   const set = (patch: Partial<Compose>) => onChange({ ...value, ...patch })
-  const eleven = tool.provider === "elevenlabs", local = isLocal(tool)
+  const eleven = tool.provider === "elevenlabs", local = isLocal(tool), shown = shownWhen(tool, value.fields)
 
   // the model: the user's pick, else the folder's default when it fits, else the tool's first
   const { recommended, others } = useMemo(() => modelsFor(tool, kind, models), [tool, kind, models])
@@ -181,7 +193,7 @@ export function Composer({
   const cap = strip ? frameCap(mp!.mid_frames!, seconds) : null
   // a voice model that clones nothing (Kie's) or takes voices whole (ElevenLabs): no clips, no Library voice field
   const noClone = model?.params.clone === false || direct || waiting
-  const toolInputs = tool.inputs.filter((i) => !(noClone && i.key === "voice_clips") && !(strip && ["first_frame", "last_frame"].includes(i.key))), first = toolInputs.findIndex((i) => i.key === "first_frame")
+  const toolInputs = tool.inputs.filter((i) => shown(i.when) && !(noClone && i.key === "voice_clips") && !(strip && ["first_frame", "last_frame"].includes(i.key))), first = toolInputs.findIndex((i) => i.key === "first_frame")
   // a new video's references beyond images (omni references: Kling 4.0, Seedance, Wan 3.0, Hailuo 3, Vidu Q4): videos,
   // sounds, and voices of one's own (Kling 4.0), after the tool's references
   const omni = kind === "video" && mode === "create" && model?.role === "generate" && tool.inputs.some((i) => i.key === "references")
@@ -191,6 +203,10 @@ export function Composer({
     ...((mp?.named_voices ?? 0) > 0 ? [{ key: "ref_voices", kind: "audio" as const, label: "Voices", optional: true, multiple: true }] : []),
   ]
   const slotTool = { ...tool, inputs: [...(first < 0 ? toolInputs : [...toolInputs.slice(0, first + 1), ...modelInputs, ...toolInputs.slice(first + 1)]), ...refInputs] }
+  // the words and the prompt, unless the model takes none (Volcengine's lip sync)
+  const words = !!tool.template && mp?.prompt !== false
+  // Lip sync on a talking head: from the frame of the video at this second
+  const lipFrame = tool.id === "lip-sync" && model?.role === "avatar"
   // Aleph 2 on a tool with a keyframe recipe: the keyframe made from this video (kept with its time), sent with it
   const keyframing = kind === "video" && !!tool.keyframe && model?.model === "runway/aleph-2"
   const keyframe = keyframing && value.params.keyframe_video === value.inputs.video?.[0] ? value.inputs.keyframe?.[0] : undefined
@@ -244,7 +260,7 @@ export function Composer({
   // a keyframe and its time go only with Aleph 2 and the video they were made from
   // (a model's own inputs and editors go only with a model that has them)
   const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe" && (!["mid_frames", "speaker_masks", "ref_videos", "ref_audios", "ref_voices"].includes(k) || [...modelInputs, ...refInputs].some((i) => i.key === k) || (k === "mid_frames" && strip))))
-  const ownParams = Object.fromEntries(Object.entries(value.params).filter(([k]) => k !== "keyframe_video" && k !== "frame" && (k !== "dialogue" || !!dialogue) && (k !== "shots" || !!shots)
+  const ownParams = Object.fromEntries(Object.entries(value.params).filter(([k]) => k !== "keyframe_video" && (k !== "frame" || lipFrame) && (k !== "dialogue" || !!dialogue) && (k !== "shots" || !!shots)
     && (k !== "mid_times" || !!mp?.mid_frames?.timed) && (k !== "draft_of" || !!draftOf) && (k !== "lines" || speaks) && (k !== "voice_names" || refInputs.some((i) => i.key === "ref_voices"))))
   const spec: Spec = useMemo(
     () => ({
@@ -260,7 +276,7 @@ export function Composer({
       ...(value.place ? { place: value.place } : {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [kind, tool.id, modelId, value, eleven, local, prompt, sheets, keyframe]
+    [kind, tool.id, modelId, value, eleven, local, prompt, sheets, keyframe, lipFrame]
   )
 
   // the estimate, again after every change (debounced)
@@ -287,22 +303,28 @@ export function Composer({
       : shots
       ? !shots.some((x) => x.prompt.trim()) ? "Write the shots" : shotLengths.length && !shotLengths.includes(shotsTotal) ? `Shots last ${shotsTotal} s: ${shotLengths[0]} to ${shotLengths.at(-1)} s` : null
       : dialogue
-      ? !dialogue.some((l) => l.text.trim()) ? "Write the lines" : dialogue.some((l) => l.text.trim() && !l.voice) ? "Pick each line's voice" : mp?.speakers && dialogueVoices > mp.speakers ? `${mp.speakers} voices at most` : direct && dialogueChars > 2000 ? "Shorten the dialogue" : null
+      ? !dialogue.some((l) => l.text.trim()) ? "Write the lines" : dialogue.some((l) => l.text.trim() && !l.voice) ? "Pick each line's voice" : mp?.speakers && dialogueVoices > mp.speakers ? `${mp.speakers} voices at most` : dialogueChars > (direct ? 2000 : 5000) ? "Shorten the dialogue" : null
       : cap != null && frameCount > cap
       ? `${cap} frames at most at ${seconds} s`
       : strip && mp?.mid_frames?.timed && (value.inputs.mid_frames?.length ?? 0) > 0 && (value.inputs.mid_frames ?? []).some((_, i) => !(((value.params.mid_times as number[] | undefined)?.[i] ?? 0) > 0))
       ? "Time each middle frame"
-      : !eleven && !local && !!tool.template && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale" && !lines.some((l) => l.text.trim())
-      ? kind === "audio" ? "Write the text" : "Write a prompt"
+      : !eleven && !local && words && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale" && !lines.some((l) => l.text.trim())
+      ? kind === "audio" ? (tool.id === "voice" ? "Write the text" : "Describe it") : "Write a prompt"
       : direct && !value.params.voice
         ? "Pick a voice"
       : direct && model?.params.max_chars && value.intent.length > model.params.max_chars
         ? "Shorten the text"
       : tool.id === "translate" && !value.fields.to?.trim()
         ? "Pick the languages"
-        : tool.id === "change-voice" && !value.params.voice
-          ? "Pick the new voice"
-          : null
+      : tool.id === "change-voice" && !value.params.voice
+        ? "Pick the new voice"
+      : tool.id === "create-singer" && !value.fields.voice?.trim()
+        ? "Describe the voice"
+      : tool.id === "music"
+        ? (value.fields.mode ?? "describe") === "describe"
+          ? !value.fields.description?.trim() && !["references", "ref_videos", "ref_audios"].some((k) => value.inputs[k]?.length) ? "Describe the song" : null
+          : !value.fields.title?.trim() ? "Give it a title" : !value.fields.style?.trim() && !value.fields.lyrics?.trim() ? "Give its style or lyrics" : null
+        : null
   const [est, setEst] = useState<{ answer?: EstimateAnswer; error?: string }>({})
   const specKey = JSON.stringify(spec)
   useEffect(() => {
@@ -323,7 +345,7 @@ export function Composer({
   const probeKey = JSON.stringify(probeSpec(modelId))
   const [probe, setProbe] = useState<{ key: string; label: string | null }>({ key: "", label: null })
   useEffect(() => {
-    if (!blocker || (kind === "audio" && !eleven)) return
+    if (!blocker || (kind === "audio" && tool.id === "voice")) return
     const t = setTimeout(() => api.estimate(probeSpec(modelId)).then((a) => setProbe({ key: probeKey, label: priceLabel(a) }), () => {}), 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -331,7 +353,7 @@ export function Composer({
   // the model list's prices: each model on these settings, asked when the list opens (a voice's on its text, once written)
   const [modelPrices, setModelPrices] = useState<{ key: string; prices: Record<string, Priced> }>({ key: "", prices: {} })
   function priceModels() {
-    const speech = kind === "audio" && !eleven
+    const speech = kind === "audio" && tool.id === "voice"
     if (speech && !prompt && !dialogue) return
     // a model's own options stay with it: the others are priced on their defaults
     const listSpec = (model?: string): Spec => ({ ...probeSpec(model), batch: undefined, params: { ...spec.params, options: undefined }, ...(speech ? { prompt } : {}) })
@@ -348,7 +370,7 @@ export function Composer({
   }
 
   // prices in the tool list: a probe estimate per tool on its recommended model, once a session
-  const listed = kind === "audio" ? tools : tools.filter((t) => t.mode === mode)
+  const listed = tools.filter((t) => t.mode === mode && !t.hidden)
   // (each router its own prices)
   const priceKey = (t: Tool) => `${state.router}:${kind}:${t.id}:${t.models?.[0] ?? ""}`
   const [, setPriced] = useState(0)
@@ -423,7 +445,7 @@ export function Composer({
   const label = keyframe ? "Apply to the shot" : tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? tool.label : "Generate"
   const a = blocker ? undefined : est.answer
   const price = a ? priceLabel(a) : blocker && probe.key === probeKey ? probe.label : null
-  const ready = !busy && !!a && (eleven ? state.keys.elevenlabs : local || state.keys[state.router])
+  const ready = !busy && !!a && (eleven || direct ? state.keys.elevenlabs : local || state.keys[state.router])
 
   // a file pasted or dropped anywhere on the composer goes to the first input that takes it
   async function take(files: File[]) {
@@ -487,36 +509,30 @@ export function Composer({
           </div>
         )}
 
-        {kind === "audio" ? (
-          // three tools: the picker alone, a clip kept from one voice tool to the other
-          <ToolPicker tools={tools} value={tool} models={models} prices={prices} onOpen={priceTools} onPick={(t) => onChange({ ...blank(kind, t.id), inputs: value.inputs.clip ? { clip: value.inputs.clip } : {} })} />
-        ) : (
-          <>
-            <Chips
-              className="grid grid-cols-2"
-              options={["create", "edit"] as const}
-              value={mode}
-              label={(m) => (m === "create" ? "Create" : "Edit")}
-              onChange={(m) => onChange({ ...blank(kind, m === "create" ? "free" : "free-edit"), batch: value.batch })}
-            />
-            <ToolPicker
-              tools={tools.filter((t) => t.mode === mode)}
-              value={tool}
-              models={models}
-              prices={prices}
-              onOpen={priceTools}
-              onPick={(t) => onChange({ ...blank(kind, t.id), batch: value.batch, inputs: Object.fromEntries(Object.entries(value.inputs).filter(([k]) => t.inputs.some((i) => i.key === k))) })}
-            />
-          </>
-        )}
+        <Chips
+          className="grid grid-cols-2"
+          options={["create", "edit"] as const}
+          value={mode}
+          label={(m) => (m === "create" ? "Create" : "Edit")}
+          onChange={(m) => onChange({ ...blank(kind, firstOf(kind, m, tools)), batch: value.batch, ...(kind === "audio" && value.inputs.clip ? { inputs: { clip: value.inputs.clip } } : {}) })}
+        />
+        <ToolPicker
+          tools={listed}
+          value={tool}
+          models={models}
+          prices={prices}
+          onOpen={priceTools}
+          // the files a tool takes too stay (a clip from one sound tool to the next)
+          onPick={(t) => onChange({ ...blank(kind, t.id), batch: value.batch, inputs: Object.fromEntries(Object.entries(value.inputs).filter(([k]) => t.inputs.some((i) => i.key === k))) })}
+        />
 
-        {!tool.template && <InputSlots tool={tool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={limits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />}
+        {!words && <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={limits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />}
 
         {tool.presets && <Setups tool={tool} fields={value.fields} onPick={(fields) => set({ fields: { ...value.fields, ...fields }, raw: false })} />}
 
         {/* the fields, those of one section under its heading (selects as tiles, two a row); Expand's margins and
             Extend's direction and join have their own panels below */}
-        {sections(tool.fields.filter((f) => f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)) && !((direct || waiting) && f.key === "instructions"))).map(({ section, fields }, i) =>
+        {sections(tool.fields.filter((f) => shown(f.when) && f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)) && !((direct || waiting) && f.key === "instructions"))).map(({ section, fields }, i) =>
           section ? (
             <div key={section}>
               <Label>{section}</Label>
@@ -557,6 +573,19 @@ export function Composer({
                 </div>
               ) : tool.id === "translate" && f.key === "quality" ? (
                 <DubModels key={f.key} spec={spec} value={value.fields.quality ?? "dubbing_v1"} ready={!missing && !!value.fields.to} onChange={(q) => set({ fields: { ...value.fields, quality: q } })} />
+              ) : f.type === "singer" ? (
+                <SingerField key={f.key} field={f} value={value.fields[f.key]} elements={state.elements ?? []} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v } })} />
+              ) : f.type === "lines" || (f.key === "style" && tool.action) ? (
+                // a song's words or style: Suno writes the lyrics from a theme, or the style out richer (Kie)
+                <SongText
+                  key={f.key}
+                  field={f}
+                  value={value.fields[f.key] ?? ""}
+                  onChange={(v) => set({ fields: { ...value.fields, [f.key]: v } })}
+                  help={state.router === "kie" && tool.id === "music" ? (f.key === "lyrics" ? "lyrics" : f.key === "style" ? "boost" : undefined) : undefined}
+                  theme={[value.fields.title, value.fields.style].filter(Boolean).join(", ")}
+                  onTitle={(title) => !value.fields.title?.trim() && set({ fields: { ...value.fields, [f.key]: value.fields[f.key] ?? "", title } })}
+                />
               ) : f.type === "style" ? (
                 <StyleField key={f.key} field={f} value={value.fields[f.key]} kind={kind} styles={state.styles ?? []} media={state.media} home={state.home} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               ) : f.type === "light" ? (
@@ -606,14 +635,14 @@ export function Composer({
           <DialogueEditor
             lines={dialogue}
             onChange={(lines) => set({ params: { ...value.params, dialogue: lines } })}
-            max={direct ? 2000 : undefined}
+            max={direct ? 2000 : 5000}
             speakers={mp?.speakers}
             tags={!!mp?.tags}
             picker={(voice, onVoice, label) =>
               direct ? (
                 <VoicePicker enabled={state.keys.elevenlabs} value={voice || undefined} onChange={onVoice} library={state.elements ?? []} label={label} placeholder="Pick its voice" hint="" />
               ) : (
-                <ModelVoices model={model!.model} voices={mp?.voices ?? []} value={voice} onChange={onVoice} label={label} placeholder="Pick its voice" />
+                <ModelVoices model={model!.model} voices={mp?.voices ?? []} info={mp?.voice_info} value={voice} onChange={onVoice} label={label} placeholder="Pick its voice" />
               )
             }
           />
@@ -658,7 +687,7 @@ export function Composer({
           />
         )}
 
-        {tool.template && (
+        {words && (
           <div className="flex flex-col gap-3">
             {/* the prompt the tool builds, read only: what goes to the model */}
             {!whole && (
@@ -683,13 +712,13 @@ export function Composer({
             {/* the user's own words, with the tool's files */}
             {(takesWords || slotTool.inputs.length > 0) && !dialogue && !shots && !draftOf && (
               <div>
-                <Label hint={direct && model?.params.max_chars ? `${value.intent.length.toLocaleString("en")} / ${model.params.max_chars.toLocaleString("en")} characters` : whole ? undefined : custom ? "added to the tool's prompt" : "optional, added to the tool's prompt"}>{kind === "audio" ? "Text to speak" : whole ? "Prompt" : "Your words"}</Label>
+                <Label hint={direct && model?.params.max_chars ? `${value.intent.length.toLocaleString("en")} / ${model.params.max_chars.toLocaleString("en")} characters` : whole ? undefined : custom ? "added to the tool's prompt" : "optional, added to the tool's prompt"}>{kind === "audio" ? (tool.id === "voice" ? "Text to speak" : "What it sounds like") : whole ? "Prompt" : "Your words"}</Label>
                 <InputGroup className="h-auto flex-col rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
                   {takesWords && kind === "audio" && (
                     <InputGroupTextarea
                       value={value.intent}
-                      aria-label="Text to speak"
-                      placeholder="What the voice says"
+                      aria-label={tool.id === "voice" ? "Text to speak" : "What it sounds like"}
+                      placeholder={tool.id === "voice" ? "What the voice says" : "rain on a tin roof, distant thunder"}
                       className={cn("max-h-[calc(6lh+1.25rem)] py-2.5 pr-10 pl-3 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
                       onChange={(e) => set({ intent: e.target.value })}
                     />
@@ -714,7 +743,7 @@ export function Composer({
                     </InputGroupAddon>
                   )}
                 </InputGroup>
-                {direct && model?.params.tags && (
+                {kind === "audio" && model?.params.tags && !dialogue && (
                   <div className="mt-2">
                     <AudioTags onAdd={(t) => set({ intent: `${value.intent.trimEnd()}${value.intent.trim() ? " " : ""}${t} ` })} />
                   </div>
@@ -798,6 +827,16 @@ export function Composer({
           />
         )}
 
+        {lipFrame && (
+          <div>
+            <Label hint="the talking head starts from it: 0 is the first frame">From the frame at</Label>
+            <div className="flex items-center gap-2">
+              <Input type="number" min={0} step={0.1} className="w-24" value={(value.params.frame as number | undefined) ?? 0} onChange={(e) => set({ params: { ...value.params, frame: Math.max(0, Number(e.target.value) || 0) } })} aria-label="Second of the video's frame" />
+              <span className="text-sm text-muted-foreground">s into the video</span>
+            </div>
+          </div>
+        )}
+
         {!blocker && est.error && (
           <Alert variant="destructive">
             <AlertDescription>{est.error}</AlertDescription>
@@ -808,15 +847,20 @@ export function Composer({
             Keeps the delivery: pauses, emotion and rhythm stay, only the timbre changes. Up to 5 min goes in one call; a longer clip is sent in pieces.
           </p>
         )}
+        {tool.id === "isolate-voice" && (
+          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
+            The voice alone: music, noise and room taken out. A video comes back with only its voice, a sound as an MP3. ElevenLabs' Voice Isolator, whichever router.
+          </p>
+        )}
         {tool.id === "translate" && (
           <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
             No lip-sync: the voices are dubbed in their own timbre, the lips keep the original language. Subtitles come with each language.
           </p>
         )}
-        {eleven && !state.keys.elevenlabs && (
+        {(eleven || direct) && !state.keys.elevenlabs && (
           <p className="rounded-lg border p-3 text-xs text-destructive">No ElevenLabs key: set it with /plugin configure skill-video@pabrisson, then restart Claude Code.</p>
         )}
-        {!eleven && !local && !state.keys[state.router] && (
+        {!eleven && !direct && !local && !state.keys[state.router] && (
           <p className="rounded-lg border p-3 text-xs text-destructive">No {ROUTER_NAME[state.router]} key: prices show, nothing can be generated. Set it with /plugin configure skill-video@pabrisson, or pick the other router in Settings.</p>
         )}
       </div>
@@ -935,7 +979,8 @@ function ModelBlock({
   why: Record<string, string>
 }) {
   const p = model.params, put = (k: string, v: unknown) => onParams({ ...params, [k]: v })
-  const [moreOpen, setMoreOpen] = useState(() => params.seed != null || params.options != null || (params.quality != null && params.quality !== "high"))
+  // the model's options shown from the start: closed only by hand
+  const [moreOpen, setMoreOpen] = useState(true)
   const caps = capsOf(model)
   const durations = own.includes("duration") ? [] : (p.duration ?? [])
   const edit = kind === "video" && hasVideoInput
@@ -1004,7 +1049,7 @@ function ModelBlock({
         </div>
       ) : null}
       {kind === "audio" && p.voices?.length && !cloning && !own.includes("voice") ? (
-        <ModelVoices model={model.model} voices={p.voices} value={(params.voice as string) ?? p.voices[0]} onChange={(v) => put("voice", v)} />
+        <ModelVoices model={model.model} voices={p.voices} info={p.voice_info} value={(params.voice as string) ?? p.voices[0]} onChange={(v) => put("voice", v)} />
       ) : null}
       {p.quality?.length || p.seed || p.options?.length ? (
         // opened by the user, or already open when something is set; never closed under them when a value goes back to its default
@@ -1041,6 +1086,82 @@ function ModelBlock({
       ) : null}
     </div>
   )
+}
+
+// a song's style or words: one line or several; on Kie, Suno writes lyrics from a theme (its versions to pick from) or
+// the style out richer, each a small priced request of its own in the ledger
+function SongText({ field: f, value, onChange, help, theme, onTitle }: { field: Field; value: string; onChange: (v: string) => void; help?: "lyrics" | "boost"; theme: string; onTitle: (t: string) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [about, setAbout] = useState("")
+  const [versions, setVersions] = useState<{ title: string; text: string }[] | null>(null)
+  const subject = (about || theme).trim().slice(0, 200)
+  async function run(confirm = false) {
+    setBusy(true)
+    try {
+      const r = await api.assist(help!, help === "lyrics" ? subject : value, confirm)
+      if (help === "lyrics") setVersions(r.texts)
+      else {
+        const before = value
+        onChange(r.texts[0].text)
+        toast.success("Style written out", { action: { label: "Undo", onClick: () => onChange(before) } })
+      }
+    } catch (e) {
+      const err = e as Error & { status?: number; body?: { shown?: string } }
+      if (err.status === 409) toast(`This costs ${err.body?.shown ?? "more"}, above your threshold`, { action: { label: "Go on", onClick: () => run(true) } })
+      else toast.error(plain(err.message))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const words = { id: `song-${f.key}`, value, placeholder: f.placeholder, onChange: (e: React.ChangeEvent<HTMLInputElement & HTMLTextAreaElement>) => onChange(e.target.value) }
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <Label>{f.label}</Label>
+        {help && (
+          <Button
+            size="xs"
+            variant="ghost"
+            className="-mt-1.5 ml-auto"
+            title={help === "lyrics" ? "Suno writes two versions from what it is about (a small request, in Credits)" : "Suno writes the style out richer (a small request, in Credits)"}
+            disabled={busy || (help === "lyrics" ? !subject : !value.trim())}
+            onClick={() => run()}
+          >
+            {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
+            {help === "lyrics" ? "Write lyrics" : "Boost"}
+          </Button>
+        )}
+      </div>
+      {help === "lyrics" && <Input className="mb-2" value={about} placeholder={theme ? `About: ${theme}` : "What the song is about, for Write lyrics"} onChange={(e) => setAbout(e.target.value)} aria-label="What the song is about" />}
+      {f.type === "lines" ? <Textarea {...words} className="max-h-[calc(10lh+1rem)] min-h-28 text-sm leading-relaxed" /> : <Input {...words} />}
+      {versions && (
+        <div className="mt-2 flex flex-col gap-2">
+          {versions.map((v, i) => (
+            <div key={i} className="rounded-lg border bg-muted/40 p-2.5">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-medium">{v.title || `Version ${i + 1}`}</span>
+                <Button size="xs" className="ml-auto" onClick={() => (onChange(v.text), v.title && onTitle(v.title), setVersions(null))}>
+                  Use
+                </Button>
+              </div>
+              <p className="mt-1 line-clamp-4 text-xs whitespace-pre-line text-muted-foreground">{v.text}</p>
+            </div>
+          ))}
+          <button type="button" className="self-start text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setVersions(null)}>
+            Keep mine
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// a song's singer: a singer of the Library that Suno has (a persona of a song, or one's own sung voice), else Suno's own
+function SingerField({ field: f, value, elements, onChange }: { field: Field; value?: string; elements: Element[]; onChange: (v: string) => void }) {
+  // a singer still waiting for its phrase is listed, never picked
+  const singers = elements.filter((e) => e.type === "singer" && e.files.length)
+  const picked = singers.find((e) => `@${e.name}` === value && !needsPhrase(e))
+  return <SingerPicker singers={singers} value={picked ? value! : ""} onChange={onChange} label={f.label} />
 }
 
 // the two dubbing models, each with its price for this clip

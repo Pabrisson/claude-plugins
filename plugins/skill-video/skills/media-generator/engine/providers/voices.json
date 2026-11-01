@@ -1,0 +1,751 @@
+{
+  "about": "ElevenLabs' voices as the routers name them (OpenRouter by first name, Kie by voice id): their line, ElevenLabs' labels and public samples (a sample per verified language), read once with GET /v2/voices and Kie's docs (2026-10-31). The dashboard lists, filters and plays them; nothing here is sent.",
+  "voices": {
+    "george": {
+      "name": "George - Warm, Captivating Storyteller",
+      "labels": {
+        "gender": "male",
+        "use_case": "narrative_story",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "british",
+        "descriptive": "mature"
+      },
+      "preview_url": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJlNjIwNmQxYS0wNzIxLTQ3ODctYWFmYi0wNmE2ZTcwNWNhYzUubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+      "previews": {
+        "en": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJlNjIwNmQxYS0wNzIxLTQ3ODctYWFmYi0wNmE2ZTcwNWNhYzUubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "fr": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI2MDk2YWNjZS1lMThmLTRlOTUtYThlMy1iYjFjMGEyNzYyNGUubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "ar": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIwZWNlMDlmOS03ZDNlLTQwMzEtYWY3NS05MzZhYTBjZGE1NzcubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "ja": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3MDlhODk0YS1kMGQxLTQ2ZDctOWMxMC0zYjE0MGUzYTY5ZjIubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "cs": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI0MzQ3YTRjMy0xNDJhLTQ0OTAtOTc3Ny0wMDY3MWVmMzg1NWMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "fil": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI5MjRjZmFmNS1jN2RiLTQ5ZmUtYjgzNS03ZDM3Y2E0MjQzMTQubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "es": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJlYWU1MGEwZC01YTM5LTQ3OTUtOWIxZS0xZDU4ZjdmODdlNjMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "hi": "https://api.us.elevenlabs.io/v1/voices/JBFqnCBsd6RMkjVDRZzb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIxNWM1OGRlMy01ZDZjLTQ2MWEtODExMS1jNDczZmQxODU1NzMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D"
+      }
+    },
+    "sarah": {
+      "name": "Sarah - Mature, Reassuring, Confident",
+      "labels": {
+        "gender": "female",
+        "use_case": "entertainment_tv",
+        "age": "young",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "professional"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/01a3e33c-6e99-4ee7-8543-ff2216a32186.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/01a3e33c-6e99-4ee7-8543-ff2216a32186.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/093154f2-dd9f-4a4c-b5c3-81836c7ac3f6.mp3",
+        "ar": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/ecb43dfe-b9f3-4691-8ee8-90c5ad3f4dbb.mp3",
+        "zh": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/d9b9f54d-c08b-426e-80f3-b4f2089c3a59.mp3",
+        "es": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/57ab5344-ed96-46fc-b319-82dc1c89bf66.mp3",
+        "hi": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/2f2caaae-ad5e-4ff2-a084-7a6067913a69.mp3"
+      }
+    },
+    "adam": {
+      "name": "Adam - Dominant, Firm",
+      "labels": {
+        "gender": "male",
+        "use_case": "social_media",
+        "language": "en",
+        "accent": "american",
+        "age": "middle_aged"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pNInz6obpgDQGcFmaJgB/d6905d7a-dd26-4187-bfff-1bd3a5ea7cac.mp3"
+    },
+    "alice": {
+      "name": "Alice - Clear, Engaging Educator",
+      "labels": {
+        "gender": "female",
+        "use_case": "informative_educational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "british",
+        "descriptive": "professional"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/d10f7534-11f6-41fe-a012-2de1e482d336.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/d10f7534-11f6-41fe-a012-2de1e482d336.mp3",
+        "it": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/5cb52c82-8152-47f0-a959-58df75b33fac.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/8078faa3-8ac4-4e55-b9ae-2d43a17fba42.mp3",
+        "ar": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/0d220e32-be6e-42b5-b478-38dd287887c8.mp3",
+        "ja": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/290e5e0e-485a-4206-9f86-b687eed71132.mp3",
+        "pl": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/bed01e1d-3dec-4c78-bb58-c3e7299cec23.mp3",
+        "hi": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/063f6922-9fc5-44d7-b9ca-d5b0ed6eeb98.mp3"
+      }
+    },
+    "bella": {
+      "name": "Bella - Professional, Bright, Warm",
+      "labels": {
+        "gender": "female",
+        "use_case": "informative_educational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "professional"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/hpp4J3VqNfWAUOO0d1Us/dab0f5ba-3aa4-48a8-9fad-f138fea1126d.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/hpp4J3VqNfWAUOO0d1Us/dab0f5ba-3aa4-48a8-9fad-f138fea1126d.mp3"
+      }
+    },
+    "bill": {
+      "name": "Bill - Wise, Mature, Balanced",
+      "labels": {
+        "gender": "male",
+        "use_case": "advertisement",
+        "age": "old",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "crisp"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/d782b3ff-84ba-4029-848c-acf01285524d.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/d782b3ff-84ba-4029-848c-acf01285524d.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/ef978e66-26c2-446e-94fc-81b4362d71b1.mp3",
+        "ar": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/617b7973-2e00-462e-bcd9-dc324db17ecc.mp3",
+        "zh": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/3e232368-c1ea-4548-a41d-048c8406a645.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/a1eee806-7c72-46c4-9270-dc9256ddffe6.mp3",
+        "cs": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/bf99c000-ca7f-4445-847c-b01e00ec063b.mp3"
+      }
+    },
+    "brian": {
+      "name": "Brian - Deep, Resonant and Comforting",
+      "labels": {
+        "gender": "male",
+        "use_case": "social_media",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "classy"
+      },
+      "preview_url": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIyZGQzZTcyYy00ZmQzLTQyZjEtOTNlYS1hYmM1ZDRlNWFhMWQubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+      "previews": {
+        "en": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIyZGQzZTcyYy00ZmQzLTQyZjEtOTNlYS1hYmM1ZDRlNWFhMWQubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "ar": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJlNTZiZTBjMy1mYzg5LTQ1MjktODI0OC05NzI2ZDQyMTc1ZmIubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "zh": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIwYmZiOGUzMC1lMGU4LTQ0ZDktOTI3Ni0yMmFmMTNkYTUwYjMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "pt": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3Yzg4ZTYzYS1mMzIxLTQwZDYtYWMyNS04OTk1NTlhM2ZmMjYubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "de": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIwYjMzYjI4Ni03NWYwLTQwNGYtYmNlYy02OGE1NmU2YjM3ZTgubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "nl": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJkM2U4ZWZiMi0wYzUyLTQyODgtODVkNy00ZmRlMWVhNGI5Y2YubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "sk": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJmNzQzYjdjOC03MWI4LTQ0N2EtOTc0NC1kNjZkMTFkY2FiYWMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "ro": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3NWIwNWIyNS0yOWNlLTQ0YjgtYmJjNC1mNDI2MDBkYThjNWMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "hi": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI5NDVjMWI1MS00NzQzLTQzYWUtYjBlNy03Y2FiN2UwOGE4NWUubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D"
+      }
+    },
+    "callum": {
+      "name": "Callum - Husky Trickster",
+      "labels": {
+        "gender": "male",
+        "use_case": "characters_animation",
+        "language": "en",
+        "accent": "american",
+        "age": "middle_aged"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/ac833bd8-ffda-4938-9ebc-b0f99ca25481.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/ac833bd8-ffda-4938-9ebc-b0f99ca25481.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/cae55f06-da58-4810-ad48-5e6eb0fe72a9.mp3",
+        "hi": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/b4465e6f-051d-4e0b-b588-617ff34de35b.mp3"
+      }
+    },
+    "charlie": {
+      "name": "Charlie - Deep, Confident, Energetic",
+      "labels": {
+        "gender": "male",
+        "use_case": "conversational",
+        "age": "young",
+        "language": "en",
+        "accent": "australian",
+        "descriptive": "hyped"
+      },
+      "preview_url": "https://api.us.elevenlabs.io/v1/voices/IKne3meq5aSn9XLyUdCD/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIxMDJkZTZmMi0yMmVkLTQzZTAtYTFmMS0xMTFmYTc1YzU0ODEubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+      "previews": {
+        "en": "https://api.us.elevenlabs.io/v1/voices/IKne3meq5aSn9XLyUdCD/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIxMDJkZTZmMi0yMmVkLTQzZTAtYTFmMS0xMTFmYTc1YzU0ODEubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "zh": "https://api.us.elevenlabs.io/v1/voices/IKne3meq5aSn9XLyUdCD/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI1MTM5MjgzNy00NjkxLTRlOWMtYTExZC02NTg4NDgwMzNhY2UubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "pt": "https://api.us.elevenlabs.io/v1/voices/IKne3meq5aSn9XLyUdCD/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJmMWQzOGMxYS1iNjlhLTQ0ZjUtOWQ5MS03NmQxN2RjY2U0NzkubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "fil": "https://api.us.elevenlabs.io/v1/voices/IKne3meq5aSn9XLyUdCD/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3ZWFlODUwMC1lYTkyLTQ3YzEtOTVmYy0zOTRjZjNiYzQ1ZDIubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "es": "https://api.us.elevenlabs.io/v1/voices/IKne3meq5aSn9XLyUdCD/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI1MmYzODQ2YS1lZWUxLTQzZTQtYmNkMS0wMjgwZjIwZmUyMDIubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D"
+      }
+    },
+    "chris": {
+      "name": "Chris - Charming, Down-to-Earth",
+      "labels": {
+        "gender": "male",
+        "use_case": "conversational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "casual"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/3f4bde72-cc48-40dd-829f-57fbf906f4d7.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/3f4bde72-cc48-40dd-829f-57fbf906f4d7.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/34ab53c0-7f77-4624-a26b-65b58394ea69.mp3",
+        "ar": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/ffdde76f-4afa-4933-94fc-6c015b4b497e.mp3",
+        "pt": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/00131b8d-38d7-4f63-91ed-91ddbe227a7d.mp3",
+        "sv": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/8710d1a0-bea3-41c9-a051-e5a4593f6a32.mp3",
+        "hi": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/a0a92736-9321-4bbc-9677-c84b84d3f30b.mp3"
+      }
+    },
+    "daniel": {
+      "name": "Daniel - Steady Broadcaster",
+      "labels": {
+        "gender": "male",
+        "use_case": "informative_educational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "british",
+        "descriptive": "formal"
+      },
+      "preview_url": "https://api.us.elevenlabs.io/v1/voices/onwK4e9ZLuTAKqWW03F9/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3ZWVlMDIzNi0xYTcyLTRiODYtYjMwMy01ZGNhZGMwMDdiYTkubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+      "previews": {
+        "en": "https://api.us.elevenlabs.io/v1/voices/onwK4e9ZLuTAKqWW03F9/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3ZWVlMDIzNi0xYTcyLTRiODYtYjMwMy01ZGNhZGMwMDdiYTkubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "de": "https://api.us.elevenlabs.io/v1/voices/onwK4e9ZLuTAKqWW03F9/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3YzMwYzY2MS04NDQ4LTRhMWUtYjdiNy1iNWI2MjllYzY0MWIubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "tr": "https://api.us.elevenlabs.io/v1/voices/onwK4e9ZLuTAKqWW03F9/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJmNTY3MjNlYi03NTI5LTQ2MTctYmM4Ny01Y2Y2NTY1OGU1MzgubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D"
+      }
+    },
+    "eric": {
+      "name": "Eric - Smooth, Trustworthy",
+      "labels": {
+        "gender": "male",
+        "use_case": "conversational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "classy"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/d098fda0-6456-4030-b3d8-63aa048c9070.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/d098fda0-6456-4030-b3d8-63aa048c9070.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/4c076868-22c6-42a6-9edd-b836f6a33f9f.mp3",
+        "pt": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/c893545f-603a-4023-ae26-0b779ab9e8c2.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/e8e9e810-3ef3-4992-a61f-4a43279b6909.mp3",
+        "sk": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/99655517-0f65-49b4-8d88-bd2a40821e65.mp3",
+        "es": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/4d56a844-3fc5-4048-b8d9-daff582c2746.mp3"
+      }
+    },
+    "harry": {
+      "name": "Harry - Fierce Warrior",
+      "labels": {
+        "gender": "male",
+        "use_case": "characters_animation",
+        "age": "young",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "rough"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SOYHLrjzK2X1ezoPC6cr/86d178f6-f4b6-4e0e-85be-3de19f490794.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SOYHLrjzK2X1ezoPC6cr/86d178f6-f4b6-4e0e-85be-3de19f490794.mp3"
+      }
+    },
+    "jessica": {
+      "name": "Jessica - Playful, Bright, Warm",
+      "labels": {
+        "gender": "female",
+        "use_case": "conversational",
+        "age": "young",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "cute"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/56a97bf8-b69b-448f-846c-c3a11683d45a.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/56a97bf8-b69b-448f-846c-c3a11683d45a.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/83ed5b34-be48-4473-93f8-58633129bc87.mp3",
+        "ar": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/114425d8-26e7-4b3d-aa31-52ab8bbdcbed.mp3",
+        "ja": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/a4011375-88c2-4469-a61b-96b0fb239caf.mp3",
+        "zh": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/6f4a6924-34c9-465a-9017-707f7e823e24.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/eb773c99-fcf2-4f0c-ace5-84dc43880c34.mp3",
+        "cs": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/9fdd6daa-383a-47b8-97be-fbec0cfbe4e2.mp3",
+        "hi": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/3a9a4248-9eb3-4e12-8823-f3766c3fd48f.mp3"
+      }
+    },
+    "laura": {
+      "name": "Laura - Enthusiast, Quirky Attitude",
+      "labels": {
+        "gender": "female",
+        "use_case": "social_media",
+        "age": "young",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "sassy"
+      },
+      "preview_url": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI2NzM0MTc1OS1hZDA4LTQxYTUtYmU2ZS1kZTEyZmU0NDg2MTgubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+      "previews": {
+        "en": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI2NzM0MTc1OS1hZDA4LTQxYTUtYmU2ZS1kZTEyZmU0NDg2MTgubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "fr": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIyMTA4MmVlOS1jMTc2LTQ0NTQtYWM1MC01NGJkZjIzMGVmNDkubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "ar": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJlYzhmY2Q3My1lZDAwLTQ0NzgtYWQyZi0wZGNhNWM1YTU1ODMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "zh": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI1NmU1ODg5OS04MzI0LTQ5MDgtYTYxNy0zZTc3MTAyNTFjMzkubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "de": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIyMTBlNzJhZC1iYTllLTQ3NWUtOWUxOC0wMDBiYzdjZDc3MWMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D"
+      }
+    },
+    "liam": {
+      "name": "Liam - Energetic, Social Media Creator",
+      "labels": {
+        "gender": "male",
+        "use_case": "social_media",
+        "age": "young",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "confident"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/63148076-6363-42db-aea8-31424308b92c.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/63148076-6363-42db-aea8-31424308b92c.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/9d63d255-b011-4231-a945-fd5a64d94bfc.mp3",
+        "pt": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/56d7e6ac-b450-48e0-ba68-ff47921b7241.mp3",
+        "cs": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/e87b9bfb-9aee-4106-ad72-81b6982dea22.mp3",
+        "pl": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/0100273d-0f0e-4560-9803-84af8f7e8809.mp3",
+        "tr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/172d9bf5-8094-4438-b06f-b382ead09a2f.mp3",
+        "hi": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/437fbcd7-782a-42c0-b813-307a2e5089d6.mp3"
+      }
+    },
+    "lily": {
+      "name": "Lily - Velvety Actress",
+      "labels": {
+        "gender": "female",
+        "use_case": "informative_educational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "british",
+        "descriptive": "confident"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/89b68b35-b3dd-4348-a84a-a3c13a3c2b30.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/89b68b35-b3dd-4348-a84a-a3c13a3c2b30.mp3",
+        "it": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/b2edb800-06a3-4d47-9bb7-461c2e5af7b2.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/0c5c2b73-34b6-4d17-ae2f-f4e4cb7b0636.mp3",
+        "zh": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/288da6a0-85aa-4705-b033-73d5304cdbaa.mp3",
+        "cs": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/f13ad751-dcab-45d0-9b3d-cb8b3b9e3f1d.mp3",
+        "nl": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/86353d12-c42f-4e3e-afc2-a574c7030884.mp3",
+        "pl": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/646f864e-fe42-42b2-a757-3da7b80275c2.mp3"
+      }
+    },
+    "matilda": {
+      "name": "Matilda - Knowledgable, Professional",
+      "labels": {
+        "gender": "female",
+        "use_case": "informative_educational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "upbeat"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/b930e18d-6b4d-466e-bab2-0ae97c6d8535.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/b930e18d-6b4d-466e-bab2-0ae97c6d8535.mp3",
+        "it": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/68da6da6-38b0-4de9-b941-1345c4503948.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/40f2148b-d09e-4f24-97b6-66aafef1b0bb.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/9d8aab27-268f-4fea-9815-7da3938539d1.mp3",
+        "ar": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/3c5bb9c4-a406-4d10-b61d-275c18e84f26.mp3",
+        "es": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/20291a6d-1e7f-45e4-9d85-a764997a2fdb.mp3"
+      }
+    },
+    "river": {
+      "name": "River - Relaxed, Neutral, Informative",
+      "labels": {
+        "gender": "neutral",
+        "use_case": "conversational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "calm"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/e6c95f0b-2227-491a-b3d7-2249240decb7.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/e6c95f0b-2227-491a-b3d7-2249240decb7.mp3",
+        "it": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/62da5f17-c5cb-48bb-ad7c-e0b7623d16cc.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/cd628aed-b6a3-463a-b96f-1e7eebd34f04.mp3",
+        "pt": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/81a2500f-c016-4ca1-a9b9-09ab065a084f.mp3",
+        "zh": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/cf733b36-9256-4224-9890-20c67ada259c.mp3"
+      }
+    },
+    "roger": {
+      "name": "Roger - Laid-Back, Casual, Resonant",
+      "labels": {
+        "gender": "male",
+        "use_case": "conversational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "classy"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/58ee3ff5-f6f2-4628-93b8-e38eb31806b0.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/58ee3ff5-f6f2-4628-93b8-e38eb31806b0.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/042d9b70-5927-4630-985e-e95107b74ec2.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/fa6a7658-18a9-4634-a96f-95dc3c47629d.mp3",
+        "nl": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/12a2ba8b-4fb3-44b6-9bc7-da0afd076fc9.mp3",
+        "es": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/f172f037-5e23-44ea-a08e-56ddb6447d5b.mp3"
+      }
+    },
+    "will": {
+      "name": "Will - Relaxed Optimist",
+      "labels": {
+        "gender": "male",
+        "use_case": "conversational",
+        "age": "young",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "chill"
+      },
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/8caf8f3d-ad29-4980-af41-53f20c72d7a4.mp3",
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/8caf8f3d-ad29-4980-af41-53f20c72d7a4.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/a46e8450-1b81-4370-adbc-f6b504a409ad.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/20efefbb-9e19-4808-97f1-9c7ae0eebf7b.mp3",
+        "pt": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/8e6ace43-9e5a-413d-a491-2ec365e0a2ae.mp3",
+        "zh": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/2c7ea680-0d76-4ac5-a77a-765e59417560.mp3",
+        "cs": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/b6b630a8-eda6-4972-a527-bfcde1df0b7c.mp3",
+        "fil": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/7890ca34-065a-4d2f-a2db-2102909c96a4.mp3",
+        "sk": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/3dc86617-878a-4964-a464-3b9d39113d2a.mp3",
+        "es": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/9b17b1ba-98f6-4c6d-9da7-dc03a76bc50c.mp3",
+        "sv": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/090d5fe3-c80a-4990-b536-e83f33d23fe1.mp3"
+      }
+    },
+    "EkK5I93UQWFDigLMpZcX": {
+      "name": "James - Husky, Engaging and Bold",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/EkK5I93UQWFDigLMpZcX.mp3"
+    },
+    "Z3R5wn05IrDiVCyEkUrK": {
+      "name": "Arabella - Mysterious and Emotive",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/Z3R5wn05IrDiVCyEkUrK.mp3"
+    },
+    "NNl6r8mD7vthiJatiJt1": {
+      "name": "Bradford - Expressive and Articulate",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/NNl6r8mD7vthiJatiJt1.mp3"
+    },
+    "YOq2y2Up4RgXP2HyXjE5": {
+      "name": "Xavier - Dominating, Metallic Announcer",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/YOq2y2Up4RgXP2HyXjE5.mp3"
+    },
+    "B8gJV1IhpuegLxdpXFOE": {
+      "name": "Kuon - Cheerful, Clear and Steady",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/B8gJV1IhpuegLxdpXFOE.mp3"
+    },
+    "2zRM7PkgwBPiau2jvVXc": {
+      "name": "Monika Sogam - Deep and Natural",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/2zRM7PkgwBPiau2jvVXc.mp3"
+    },
+    "1SM7GgM6IMuvQlz2BwM3": {
+      "name": "Mark - Casual, Relaxed and Light",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/1SM7GgM6IMuvQlz2BwM3.mp3"
+    },
+    "5l5f8iK3YPeGga21rQIX": {
+      "name": "Adeline - Feminine and Conversational",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/5l5f8iK3YPeGga21rQIX.mp3"
+    },
+    "scOwDtmlUjD3prqpp97I": {
+      "name": "Sam - Support Agent",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/scOwDtmlUjD3prqpp97I.mp3"
+    },
+    "NOpBlnGInO9m6vDvFkFC": {
+      "name": "Spuds Oxley - Wise and Approachable",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/NOpBlnGInO9m6vDvFkFC.mp3"
+    },
+    "BZgkqPqms7Kj9ulSkVzn": {
+      "name": "Eve - Authentic, Energetic and Happy",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/BZgkqPqms7Kj9ulSkVzn.mp3"
+    },
+    "wo6udizrrtpIxWGp2qJk": {
+      "name": "Northern Terry",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/wo6udizrrtpIxWGp2qJk.mp3"
+    },
+    "gU0LNdkMOQCOrPrwtbee": {
+      "name": "British Football Announcer",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/gU0LNdkMOQCOrPrwtbee.mp3"
+    },
+    "DGzg6RaUqxGRTHSBjfgF": {
+      "name": "Brock - Commanding and Loud Sergeant",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/DGzg6RaUqxGRTHSBjfgF.mp3"
+    },
+    "x70vRnQBMBu4FAYhjJbO": {
+      "name": "Nathan - Virtual Radio Host",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/x70vRnQBMBu4FAYhjJbO.mp3"
+    },
+    "Sm1seazb4gs7RSlUVw7c": {
+      "name": "Anika - Animated, Friendly and Engaging",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/Sm1seazb4gs7RSlUVw7c.mp3"
+    },
+    "P1bg08DkjqiVEzOn76yG": {
+      "name": "Viraj - Rich and Soft",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/P1bg08DkjqiVEzOn76yG.mp3"
+    },
+    "qDuRKMlYmrm8trt5QyBn": {
+      "name": "Taksh - Calm, Serious and Smooth",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/qDuRKMlYmrm8trt5QyBn.mp3"
+    },
+    "qXpMhyvQqiRxWQs4qSSB": {
+      "name": "Horatius - Energetic Character Voice",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/qXpMhyvQqiRxWQs4qSSB.mp3"
+    },
+    "TX3LPaxmHKxFdv7VOQHJ": {
+      "name": "Liam - Energetic, Social Media Creator",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/TX3LPaxmHKxFdv7VOQHJ.mp3",
+      "labels": {
+        "gender": "male",
+        "use_case": "social_media",
+        "age": "young",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "confident"
+      },
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/63148076-6363-42db-aea8-31424308b92c.mp3",
+        "de": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/9d63d255-b011-4231-a945-fd5a64d94bfc.mp3",
+        "pt": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/56d7e6ac-b450-48e0-ba68-ff47921b7241.mp3",
+        "cs": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/e87b9bfb-9aee-4106-ad72-81b6982dea22.mp3",
+        "pl": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/0100273d-0f0e-4560-9803-84af8f7e8809.mp3",
+        "tr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/172d9bf5-8094-4438-b06f-b382ead09a2f.mp3",
+        "hi": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/437fbcd7-782a-42c0-b813-307a2e5089d6.mp3"
+      }
+    },
+    "N2lVS1w4EtoT3dr4eOWO": {
+      "name": "Callum - Husky Trickster",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/N2lVS1w4EtoT3dr4eOWO.mp3",
+      "labels": {
+        "gender": "male",
+        "use_case": "characters_animation",
+        "language": "en",
+        "accent": "american",
+        "age": "middle_aged"
+      },
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/ac833bd8-ffda-4938-9ebc-b0f99ca25481.mp3",
+        "fr": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/cae55f06-da58-4810-ad48-5e6eb0fe72a9.mp3",
+        "hi": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/b4465e6f-051d-4e0b-b588-617ff34de35b.mp3"
+      }
+    },
+    "FGY2WhTYpPnrIDTdsKH5": {
+      "name": "Laura - Enthusiast, Quirky Attitude",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/FGY2WhTYpPnrIDTdsKH5.mp3",
+      "labels": {
+        "gender": "female",
+        "use_case": "social_media",
+        "age": "young",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "sassy"
+      },
+      "previews": {
+        "en": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI2NzM0MTc1OS1hZDA4LTQxYTUtYmU2ZS1kZTEyZmU0NDg2MTgubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "fr": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIyMTA4MmVlOS1jMTc2LTQ0NTQtYWM1MC01NGJkZjIzMGVmNDkubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "ar": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJlYzhmY2Q3My1lZDAwLTQ0NzgtYWQyZi0wZGNhNWM1YTU1ODMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "zh": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI1NmU1ODg5OS04MzI0LTQ5MDgtYTYxNy0zZTc3MTAyNTFjMzkubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "de": "https://api.us.elevenlabs.io/v1/voices/FGY2WhTYpPnrIDTdsKH5/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIyMTBlNzJhZC1iYTllLTQ3NWUtOWUxOC0wMDBiYzdjZDc3MWMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D"
+      }
+    },
+    "kPzsL2i3teMYv0FxEYQ6": {
+      "name": "Brittney - Social Media Voice - Fun, Youthful & Informative",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/kPzsL2i3teMYv0FxEYQ6.mp3"
+    },
+    "UgBBYS2sOqTuMpoF3BR0": {
+      "name": "Mark - Natural Conversations",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/UgBBYS2sOqTuMpoF3BR0.mp3"
+    },
+    "hpp4J3VqNfWAUOO0d1Us": {
+      "name": "Bella - Professional, Bright, Warm",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/hpp4J3VqNfWAUOO0d1Us.mp3",
+      "labels": {
+        "gender": "female",
+        "use_case": "informative_educational",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "professional"
+      },
+      "previews": {
+        "en": "https://storage.googleapis.com/eleven-public-prod/premade/voices/hpp4J3VqNfWAUOO0d1Us/dab0f5ba-3aa4-48a8-9fad-f138fea1126d.mp3"
+      }
+    },
+    "nPczCjzI2devNBz1zQrb": {
+      "name": "Brian - Deep, Resonant and Comforting",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/nPczCjzI2devNBz1zQrb.mp3",
+      "labels": {
+        "gender": "male",
+        "use_case": "social_media",
+        "age": "middle_aged",
+        "language": "en",
+        "accent": "american",
+        "descriptive": "classy"
+      },
+      "previews": {
+        "en": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIyZGQzZTcyYy00ZmQzLTQyZjEtOTNlYS1hYmM1ZDRlNWFhMWQubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "ar": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJlNTZiZTBjMy1mYzg5LTQ1MjktODI0OC05NzI2ZDQyMTc1ZmIubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "zh": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIwYmZiOGUzMC1lMGU4LTQ0ZDktOTI3Ni0yMmFmMTNkYTUwYjMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "pt": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3Yzg4ZTYzYS1mMzIxLTQwZDYtYWMyNS04OTk1NTlhM2ZmMjYubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "de": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiIwYjMzYjI4Ni03NWYwLTQwNGYtYmNlYy02OGE1NmU2YjM3ZTgubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "nl": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJkM2U4ZWZiMi0wYzUyLTQyODgtODVkNy00ZmRlMWVhNGI5Y2YubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "sk": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiJmNzQzYjdjOC03MWI4LTQ0N2EtOTc0NC1kNjZkMTFkY2FiYWMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "ro": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI3NWIwNWIyNS0yOWNlLTQ0YjgtYmJjNC1mNDI2MDBkYThjNWMubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D",
+        "hi": "https://api.us.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/previews/audio?payload=eyJ2b2ljZV9zb3VyY2UiOiJwcmVtYWRlIiwiZmlsZW5hbWUiOiI5NDVjMWI1MS00NzQzLTQzYWUtYjBlNy03Y2FiN2UwOGE4NWUubXAzIiwidGltZXN0YW1wIjoxNzkzNDc2ODAwMDAwMDAwfQ%3D%3D"
+      }
+    },
+    "uYXf8XasLslADfZ2MB4u": {
+      "name": "Hope - Bubbly, Gossipy and Girly",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/uYXf8XasLslADfZ2MB4u.mp3"
+    },
+    "gs0tAILXbY5DNrJrsM6F": {
+      "name": "Jeff - Classy, Resonating and Strong",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/gs0tAILXbY5DNrJrsM6F.mp3"
+    },
+    "DTKMou8ccj1ZaWGBiotd": {
+      "name": "Jamahal - Young, Vibrant, and Natural",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/DTKMou8ccj1ZaWGBiotd.mp3"
+    },
+    "vBKc2FfBKJfcZNyEt1n6": {
+      "name": "Finn - Youthful, Eager and Energetic",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/vBKc2FfBKJfcZNyEt1n6.mp3"
+    },
+    "DYkrAHD8iwork3YSUBbs": {
+      "name": "Tom - Conversations & Books",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/DYkrAHD8iwork3YSUBbs.mp3"
+    },
+    "56AoDkrOh6qfVPDXZ7Pt": {
+      "name": "Cassidy - Crisp, Direct and Clear",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/56AoDkrOh6qfVPDXZ7Pt.mp3"
+    },
+    "eR40ATw9ArzDf9h3v7t7": {
+      "name": "Addison 2.0 - Australian Audiobook & Podcast",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/eR40ATw9ArzDf9h3v7t7.mp3"
+    },
+    "g6xIsTj2HwM6VR4iXFCw": {
+      "name": "Jessica Anne Bogart - Chatty and Friendly",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/g6xIsTj2HwM6VR4iXFCw.mp3"
+    },
+    "lcMyyd2HUfFzxdCaC4Ta": {
+      "name": "Lucy - Fresh & Casual",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/lcMyyd2HUfFzxdCaC4Ta.mp3"
+    },
+    "6aDn1KB0hjpdcocrUkmq": {
+      "name": "Tiffany - Natural and Welcoming",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/6aDn1KB0hjpdcocrUkmq.mp3"
+    },
+    "Sq93GQT4X1lKDXsQcixO": {
+      "name": "Felix - Warm, Positive & Contemporary RP",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/Sq93GQT4X1lKDXsQcixO.mp3"
+    },
+    "flHkNRp1BlvT73UL6gyz": {
+      "name": "Jessica Anne Bogart - Eloquent Villain",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/flHkNRp1BlvT73UL6gyz.mp3"
+    },
+    "9yzdeviXkFddZ4Oz8Mok": {
+      "name": "Lutz - Chuckling, Giggly and Cheerful",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/9yzdeviXkFddZ4Oz8Mok.mp3"
+    },
+    "pPdl9cQBQq4p6mRkZy2Z": {
+      "name": "Emma - Adorable and Upbeat",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/pPdl9cQBQq4p6mRkZy2Z.mp3"
+    },
+    "zYcjlYFOd3taleS0gkk3": {
+      "name": "Edward - Loud, Confident and Cocky",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/zYcjlYFOd3taleS0gkk3.mp3"
+    },
+    "nzeAacJi50IvxcyDnMXa": {
+      "name": "Marshal - Friendly, Funny Professor",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/nzeAacJi50IvxcyDnMXa.mp3"
+    },
+    "ruirxsoakN0GWmGNIo04": {
+      "name": "John Morgan - Gritty, Rugged Cowboy",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/ruirxsoakN0GWmGNIo04.mp3"
+    },
+    "TC0Zp7WVFzhA8zpTlRqV": {
+      "name": "Aria - Sultry Villain",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/TC0Zp7WVFzhA8zpTlRqV.mp3"
+    },
+    "ljo9gAlSqKOvF6D8sOsX": {
+      "name": "Viking Bjorn - Epic Medieval Raider",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/ljo9gAlSqKOvF6D8sOsX.mp3"
+    },
+    "PPzYpIqttlTYA83688JI": {
+      "name": "Pirate Marshal",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/PPzYpIqttlTYA83688JI.mp3"
+    },
+    "8JVbfL6oEdmuxKn5DK2C": {
+      "name": "Johnny Kid - Serious and Calm Narrator",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/8JVbfL6oEdmuxKn5DK2C.mp3"
+    },
+    "iCrDUkL56s3C8sCRl7wb": {
+      "name": "Hope - Poetic, Romantic and Captivating",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/iCrDUkL56s3C8sCRl7wb.mp3"
+    },
+    "wJqPPQ618aTW29mptyoc": {
+      "name": "Ana Rita - Smooth, Expressive and Bright",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/wJqPPQ618aTW29mptyoc.mp3"
+    },
+    "EiNlNiXeDU1pqqOPrYMO": {
+      "name": "John Doe - Deep",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/EiNlNiXeDU1pqqOPrYMO.mp3"
+    },
+    "4YYIPFl9wE5c4L2eu2Gb": {
+      "name": "Burt Reynolds™ - Deep, Smooth and Clear",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/4YYIPFl9wE5c4L2eu2Gb.mp3"
+    },
+    "6F5Zhi321D3Oq7v1oNT4": {
+      "name": "Hank - Deep and Engaging Narrator",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/6F5Zhi321D3Oq7v1oNT4.mp3"
+    },
+    "YXpFCvM1S3JbWEJhoskW": {
+      "name": "Wyatt - Wise Rustic Cowboy",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/YXpFCvM1S3JbWEJhoskW.mp3"
+    },
+    "LG95yZDEHg6fCZdQjLqj": {
+      "name": "Phil - Explosive, Passionate Announcer",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/LG95yZDEHg6fCZdQjLqj.mp3"
+    },
+    "CeNX9CMwmxDxUF5Q2Inm": {
+      "name": "Johnny Dynamite - Vintage Radio DJ",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/CeNX9CMwmxDxUF5Q2Inm.mp3"
+    },
+    "aD6riP1btT197c6dACmy": {
+      "name": "Rachel M - Pro British Radio Presenter",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/aD6riP1btT197c6dACmy.mp3"
+    },
+    "mtrellq69YZsNwzUSyXh": {
+      "name": "Rex Thunder - Deep N Tough",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/mtrellq69YZsNwzUSyXh.mp3"
+    },
+    "dHd5gvgSOzSfduK4CvEg": {
+      "name": "Ed - Late Night Announcer",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/dHd5gvgSOzSfduK4CvEg.mp3"
+    },
+    "eVItLK1UvXctxuaRV2Oq": {
+      "name": "Jean - Alluring and Playful Femme Fatale",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/eVItLK1UvXctxuaRV2Oq.mp3"
+    },
+    "esy0r39YPLQjOczyOib8": {
+      "name": "Britney - Calm and Calculative Villain",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/esy0r39YPLQjOczyOib8.mp3"
+    },
+    "Tsns2HvNFKfGiNjllgqo": {
+      "name": "Sven - Emotional and Nice",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/Tsns2HvNFKfGiNjllgqo.mp3"
+    },
+    "1U02n4nD6AdIZ9CjF053": {
+      "name": "Viraj - Smooth and Gentle",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/1U02n4nD6AdIZ9CjF053.mp3"
+    },
+    "AeRdCCKzvd23BpJoofzx": {
+      "name": "Nathaniel - Engaging, British and Calm",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/AeRdCCKzvd23BpJoofzx.mp3"
+    },
+    "LruHrtVF6PSyGItzMNHS": {
+      "name": "Benjamin - Deep, Warm, Calming",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/LruHrtVF6PSyGItzMNHS.mp3"
+    },
+    "1wGbFxmAM3Fgw63G1zZJ": {
+      "name": "Allison - Calm, Soothing and Meditative",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/1wGbFxmAM3Fgw63G1zZJ.mp3"
+    },
+    "hqfrgApggtO1785R4Fsn": {
+      "name": "Theodore HQ - Serene and Grounded",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/hqfrgApggtO1785R4Fsn.mp3"
+    },
+    "MJ0RnG71ty4LH3dvNfSd": {
+      "name": "Leon - Soothing and Grounded",
+      "preview_url": "https://static.aiquickdraw.com/elevenlabs/voice/MJ0RnG71ty4LH3dvNfSd.mp3"
+    }
+  }
+}

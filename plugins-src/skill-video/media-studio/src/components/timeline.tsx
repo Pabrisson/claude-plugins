@@ -926,11 +926,11 @@ function Preview({ t, time, playing, ratio, onAuto, number, screen }: { t: Timel
           isStill(c.path) ? (
             <img key={c.id} ref={keep(c)} src={fileUrl(c.path)} alt="" onLoad={measure} className={cn("absolute inset-0 size-full object-contain", c !== top && "invisible")} />
           ) : (
-            <video key={c.id} ref={keep(c)} src={fileUrl(c.path)} preload="auto" playsInline onLoadedMetadata={measure} className={cn("absolute inset-0 size-full object-contain", c !== top && "invisible")} />
+            <video key={c.id} ref={keep(c)} src={fileUrl(c.path)} data-together="timeline" preload="auto" playsInline onLoadedMetadata={measure} className={cn("absolute inset-0 size-full object-contain", c !== top && "invisible")} />
           )
         )}
         {t.clips.filter((c) => kind(c) === "audio").map((c) => (
-          <audio key={c.id} ref={keep(c)} src={fileUrl(c.path)} preload="auto" />
+          <audio key={c.id} ref={keep(c)} src={fileUrl(c.path)} data-together="timeline" preload="auto" />
         ))}
         {top && number[top.id] && <span className="absolute top-2 left-2 rounded bg-black/60 px-1.5 text-xs font-semibold text-white tabular-nums">#{number[top.id]}</span>}
         {!top && <span className="absolute inset-0 grid place-items-center p-4 text-center text-xs text-white/45">{t.clips.length ? "Nothing on the video tracks here" : "The edit plays here"}</span>}

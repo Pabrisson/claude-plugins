@@ -68,10 +68,12 @@ const tool = (id: string, mode: Tool["mode"], ...inputs: [string, string][]) => 
 const tools: Record<Kind, Tool[]> = {
   image: [tool("free", "create"), tool("restyle", "edit", ["image", "image"]), tool("remove-background", "edit", ["image", "image"])],
   video: [tool("animate", "create", ["first_frame", "image"]), tool("upscale", "edit", ["video", "video"]), tool("extend", "edit", ["video", "video"]), tool("depth-map", "edit", ["video", "video"])],
-  audio: [tool("voice", "create"), tool("change-voice", "edit", ["clip", "media"])],
+  audio: [tool("voice", "create"), tool("isolate-voice", "edit", ["clip", "media"]), tool("cover", "edit", ["clip", "audio"]), tool("stems", "edit", ["clip", "audio"]), { ...tool("wav", "edit", ["clip", "audio"]), hidden: true }],
 }
 const ids = (list: ReturnType<typeof offers>) => list.map((o) => [o.title, o.items.map((i) => i.tool.id)])
-assert.deepEqual(ids(offers(tools, a, "video")), [["edit", ["upscale", "change-voice"]], ["frame", ["animate"]]])
+// a shot's sound: what takes a video's (the Isolator); a sound clip: the music tools too, not Stems (a whole Suno song)
+// nor a song's hidden extras
+assert.deepEqual(ids(offers(tools, a, "video")), [["edit", ["upscale", "isolate-voice"]], ["frame", ["animate"]]])
 assert.deepEqual(ids(offers(tools, b, "video")), [["edit", ["restyle"]], ["frame", ["animate"]]])
-assert.deepEqual(ids(offers(tools, t.clips.find((c) => c.job === "v")!, "audio")), [["edit", ["change-voice"]]])
+assert.deepEqual(ids(offers(tools, t.clips.find((c) => c.job === "v")!, "audio")), [["edit", ["isolate-voice", "cover"]]])
 console.log("timeline: ok")

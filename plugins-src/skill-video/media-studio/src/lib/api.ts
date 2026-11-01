@@ -14,6 +14,10 @@ export type Input = {
   matte?: string
   // how the prompt names its images, {} their place (« images 2 to 3 »): nothing without a file
   phrase?: string
+  // shown only while the tool's fields have these values (Music's references in Describe)
+  when?: Record<string, string>
+  // how many files it takes, when exactly so many (Mashup's two songs)
+  count?: number
 }
 // an option: its value, or the value with what the dashboard shows of it (a preset light carries its lights, a style
 // the palette of its card, a References sheet its ratio)
@@ -26,7 +30,8 @@ export type Cam = { az: number; el: number; zoom: number }
 export type Field = {
   key: string
   label: string
-  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin" | "style" | "sheets" | "element" | "camera" | "recolors"
+  // lines: words on several lines (lyrics); singer: a voice of the Library made a Suno singer
+  type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin" | "style" | "sheets" | "element" | "camera" | "recolors" | "lines" | "singer"
   options?: Option[]
   // how a value reads in the template ("shot on {}"): an empty one leaves nothing
   phrase?: string
@@ -42,6 +47,8 @@ export type Field = {
   optional?: boolean
   // the tool cannot go without it (Object swap's element)
   required?: boolean
+  // shown only while the tool's other fields have these values (Music's lyrics in Write, when sung)
+  when?: Record<string, string>
   default?: string | number
   placeholder?: string
   min?: number
@@ -68,6 +75,11 @@ export type Tool = {
   params?: Record<string, unknown>
   local?: string
   provider?: string
+  // what a music or sound tool asks its router (Suno's task); hidden: run from the viewer, never in the tool list
+  action?: string
+  hidden?: boolean
+  // the routers it runs on, when not both
+  routers?: string[]
   // setups that fill several fields at once
   presets?: { label: string; group?: string; note?: string; fields: Record<string, string> }[]
   // a References tool: the Element its sheets make, and the field or input it needs one of (words or photos)
@@ -103,9 +115,11 @@ export type Model = {
     quality?: string[] | null
     background?: string[] | null
     voices?: string[] | null
+    // what the dashboard shows of some voices (ElevenLabs'): their line, labels and public samples
+    voice_info?: Record<string, { name: string; labels?: Record<string, string>; preview_url?: string; previews?: Record<string, string> }> | null
     // clone false when it takes no clips (Kie); "library" (ElevenLabs): the account's voices and the Library's, whole
     clone?: boolean | "library"
-    // a dialogue's lines (ElevenLabs v4 and v3, Gemini on Kie) and how many voices it takes; audio tags in the text
+    // a dialogue's lines (Eleven v3 and Gemini on Kie) and how many voices it takes; audio tags in the text
     dialogue?: boolean
     speakers?: number
     tags?: boolean
@@ -137,6 +151,10 @@ export type Model = {
     // Kling's named elements (Kie): how many @Elements it takes whole, and whether beside a frame
     elements?: number
     elements_with_frames?: boolean
+    // whether its request has words at all (Volcengine's lip sync has none)
+    prompt?: boolean
+    // its frames made from a sound's length (Wan 2.2 Speech to Video)
+    audio_frames?: { fps: number; min: number; max: number; step: number } | null
   }
 }
 export type OptionValue = string | number | { value: string | number; label: string }
@@ -195,6 +213,10 @@ export type Job = {
   place?: Place
   // each file's size and length, measured once by the engine
   meta?: Record<string, { w?: number; h?: number; dur?: number }>
+  // a song Suno made: its task, its takes (their ids, title, style and words), what it answered
+  suno?: { task_id: string | null; tracks: { file: string; voice?: string; audio_id: string | null; title: string; tags: string; lyrics: string; duration: number | null }[] | null; data?: unknown } | null
+  // the Library's singer it made
+  element?: string
 }
 // where a result goes on a timeline once done: into the cut at `at` (a Bridge shot, a voice at the playhead), or by
 // the clip it replaces: in its place at its length (a take), at the result's length (whole), in place of the stretch
@@ -310,10 +332,15 @@ export type Voice = {
   previews?: Record<string, string>
 }
 // an Element of the Library: what its images are to the model (a voice holds clips), its words, a brand's colors and
-// typeface, a voice's ElevenLabs id once it is on the account
-export type ElementType = "character" | "outfit" | "object" | "location" | "pose" | "brand" | "voice" | "other"
+// typeface, a voice's ElevenLabs id once it is on the account, its Suno singer (a persona of a song, or its own voice made
+// a Suno voice: pending, its phrase to sing)
+export type ElementType = "character" | "outfit" | "object" | "location" | "pose" | "brand" | "voice" | "singer" | "other"
+// the Elements heard, not seen: a voice (spoken) and a singer (sung) hold clips, never cited with @ in words
+export const heard = (t: ElementType) => t === "voice" || t === "singer"
+// a singer of one's own Suno has not heard yet: nothing sings with it until its phrase is sung
+export const needsPhrase = (e: Element) => e.type === "singer" && !(e.suno?.persona_id || e.suno?.voice_id)
 // voice: a character's own voice, a voice of the Library heard when it speaks in a video (Kling 4.0)
-export type Element = { name: string; type: ElementType; words: string; colors: string[]; font: string; voice_id: string | null; voice?: string | null; files: string[] }
+export type Element = { name: string; type: ElementType; words: string; colors: string[]; font: string; voice_id: string | null; voice?: string | null; cover?: string | null; suno?: { persona_id?: string; voice_id?: string; pending?: { task_id: string; phrase: string } } | null; files: string[] }
 export const ELEMENT_TYPES: { type: ElementType; label: string; plural: string; hint: string }[] = [
   { type: "character", label: "Character", plural: "Characters", hint: "a person, a creature, a mascot" },
   { type: "outfit", label: "Outfit", plural: "Outfits", hint: "clothes, shoes, accessories worn" },
@@ -321,7 +348,8 @@ export const ELEMENT_TYPES: { type: ElementType; label: string; plural: string; 
   { type: "location", label: "Location", plural: "Locations", hint: "a place, a set" },
   { type: "pose", label: "Pose", plural: "Poses", hint: "a body pose to copy, nothing else" },
   { type: "brand", label: "Brand", plural: "Brands", hint: "a logo kept exact, its colors" },
-  { type: "voice", label: "Voice", plural: "Voices", hint: "1 to 3 clips, picked as Audio's voice" },
+  { type: "voice", label: "Voice", plural: "Voices", hint: "1 to 3 clips of speech, picked as Audio's voice and for Change voice" },
+  { type: "singer", label: "Singer", plural: "Singers", hint: "1 to 3 sung clips, picked as Music's singer once Suno has it" },
   { type: "other", label: "Other", plural: "Other", hint: "anything else" },
 ]
 export const typeLabel = (t: ElementType) => ELEMENT_TYPES.find((x) => x.type === t)!.label
@@ -371,6 +399,14 @@ export const api = {
   voices: () => call<Voice[] | { voices: Voice[] }>("/api/voices"),
   clone: (name: string, paths: string[]) =>
     post<{ ok: true }>("/api/voice-clone", { name, paths }),
+  // Suno's help with the words (Kie, priced): lyrics from a theme (its versions), a style written out richer
+  assist: (what: "lyrics" | "boost", text: string, confirm = false) => post<{ texts: { title: string; text: string }[]; cost: number | null }>("/api/assist", { what, text, confirm }),
+  // where a sound sings the most (Make a singer's 10 to 30 s), and recordings cleaned by the Voice Isolator (jobs of the
+  // Library, priced: 409 asks first)
+  sung: (path: string) => post<{ start: number; end: number; sung: number; duration: number }>("/api/sung", { path }),
+  clean: (paths: string[], confirm = false) => post<{ paths: string[] }>("/api/clean", { paths, confirm }),
+  // a voice of the Library made a Suno singer: its phrase to sing first, then the recording of it
+  sunoVoice: (body: { name: string; start?: number; end?: number; language?: string; verify?: string }) => post<{ phrase?: string; task_id?: string } & Partial<Element>>("/api/elements/suno", body),
   elements: (body: { name: string; type?: ElementType; words?: string; colors?: string[]; font?: string; voice?: string; paths?: string[]; drop?: string[]; remove?: boolean; elevenlabs?: boolean; workspace?: string | null }) =>
     post<Element[]>("/api/elements", body),
   styles: (body: { name: string; paths?: string[]; words?: string; drop?: string[]; remove?: boolean }) => post<SavedStyle[]>("/api/styles", body),
@@ -394,6 +430,15 @@ export function spentIn(s: State, slug: string) {
 }
 
 export const fileUrl = (path: string) => `/files?path=${encodeURIComponent(path)}`
+// the pictures a sound may have, when its job made one: a Suno take's cover (out-2.mp3 and its voice-2.mp3 show
+// cover-2.jpeg, Kie's, or .jpg). Found by its path; the caller tries each and hides what does not load
+export const coverPaths = (path: string) =>
+  /\/media\/[^/]+\/(?:out|voice)-\d+\.\w+$/.test(path) ? ["jpeg", "jpg", "png", "webp"].map((x) => path.replace(/(?:out|voice)-(\d+)\.\w+$/, `cover-$1.${x}`)) : []
+// a job's own cover of one of its sounds, from its outputs
+export const coverOf = (job: Job, file: string) => {
+  const n = file.match(/(?:^|\/)(?:out|voice)-(\d+)\.\w+$/)?.[1]
+  return n ? (job.outputs.find((o) => o.startsWith(`cover-${n}.`)) ?? null) : null
+}
 export const outputPath = (home: string, job: Job, file: string) =>
   `${home}/media/${job.id}/${file}`
 export const inputPath = (home: string, job: Job, file: string) =>
@@ -452,7 +497,7 @@ export function places(kind: Kind, tool: Tool, inputs: Record<string, string[]>)
 // what a prompt can cite with @name: the Library's Elements with images (a voice is picked as Audio's voice, a style in
 // a Style field)
 export type Mentionable = Pick<Element, "name" | "type" | "files" | "words">
-export const mentionables = (s: State): Mentionable[] => (s.elements ?? []).filter((e) => e.type !== "voice" && e.files.length)
+export const mentionables = (s: State): Mentionable[] => (s.elements ?? []).filter((e) => !heard(e.type) && e.files.length)
 // the @names a prompt cites, once each and in order, of those it can
 export const cited = (text: string, items: Mentionable[]) =>
   [...new Set([...text.matchAll(/@([\w-]+)/g)].map((m) => m[1]))].flatMap((n) => items.filter((i) => i.name === n))
@@ -509,11 +554,11 @@ export function fill(tool: Tool, fields: Record<string, string>, prompt: string,
     .trim()
 }
 
-// the USD price of 1,000 ElevenLabs credits on the user's plan, null without a paid one
 // the routers by their ids, as the pages name them
 export const ROUTER_NAME: Record<Router, string> = { openrouter: "OpenRouter", kie: "Kie.ai" }
-export const per1000 = (s: State) => s.plans?.[s.settings.elevenlabs.plan ?? ""] || null
 
+// the USD price of 1,000 ElevenLabs credits on the user's plan, null without a paid one
+export const per1000 = (s: State) => s.plans?.[s.settings.elevenlabs?.plan ?? ""] || null
 // a price as the engine writes it: dollars, or ElevenLabs credits with their dollars on a paid plan
 export function money(amount: number | null | undefined, unit: "usd" | "credits", usdPer1000?: number | null): string {
   if (amount == null) return "unknown cost"

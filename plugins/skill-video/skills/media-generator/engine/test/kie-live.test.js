@@ -6,13 +6,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import kie, { CATALOG_PRICES, fromSpec, readSpec } from '../providers/kie.js'
+import kie, { CATALOG_PRICES, fromSpec, readSpec, SUNO } from '../providers/kie.js'
 import { SKIP } from '../lib/options.js'
 
 const live = process.env.KIE_LIVE === '1' && !!process.env.KIE_API_KEY
 const list = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'providers', 'kie-models.json'), 'utf8'))
 const all = ['image', 'video', 'speech'].flatMap(k => list[k].map(m => ({ ...m, kind: k })))
-const names = m => (typeof m.kie === 'string' ? [m.kie] : Object.values(m.kie).map(v => v.model ?? v))
+// Suno's models run its tasks (its docs are not market pages: names only)
+const SUNO_TASKS = { music: ['music', 'extend', 'upload_extend', 'cover', 'add_vocals', 'add_instrumental', 'replace', 'mashup'], sound: ['sounds'], stems: ['stems'],
+  extras: ['wav', 'timings', 'video', 'midi', 'persona', 'lyrics', 'boost', 'phrase', 'voice', 'check'] }
+const names = m => (m.kie === 'suno' ? SUNO_TASKS[m.role].map(a => SUNO[a]) : typeof m.kie === 'string' ? [m.kie] : Object.values(m.kie).map(v => v.model ?? v))
 const key = f => f.replace(/\[\]$/, '')
 // the fields a mode names its own way (Wan 2.7: audio_url, driving_audio_url, reference_voice)
 const modeFields = m => Object.values(typeof m.kie === 'object' ? m.kie : {}).flatMap(v => Object.values(v.fields ?? {}))
@@ -48,7 +51,7 @@ test('Kie live: the shipped list against Kie\'s names, docs and prices; nothing 
   const noise = k => /^(required|properties|x-apidog.*)$/.test(k) || /^0[0-9A-Z]{25}$/.test(k)
   for (const m of all) {
     const sent = new Set([...Object.values(m.fields ?? {}).map(key), ...modeFields(m).map(key), ...Object.keys(m.set ?? {}), m.elements?.key, m.shots?.key, m.shots?.flag, m.mid_frames?.key, m.masks?.key, m.named_voices?.key,
-      ...(m.dialogue === 'gemini' ? ['speakers', 'dialogue_turns'] : []), ...(m.options ?? []).map(o => (typeof o === 'string' ? o : o.covers ?? o.key))].filter(Boolean))
+      ...(m.dialogue === 'gemini' ? ['speakers', 'dialogue_turns'] : m.dialogue === 'list' ? ['dialogue'] : []), ...(m.audio_frames ? ['num_frames', 'frames_per_second'] : []), ...(m.options ?? []).map(o => (typeof o === 'string' ? o : o.covers ?? o.key))].filter(Boolean))
     for (const v of Object.values(typeof m.kie === 'object' ? m.kie : {})) for (const k of Object.keys(v.set ?? {})) sent.add(k)
     const left = [...new Set(names(m).flatMap(n => Object.keys(specs[n]?.props ?? {})))].filter(k => !noise(k) && !sent.has(k) && !m.skip?.[k] && !SKIP[k])
     assert.deepEqual(left, [], `${m.id}: inputs of its docs neither sent nor skipped with a reason`)

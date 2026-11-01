@@ -185,17 +185,19 @@ export function marginsTo(w: number, h: number, ratio: string): Record<string, s
 
 // what Generate offers a clip: the tools that take its medium, by what they make of it (edit it: the result replaces
 // it; start from its frame: an image animated, a shot going on from a frame of it). Left out: Extend (its own items),
-// and what an edit has no use for yet (a depth map, HDR, a cut-out without layers)
+// and what an edit has no use for yet (a depth map, HDR, a cut-out without layers), nor what needs a whole song Suno
+// made (a clip goes as its cut)
 export type Offer = { title: "edit" | "frame"; items: { kind: Kind; tool: Tool }[] }
-const NOT_HERE = ["extend", "depth-map", "sdr-to-hdr", "remove-background"]
+const NOT_HERE = ["extend", "depth-map", "sdr-to-hdr", "remove-background", "stems", "replace-section"]
 export function offers(tools: Record<Kind, Tool[]>, c: Clip, kind: Track["kind"]): Offer[] {
   const of = (k: Kind, ok: (t: Tool) => boolean) => tools[k].filter((t) => !NOT_HERE.includes(t.id) && ok(t)).map((tool) => ({ kind: k, tool }))
   const takes = (t: Tool, key: string, k: string) => t.inputs.some((i) => i.key === key && i.kind === k)
-  const sound = of("audio", (t) => t.inputs.some((i) => i.kind === "media"))
-  if (kind === "audio") return [{ title: "edit", items: sound }]
+  // a sound clip takes the music tools too, a video's sound only what takes a video (the Voice Isolator)
+  const sound = (music: boolean) => of("audio", (t) => !t.hidden && t.inputs.some((i) => i.kind === "media" || (music && i.key === "clip" && i.kind === "audio")))
+  if (kind === "audio") return [{ title: "edit", items: sound(true) }]
   const frames = { title: "frame" as const, items: of("video", (t) => takes(t, "first_frame", "image")) }
   if (isStill(c.path)) return [{ title: "edit", items: of("image", (t) => t.mode === "edit" && takes(t, "image", "image")) }, frames]
-  return [{ title: "edit", items: [...of("video", (t) => takes(t, "video", "video")), ...sound] }, frames]
+  return [{ title: "edit", items: [...of("video", (t) => takes(t, "video", "video")), ...sound(false)] }, frames]
 }
 
 // every time a clip starts or ends, for ⏮ ⏭ and ↑ ↓

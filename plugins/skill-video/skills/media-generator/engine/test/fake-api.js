@@ -1,4 +1,4 @@
-// A fake OpenRouter (under /api/v1) and ElevenLabs (under /el) for the tests (their models: test/models.json): generations that answer
+// A fake OpenRouter (under /api/v1), ElevenLabs (under /el, for video-editor's tests' kind) and Kie for the tests (their models: test/models.json): generations that answer
 // files made by ffmpeg, the errors that matter, in the shapes the real APIs answered on 2026-10-29. Every request is
 // kept in calls
 import { execFileSync } from 'node:child_process'
@@ -18,7 +18,8 @@ export async function startFake(dir) {
   // bills, its price rows
   const kie = { tasks: {}, uploads: [], window: [], busy: 0, credits: { 'fake-i2i': 12, 'fake-vid': 136, 'fake-gem': 3 },
     prices: { 'fake img, 1K': [6, 'per image'], 'fake img, 2K': [10, 'per image'], 'fake vid, 480p no video': [28, 'per second'], 'fake lip, per second': [8, 'per second'], 'fake animate, per second': [12, 'per second'], 'fake vid, 480p with video': [17, 'per second'],
-      'fake vid, 1080p with video': [95, 'per second'], 'fake tts': [6, 'per 1000 characters'] } }
+      'fake vid, 1080p with video': [95, 'per second'], 'fake tts': [6, 'per 1000 characters'],
+      'fake suno, request': [12, 'per request'], 'fake suno, sound': [2.5, 'per request'], 'fake suno, stems': [10, 'per request'], 'fake suno, stems 12': [50, 'per request'], 'fake suno, tiny': [0.4, 'per request'], 'fake s2v, per second': [12, 'per second'] } }
   // a fake cloudflared: its quick tunnel's name carries the local port, where the fake router fetches the files
   const bin = path.join(dir, 'bin')
   fs.mkdirSync(bin, { recursive: true })
@@ -100,6 +101,14 @@ setInterval(() => {}, 1e6)
       if (body.model === 'fake/pcm-tts' && body.response_format !== 'pcm') return json({ error: { message: 'HeyGen Voice only supports response_format "pcm".', code: 400 } }, 400)
       return bytes(body.response_format === 'pcm' ? pcm : mp3, body.response_format === 'pcm' ? 'audio/pcm;rate=44100;channels=1' : 'audio/mpeg', { 'x-generation-id': `g${calls.length}` })
     }
+    // a song (Lyria): chat completions with audio out, streamed in pieces of base64, its words as the transcript
+    if (p === '/api/v1/chat/completions') {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      const half = Math.floor(mp3.length / 2), id = `g${calls.length}`
+      for (const part of [mp3.subarray(0, half), mp3.subarray(half)]) res.write(`data: ${JSON.stringify({ id, choices: [{ delta: { audio: { data: part.toString('base64') } } }] })}\n\n`)
+      res.write(`data: ${JSON.stringify({ id, choices: [{ delta: { audio: { transcript: '[Verse] la la' } } }] })}\n\ndata: [DONE]\n\n`)
+      return res.end()
+    }
     // the stats answer 404 for a while after the generation (10 to 15 s on 2026-10-29)
     if (p === '/api/v1/generation') {
       const id = u.searchParams.get('id')
@@ -121,6 +130,11 @@ setInterval(() => {}, 1e6)
     if (p.startsWith('/el/v1/voice-changer/')) {
       // a free plan's answer to a format of the Creator tier
       if (u.searchParams.get('output_format') === 'mp3_44100_192') return json({ detail: { type: 'authorization_error', code: 'subscription_required', message: "Output format 'mp3_44100_192' is only available on the Creator tier and above.", status: 'output_format_not_allowed' } }, 403)
+      pending += 50
+      return bytes(mp3, 'audio/mpeg')
+    }
+    // the Voice Isolator: the voice alone, billed by the minute
+    if (p === '/el/v1/audio-isolation') {
       pending += 50
       return bytes(mp3, 'audio/mpeg')
     }
@@ -172,13 +186,34 @@ setInterval(() => {}, 1e6)
       if (body.model === 'fake-broke') return json({ code: 402, msg: 'Credits insufficient', data: null })
       const id = `kie-task-${calls.length}`
       kie.tasks[id] = { model: body.model, input: body.input, polls: 0 }
+      // Suno's timed lyrics answer at once (code and data inside data), no task to follow
+      if (body.model === 'ai-music-api/timeStamped-lyrics') return kieOk({ code: 200, msg: 'success', data: { alignedWords: [{ word: 'la', startS: 0.2, endS: 0.6 }, { word: 'la', startS: 0.7, endS: 1 }] } })
+      // a persona too: its id in data
+      if (body.model === 'ai-music-api/generate-persona') return kieOk({ persona_id: 'persona-1', name: body.input.name })
+      // a voice's recording: its validation phrase's task succeeds
+      if (body.model === 'ai-music-api/create-voice' && kie.tasks[body.input.task_id]) kie.tasks[body.input.task_id].voiced = true
       return kieOk({ taskId: id })
     }
     if (p === '/kie/api/v1/jobs/recordInfo') {
       const id = u.searchParams.get('taskId'), t = kie.tasks[id]
       if (!t) return json({ code: 422, msg: 'recordInfo is null', data: null })
+      // Suno's validation phrase waits for the recording (« generating », its phrase already there) until create-voice
+      if (t.model === 'ai-music-api/validation-phrase')
+        return kieOk({ taskId: id, model: t.model, state: t.voiced ? 'success' : 'generating', resultJson: t.polls++ ? JSON.stringify({ msg: 'success', code: 200, data: { verify_phrase_text: 'the moon sings softly', verify_phrase_id: 'p-1' }, task_id: id }) : '' })
       const state = ['waiting', 'generating'][t.polls++] ?? (t.model === 'fake-fail' ? 'fail' : 'success')
-      const file = /vid|edit|avatar|kling|grok/.test(t.model) ? 'out.mp4' : /tts|gem/.test(t.model) ? 'out.mp3' : 'out.png'
+      // Suno (its docs, 2026-10-31): a song's two takes under response.data, the rest in resultJson (resultUrls, resultObject)
+      const suno = t.model.startsWith('ai-music-api/') && t.model.split('/')[1], done = state === 'success'
+      if (suno && ['generate', 'extend', 'upload-and-extend-audio', 'upload-and-cover-audio', 'add-vocals', 'add-instrumental', 'replace-section', 'mashup'].includes(suno))
+        return kieOk({ taskId: id, model: t.model, state, resultJson: '', creditsConsumed: done ? 12 : null,
+          response: done ? { data: [1, 2].map(n => ({ id: `${id}-take-${n}`, audio_url: `${base}/kiefiles/out.mp3`, image_url: `${base}/kiefiles/out.png`, title: t.input.title ?? 'Song', tags: t.input.style ?? 'pop', prompt: '[Verse]\nla la', duration: 1 })) } : null })
+      const object = { 'separate-vocals': { origin_data: [{ id: 'stem-v', stem_name: 'vocals' }, { id: 'stem-i', stem_name: 'instrumental' }] }, 'timeStamped-lyrics': { aligned_words: [{ word: 'la', start_s: 0.2, end_s: 0.6 }, { word: 'la', start_s: 0.7, end_s: 1 }] },
+        'generate-persona': { personaId: 'persona-1' }, 'generate-lyrics': { lyricsData: [{ title: 'Night', text: '[Verse]\nroad' }, { title: 'Drive', text: '[Verse]\nlights' }] }, 'boost-music-style': {},
+        'validation-phrase': { phrase: 'the moon sings softly' }, 'create-voice': { voiceId: 'voice-1' }, 'generate-midi-from-audio': { instruments: [{ name: 'Voice', notes: [{ pitch: 60, start: 0, end: 0.5 }] }] } }[suno]
+      const urls = { 'separate-vocals': ['vocals.mp3', 'instrumental.mp3'], 'convert-to-wav-format': ['out.wav'], 'create-music-video': ['out.mp4'], 'sounds': ['out.mp3'] }[suno]
+      // Boost style's text comes among its « URLs » (2026-10-31)
+      const texts = suno === 'boost-music-style' ? ['dreamy synthwave, airy female vocals, 100 BPM'] : []
+      if (suno) return kieOk({ taskId: id, model: t.model, state, resultJson: done ? JSON.stringify({ resultUrls: [...(urls ?? []).map(u => `${base}/kiefiles/${u}`), ...texts], resultObject: object ?? {} }) : '', creditsConsumed: done ? 2 : null })
+      const file = /vid|edit|avatar|kling|grok|s2v/.test(t.model) ? 'out.mp4' : /tts|gem/.test(t.model) ? 'out.mp3' : 'out.png'
       // the last frame beside, when asked
       return kieOk({ taskId: id, model: t.model, state, resultJson: state === 'success' ? JSON.stringify({ resultUrls: [`${base}/kiefiles/${file}`], ...(t.input?.return_last_frame ? { lastFrameUrl: `${base}/kiefiles/last.jpg` } : {}) }) : '',
         failCode: state === 'fail' ? '500' : '', failMsg: state === 'fail' ? 'Content flagged' : '', creditsConsumed: state === 'success' ? kie.credits[t.model] ?? 10 : null })
@@ -186,7 +221,7 @@ setInterval(() => {}, 1e6)
     if (p === '/kiefiles/out.png') return bytes(png, 'image/png')
     if (p === '/kiefiles/last.jpg') return bytes(png, 'image/jpeg')
     if (p === '/kiefiles/out.mp4') return bytes(mp4, 'video/mp4')
-    if (p === '/kiefiles/out.mp3') return bytes(mp3, 'audio/mpeg')
+    if (/^\/kiefiles\/(out|vocals|instrumental)\.(mp3|wav)$/.test(p)) return bytes(mp3, 'audio/mpeg')
     if (p.startsWith('/kiefiles/upload-')) return bytes(png, 'image/png')
     json({ error: { message: `fake: nothing at ${p}` } }, 404)
   })

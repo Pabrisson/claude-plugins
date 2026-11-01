@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// media-generator CLI and the dashboard's server. Images, videos and speech through the model routers of providers/,
-// voice changes and dubbing through ElevenLabs by video-editor's engine. Everything lives in the folder Claude Code
+// media-generator CLI and the dashboard's server. Images, videos, voices, music and sounds through the model routers of
+// providers/, ElevenLabs' voices straight from it, voice changes and dubbing through ElevenLabs by video-editor's engine.
+// Everything lives in the folder Claude Code
 // runs in ($MEDIA_GENERATOR_DIR overrides it): media/ (one folder per generation), elements/ (the @ references),
 // styles/ (the Library's styles), ledger.jsonl (what was spent), settings.json (thresholds, caps, defaults), .cache/
 // (catalogs, uploads, drafts)
@@ -36,7 +37,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' }, option: { type: 'string', multiple: true }, line: { type: 'string', multiple: true }, shot: { type: 'string', multiple: true }, say: { type: 'string', multiple: true }, 'from-draft': { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' },
-    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' },
+    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, language: { type: 'string' }, verify: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' },
   },
 })
 
@@ -180,13 +181,13 @@ const toolModels = tool => {
 }
 
 // the active router's models of a kind, their ids prefixed with the router: its list kept by hand, plus the new models
-// of its catalog (checked once a day). Speech: ElevenLabs' own models first, straight from it (its key), and none of a
-// router's ElevenLabs
+// of its catalog (checked once a day). Speech: ElevenLabs' own models first, straight from it (its key), and then none of
+// a router's ElevenLabs voices (without its key, the router's stay)
 async function models(kind) {
   const name = active(), own = (await PROVIDERS[name].models(routerKind(kind))).map(m => ({ ...m, id: `${name}:${m.model}`, provider: name }))
   if (kind !== 'audio') return own
   const direct = (await DIRECT.elevenlabs.models('speech').catch(() => [])).map(m => ({ ...m, id: `elevenlabs:${m.model}`, provider: 'elevenlabs' }))
-  return [...direct, ...own.filter(m => !m.model.startsWith('elevenlabs/'))]
+  return [...direct, ...own.filter(m => !(direct.length && m.role === 'speech' && m.model.startsWith('elevenlabs/')))]
 }
 // a model of another router (a remix, a default set before a switch) runs on the active one when it has it
 async function modelOf(kind, id) {
@@ -251,19 +252,23 @@ function prepared(tool, spec, keyframe = false) {
 
 // ---------- the Library: Elements and styles, cited with @name ----------
 
-// an Element's type says what its images are to the model; a voice holds clips, picked as Audio's voice, never in words.
-// One made before the types is « other »
-const TYPES = ['character', 'outfit', 'object', 'location', 'pose', 'brand', 'voice', 'other']
+// an Element's type says what its images are to the model; a voice (spoken) and a singer (sung) hold clips, picked in
+// Audio's fields, never in words. One made before the types is « other »
+const TYPES = ['character', 'outfit', 'object', 'location', 'pose', 'brand', 'voice', 'singer', 'other']
+const heard = type => type === 'voice' || type === 'singer'
 const NAME = /^[\w-]+$/
 // an Element (elements/<name>/): its images (a voice's clips) and element.json: its type, its words, a brand's colors and
-// typeface, a voice's ElevenLabs id once it is on the account, a character's own voice (a voice of the Library)
+// typeface, a voice's ElevenLabs id once it is on the account, a singer's Suno persona or voice, a character's own voice
+// (a voice of the Library)
 function element(name) {
   const d = at('elements', String(name ?? ''))
   if (!NAME.test(name ?? '') || !fs.existsSync(d) || !fs.statSync(d).isDirectory()) return null
   const meta = fs.existsSync(path.join(d, 'element.json')) ? readJson(path.join(d, 'element.json')) : {}
   const type = TYPES.includes(meta.type) ? meta.type : 'other'
-  const files = fs.readdirSync(d).filter(f => kindOfFile(f) === (type === 'voice' ? 'audio' : 'image')).sort().map(f => path.join(d, f))
-  return { name, type, words: meta.words ?? '', colors: meta.colors ?? [], font: meta.font ?? '', voice_id: meta.voice_id ?? null, voice: meta.voice ?? null, files }
+  const files = fs.readdirSync(d).filter(f => kindOfFile(f) === (heard(type) ? 'audio' : 'image')).sort().map(f => path.join(d, f))
+  // a singer from a song keeps its cover as its picture
+  const cover = heard(type) && fs.existsSync(path.join(d, 'cover.jpg')) ? path.join(d, 'cover.jpg') : null
+  return { name, type, words: meta.words ?? '', colors: meta.colors ?? [], font: meta.font ?? '', voice_id: meta.voice_id ?? null, voice: meta.voice ?? null, suno: meta.suno ?? null, cover, files }
 }
 const elementList = () => (fs.existsSync(at('elements')) ? fs.readdirSync(at('elements')).sort().map(element).filter(Boolean) : [])
 
@@ -299,10 +304,10 @@ function saveElement(name, { type, words, colors, font, voice, files = [], from 
   if (!NAME.test(name ?? '')) throw userError('an Element\'s name is letters, digits, - and _')
   const now = element(name), t = type ?? now?.type ?? 'other'
   if (!TYPES.includes(t)) throw userError(`the types are ${TYPES.join(', ')}`)
-  const want = t === 'voice' ? 'audio' : 'image', all = [...files, ...outputsOf(from, want)]
+  const want = heard(t) ? 'audio' : 'image', all = [...files, ...outputsOf(from, want)]
   const odd = all.find(f => kindOfFile(f) !== want)
-  if (odd) throw userError(`${path.basename(odd)} is not ${want === 'audio' ? 'a sound: a voice takes clips' : 'an image'}`)
-  if (!now && !all.length) throw userError(`a new Element takes ${want === 'audio' ? 'a voice clip' : 'an image'} or more`)
+  if (odd) throw userError(`${path.basename(odd)} is not ${want === 'audio' ? `a sound: a ${t} takes clips` : 'an image'}`)
+  if (!now && !all.length) throw userError(`a new Element takes ${want === 'audio' ? `a ${t === 'singer' ? 'sung' : 'voice'} clip` : 'an image'} or more`)
   // a character's own voice: a voice of the Library ('' takes it off), heard when it speaks (Kling 4.0)
   const own = voice === undefined ? now?.voice ?? undefined : String(voice).replace(/^@/, '') || undefined
   if (own && t !== 'character') throw userError('only a character has a voice of its own')
@@ -319,7 +324,7 @@ function saveElement(name, { type, words, colors, font, voice, files = [], from 
   for (const f of all) copyIn(d, f)
   for (const f of drop) fs.rmSync(path.join(d, path.basename(f)), { force: true })
   writeJson(path.join(d, 'element.json'), clean({ type: t, words: (words ?? now?.words ?? '').trim(),
-    ...(t === 'brand' ? { colors: colors ?? now?.colors ?? [], font: (font ?? now?.font ?? '').trim() } : {}), voice_id: t === 'voice' ? now?.voice_id : undefined, voice: own }))
+    ...(t === 'brand' ? { colors: colors ?? now?.colors ?? [], font: (font ?? now?.font ?? '').trim() } : {}), voice_id: now?.voice_id ?? undefined, suno: now?.suno ?? undefined, voice: own }))
   // a new one is linked to the workspace asked (null: none), else the current one
   const to = ws === undefined ? currentWorkspace() : ws
   if (!now && to && workspace(to)) saveWorkspace(to, { elements: [...workspace(to).elements, name] })
@@ -356,7 +361,7 @@ function mentions(text, kind, from, keyframe = false) {
   const out = text.replace(/@([\w-]+)/g, (all, name) => {
     if (done.has(name)) return name
     const el = element(name)
-    if (!el || el.type === 'voice' || !el.files.length) return all
+    if (!el || heard(el.type) || !el.files.length) return all
     // in a keyframe already: « Papi (the character in the keyframe, …) », its images not sent again
     const where = keyframe ? 'the keyframe' : placeOf(kind, from + refs.length, el.files.length)
     if (!keyframe) refs.push(...el.files)
@@ -377,7 +382,7 @@ function klingElements(text, m, spec) {
       if (!seen.has(name)) (seen.set(name, name.replace(/-/g, '_').slice(0, 20)), voices.push({ name: seen.get(name), file: el.files[0] }))
       return `@${seen.get(name)}`
     }
-    if (!el || el.type === 'voice' || !el.files.length) return all
+    if (!el || heard(el.type) || !el.files.length) return all
     if (!seen.has(name)) {
       if (el.files.length < 2) throw userError(`@${name} has 1 image: ${m.name} takes 2 to 4 views of an Element. ${REF_TOOLS[el.type] ? `Make another with media.mjs image --tool ${REF_TOOLS[el.type]} --in references=<its image> (its estimate, then the user's yes), then media.mjs elements set ${name} --from <that generation>` : `Add a second image: media.mjs elements set ${name} <file>`}`)
       seen.set(name, name.replace(/-/g, '_').slice(0, 20))
@@ -400,7 +405,7 @@ function klingElements(text, m, spec) {
 // the prompt cites it like the user's own words
 function elementField(f, v) {
   const name = String(v).trim().replace(/^@/, ''), el = element(name)
-  if (!el || el.type === 'voice' || !el.files.length) throw userError(`${f.label}: no element @${name} in the Library (media.mjs elements)`)
+  if (!el || heard(el.type) || !el.files.length) throw userError(`${f.label}: no element @${name} in the Library (media.mjs elements)`)
   if (f.types && !f.types.includes(el.type)) throw userError(`${f.label}: @${name} is ${el.type === 'other' ? 'untyped' : `${/^[aeiou]/.test(el.type) ? 'an' : 'a'} ${el.type}`}, this takes ${f.types.join(' or ')}`)
   return `@${name}`
 }
@@ -716,12 +721,21 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
       ...(keyframe ? { keyframes: [{ uri: dataUrl(keyframe), seconds: +p.frame }] } : {}) }
     // a model without durations (an avatar) lasts as long as its voice
     const voice = files('audio')[0]
+    // its frames made from the sound's length (Wan 2.2 Speech to Video: 2.5 to 7.5 s)
+    const af = m.params.audio_frames, frameCount = af && voice && Math.min(af.max, Math.max(af.min, Math.round((probe(voice).duration * af.fps) / af.step) * af.step))
+    if (af && voice && probe(voice).duration > af.max / af.fps + 0.05) throw userError(`${m.name} moves ${af.max / af.fps} s at most: this sound lasts ${probe(voice).duration.toFixed(1)} s, cut it`)
+    if (af && voice) send.audio_seconds = probe(voice).duration
+    // the sound a talking head takes (OmniHuman 2.0: 4 s at least, Kie's 400 otherwise, 2026-11-01)
+    const as = m.params.audio_seconds, said = as && voice ? probe(voice).duration : null
+    if (said != null && (said < (as.min ?? 0) - 0.05 || said > (as.max ?? Infinity) + 0.05)) throw userError(`${m.name} takes a sound of ${as.min ? `${as.min} to ` : 'up to '}${as.max} s: this one lasts ${said.toFixed(1)} s`)
     // (a lip sync lasts as long as its voice, the video trimmed or looped)
-    return { send, estimate: { duration: (params.duration > 0 ? params.duration : undefined) ?? (m.params.follows_audio && voice ? probe(voice).duration : undefined) ?? source?.duration ?? (voice ? probe(voice).duration : undefined), resolution: params.resolution ?? `${Math.min(source?.width ?? 1920, source?.height ?? 1080)}p`,
+    return { send, estimate: { duration: (frameCount ? frameCount / af.fps : undefined) ?? (params.duration > 0 ? params.duration : undefined) ?? (m.params.follows_audio && voice ? probe(voice).duration : undefined) ?? source?.duration ?? (voice ? probe(voice).duration : undefined), resolution: params.resolution ?? `${Math.min(source?.width ?? 1920, source?.height ?? 1080)}p`,
       ratio: params.aspect_ratio, sound: params.generate_audio, input: video || refVideos.length ? 'video' : Object.keys(frames).length ? 'image' : 'text',
       images: images.length + Object.keys(frames).length, creativity: spec.fields?.creativity, factor: spec.fields?.factor, width: source?.width, height: source?.height,
       source_duration: source?.duration ?? (refVideos.length ? refSeconds : undefined), min_pixels: m.params.min_pixels } }
   }
+  // music, sounds and what follows from them: their own request
+  if (m.role !== 'speech') return audioRequest(tool, spec, m, options)
   // speech: a preset voice, or up to 3 clips to clone; a dialogue's lines (Gemini on Kie: two voices)
   const clips = files('voice_clips'), lines = (p.dialogue ?? []).filter(l => String(l.text ?? '').trim())
   if (lines.length) {
@@ -735,6 +749,193 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
   if (clips.length && m.params.clone === false) throw userError(`${m.name} clones no voice here: pick one of its voices (--voice), or switch the router to OpenRouter in Settings`)
   const voice = p.voice ?? (clips.length ? undefined : m.params.voices?.[0])
   return { send: { model: m.model, text: prompt, voice, instructions: spec.fields?.instructions || undefined, refs: clips.map(dataUrl), ...own }, estimate: { text: prompt } }
+}
+
+// ---------- music and sounds: Suno on Kie, Lyria on OpenRouter ----------
+
+// a song Suno made, found by its file: its task's id and its take's (an extend, a section, the stems, its WAV… go by
+// them). A file copied elsewhere (a remix's input) is found by its bytes. With voices, a take's voice taken apart (the
+// Singer tool's voice-1.mp3) counts as its take: a persona is made from it
+function sunoOf(file, voices = false) {
+  const take = (job, name) => {
+    const t = job?.suno?.tracks?.find(x => x.file === name || (voices && x.voice === name))
+    return t && { task_id: job.suno.task_id, ...t, job: job.id }
+  }
+  const dir = path.dirname(path.resolve(file)), id = path.basename(dir)
+  if (path.dirname(dir) === at('media') && fs.existsSync(path.join(dir, 'job.json'))) {
+    const hit = take(readJob(id), path.basename(file))
+    if (hit) return hit
+  }
+  const size = fs.statSync(file).size, hash = f => createHash('sha1').update(fs.readFileSync(f)).digest('hex'), mine = hash(file)
+  for (const j of allJobs().filter(j => j.suno?.tracks))
+    for (const t of j.suno.tracks)
+      for (const name of [t.file, voices && t.voice].filter(Boolean)) {
+        const f = path.join(mediaDir(j.id), name)
+        if (fs.existsSync(f) && fs.statSync(f).size === size && hash(f) === mine) return { task_id: j.suno.task_id, ...t, job: j.id }
+      }
+  return null
+}
+// a stem of a Stems job: its task (MIDI is made from it) and the stem's id when Suno gave one by its name
+function stemOf(file) {
+  const dir = path.dirname(path.resolve(file)), job = fs.existsSync(path.join(dir, 'job.json')) ? readJob(path.basename(dir)) : null
+  if (job?.tool !== 'stems' || !job.suno?.task_id) return null
+  // its file is named by Kie after the stem's id and group (<id>_Vocals.mp3, 2026-10-31)
+  const name = path.parse(file).name.toLowerCase(), item = (job.suno.data?.origin_data ?? []).find(x => [x.id, x.stem_type_group_name, x.stem_name].some(k => k && name.includes(String(k).toLowerCase().replace(/\s+/g, '_'))))
+  return { task_id: job.suno.task_id, audio_id: item?.id }
+}
+// a singer of the Library: a persona of a song, or a voice of one's own made a Suno voice
+function singerOf(value) {
+  const name = String(value ?? '').trim().replace(/^@/, '')
+  if (!name) return {}
+  const v = element(name)
+  if (v?.type !== 'singer' || !(v.suno?.persona_id || v.suno?.voice_id)) throw userError(v?.type === 'singer' ? `@${name} sings with Suno once its phrase is recorded (Library › Elements, or elements suno ${name})` : `@${name} is not a singer of the Library: Make a singer from a Suno song, or add one from sung clips (elements add ${name} <clips…> --type singer)`)
+  return v.suno.persona_id ? { persona_id: v.suno.persona_id, persona_model: 'style_persona' } : { persona_id: v.suno.voice_id, persona_model: 'voice_persona' }
+}
+// where a sound sings the most, for Suno's persona (10 to 30 s): its silences found by ffmpeg, the window of 30 s (or
+// all of it) holding the most voice. ponytail: 1 s steps, a song of a few minutes at most
+function sungWindow(file) {
+  const total = probe(file).duration, len = Math.min(30, total)
+  if (total < 10) throw userError(`a singer is made from 10 s of singing at least: ${path.basename(file)} lasts ${total.toFixed(1)} s`)
+  const log = spawnSync('ffmpeg', ['-hide_banner', '-i', file, '-af', 'silencedetect=noise=-35dB:d=0.4', '-f', 'null', '-'], { encoding: 'utf8' }).stderr ?? ''
+  const starts = [...log.matchAll(/silence_start: ([\d.]+)/g)].map(m => +m[1]), ends = [...log.matchAll(/silence_end: ([\d.]+)/g)].map(m => +m[1])
+  const quiet = starts.map((s, i) => [s, ends[i] ?? total])
+  const sung = a => len - quiet.reduce((n, [x, y]) => n + Math.max(0, Math.min(a + len, y) - Math.max(a, x)), 0)
+  let best = 0
+  for (let a = 1; a + len <= total + 1e-6; a++) if (sung(a) > sung(best)) best = a
+  return { start: best, end: Math.round((best + len) * 10) / 10, sung: Math.round(sung(best) * 10) / 10 }
+}
+const seconds = (v, what) => {
+  const n = String(v ?? '').trim() === '' ? undefined : Number(v)
+  if (n !== undefined && !(Number.isFinite(n) && n >= 0)) throw userError(`${what} is a time in seconds`)
+  return n
+}
+// what a music, sound or audio tool asks, checked, in the engine's words (the router names them its own way)
+const CUSTOM_ONLY = ['vocal_gender', 'style_weight', 'weirdness_constraint', 'audio_weight', 'variety']
+function audioRequest(tool, spec, m, options) {
+  const f = spec.fields ?? {}, files = k => spec.inputs?.[k] ?? [], probing = !!spec.probe, action = tool.action
+  const sung = (f.vocals ?? 'sung') !== 'instrumental', words = k => String(f[k] ?? '').trim()
+  const send = (input, attached = {}, opts = options) => ({ send: { model: m.model, action, input, files: attached, options: opts, seed: spec.params?.seed },
+    estimate: { action, type: input.type, text: input.prompt ?? '' } })
+  const clip = files('clip')[0] ?? files('clips')[0]
+  // a song Suno made, for the tools that work on its takes
+  const suno = () => {
+    if (!clip) return probing ? { task_id: 'probe', audio_id: 'probe', duration: 120 } : null
+    const s = sunoOf(clip, action === 'persona')
+    if (!s && !probing) throw userError(`${tool.label} works on a song Suno made here (a Music result, an extend, a cover…): ${path.basename(clip)} is not one`)
+    return s ?? { task_id: 'probe', audio_id: 'probe' }
+  }
+  const limit = (k, n) => { if (words(k).length > n) throw userError(`${k} is ${n} characters at most, this one has ${words(k).length}`) }
+  limit('title', 80); limit('style', 1000); limit('lyrics', 5000); limit('full_lyrics', 5000)
+  const length = num(f.length) || undefined
+  if (length && (length < 10 || length > 360)) throw userError('a length is 10 to 360 s (0: its own)')
+  if (action === 'music') {
+    const describe = (f.mode ?? 'describe') !== 'write', refs = files('references'), vids = files('ref_videos'), sounds = files('ref_audios')
+    if (m.role !== 'music') throw userError(`${m.name} makes no music`)
+    if (m.provider === 'openrouter') {
+      // Lyria: one prompt (the words, or the title, style and lyrics written out), images beside
+      if (vids.length || sounds.length) throw userError(`${m.name} takes images only beside its words: a video or a sound goes to Suno on Kie`)
+      const prompt = describe ? words('description') : [words('title') && `Title: ${words('title')}`, words('style') && `Style: ${words('style')}`, !sung ? 'Instrumental, no vocals.' : words('lyrics') && `Lyrics:\n${words('lyrics')}`].filter(Boolean).join('\n')
+      if (!prompt && !probing) throw userError(describe ? 'describe the song (--field description="…")' : 'give its style or its lyrics (--field style="…", --field lyrics="…")')
+      return { send: { model: m.model, action, input: { prompt: prompt + (describe && !sung ? ' Instrumental, no vocals.' : '') }, files: { references: refs.map(dataUrl) }, options, seed: spec.params?.seed }, estimate: { action } }
+    }
+    if (describe) {
+      if (!probing && !words('description') && !refs.length && !vids.length && !sounds.length) throw userError('describe the song (--field description="…") or give it images, a video or a sound (--in references=…, ref_videos=…, ref_audios=…)')
+      if (words('description').length > 3000) throw userError(`a description is 3,000 characters at most, this one has ${words('description').length}`)
+      if (refs.length > 5 || vids.length > 1 || sounds.length > 1) throw userError('Describe takes 5 images, 1 video and 1 sound at most')
+      for (const s of sounds) { const d = probe(s).duration; if (d < 6) throw userError(`a sound for Suno lasts 6 s at least, ${path.basename(s)} is ${d.toFixed(1)} s`) }
+      const opts = Object.fromEntries(Object.entries(options).filter(([k]) => !CUSTOM_ONLY.includes(k)))
+      return send({ custom_mode: false, instrumental: !sung, prompt: words('description') || undefined, ...(sung ? singerOf(f.singer) : {}) }, { image_urls: refs, video_urls: vids, audio_urls: sounds }, opts)
+    }
+    if (!probing && !words('title')) throw userError('a song written has its title (--field title="…")')
+    if (!probing && !words('style') && !(sung && words('lyrics')) && !options.negative_tags) throw userError('give its style or its lyrics (--field style="…", --field lyrics="…")')
+    return send({ custom_mode: true, instrumental: !sung, title: words('title') || 'Untitled', style: words('style') || undefined, lyrics: sung ? words('lyrics') || undefined : undefined, duration: length, ...(sung ? singerOf(f.singer) : {}) })
+  }
+  // a singer made by AI: a short song sung solo in the voice described (Suno writes its words), each take's voice then
+  // taken apart from the music (Suno's split, runAudio)
+  if (action === 'singer_song') {
+    if (!probing && !words('voice')) throw userError('describe the voice (--field voice="a warm, breathy female pop voice")')
+    if (words('name') && !NAME.test(words('name'))) throw userError('the singer\'s name is letters, digits, - and _ (--field name=nova)')
+    const prompt = `A short song sung solo by ${words('voice') || 'a singer'}${words('style') ? `, ${words('style')}` : ''}. The voice stays in front the whole time, clear and dry, over a sparse accompaniment.`
+    const r = send({ custom_mode: false, instrumental: false, prompt }, {}, Object.fromEntries(Object.entries(options).filter(([k]) => !CUSTOM_ONLY.includes(k))))
+    r.send.action = r.estimate.action = 'music'
+    r.send.then = 'vocals'
+    return r
+  }
+  if (action === 'sounds') {
+    const prompt = String(spec.prompt ?? '').trim()
+    if (!prompt && !probing) throw userError('say what it sounds like (--prompt "…")')
+    if (prompt.length > 500) throw userError(`a sound is described in 500 characters at most, this has ${prompt.length}`)
+    const { sound_tempo, ...rest } = options
+    return send({ prompt: prompt || undefined }, {}, { ...rest, ...(sound_tempo ? { sound_tempo } : {}) })
+  }
+  const from = seconds(f.from, 'From'), source = clip && kindOfFile(clip) === 'audio' ? probe(clip).duration : null
+  // a sound Suno takes whole (not one of its own takes): 6 s at least (Kie's 413, free, 2026-10-31)
+  const whole = ['cover', 'add_vocals', 'add_instrumental', 'mashup'].includes(action) || (action === 'extend' && clip && !sunoOf(clip))
+  for (const s of whole ? [...files('clip'), ...files('clips')] : []) if (probe(s).duration < 6) throw userError(`Suno takes a sound of 6 s at least: ${path.basename(s)} lasts ${probe(s).duration.toFixed(1)} s`)
+  if (from != null && source != null && from > source) throw userError(`From is inside the song: 0 to ${source.toFixed(0)} s`)
+  const lyrics = sung ? words('lyrics') || undefined : undefined, singer = sung ? singerOf(f.singer) : {}
+  if (action === 'extend') {
+    const s = clip && sunoOf(clip), at_ = from ?? Math.floor(source ?? s?.duration ?? 0)
+    const common = { continue_at: at_ || undefined, style: words('style') || undefined, title: words('title') || undefined, lyrics, instrumental: !sung, ...singer }
+    // a take of Suno's goes on by its id, any other sound is sent whole
+    if (s) return send({ audio_id: s.audio_id, ...common })
+    const r = send({ ...common, title: common.title ?? 'Untitled' }, clip ? { upload_url: clip } : {})
+    r.send.action = r.estimate.action = 'upload_extend'
+    return r
+  }
+  if (action === 'cover') {
+    if (!probing && !words('style') && !lyrics) throw userError('say the style it is sung in, or its new words (--field style="…")')
+    return send({ instrumental: !sung, style: words('style') || undefined, lyrics, title: words('title') || 'Cover', ...singer }, clip ? { upload_url: clip } : {})
+  }
+  if (action === 'add_vocals' || action === 'add_instrumental') {
+    if (!probing && (!words('title') || !words('style'))) throw userError(`${tool.label} needs a title and a style (--field title="…" --field style="…")`)
+    if (action === 'add_vocals' && !probing && !words('lyrics')) throw userError('give the words to sing (--field lyrics="…")')
+    // Kie refuses these without words to avoid (« Please enter negativeTags », 2026-10-31): the user's, else a neutral one
+    const { negative_tags = 'noise, distortion', ...rest } = options
+    const input = action === 'add_vocals' ? { title: words('title'), style: words('style'), lyrics: words('lyrics') || undefined, negative_tags } : { title: words('title'), tags: words('style'), negative_tags }
+    return send(input, clip ? { upload_url: clip } : {}, rest)
+  }
+  if (action === 'mashup') {
+    const two = files('clips')
+    if (!probing && two.length !== 2) throw userError(`a mashup takes two songs, this has ${two.length}`)
+    if (!probing && (!words('title') || !words('style'))) throw userError('a mashup needs a title and a style (--field title="…" --field style="…")')
+    return send({ title: words('title') || undefined, style: words('style') || undefined, lyrics: words('lyrics') || undefined, duration: length, ...(words('lyrics') ? singerOf(f.singer) : {}) }, { upload_url_list: two })
+  }
+  if (action === 'midi') {
+    const s = clip ? stemOf(clip) : probing ? { task_id: 'probe' } : null
+    if (!s) throw userError(`MIDI is made from a stem of the Stems tool: ${path.basename(clip ?? '')} is not one`)
+    return send({ task_id: s.task_id, audio_id: s.audio_id })
+  }
+  // the tools on a song Suno made: its section, its stems, its WAV, its timed words, its video, a singer from it
+  const s = suno(), ids = { task_id: s.task_id, audio_id: s.audio_id }
+  if (action === 'replace') {
+    const a = seconds(f.start, 'From'), b = seconds(f.end, 'To')
+    if (!probing && (a == null || b == null)) throw userError('say the part to replace (--field start=30 --field end=45)')
+    if (!probing && b - a < 10) throw userError(`a section lasts 10 s at least, this one ${(b - a).toFixed(1)} s`)
+    if (!probing && s.duration && b > s.duration + 0.5) throw userError(`the song lasts ${Math.round(s.duration)} s`)
+    if (!probing && !words('change')) throw userError('say what changes in it (--field change="…")')
+    return send({ ...ids, prompt: words('change') || undefined, tags: words('style') || s.tags || undefined, title: s.title || 'Untitled', infill_start_s: a, infill_end_s: b,
+      full_lyrics: words('full_lyrics') || s.lyrics || undefined, lyrics: words('lyrics') || undefined, ...singerOf(f.singer) })
+  }
+  if (action === 'stems') {
+    const type = f.split ?? 'separate_vocal'
+    if (!['separate_vocal', 'split_stem', 'split_stem_advanced'].includes(type)) throw userError('split is separate_vocal, split_stem or split_stem_advanced')
+    return send({ ...ids, type, ...(type === 'split_stem_advanced' ? { stem_name: f.instrument || 'Lead Vocal' } : {}) })
+  }
+  if (action === 'video') return send({ ...ids, author: words('author').slice(0, 50) || undefined, domain_name: words('domain_name').slice(0, 50) || undefined })
+  if (action === 'persona') {
+    // where it sings: as asked, else found in the clip (a take's voice alone says it best)
+    const found = !probing && clip && (f.start == null || f.start === '' || f.end == null || f.end === '') ? sungWindow(clip) : null
+    const a = found ? found.start : seconds(f.start, 'From'), b = found ? found.end : seconds(f.end, 'To'), name = words('name')
+    if (!probing && !NAME.test(name)) throw userError('the singer\'s name is letters, digits, - and _ (--field name=Nova)')
+    if (!probing && element(name)) throw userError(`@${name} is in the Library already: another name`)
+    if (!probing && !words('description')) throw userError('describe the voice (--field description="…")')
+    if (!probing && !(b - a >= 10 && b - a <= 30.05)) throw userError(`Suno makes a singer from 10 to 30 s where it sings (--field start=20 --field end=40), this is ${(b - a).toFixed(1)} s`)
+    // its style: the take's, 256 characters at most (Kie's 400 beyond, 2026-11-01), cut at a comma
+    const tags = String(s.tags ?? ''), style = tags.length <= 256 ? tags : tags.slice(0, Math.max(tags.lastIndexOf(',', 256), 0) || 256)
+    return send({ ...ids, name: name || undefined, description: words('description')?.slice(0, 200) || undefined, vocal_start: a, vocal_end: b, style: style || undefined })
+  }
+  return send(ids)
 }
 
 // a video model's own editors, checked: Kling's shots (their seconds its length), the middle frames (Kling 4.0's in
@@ -856,6 +1057,8 @@ function elevenRequest(m, prompt, p, probing) {
 function elevenArgs(tool, spec) {
   const clip = spec.inputs?.clip?.[0]
   if (!clip) throw userError(`${tool.label} needs a clip (--in clip=<file>)`)
+  // the Voice Isolator: the voice alone, a video's back on it
+  if (tool.id === 'isolate-voice') return ['isolate', clip]
   if (tool.id === 'change-voice') {
     let voice = spec.params?.voice ?? spec.fields?.voice
     if (!voice) throw userError('pick the new voice (--voice <voice_id>, media.mjs voices lists them, or --voice @<a voice of the Library>)')
@@ -926,7 +1129,7 @@ async function plan(spec) {
   if (tool.provider === 'elevenlabs') {
     if (probing && !spec.inputs?.clip?.length) return { tool, prompt: '', provider: 'elevenlabs', model: tool.id, estimate: { amount: null, unit: 'credits', known: false, detail: 'per minute of the clip' } }
     const argv = elevenArgs(tool, spec)
-    return { tool, prompt: '', provider: 'elevenlabs', model: argv[0] === 'dub' ? argv[argv.indexOf('--model') + 1] : 'eleven_multilingual_sts_v2', argv, estimate: elevenEstimate(argv) }
+    return { tool, prompt: '', provider: 'elevenlabs', model: { dub: argv[argv.indexOf('--model') + 1], isolate: 'voice_isolator' }[argv[0]] ?? 'eleven_multilingual_sts_v2', argv, estimate: elevenEstimate(argv) }
   }
   if (!prompt && !probing && tool.template && !['upscale'].includes(tool.id) && !spec.params?.dialogue?.length && !spec.params?.shots?.length && !spec.params?.draft_of) throw userError('write a prompt (--prompt "…"), or fill the tool\'s fields (--field key=value)')
   // the user's words are optional beside a tool's own prompt, the whole prompt of Custom and Custom edit
@@ -938,7 +1141,7 @@ async function plan(spec) {
   const m = id ? await modelOf(spec.kind, id) : all.find(x => x.role !== 'edit' && x.role !== 'upscale' && x.role !== 'avatar')
   if (lines.length && !m.params.audio) throw userError(`${m.name} makes no sound: its lines need a model with sound`)
   if (lines.some(l => l.voice) && !m.params.named_voices) throw userError(`${m.name} takes no voice of its own for a line: Kling 4.0 on Kie does`)
-  // a voice of the Library (--voice @name) on a router's model: its clips are cloned, its words say how it sounds
+  // a voice of the Library (--voice @name) on a model that clones: its clips are cloned, its words say how it sounds
   // (ElevenLabs takes it whole, by its id)
   if (spec.kind === 'audio' && m.provider !== 'elevenlabs' && String(spec.params?.voice ?? '').startsWith('@')) {
     const v = element(spec.params.voice.slice(1)), { voice, ...params } = spec.params
@@ -958,7 +1161,7 @@ async function plan(spec) {
   }
   if (named?.elements.length || named?.voices.length) { prompt = named.text; refs.splice(0, cited) }
   // a model that takes one image of its subject (Wan 2.2 Animate Replace, no prompt): each cited Element's main view
-  if (m.params.element_views === 1 && cited) refs.splice(0, cited, ...[...new Set([...filled.matchAll(/@([\w-]+)/g)].map(x => x[1]))].map(element).filter(el => el && el.type !== 'voice' && el.files.length).map(el => el.files[0]))
+  if (m.params.element_views === 1 && cited) refs.splice(0, cited, ...[...new Set([...filled.matchAll(/@([\w-]+)/g)].map(x => x[1]))].map(element).filter(el => el && !heard(el.type) && el.files.length).map(el => el.files[0]))
   // voices of their own (Kling 4.0), each a clip and the name the words cite it by (@Narrator), beside the Library's
   const fileVoices = (spec.inputs?.ref_voices ?? []).map((f, i) => ({ name: String(spec.params?.voice_names?.[i] || path.parse(f).name.replace(/^\d+-/, '')).replace(/[^\w]/g, '_').slice(0, 20), file: f }))
   if (fileVoices.length && !m.params.named_voices) throw userError(`${m.name} takes no voice of its own: Kling 4.0 on Kie does`)
@@ -970,6 +1173,20 @@ async function plan(spec) {
     throw userError(`${tool.label} on Aleph 2 takes a keyframe: --frame <seconds> makes it from the video, then --in keyframe=<it> --frame <seconds>`)
   // the tool's price before its keyframe: its Elements' images will go to the keyframe, not to Aleph
   if (probing && tool.keyframe && m.model === ALEPH) refs.splice(0)
+  // Lip sync on a model that starts from an image (a talking head): the video's frame at --frame (its first by default);
+  // on one that remakes a shot (Seedance 2.0): the video and the voice as its references, as long as the voice
+  if (tool.id === 'lip-sync' && spec.inputs?.video?.length && m.role !== 'edit') {
+    const video = spec.inputs.video[0], voice = spec.inputs.audio ?? [], at_ = +(spec.params?.frame ?? 0)
+    if (!(at_ >= 0 && at_ <= probe(video).duration)) throw userError(`--frame is a time in the video: 0 to ${probe(video).duration.toFixed(1)} s`)
+    spec = m.role === 'avatar' ? { ...spec, inputs: { first_frame: [frameAt(video, at_)], audio: voice } }
+      : { ...spec, inputs: { ref_videos: [video], ref_audios: voice }, params: { ...spec.params, duration: voice[0] ? Math.round(probe(voice[0]).duration) : undefined } }
+  }
+  // a model that takes a reference sound or frames, not both (Seedance on Kie: « mutually exclusive », 2026-10-31): the
+  // image a sound drives goes as a reference, its ratio kept
+  if (spec.kind === 'video' && m.params.sound_or_frames && spec.inputs?.audio?.length && spec.inputs?.first_frame?.length) {
+    const { first_frame, ...rest } = spec.inputs
+    spec = { ...spec, inputs: { ...rest, references: [...(rest.references ?? []), ...first_frame] }, params: { ...spec.params, aspect_ratio: spec.params?.aspect_ratio ?? ratioOf(m.params.aspect_ratio, first_frame[0]) } }
+  }
   let request
   try {
     // extend: the source's last frame starts the new shot (sequel), or its first frame ends it (prequel)
@@ -996,8 +1213,15 @@ async function plan(spec) {
   if (voices.length) request.send.voices = voices.map(v => ({ name: v.name, file: dataUrl(v.file) }))
   const { provider } = routerOf(m.id)
   const estimate = provider.estimate(routerKind(spec.kind), m, request.estimate)
+  // the Singer tool: the song, then each of its 2 takes' voice taken apart
+  if (request.send.then === 'vocals') {
+    const split = provider.estimate('speech', await modelOf('audio', 'suno/stems'), { action: 'stems', type: 'separate_vocal' })
+    Object.assign(estimate, estimate.amount != null && split.amount != null
+      ? { amount: Math.round((estimate.amount + 2 * split.amount) * 1e4) / 1e4, credits: estimate.credits != null && split.credits != null ? estimate.credits + 2 * split.credits : undefined, detail: `the song (${estimate.detail}) + its 2 voices taken apart (${split.detail} each)` }
+      : { amount: null, known: false, detail: 'Kie\'s price list not read yet' })
+  }
   // a voice priced before its text (the tool list's price): by its characters, none to count yet
-  if (probing && spec.kind === 'audio' && !request.estimate?.text) Object.assign(estimate, { amount: null, known: false, detail: 'per character of its text' })
+  if (probing && m.role === 'speech' && !request.estimate?.text) Object.assign(estimate, { amount: null, known: false, detail: 'per character of its text' })
   // a draft's final: priced at the model's rate, said unknown (Kie lists no price of its own for it)
   if (request.send.draft_of) Object.assign(estimate, { known: false, detail: `Kie lists no price for a draft's final: about ${estimate.credits ?? '?'} credits at its 1080p rate` })
   return { tool, prompt, provider: m.provider, model: m.model, name: m.name, request, estimate }
@@ -1170,6 +1394,85 @@ async function matchFirst(dir, job) {
   }
 }
 
+// a song, a sound, its extras: its files saved by what they are (Suno's takes out-1 and out-2, their covers, a stem by
+// its name), Suno's ids kept with the job for what follows from it; its words written beside (lyrics.txt, a timed
+// lyrics.srt); a singer goes to the Library
+async function runAudio(dir, job, request, provider) {
+  progress(job, `${job.label.toLowerCase()} with ${job.name}…`)
+  const r = await provider.audio(request, { progress: m => progress(job, m) })
+  const names = new Map()
+  job.outputs = []
+  for (const f of r.files) {
+    if (!f.data && !f.url) continue
+    const ext = f.ext ?? (path.extname(new URL(f.url).pathname).slice(1).toLowerCase() || 'mp3')
+    let name = `${f.name}.${ext}`
+    fs.writeFileSync(path.join(dir, name), f.data ?? await provider.download(f.url))
+    // raw PCM (16-bit, 24 kHz) made an MP3
+    if (ext === 'pcm') (ffmpeg(['-f', 's16le', '-ar', '24000', '-ac', '1', '-i', path.join(dir, name), '-b:a', '192k', path.join(dir, `${f.name}.mp3`)]), fs.rmSync(path.join(dir, name)), (name = `${f.name}.mp3`))
+    names.set(f.name, name)
+    job.outputs.push(name)
+  }
+  // the sound first, its covers after
+  job.outputs.sort((a, b) => (kindOfFile(a) === 'image') - (kindOfFile(b) === 'image'))
+  if (r.task_id) job.suno = { task_id: r.task_id, tracks: r.tracks?.map(t => ({ ...t, file: names.get(t.file) ?? t.file })) ?? null, data: r.data ?? null }
+  // the Singer tool: each take's voice taken apart (Suno's split: voice-1.mp3 beside out-1.mp3), the music dropped; a
+  // take whose split fails keeps its song and says why
+  let more = 0
+  if (request.then === 'vocals') {
+    const split = await modelOf('audio', 'suno/stems'), failed = []
+    for (const [i, t] of (job.suno?.tracks ?? []).entries()) {
+      try {
+        progress(job, `taking the voice of take ${i + 1} apart…`)
+        const s = await provider.audio({ model: split.model, action: 'stems', input: { task_id: job.suno.task_id, audio_id: t.audio_id, type: 'separate_vocal' } }, { progress: m => progress(job, m) })
+        const v = s.files.find(f => /vocal/i.test(f.name) && !/instrumental/i.test(f.name)) ?? s.files[0]
+        if (!v) throw new Error('no voice came back')
+        const name = `voice-${i + 1}.mp3`
+        fs.writeFileSync(path.join(dir, name), v.data ?? await provider.download(v.url))
+        Object.assign(t, { voice: name })
+        job.outputs.splice(job.outputs.indexOf(t.file) + 1, 0, name)
+        more += s.cost ?? 0
+      } catch (e) { failed.push(`take ${i + 1}: ${e.message}`) }
+    }
+    if (failed.length) job.note = `its voice could not be taken apart (${failed.join('; ')})`
+  }
+  const said = [...new Set(r.tracks?.map(t => t.lyrics).filter(Boolean) ?? [])]
+  if (r.data?.lyrics) said.push(r.data.lyrics)
+  if (said.length) (fs.writeFileSync(path.join(dir, 'lyrics.txt'), said.join('\n\n---\n\n') + '\n'), job.outputs.push('lyrics.txt'))
+  // the words with their times: as Suno gives them (lyrics.json) and as captions (lyrics.srt)
+  if (request.action === 'timings') {
+    const words = [r.data?.aligned_words, r.data?.alignedWords, r.data?.data?.aligned_words].find(Array.isArray) ?? []
+    writeJson(path.join(dir, 'lyrics.json'), r.data ?? {})
+    const t = s => new Date(Math.max(0, +s || 0) * 1000).toISOString().slice(11, 23).replace('.', ',')
+    const lines = words.map(w => ({ text: String(w.word ?? w.text ?? '').trim(), a: w.start_s ?? w.startS, b: w.end_s ?? w.endS })).filter(w => w.text)
+    fs.writeFileSync(path.join(dir, 'lyrics.srt'), lines.map((w, i) => `${i + 1}\n${t(w.a)} --> ${t(w.b)}\n${w.text}\n`).join('\n'))
+    job.outputs = ['lyrics.srt', 'lyrics.json']
+  }
+  // a singer of the Library: the part where it sings alone, and its persona
+  if (request.action === 'persona') {
+    const id = [r.data?.personaId, r.data?.persona_id, r.data?.id].find(x => typeof x === 'string')
+    if (!id) throw new Error(`Suno gave no persona id: ${JSON.stringify(r.data).slice(0, 200)}`)
+    // its clip: where it sings (as asked, or as found), from the clip given (a take's voice alone, or the take)
+    const src = path.join(dir, job.spec.inputs.clip[0]), clip = path.join(dir, 'singer.mp3'), { name, description } = job.spec.fields
+    ffmpeg(['-ss', String(request.input.vocal_start), '-to', String(request.input.vocal_end), '-i', src, '-b:a', '192k', clip])
+    saveElement(name, { type: 'singer', words: description, files: [clip], workspace: job.workspaces?.[0] })
+    const f = at('elements', name, 'element.json')
+    writeJson(f, { ...readJson(f), suno: { persona_id: id } })
+    // its picture: its song's cover (out-2.mp3's is cover-2.jpeg)
+    const take = sunoOf(src, true), n = take?.file.match(/^out-(\d+)\./)?.[1]
+    const cover = n && readJob(take.job).outputs.find(o => o.startsWith(`cover-${n}.`))
+    if (cover) fs.copyFileSync(path.join(mediaDir(take.job), cover), at('elements', name, 'cover.jpg'))
+    // kept with the job too: the singer can be made again from it
+    job.suno = { task_id: null, tracks: null, data: { persona_id: id } }
+    job.outputs = ['singer.mp3']
+    job.element = name
+  }
+  // its data alone (a stem's MIDI: its notes)
+  if (!job.outputs.length && r.data && Object.keys(r.data).length) (writeJson(path.join(dir, 'notes.json'), r.data), job.outputs.push('notes.json'))
+  if (!job.outputs.length) throw new Error(`${job.name} made no file: ${JSON.stringify(r.data ?? {}).slice(0, 200)}`)
+  const cost = r.cost ?? (r.generation ? await provider.generationCost(r.generation) : null)
+  if (cost != null) Object.assign(job, { actual: Math.round((cost + more) * 1e4) / 1e4, actual_known: true })
+}
+
 async function runRouter(dir, job, request) {
   const { provider } = routerOf(`${job.provider}:${job.model}`)
   if (job.kind === 'image') {
@@ -1194,6 +1497,7 @@ async function runRouter(dir, job, request) {
     }
     return
   }
+  if (job.kind === 'audio' && request.action) return runAudio(dir, job, request, provider)
   if (job.kind === 'audio') {
     // ElevenLabs: a voice of the Library not on the account yet goes there first (its paid plans), its id kept with it
     if (job.provider === 'elevenlabs') {
@@ -1361,8 +1665,9 @@ function runEleven(dir, job, argv) {
     progress(job, `putting ${argv[v + 1]} on ElevenLabs…`)
     argv = argv.with(v + 1, voiceToEleven(argv[v + 1].slice(1)).voice_id)
   }
-  progress(job, argv[0] === 'dub' ? 'dubbing with ElevenLabs…' : 'changing the voice with ElevenLabs…')
-  const clip = path.join(dir, job.spec.inputs.clip[0]), out = argv[0] === 'dub' ? dir : path.join(dir, `out${path.extname(clip)}`)
+  progress(job, { dub: 'dubbing with ElevenLabs…', isolate: 'isolating the voice with ElevenLabs…' }[argv[0]] ?? 'changing the voice with ElevenLabs…')
+  // a sound comes back as an MP3 (a video's sound as the video, its voice alone)
+  const clip = path.join(dir, job.spec.inputs.clip[0]), out = argv[0] === 'dub' ? dir : path.join(dir, `out${kindOfFile(clip) === 'audio' ? '.mp3' : path.extname(clip)}`)
   const r = videoMjs([argv[0], clip, ...argv.slice(2), '--out', out, '--spend', String(job.estimate.amount)])
   if (!process.env.MEDIA_GENERATOR_QUIET) process.stdout.write(r.stdout)
   if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim().split('\n').pop().replace(/^error: /, ''))
@@ -1494,6 +1799,64 @@ function jobs(id) {
   if (!list.length) console.log('no generation yet')
 }
 
+// Suno's help with the words (Kie): lyrics written from a theme (2 versions) or a style written out richer. Priced and in
+// the ledger like a generation; the dashboard's click is the yes, the CLI's --spend
+async function assist(what, text, gateOpts) {
+  if (!['lyrics', 'boost'].includes(what)) throw userError('assist writes lyrics or boosts a style')
+  if (active() !== 'kie') throw userError('Write lyrics and Boost style are Suno\'s, on Kie: switch the router in Settings')
+  const t = String(text ?? '').trim()
+  if (!t) throw userError(what === 'lyrics' ? 'say what the song is about' : 'write a style first')
+  if (what === 'lyrics' && t.length > 200) throw userError(`a theme is 200 characters at most, this one has ${t.length}`)
+  const m = await modelOf('audio', 'suno/extras'), label = what === 'lyrics' ? 'Write lyrics' : 'Boost style'
+  const estimate = PROVIDERS.kie.estimate('speech', m, { action: what })
+  if (gateOpts.estimate) return { estimate, shown: money(estimate.amount, estimate.unit) }
+  gate({ provider: 'kie', estimate }, gateOpts)
+  const id = newId(what === 'lyrics' ? 'write-lyrics' : 'boost-style'), line = { id, kind: 'audio', tool: what === 'lyrics' ? 'write-lyrics' : 'boost-style', label, provider: 'kie', model: m.model, unit: 'usd', estimate: estimate.amount, by: gateOpts.by }
+  try {
+    const r = await PROVIDERS.kie.audio({ model: m.model, action: what, input: what === 'lyrics' ? { prompt: t } : { content: t } })
+    // the versions Suno wrote, or the style it gave back (its key is not documented: the longest text of its answer)
+    const texts = what === 'lyrics' ? (r.data?.lyricsData ?? r.data?.data ?? []).map(x => ({ title: x.title ?? '', text: x.text ?? '' })).filter(x => x.text)
+      : [r.texts?.[0] ?? Object.values(r.data ?? {}).filter(v => typeof v === 'string').sort((a, b) => b.length - a.length)[0]].filter(Boolean).map(text => ({ title: '', text }))
+    appendLedger(HOME, { ...line, actual: r.cost ?? estimate.amount, actual_known: r.cost != null, status: 'done' })
+    if (!texts.length) throw new Error(`Suno wrote nothing: ${JSON.stringify(r.data).slice(0, 200)}`)
+    return { texts, cost: r.cost }
+  } catch (e) {
+    if (!/^Suno wrote nothing/.test(e.message)) appendLedger(HOME, { ...line, actual: 0, actual_known: false, status: 'failed' })
+    throw e
+  }
+}
+
+// a singer of the Library made a Suno voice (free): Suno gives a phrase to sing in it, from the part where it sings
+// (--start, --end, --language); its recording (--verify) proves it is the same voice, then Suno makes it a voice
+async function sunoVoice(name, { start, end, language, verify } = {}) {
+  const v = element(name)
+  if (v?.type !== 'singer' || !v.files.length) throw userError(`no singer @${name} in the Library: add its sung clips (elements add ${name} <clips…> --type singer)`)
+  if (active() !== 'kie') throw userError('a Suno voice is made on Kie: switch the router in Settings')
+  const f = at('elements', name, 'element.json'), meta = () => (fs.existsSync(f) ? readJson(f) : {})
+  if (!verify) {
+    // where it sings: as asked, else found (30 s holding the most voice), else all of a short clip
+    const long = probe(v.files[0]).duration, found = start == null && end == null && long >= 10 ? sungWindow(v.files[0]) : null
+    const a = found?.start ?? seconds(start, 'start') ?? 0, b = found?.end ?? seconds(end, 'end') ?? Math.min(long, a + 30)
+    if (b <= a || b > long + 0.05) throw userError(`the part it sings is inside its first clip: 0 to ${long.toFixed(1)} s`)
+    const r = await PROVIDERS.kie.audio({ model: 'suno/extras', action: 'phrase', input: { vocal_start_s: a, vocal_end_s: b, ...(language ? { language } : {}) }, files: { voice_url: v.files[0] } })
+    const phrase = [r.data?.phrase, r.data?.validationPhrase, r.data?.validation_phrase, r.data?.text].find(x => typeof x === 'string')
+    if (!phrase) throw userError(`Suno gave no phrase: ${JSON.stringify(r.data).slice(0, 200)}`)
+    writeJson(f, { ...meta(), suno: { ...meta().suno, pending: { task_id: r.task_id, phrase } } })
+    return { phrase, task_id: r.task_id }
+  }
+  const pending = meta().suno?.pending
+  if (!pending) throw userError(`ask @${name}'s phrase first (elements suno ${name} --start <s> --end <s>)`)
+  if (!fs.existsSync(verify)) throw userError(`no such file: ${verify}`)
+  // a recording from the browser (webm) becomes an MP3 first
+  let file = path.resolve(verify)
+  if (/\.webm$/i.test(file)) { const mp3 = file.replace(/\.webm$/i, '.mp3'); ffmpeg(['-i', file, '-b:a', '192k', mp3]); file = mp3 }
+  const r = await PROVIDERS.kie.audio({ model: 'suno/extras', action: 'voice', input: { task_id: pending.task_id, voice_name: name, ...(v.words ? { description: v.words.slice(0, 200) } : {}) }, files: { verify_url: file } })
+  const id = [r.data?.voiceId, r.data?.voice_id, r.data?.personaId, r.data?.id].find(x => typeof x === 'string')
+  if (!id) throw userError(`Suno made no voice: ${JSON.stringify(r.data).slice(0, 200)}`)
+  writeJson(f, { ...meta(), suno: { voice_id: id } })
+  return element(name)
+}
+
 async function balances() {
   const out = {}
   for (const [name, p] of Object.entries(PROVIDERS)) out[name] = p.key() ? await p.balance().catch(e => ({ error: e.message })) : { error: 'no key' }
@@ -1546,17 +1909,20 @@ function setup(sub, ...rest) {
   for (const [sec, o] of Object.entries(s)) console.log(`${sec}: ${Object.entries(o).map(([k, v]) => `${k} ${v ?? 'not set'}`).join(' · ')}`)
 }
 
-// elements [add|set <name> [<files…>] | show <name> | remove <name> | elevenlabs <name>]: the characters, outfits,
+// elements [add|set <name> [<files…>] | show <name> | remove <name> | elevenlabs <name> | suno <name>]: the characters, outfits,
 // objects, places, poses, brands and voices of the Library. add makes one or adds to it, set changes one; both take
 // --type, --words, --colors "#hex,#hex" and --font (a brand), --from <generation> (its results) and --drop <file>
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
-function elements(sub, name, ...files) {
-  const usage = `usage: elements [add|set <name> [<files…>] [--type ${TYPES.join('|')}] [--words "…"] [--colors "#hex,#hex"] [--font "…"] [--voice @<voice>] [--from <generation>] [--drop <file>] [--workspace <slug>|none] | show <name> | remove <name> | elevenlabs <name>]`
+async function elements(sub, name, ...files) {
+  const usage = `usage: elements [add|set <name> [<files…>] [--type ${TYPES.join('|')}] [--words "…"] [--colors "#hex,#hex"] [--font "…"] [--voice @<voice>] [--from <generation>] [--drop <file>] [--workspace <slug>|none] | suno <name> [--start <s> --end <s> --language <code> | --verify <recording>] | show <name> | remove <name> | elevenlabs <name>]`
   try {
     if (sub === 'add' || sub === 'set') {
       if (sub === 'set' && !element(name)) throw userError(`no Element @${name}: elements add ${name} <files…>`)
       saveElement(name, { type: opt.type, words: opt.words, colors: opt.colors?.split(/[,\s]+/).filter(Boolean), font: opt.font, voice: opt.voice, files: files.map(f => path.resolve(f)), from: opt.from, drop: opt.drop,
         workspace: opt.workspace === 'none' ? null : opt.workspace })
+    } else if (sub === 'suno') {
+      const r = await sunoVoice(name, { start: opt.start, end: opt.end, language: opt.language, verify: opt.verify })
+      return console.log(r.phrase ? `sing or say this in the same voice, record it, then: elements suno ${name} --verify <recording>\n${r.phrase}` : `@${name} is a Suno singer: Music's Singer field takes it (--field singer=@${name})`)
     } else if (sub === 'show') {
       const el = element(name)
       if (!el) throw userError(`no Element @${name}`)
@@ -1566,7 +1932,7 @@ function elements(sub, name, ...files) {
     else if (sub) die(usage)
   } catch (e) { die(e.message) }
   const list = elementList()
-  for (const el of list) console.log(`@${el.name}: ${el.type}, ${plural(el.files.length, el.type === 'voice' ? 'clip' : 'image')}${el.colors.length ? ` · ${el.colors.join(' ')}` : ''}${el.words ? ` · ${el.words}` : ''}${el.voice ? ` · speaks as @${el.voice}` : ''}${el.voice_id ? ` · ElevenLabs ${el.voice_id}` : ''}`)
+  for (const el of list) console.log(`@${el.name}: ${el.type}, ${plural(el.files.length, heard(el.type) ? 'clip' : 'image')}${el.colors.length ? ` · ${el.colors.join(' ')}` : ''}${el.words ? ` · ${el.words}` : ''}${el.voice ? ` · speaks as @${el.voice}` : ''}${el.voice_id ? ` · ElevenLabs ${el.voice_id}` : ''}`)
   if (!list.length) console.log('no element yet: elements add <name> <images…> --type character')
 }
 
@@ -1647,7 +2013,7 @@ function doctor() {
   console.log(process.env.OPENROUTER_MANAGEMENT_KEY ? 'openrouter management key: set (the account\'s balance)' : 'openrouter management key: not set (the key\'s own limit only)')
   console.log(process.env.KIE_API_KEY ? 'kie: key set' : 'kie: no key (the default router; OpenRouter is used while only its key is set)')
   console.log(`active router: ${PROVIDERS[active()].label}${PROVIDERS[active()].key() ? '' : ', without its key: nothing can be generated'}`)
-  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Voice and dialogues straight from ElevenLabs, change voice, translate)' : 'elevenlabs: no key, no voice change or translation')
+  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Voice and dialogues straight from ElevenLabs, change voice, translate)' : 'elevenlabs: no key, no voice change or translation (the routers\' ElevenLabs voices stay)')
   const s = settings()
   console.log(`limits: ${['openrouter', 'kie', 'elevenlabs'].map(p => `${p} threshold ${s[p].threshold ?? 'none'}, cap ${s[p].cap ?? 'none'}`).join(' · ')}`)
   console.log(`folder: ${HOME}`)
@@ -1709,7 +2075,7 @@ function mediaList() {
 
 let balanceCache = { at: 0, value: null }
 
-// the fake APIs a dev or test server was started on ($OPENROUTER_BASE, $ELEVENLABS_BASE): the header's toggle turns
+// the fake APIs a dev or test server was started on ($OPENROUTER_BASE, $ELEVENLABS_BASE, $KIE_BASE…): the header's toggle turns
 // them off (the real APIs, with the server's keys) and on again, for this server and the runs it starts
 const FAKE = Object.fromEntries(['OPENROUTER_BASE', 'ELEVENLABS_BASE', 'KIE_BASE', 'KIE_UPLOAD_BASE', 'KIE_DOCS'].filter(k => process.env[k]).map(k => [k, process.env[k]]))
 const fakeState = () => ({ on: Object.keys(FAKE).some(k => process.env[k]), bases: Object.values(FAKE) })
@@ -1821,6 +2187,35 @@ async function handle(req, res) {
     else if (action === 'delete') { fs.mkdirSync(at('.trash'), { recursive: true }); fs.renameSync(dir, at('.trash', id)) }
     else return reply(res, 404, { error: 'unknown action' })
     return reply(res, 200, { ok: true })
+  }
+  // Suno's help with the words, and a singer of the Library made a Suno voice
+  if (p === '/api/assist' && post) {
+    const { what, text, confirm } = await readBody(req)
+    try { return reply(res, 200, await assist(what, text, { by: 'dashboard', confirm })) } catch (e) { return reply(res, e.code === 2 ? 409 : 400, { error: e.message, ...(e.code === 2 ? { needs: e.reason, shown: e.shown } : {}) }) }
+  }
+  // where a sound sings the most (Make a singer's window)
+  if (p === '/api/sung' && post) {
+    const { path: file } = await readBody(req), src = file && inside(HOME, file)
+    if (!src) return reply(res, 403, { error: 'outside the folder' })
+    try { return reply(res, 200, { ...sungWindow(src), duration: probe(src).duration }) } catch (e) { return reply(res, 400, { error: e.message }) }
+  }
+  // recordings cleaned before they make an Element (a singer of one's own): each an Isolate voice job of the Library,
+  // run here and waited for; the threshold asks first (409)
+  if (p === '/api/clean' && post) {
+    const { paths = [], confirm } = await readBody(req), files = paths.map(f => inside(HOME, f)).filter(Boolean), out = []
+    try {
+      for (const f of files) {
+        const [job] = await create({ kind: 'audio', tool: 'isolate-voice', inputs: { clip: [f] } }, { by: 'dashboard', confirm })
+        const done = await run(job.id)
+        if (done.status !== 'done') throw userError(`${path.basename(f)}: ${done.error}`)
+        out.push(path.join(mediaDir(done.id), done.outputs[0]))
+      }
+      return reply(res, 200, { paths: out })
+    } catch (e) { return reply(res, e.code === 2 ? 409 : 400, { error: e.message, needs: e.reason, shown: e.shown }) }
+  }
+  if (p === '/api/elements/suno' && post) {
+    const { name, start, end, language, verify } = await readBody(req)
+    try { return reply(res, 200, await sunoVoice(name, { start, end, language, verify: verify && inside(HOME, verify) })) } catch (e) { return reply(res, 400, { error: e.message }) }
   }
   if (p === '/api/settings' && post) {
     const body = await readBody(req), s = settings()
@@ -2007,6 +2402,8 @@ const commands = {
   models: () => cmdModels(args[0]), tools: () => cmdTools(args[0]),
   image: () => generate('image'), video: () => generate('video'), audio: () => generate('audio'),
   run: async () => { const j = await run(args[0]); console.log(`${j.status}: ${j.outputs.join(', ') || j.error}`) },
+  // Suno's help with the words: lyrics from a theme, a style written out richer (priced: --estimate, then --spend)
+  lyrics: () => cliAssist('lyrics'), boost: () => cliAssist('boost'),
   // ElevenLabs' voices of the account, and a clone of a voice from recordings: video-editor's engine does it
   voices: () => relay(['voices', ...args, ...(opt.json ? ['--json'] : [])]), 'voice-clone': () => relay(['voice-clone', ...args]),
 }
@@ -2015,6 +2412,13 @@ function relay(argv) {
   process.stdout.write(r.stdout)
   process.stderr.write(r.stderr)
   process.exit(r.status ?? 1)
+}
+async function cliAssist(what) {
+  try {
+    const r = await assist(what, opt.prompt ?? args.join(' '), { by: 'claude', spend: num(opt.spend), estimate: opt.estimate })
+    if (r.shown) return console.log(JSON.stringify(r))
+    for (const [i, x] of r.texts.entries()) console.log(`${r.texts.length > 1 ? `--- version ${i + 1}${x.title ? `: ${x.title}` : ''}\n` : ''}${x.text}`)
+  } catch (e) { die(e.message, e.code === 2 ? 2 : 1) }
 }
 if (!commands[cmd]) die(`usage: media.mjs <${Object.keys(commands).join(' | ')}>`)
 await commands[cmd]()

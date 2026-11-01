@@ -7,6 +7,7 @@ import path from 'node:path'
 import { estimateImage, estimateSpeech, estimateVideo } from '../lib/cost.js'
 import { retry429, retryAfter } from '../lib/limit.js'
 import { OPTIONS, resolveOptions, SKIP } from '../lib/options.js'
+import { voiceInfo } from '../lib/voices.js'
 
 const base = () => (process.env.OPENROUTER_BASE ?? 'https://openrouter.ai/api/v1').replace(/\/$/, '')
 
@@ -77,7 +78,7 @@ async function fetchCatalog(hand) {
   })
   const [image, video, speech] = await Promise.all(['/images/models', '/videos/models', '/models?output_modalities=speech'].map(get))
   // ElevenLabs is reached straight: never one of OpenRouter's catalog
-  const known = kind => new Set(hand[kind].map(m => m.id)), fresh = (kind, data) => data.filter(m => !known(kind).has(m.id) && !m.id.startsWith('elevenlabs/'))
+  const known = kind => new Set(hand[kind].map(m => m.id)), fresh = (kind, data) => data.filter(m => !known(kind).has(m.id))
   const images = await Promise.all(fresh('image', image.data).map(async m => NORMALIZE.image(m, (await get(`/images/models/${m.id}/endpoints`).catch(() => null))?.endpoints ?? [])))
   // a new video model with settings of its own: its provider's slug, which they go under
   const videos = await Promise.all(fresh('video', video.data).map(async m => NORMALIZE.video(m.allowed_passthrough_parameters?.length ? { ...m, slug: (await get(`/models/${m.id}/endpoints`).catch(() => null))?.data?.endpoints?.[0]?.tag } : m)))
@@ -150,7 +151,8 @@ export default {
         ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, n: { min: 1, max: m.max_images }, references: m.references, seed: m.seed, quality: m.quality, background: m.background, options: resolveOptions(m.options) }
         : kind === 'video'
           ? { resolution: m.resolutions, aspect_ratio: m.aspect_ratios, duration: m.durations, frames: m.frames, references: m.references, audio: m.sound, seed: m.seed, creativity: !!m.upscale?.creativity, factor: !!m.upscale, min_pixels: m.min_pixels, options: resolveOptions(m.options) }
-          : { voices: m.voices },
+          // a voice (ElevenLabs' with their samples), or a song (Lyria)
+          : { voices: m.voices ?? null, voice_info: voiceInfo(m.voices), seed: !!m.seed, options: resolveOptions(m.options) },
       pricing: kind === 'image' ? m.pricing.map(pricing => ({ pricing })) : m.pricing,
     }))
   },
@@ -158,6 +160,8 @@ export default {
   estimate(kind, m, req) {
     if (kind === 'image') return estimateImage(m.model, m.pricing, req)
     if (kind === 'video') return estimateVideo(m.pricing, req)
+    // a song or a clip at its price (Lyria: per request, as OpenRouter's description says)
+    if (m.role === 'music') return { amount: m.pricing.request, unit: 'usd', known: true, detail: `$${m.pricing.request} a ${m.model.includes('clip') ? '30 s clip' : 'song'}` }
     return estimateSpeech(m.model, m.pricing, req.text)
   },
 
@@ -171,9 +175,13 @@ export default {
   // videos are jobs: the id to poll (and to continue with previous_job_id)
   async video({ model, prompt, frames = {}, refs = [], keyframes, options, ...params }) {
     // the provider's own settings and Aleph's keyframes go under its slug (GET /models/<id>/endpoints: its tag)
-    const slug = [...list().video, ...(catalog?.video ?? [])].find(m => m.id === model)?.slug ?? 'runway', own = { ...options, ...(keyframes ? { keyframes } : {}) }
+    const entry = [...list().video, ...(catalog?.video ?? [])].find(m => m.id === model), slug = entry?.slug ?? 'runway', own = { ...options, ...(keyframes ? { keyframes } : {}) }
+    // a model that takes its sound as its provider's own parameter (Wan 2.7's audio: OpenRouter refuses it as a
+    // reference, 2026-10-31)
+    const sound = entry?.audio_param && refs.find(r => r.kind === 'audio')
+    if (sound) own[entry.audio_param] = sound.url
     const frame_images = Object.entries(frames).filter(([, url]) => url).map(([frame_type, url]) => ({ type: 'image_url', image_url: { url }, frame_type }))
-    const input_references = refs.map(({ kind, url }) => ({ type: `${kind}_url`, [`${kind}_url`]: { url } }))
+    const input_references = refs.filter(r => r !== sound).map(({ kind, url }) => ({ type: `${kind}_url`, [`${kind}_url`]: { url } }))
     const body = { model, ...(prompt ? { prompt } : {}), ...params, ...(frame_images.length ? { frame_images } : {}), ...(input_references.length ? { input_references } : {}),
       // a provider's own parameters (GET /videos/models: allowed_passthrough_parameters) go under its slug: Aleph 2's
       // keyframes reach Runway only there (at the top level they were dropped, 2026-10-31)
@@ -204,6 +212,37 @@ export default {
     return { data: Buffer.from(await r.arrayBuffer()), format, rate: +type.match(/rate=(\d+)/)?.[1] || 24000, channels: +type.match(/channels=(\d+)/)?.[1] || 1,
       generation: r.headers.get('x-generation-id') }
   },
+  // a song (Lyria): chat completions with audio out, which only streams; its words come as the transcript beside.
+  // Images go with the words as inspiration
+  async audio({ model, input = {}, files = {}, options = {}, seed }) {
+    const images = [files.references ?? []].flat()
+    const content = [{ type: 'text', text: input.prompt }, ...images.map(url => ({ type: 'image_url', image_url: { url } }))]
+    const r = await api('/chat/completions', { method: 'POST', body: JSON.stringify({ model, messages: [{ role: 'user', content }], modalities: ['text', 'audio'],
+      audio: { format: 'mp3' }, stream: true, ...(seed != null ? { seed } : {}), ...options }) })
+    const chunks = [], words = []
+    let generation = null, format = 'mp3', buf = ''
+    const take = line => {
+      if (!line.startsWith('data:')) return
+      const s = line.slice(5).trim()
+      if (!s || s === '[DONE]') return
+      const j = JSON.parse(s), a = j.choices?.[0]?.delta?.audio
+      generation ??= j.id ?? null
+      if (a?.data) chunks.push(Buffer.from(a.data, 'base64'))
+      if (a?.transcript) words.push(a.transcript)
+      if (a?.format) format = a.format
+      if (j.choices?.[0]?.delta?.content) words.push(j.choices[0].delta.content)
+    }
+    for await (const part of r.body) {
+      buf += Buffer.from(part).toString('utf8')
+      const lines = buf.split('\n')
+      buf = lines.pop()
+      lines.forEach(take)
+    }
+    take(buf)
+    if (!chunks.length) throw new Error(`${model} sent no audio`)
+    return { files: [{ data: Buffer.concat(chunks), name: 'out', ext: format === 'pcm16' ? 'pcm' : format }], data: { lyrics: words.join('') }, tracks: null, generation }
+  },
+
   // the generation's stats answer 404 for 10 to 15 s after the speech
   async generationCost(id) {
     for (let i = 0; i < 15; i++) {

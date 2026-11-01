@@ -4,10 +4,10 @@ import { cn } from "cn"
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command"
 import { InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
-import { cited, ELEMENT_TYPES, fileUrl, typeLabel, type Mentionable } from "@/lib/api"
+import { cited, ELEMENT_TYPES, fileUrl, heard, typeLabel, type Mentionable } from "@/lib/api"
 
 // the picker's groups, in the Library's order (a voice is picked as Audio's voice)
-const GROUPS = ELEMENT_TYPES.filter((t) => t.type !== "voice").map((t) => ({ type: t.type, heading: t.plural }))
+const GROUPS = ELEMENT_TYPES.filter((t) => !heard(t.type)).map((t) => ({ type: t.type, heading: t.plural }))
 
 // the @ just typed before the caret, and what follows it
 const typing = (el: HTMLTextAreaElement) => {

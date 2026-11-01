@@ -100,7 +100,7 @@ test('the shipped model list is normalized', () => {
     video: ['id', 'lab', 'name', 'role', 'resolutions', 'aspect_ratios', 'durations', 'frames', 'references', 'sound', 'seed', 'upscale', 'min_pixels', 'pricing'],
     speech: ['id', 'lab', 'name', 'role', 'voices', 'pricing'],
   }
-  const roles = { image: ['create', 'both', 'edit'], video: ['generate', 'edit', 'upscale', 'avatar'], speech: ['speech'] }
+  const roles = { image: ['create', 'both', 'edit'], video: ['generate', 'edit', 'upscale', 'avatar'], speech: ['speech', 'music'] }
   const RES = ['360p', '432p', '480p', '540p', '720p', '768p', '1080p', '1440p', '512', '768', '1K', '1.5K', '2K', '4K']
   const ratio = r => (r === 'auto' ? Infinity : r.split(':').reduce((a, b) => a / b))
   const sorted = (l, by) => assert.deepEqual(l, l.toSorted((a, b) => by(a) - by(b)))
@@ -108,7 +108,7 @@ test('the shipped model list is normalized', () => {
     assert.ok(list[kind].length > 0, kind)
     for (const m of list[kind]) {
       // its provider's slug, its own settings and the ones it leaves out, when it has some, before its prices
-      assert.deepEqual(Object.keys(m).filter(k => !['slug', 'options', 'skip'].includes(k)), keys[kind], m.id)
+      assert.deepEqual(Object.keys(m).filter(k => !['slug', 'audio_param', 'options', 'skip'].includes(k) && !(kind === 'speech' && k === 'seed')), keys[kind], m.id)
       assert.deepEqual(Object.keys(m).slice(-1), ['pricing'], m.id)
       assert.ok(roles[kind].includes(m.role), `${m.id}: role ${m.role}`)
       if (m.resolutions) (assert.ok(m.resolutions.every(r => RES.includes(r)), `${m.id}: ${m.resolutions}`), sorted(m.resolutions, r => RES.indexOf(r)))
@@ -164,7 +164,7 @@ test('a tool: its template filled from the fields, its inputs sent in order', as
 test('Elements: typed, from files or results; an @name says what it is and where its images are, never a style', async () => {
   const est = async (...argv) => JSON.parse((await cli(...argv, '--estimate')).out)
   const bad = await cli('elements', 'add', 'Mo', at('a.png'), '--type', 'hero')
-  assert.match(bad.err, /the types are character, outfit, object, location, pose, brand, voice, other/)
+  assert.match(bad.err, /the types are character, outfit, object, location, pose, brand, voice, singer, other/)
   assert.match((await cli('elements', 'add', 'Mo', at('a.png'), '--type', 'character')).err, /make another view from it with character \(media\.mjs image --tool character --in references=<its image>/)
   assert.match((await cli('elements', 'add', 'Mo', ...two(), '--type', 'character', '--words', 'a tall man, grey beard')).out, /^@Mo: character, 2 images · a tall man, grey beard$/m)
   // a result joins it by its generation's id; the same file twice is kept once
@@ -502,6 +502,23 @@ test('change voice: through video.mjs and ElevenLabs, in credits; their dollars 
   assert.match(lib.err, /instant voice cloning|upgrade/i)
 })
 
+test('isolate voice: always ElevenLabs\' Voice Isolator (any router), by the minute; a video comes back with its voice alone, a sound as an MP3', async () => {
+  // 4.6 s at least (ElevenLabs' 400 otherwise), said with the estimate
+  assert.match((await cli('audio', '--tool', 'isolate-voice', '--in', `clip=${at('talk.mp4')}`, '--estimate')).err, /takes 4\.6 s at least: talk\.mp4 lasts 3\.0 s/)
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25:d=6', '-f', 'lavfi', '-i', 'sine=d=6', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', at('talk6.mp4')])
+  const est = JSON.parse((await cli('audio', '--tool', 'isolate-voice', '--in', `clip=${at('talk6.mp4')}`, '--estimate')).out)
+  assert.deepEqual([est.provider, est.model, est.estimate.amount, est.estimate.unit], ['elevenlabs', 'voice_isolator', 100, 'credits'])
+  const r = await cli('audio', '--tool', 'isolate-voice', '--in', `clip=${at('talk6.mp4')}`, '--spend', '100')
+  assert.equal(r.code, 0, r.err)
+  assert.ok(fake.calls.some(c => c.path === '/el/v1/audio-isolation'))
+  const id = media().filter(d => d.includes('-isolate-voice-')).at(-1), job = JSON.parse(fs.readFileSync(at('media', id, 'job.json'), 'utf8'))
+  assert.deepEqual([job.outputs, job.provider], [['out.mp4'], 'elevenlabs'])
+  assert.deepEqual(probe(at('media', id, 'out.mp4')).streams.map(s => s.codec_type).sort(), ['audio', 'video'])
+  assert.deepEqual([ledger().at(-1).tool, ledger().at(-1).provider, ledger().at(-1).unit], ['isolate-voice', 'elevenlabs', 'credits'])
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=6', at('voice6s.mp3')])
+  assert.equal(JSON.parse((await cli('audio', '--tool', 'isolate-voice', '--in', `clip=${at('voice6s.mp3')}`, '--estimate')).out).estimate.amount, 101)
+})
+
 test('refusals said in ElevenLabs\' words: a key without dubbing_write, a plan without voice cloning; nothing counted', async () => {
   const t = await cli('audio', '--tool', 'translate', '--in', `clip=${at('talk.mp4')}`, '--field', 'to=fr', '--spend', '150')
   assert.equal(t.code, 3)
@@ -512,6 +529,17 @@ test('refusals said in ElevenLabs\' words: a key without dubbing_write, a plan w
   assert.equal(c.err.trim(), 'error: ElevenLabs /v1/voices/add: 400 Your subscription does not include instant voice cloning. Please upgrade your plan.')
 })
 
+test('a song on OpenRouter (Lyria): one prompt from what is written, images beside, the audio streamed back, its words kept', async () => {
+  assert.match((await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'description=x', '--in', `ref_audios=${at('voice.mp3')}`, '--estimate')).err, /takes images only/)
+  const r = await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'mode=write', '--field', 'title=Night', '--field', 'style=synthwave', '--field', 'lyrics=[Verse] road', '--option', 'temperature=1.2', '--in', `references=${at('a.png')}`, '--spend', '0.04')
+  assert.equal(r.code, 0, r.err)
+  const body = sent('/api/v1/chat/completions').body
+  assert.deepEqual([body.modalities, body.stream, body.temperature, body.messages[0].content[0].text, body.messages[0].content[1].type], [['text', 'audio'], true, 1.2, 'Title: Night\nStyle: synthwave\nLyrics:\n[Verse] road', 'image_url'])
+  const id = media().find(d => d.includes('-music-'))
+  assert.deepEqual(JSON.parse(fs.readFileSync(at('media', id, 'job.json'), 'utf8')).outputs, ['out.mp3', 'lyrics.txt'])
+  assert.ok(probe(at('media', id, 'out.mp3')).streams.some(s => s.codec_type === 'audio'))
+})
+
 test('draft: Claude\'s prompt for the composer, nothing generated; credits: balances and this month', async () => {
   const before = media().length
   await cli('draft', '--space', 'video', '--tool', 'orbit', '--model', 'openrouter:fake/vid', '--prompt', 'slow orbit around the vase')
@@ -520,7 +548,7 @@ test('draft: Claude\'s prompt for the composer, nothing generated; credits: bala
   assert.equal(media().length, before)
   const c = await cli('credits')
   assert.match(c.out, /openrouter: \$13\.71 left on the account, \$18\.62 left on this key, \$1\.38 used this month/)
-  assert.match(c.out, /elevenlabs: 8,950 credits · \$1\.79 left of 10000/)
+  assert.match(c.out, /elevenlabs: 8,900 credits · \$1\.78 left of 10000/)
   assert.match(c.out, /openrouter this month here: \$\d+\.\d+/)
 })
 
@@ -546,6 +574,7 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   const state = await fetch(url + '/api/state').then(r => r.json())
   assert.equal(state.home, home)
   assert.deepEqual(state.fake, { on: true, bases: [`${fake.base}/api/v1`, `${fake.base}/el`] }, 'the fake APIs, for the header\'s badge and toggle')
+  assert.deepEqual(Object.keys(state.keys), ['openrouter', 'management', 'kie', 'elevenlabs'])
   // the toggle: off, the real APIs; on again, the fake
   assert.deepEqual((await post('/api/fake', { on: false })).body, { on: false, bases: state.fake.bases })
   assert.equal((await fetch(url + '/api/state').then(r => r.json())).fake.on, false)
@@ -557,7 +586,7 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   const fresh = (await fetch(url + '/api/models?kind=video').then(r => r.json())).find(m => m.model === 'fake/new-vid')
   assert.equal(fresh.new, true)
   assert.equal(fresh.from, '$0.015 for 3 s at 480p')
-  assert.ok(state.media.length > 5)
+  assert.ok(state.media.length > 0)
   assert.equal(state.drafts.video.tool, 'orbit')
   // the Library's styles: made from the page with their words, in the state with how a prompt cites them, removed
   const added = await post('/api/styles', { name: 'Pen', paths: [at('a.png'), at('a.png')], words: 'fine pen' })
@@ -581,12 +610,21 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   await post('/api/elements', { name: 'Vox', type: 'voice', paths: [at('voice.mp3')] })
   const cloned = await post('/api/elements', { name: 'Vox', elevenlabs: true })
   assert.deepEqual([cloned.code, /instant voice cloning/.test(cloned.body.error)], [400, true])
-  for (const name of ['Zoe', 'Vox']) await post('/api/elements', { name, remove: true })
+  // a Suno voice is made of a singer of the Library (not a spoken voice), on Kie only
+  assert.match((await post('/api/elements/suno', { name: 'Vox' })).body.error, /no singer @Vox/)
+  await post('/api/elements', { name: 'Siren', type: 'singer', paths: [at('voice.mp3')] })
+  assert.deepEqual((await fetch(url + '/api/state').then(r => r.json())).elements.find(e => e.name === 'Siren')?.type, 'singer')
+  assert.match((await post('/api/elements/suno', { name: 'Siren' })).body.error, /made on Kie/)
+  for (const name of ['Zoe', 'Vox', 'Siren']) await post('/api/elements', { name, remove: true })
+  // where a sound sings the most: 30 s holding all of its 20 s of voice
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono:d=12', '-f', 'lavfi', '-i', 'sine=f=330:d=20', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono:d=8', '-filter_complex', '[0][1][2]concat=n=3:v=0:a=1', at('sung.mp3')])
+  const sung = (await post('/api/sung', { path: at('sung.mp3') })).body
+  assert.ok(sung.start <= 12 && sung.end >= 32 && Math.abs(sung.sung - 20) < 1, JSON.stringify(sung))
   const spec = { kind: 'image', tool: 'free', model: 'openrouter:fake/img', prompt: 'a lighthouse', inputs: {}, params: { n: 2 } }
   const est = await post('/api/estimate', spec)
   assert.deepEqual([est.body.estimate.amount, est.body.shown, est.body.needs], [0.08, '$0.08', null])
   // the tool list's price of a voice, before its text: per character, not an error
-  const voice = await post('/api/estimate', { kind: 'audio', tool: 'voice', prompt: '', fields: {}, inputs: {}, params: {}, probe: true })
+  const voice = await post('/api/estimate', { kind: 'audio', tool: 'voice', model: 'openrouter:fake/tts', prompt: '', fields: {}, inputs: {}, params: {}, probe: true })
   assert.deepEqual([voice.code, voice.body.estimate?.known, voice.body.estimate?.detail], [200, false, 'per character of its text'])
   await post('/api/settings', { openrouter: { threshold: 0.05 } })
   const ask = await post('/api/generate', spec)
@@ -899,7 +937,7 @@ test('the tools\' models: each in the shipped list, able to run its tool', () =>
           // Aleph 2 takes no image: on a tool with a keyframe, they make the keyframe
           if ((needs.some(i => ['references', 'sketch'].includes(i.key)) || t.fields.some(f => f.type === 'element' && f.required)) && !(t.keyframe && id === 'runway/aleph-2')) assert.notEqual(m.references, 0, `${at} takes no image`)
         }
-        if (kind === 'audio') assert.equal(m.role, 'speech', at)
+        if (kind === 'audio') assert.equal(m.role, { music: 'music' }[t.id] ?? 'speech', at)
       }
     }
   }

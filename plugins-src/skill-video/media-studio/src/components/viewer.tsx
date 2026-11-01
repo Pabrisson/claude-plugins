@@ -1,17 +1,18 @@
 import { useContext, useEffect, useState } from "react"
-import { AudioLinesIcon, ChevronLeftIcon, ChevronRightIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, FolderKanbanIcon, StarIcon, Trash2Icon } from "lucide-react"
+import { AudioLinesIcon, CaptionsIcon, ChevronLeftIcon, ChevronRightIcon, ClapperboardIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, FileAudioIcon, FolderKanbanIcon, PianoIcon, StarIcon, Trash2Icon, UserRoundPlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job, type Line, type Shot } from "@/lib/api"
+import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job, type Line, type Shot, type Spec } from "@/lib/api"
 import { Label } from "@/components/chips"
 import { Thumb, Workspaces } from "@/components/inputs"
 import { ModelLogo } from "@/components/model-logo"
-import { BRIDGES, costOf, DeleteDialog, REMIX, SEND, sendToEdit, type Bridge, FINAL, isDraft } from "@/components/results"
+import { BRIDGES, costOf, DeleteDialog, REMIX, SEND, sendToEdit, SONG, type Bridge, FINAL, isDraft } from "@/components/results"
 import { CompareDialog } from "@/components/compare"
 
 // the settings a result was made with, in words
@@ -41,9 +42,34 @@ const HINTS: Record<string, string> = {
   Extend: "Continue the shot",
   Upscale: "Sharper and larger",
   "Talking avatar": "A face speaks it",
+  "Speech to video": "An image speaks or sings it",
+  "Extend music": "It goes on, in its style",
+  Cover: "The same melody, another style",
+  Stems: "Its voice and instruments apart",
   "Send to edit": "A rush in video-editor",
   "Add to timeline": "After the last shot of the current workspace",
 }
+// who made it: the router, ElevenLabs straight or this machine
+const MADE_BY: Record<string, string> = { kie: "Kie.ai", openrouter: "OpenRouter", local: "This machine", elevenlabs: "ElevenLabs" }
+// a Suno song's extras (Kie), each a small job of its own: its WAV, its words with their times, a music video, a stem's
+// notes; a singer from it asks its name and where it sings alone
+const EXTRAS = [
+  { tool: "wav", label: "WAV", icon: FileAudioIcon, hint: "The song as a WAV file" },
+  { tool: "lyrics-timings", label: "Lyrics with timings", icon: CaptionsIcon, hint: "Each sung word with its time: captions" },
+  { tool: "music-video", label: "Music video", icon: ClapperboardIcon, hint: "An MP4 with its cover and a visualizer" },
+]
+async function runExtra(spec: Spec, label: string, confirm = false) {
+  try {
+    await api.generate(spec, confirm)
+    toast.success(`${label} started`, { description: "It lands in Audio's results." })
+  } catch (e) {
+    const err = e as Error & { status?: number; body?: { shown?: string } }
+    if (err.status === 409) toast(`${label}: ${err.body?.shown ?? "a cost"} to confirm`, { action: { label: "Go on", onClick: () => runExtra(spec, label, true) } })
+    else toast.error(plain(err.message))
+  }
+}
+const extraSpec = (tool: string, file: string, fields: Record<string, string> = {}): Spec => ({ kind: "audio", tool, prompt: "", fields, inputs: { clip: [file] }, params: {} })
+
 const bytes = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`)
 const span = (a?: string, b?: string) => {
   const s = a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 1000) : NaN
@@ -116,6 +142,25 @@ function Body({
   const facts = (file && known[file]) || {}
   const setFacts = (patch: (typeof known)[string]) => file && setKnown((all) => ({ ...all, [file]: { ...all[file], ...patch } }))
   const k = file ? mediaKind(file) : null
+  // a song's cover beside its take (Suno: cover-1 for out-1), a text file read as it is (lyrics, captions, notes)
+  const name = job.outputs[out] ?? "", cover = job.outputs.find((o) => mediaKind(o) === "image" && o.replace(/^cover-/, "").split(".")[0] === name.replace(/^out-/, "").split(".")[0] && /^cover-/.test(o))
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    if (!file || k !== "other") return
+    fetch(fileUrl(file)).then((r) => r.text()).then(setText, () => setText(null))
+  }, [file, k])
+  const take = job.suno?.tracks?.some((t) => t.file === name)
+  // a take's voice taken apart (the Singer tool's voice-1.mp3): a singer is made from it
+  const voiceOnly = job.suno?.tracks?.some((t) => t.voice === name)
+  const [singer, setSinger] = useState<{ name: string; description: string; start: string; end: string } | null>(null)
+  // Make a singer: its name and voice as the Singer tool was told, where it sings the most found by the engine
+  const openSinger = () => {
+    setSinger({ name: String(job.fields?.name ?? ""), description: String(job.fields?.voice ?? ""), start: "", end: "" })
+    api.sung(file!).then(
+      (w) => setSinger((s) => (s && !s.start && !s.end ? { ...s, start: String(w.start), end: String(w.end) } : s)),
+      (e) => toast.error(plain(e.message))
+    )
+  }
   const failed = job.status === "failed"
   useEffect(() => {
     if (!file) return
@@ -137,12 +182,19 @@ function Body({
     ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) }]),
     ...(isDraft(job) ? [{ ...FINAL, hint: "In 1080p, from this draft (Kie lists no price for it)", run: () => onBridge("final", file ?? "") }] : []),
     // already on the current workspace's timeline: its place there instead of « Add to timeline »
-    ...(failed || !k ? [] : (BRIDGES[k] ?? []).map((x) => (x.b === "timeline" && ws.shots[file!] ? { ...x, label: `${ws.shots[file!]} on the timeline`, hint: "Show it in the timeline", run: () => onBridge("shot", file!) } : { ...x, run: () => onBridge(x.b, file!) }))),
+    // Make a voice only on speech (a song makes a singer instead)
+    ...(failed || !k ? [] : (BRIDGES[k] ?? []).filter((x) => !(k === "audio" && x.b === "element" && !["voice", "change-voice", "isolate-voice", "translate", "import"].includes(job.tool))).map((x) => (x.b === "timeline" && ws.shots[file!] ? { ...x, label: `${ws.shots[file!]} on the timeline`, hint: "Show it in the timeline", run: () => onBridge("shot", file!) } : { ...x, run: () => onBridge(x.b, file!) }))),
     ...(failed || !file ? [] : [{ ...SEND, run: () => sendToEdit(file) }]),
+    // a sound's music tools (Kie), Stems on a song Suno made; a take's extras; a stem's notes
+    ...(failed || k !== "audio" || job.provider !== "kie" ? [] : SONG.filter((x) => !x.suno || take).map((x) => ({ ...x, run: () => onBridge(x.b, file!) }))),
+    ...(failed || !take ? [] : [...EXTRAS.map((x) => ({ ...x, run: () => runExtra(extraSpec(x.tool, file!), x.label) })), { label: "Make a singer", icon: UserRoundPlusIcon, hint: "Its voice and style in the Library, for Music", run: openSinger }]),
+    ...(failed || !voiceOnly ? [] : [{ label: "Make a singer", icon: UserRoundPlusIcon, hint: "This voice in the Library, for Music's Singer", run: openSinger }]),
+    ...(failed || job.tool !== "stems" || k !== "audio" ? [] : [{ label: "MIDI", icon: PianoIcon, hint: "This stem's notes", run: () => runExtra(extraSpec("midi", file!), "MIDI") }]),
   ]
   const ext = file?.split(".").pop()?.toUpperCase()
   const stats = [
     { label: "Cost", value: costOf(job, per1000), cost: job.provider !== "local" && !failed },
+    { label: "Router", value: MADE_BY[job.provider] ?? job.provider },
     facts.w ? { label: k === "video" ? "Frame" : "Size", value: `${facts.w} × ${facts.h}` } : null,
     facts.length ? { label: "Length", value: `${facts.length.toFixed(1)} s` } : null,
     ext ? { label: "File", value: `${ext}${facts.size ? ` · ${bytes(facts.size)}` : ""}` } : null,
@@ -192,9 +244,11 @@ function Body({
               onError={() => setFacts({ unplayable: true })}
               className="max-h-full max-w-full rounded-lg bg-[repeating-conic-gradient(#222_0_25%,#2c2c2c_0_50%)] bg-size-[24px_24px]"
             />
+          ) : k === "other" ? (
+            <pre className="max-h-full w-full max-w-2xl overflow-auto rounded-lg bg-white/5 p-5 text-sm leading-relaxed whitespace-pre-wrap text-white/85">{text ?? "…"}</pre>
           ) : k === "audio" ? (
             <div className="flex w-full max-w-lg flex-col items-center gap-6">
-              <AudioLinesIcon className="size-16 text-aud" aria-hidden />
+              {cover ? <img src={fileUrl(outputPath(home, job, cover))} alt="" className="size-56 rounded-xl object-cover shadow-lg" /> : <AudioLinesIcon className="size-16 text-aud" aria-hidden />}
               <audio src={fileUrl(file!)} controls autoPlay onLoadedMetadata={(e) => setFacts({ length: e.currentTarget.duration })} className="w-full" />
             </div>
           ) : null}
@@ -211,7 +265,7 @@ function Body({
                 onClick={() => setOut(n)}
                 className={cn("size-14 overflow-hidden rounded-md opacity-60 ring-2 ring-transparent transition hover:opacity-100", n === out && "opacity-100 ring-white")}
               >
-                {/\.mov$/i.test(o) ? <span className="grid size-full place-items-center bg-white/10 text-[11px] font-semibold text-white">MOV</span> : <Thumb path={outputPath(home, job, o)} />}
+                {/\.(mov|txt|srt|json)$/i.test(o) ? <span className="grid size-full place-items-center bg-white/10 text-[11px] font-semibold text-white">{o.split(".").pop()!.toUpperCase()}</span> : <Thumb path={outputPath(home, job, o)} />}
               </button>
             ))}
           </div>
@@ -409,6 +463,43 @@ function Body({
           )}
         </div>
         <DeleteDialog job={job} open={confirm} onOpenChange={setConfirm} onDeleted={onDeleted} />
+        <Dialog open={!!singer} onOpenChange={(o) => !o && setSinger(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogTitle>Make a singer</DialogTitle>
+            <DialogDescription>Suno keeps this {voiceOnly ? "voice" : "song's voice and style"} as a singer of the Library: the Singer field of Music, Extend, Cover, Mashup and Replace section takes it. Free.</DialogDescription>
+            {singer && (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <Label>Name</Label>
+                  <Input value={singer.name} placeholder="Nova" onChange={(e) => setSinger({ ...singer, name: e.target.value.replace(/[^\w-]/g, "") })} />
+                </div>
+                <div>
+                  <Label>Described</Label>
+                  <Input value={singer.description} placeholder="a warm, breathy female pop voice" onChange={(e) => setSinger({ ...singer, description: e.target.value })} />
+                </div>
+                <div>
+                  <Label hint="10 to 30 s where it sings, found for you">Sung from</Label>
+                  <div className="flex items-center gap-2">
+                    <Input className="w-24" inputMode="decimal" value={singer.start} placeholder="…" onChange={(e) => setSinger({ ...singer, start: e.target.value })} aria-label="From (s)" />
+                    <span className="text-sm text-muted-foreground">to</span>
+                    <Input className="w-24" inputMode="decimal" value={singer.end} placeholder="…" onChange={(e) => setSinger({ ...singer, end: e.target.value })} aria-label="To (s)" />
+                  </div>
+                  {/* that part, to hear before keeping it */}
+                  {singer.start && singer.end && <audio key={`${singer.start}-${singer.end}`} controls src={`${fileUrl(file!)}#t=${singer.start},${singer.end}`} className="mt-2 h-9 w-full" />}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setSinger(null)}>Cancel</Button>
+                  <Button
+                    disabled={!singer.name || !singer.description || !singer.start || !singer.end}
+                    onClick={() => (runExtra(extraSpec("singer", file!, singer), "Make a singer"), setSinger(null))}
+                  >
+                    Make it
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
         {file && <CompareDialog open={comparing} onOpenChange={setComparing} origin={job} file={file} jobs={jobs} home={home} per1000={per1000} />}
       </aside>
     </>

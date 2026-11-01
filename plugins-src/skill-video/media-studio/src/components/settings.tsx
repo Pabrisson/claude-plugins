@@ -22,7 +22,7 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 const PROVIDERS = [
   { id: "kie", name: "Kie.ai", unit: "usd", what: "Images, videos and voices, its credits counted" },
   { id: "openrouter", name: "OpenRouter", unit: "usd", what: "Images, videos and voices" },
-  { id: "elevenlabs", name: "ElevenLabs", unit: "credits", what: "Change voice and Translate" },
+  { id: "elevenlabs", name: "ElevenLabs", unit: "credits", what: "Voices straight from it, Change voice and Translate" },
 ] as const
 // the routers, one active at a time (Kie by default): what each is, and its rate limit (OpenRouter's docs; Kie's docs and a probe,
 // 2026-10-31)
@@ -160,7 +160,7 @@ export function SettingsPage({ state, models, onSaved, onModels }: { state: Stat
     { set: state.keys.kie, name: "Kie.ai key", about: "Every image, video and voice model while Kie.ai is the router, and its credits left." },
     { set: state.keys.openrouter, name: "OpenRouter key", about: "Every image, video and voice model while OpenRouter is the router. Without it, prices show and nothing can be generated." },
     { set: state.keys.management, name: "OpenRouter management key", about: "Optional: the account's whole balance in the header, not only this key's." },
-    { set: state.keys.elevenlabs, name: "ElevenLabs key", about: "Change voice and Translate, and the credits left." },
+    { set: state.keys.elevenlabs, name: "ElevenLabs key", about: "Voice straight from ElevenLabs (Eleven v4…), Change voice and Translate, and the credits left. Without it, the router's ElevenLabs voices." },
   ]
   const nav = [
     { id: "spending", icon: WalletIcon, title: "Spending", status: noLimits ? "No limit set" : "Limits set", warn: noLimits },

@@ -508,16 +508,18 @@ gives its current lines.
 - **Everything stays on the machine.** The studio server listens on 127.0.0.1 only. Do not upload the user's
   footage anywhere. The only exception is ElevenLabs, for what the user turned on in `source/elevenlabs.json`:
   Scribe v2 gets the source's sound, the voice-over the text of `source/voice.txt`, the music and the effects their
-  prompts; `voice-change` and `dub` the file they are given.
+  prompts; `voice-change`, `dub` and `isolate` the file they are given.
 - **Git.** `init` writes the projects folder's `.gitignore` when it has none: git keeps the rushes, the clips, the
   music and the effects (`.sound/`, `assets/`), and leaves out only what the engine makes again (`.cache/`, `output/`,
   `stills/`, `frames/`, `assets/source.wav`, `assets/mix.wav`) and manual backups (`.backup/`). `doctor` warns when a `.gitignore` would leave out one of them.
 - **One studio per projects folder.** `studio` reuses this folder's server, or starts one on the first free port from
   41187: other folders' studios keep running side by side. Give the user the URL it prints.
-- **Voice change and dubbing, on any file.** `voice-change <file> --voice <voice_id>` keeps the delivery in another
-  voice, `voice-clone <name> <recordings…>` makes a voice from the user's recordings, and `dub <file> --to <lang>,…`
-  dubs into other languages in the speakers' voices, with subtitles and no lip-sync. They work outside a project
-  (media-generator uses them), always through ElevenLabs: about 1,000 credits a minute for a voice change, 3,000 a
+- **Voice change, dubbing and voice isolation, on any file.** `voice-change <file> --voice <voice_id>` keeps the
+  delivery in another voice, `voice-clone <name> <recordings…>` makes a voice from the user's recordings, `dub <file>
+  --to <lang>,…` dubs into other languages in the speakers' voices, with subtitles and no lip-sync, and `isolate <file>`
+  keeps the voice alone (music, noise and room out; a video comes back with it). They work outside a project
+  (media-generator uses them), always through ElevenLabs: about 1,000 credits a minute for a voice change or an
+  isolation, 3,000 a
   minute per language to dub (13,500 with `--model dubbing_v2`). Without `--spend <credits>` they stop with exit
   code 2 and the estimate: give it to the user (`credits` adds what the account has left), then run again with
   `--spend`. A video in another language than the style's can be dubbed first, then edited as a rush.

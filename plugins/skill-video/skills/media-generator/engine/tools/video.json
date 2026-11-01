@@ -350,6 +350,19 @@
     "kie": { "models": ["kwaivgi/kling-ai-avatar-pro", "bytedance/omnihuman-1.5", "bytedance/omnihuman-2.0"], "also": ["kwaivgi/kling-ai-avatar-standard", "meigen-ai/infinitalk", "alibaba/wan-2.7"] }
   },
   {
+    "id": "speech-to-video", "label": "Speech to video", "group": "Characters", "mode": "create", "icon": "audio-waveform",
+    "description": "An image moves to a voice or a song: whoever is in it speaks or sings, the scene follows the sound, as long as it lasts.",
+    "inputs": [
+      { "key": "first_frame", "kind": "image", "label": "Image" },
+      { "key": "audio", "kind": "audio", "label": "Voice or song" }
+    ],
+    "fields": [],
+    "template": "Whoever is in the image speaks or sings the audio, the scene moving with it. {prompt}",
+    "models": ["alibaba/wan-2.7"], "also": ["heygen/avatar-iv"],
+    "why": { "bytedance/seedance-2.0": "The sound as a reference beside its first frame, 4 to 15 s, up to 4K", "alibaba/wan-2.7": "A voice drives its first frame, up to 1080p" },
+    "kie": { "models": ["alibaba/wan-2.2-s2v-turbo", "bytedance/seedance-2.0", "alibaba/wan-2.7"], "also": ["meigen-ai/infinitalk", "kwaivgi/kling-ai-avatar-pro", "kwaivgi/kling-ai-avatar-standard", "bytedance/omnihuman-1.5", "bytedance/omnihuman-2.0"] }
+  },
+  {
     "id": "free-edit", "label": "Custom edit", "group": "Custom", "mode": "edit", "icon": "wand",
     "description": "Changes what you describe in a video, the rest stays. Draw on a frame to point at it.",
     "inputs": [
@@ -558,10 +571,10 @@
     "description": "Someone who speaks in a video says a new voice: the lips follow it, the video lasts as long as the voice. On Kie.ai.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }, { "key": "audio", "kind": "audio", "label": "Voice" }],
     "fields": [],
-    "template": "",
+    "template": "The person speaks the audio with natural lip-sync, the same look, place and framing. {prompt}",
     "routers": ["kie"],
     "models": [],
-    "kie": { "models": ["volcengine/video-to-video-lip-sync"] }
+    "kie": { "models": ["volcengine/video-to-video-lip-sync"], "also": ["bytedance/seedance-2.0", "kwaivgi/kling-ai-avatar-pro", "kwaivgi/kling-ai-avatar-standard", "meigen-ai/infinitalk", "bytedance/omnihuman-1.5", "bytedance/omnihuman-2.0"] }
   },
   {
     "id": "remove-background", "label": "Remove background", "group": "Retouch", "mode": "edit", "icon": "scissors",

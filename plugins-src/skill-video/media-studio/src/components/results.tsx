@@ -1,32 +1,17 @@
 import { useContext, useRef, useState } from "react"
-import {
-  AudioLinesIcon,
-  BookmarkPlusIcon,
-  FastForwardIcon,
-  ListVideoIcon,
-  LoaderCircleIcon,
-  MaximizeIcon,
-  MessageCircleIcon,
-  PauseIcon,
-  PlayIcon,
-  RefreshCwIcon,
-  ScissorsIcon,
-  StarIcon,
-  Trash2Icon,
-  TriangleAlertIcon,
-  type LucideIcon, SparklesIcon } from "lucide-react"
+import { ArrowRightToLineIcon, AudioLinesIcon, AudioWaveformIcon, BookmarkPlusIcon, Disc3Icon, FastForwardIcon, LayersIcon, ListVideoIcon, LoaderCircleIcon, MaximizeIcon, MessageCircleIcon, PauseIcon, PlayIcon, RefreshCwIcon, ScissorsIcon, SparklesIcon, StarIcon, Trash2Icon, TriangleAlertIcon, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { api, elapsed, fileUrl, inputPath, mediaKind, money, outputPath, plain, type Job } from "@/lib/api"
+import { api, coverOf, elapsed, fileUrl, inputPath, mediaKind, money, outputPath, plain, type Job } from "@/lib/api"
 import { Viewer } from "@/components/viewer"
 import { Workspaces } from "@/components/inputs"
 
 // timeline: laid on the current workspace's timeline; shot: shown there, where it already is
-export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar" | "element" | "timeline" | "shot" | "final"
+export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar" | "s2v" | "extend-music" | "cover" | "stems" | "element" | "timeline" | "shot" | "final"
 
 // what a result leads to, by its medium: the next tool with it as input, or the current workspace's timeline
 const TIMELINE = { b: "timeline" as const, label: "Add to timeline", icon: ListVideoIcon }
@@ -43,10 +28,17 @@ export const BRIDGES: Record<string, { b: Bridge; label: string; icon: LucideIco
   ],
   audio: [
     { b: "avatar", label: "Talking avatar", icon: MessageCircleIcon },
+    { b: "s2v", label: "Speech to video", icon: AudioWaveformIcon },
     { b: "element", label: "Make a voice", icon: BookmarkPlusIcon },
     TIMELINE,
   ],
 }
+// a song's own next steps (Kie: Suno's tools take any sound, Stems only the songs Suno made)
+export const SONG: { b: Bridge; label: string; icon: LucideIcon; suno?: boolean }[] = [
+  { b: "extend-music", label: "Extend music", icon: ArrowRightToLineIcon },
+  { b: "cover", label: "Cover", icon: Disc3Icon },
+  { b: "stems", label: "Stems", icon: LayersIcon, suno: true },
+]
 // an action a page adds to its tiles (a workspace's « Remove from workspace »)
 export type Extra = { label: string; icon: LucideIcon; run: (job: Job) => void }
 export const REMIX = { label: "Remix", icon: RefreshCwIcon }
@@ -117,14 +109,17 @@ function Pending({ job, home, per1000 }: { job: Job; home: string; per1000: numb
   )
 }
 
-// a voice: its words, and a play button on the tile itself
+// a sound: its words (on its cover when it has one), and a play button on the tile itself
 function AudioFace({ job, file }: { job: Job; file: string }) {
   const [playing, setPlaying] = useState(false)
   const audio = useRef<HTMLAudioElement>(null)
+  const own = coverOf(job, file), cover = own && file.replace(/[^/]+$/, own), pictured = !!cover
   return (
     <>
-      <div className="flex size-full items-center gap-3 bg-linear-to-br from-aud/20 to-aud/5 py-4 pr-5 pl-16">
-        <p className="line-clamp-4 text-[15px] leading-snug text-foreground/90">{job.prompt ? `“${job.prompt}”` : job.name}</p>
+      {/* under the tile's own button: a click still opens the viewer */}
+      {pictured && <img src={fileUrl(cover!)} alt="" className="pointer-events-none absolute inset-0 size-full object-cover" />}
+      <div className={cn("pointer-events-none relative flex size-full items-center gap-3 py-4 pr-5 pl-16", pictured ? "bg-linear-to-r from-black/75 via-black/45 to-black/10" : "bg-linear-to-br from-aud/20 to-aud/5")}>
+        <p className={cn("line-clamp-4 text-[15px] leading-snug", pictured ? "text-white drop-shadow" : "text-foreground/90")}>{job.prompt ? `“${job.prompt}”` : job.name}</p>
         <AudioLinesIcon className="absolute top-3 right-3 size-4 text-aud" aria-hidden />
       </div>
       <audio ref={audio} src={fileUrl(file)} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />

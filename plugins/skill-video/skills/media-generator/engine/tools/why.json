@@ -32,12 +32,20 @@
     "kwaivgi/kling-ai-avatar-pro": "Kling's talking head, 1080p",
     "bytedance/omnihuman-1.5": "Gestures with the voice, and who speaks in a group photo",
     "bytedance/omnihuman-2.0": "OmniHuman's newest, at a lower price",
-    "volcengine/video-to-video-lip-sync": "The lips of a filmed person matched to a new voice, up to 4 min"
+    "volcengine/video-to-video-lip-sync": "The lips of a filmed person matched to a new voice, up to 4 min",
+    "alibaba/wan-2.2-s2v-turbo": "Made for it: an image moved by a voice or a song, up to 7.5 s, from $0.06 a second"
   },
   "audio": {
     "eleven_v4": "ElevenLabs' newest, audio tags, dialogues, 90+ languages",
+    "elevenlabs/eleven-v4": "ElevenLabs' newest by the router, audio tags, 90+ languages",
+    "elevenlabs/eleven-v3": "ElevenLabs' most expressive, audio tags, dialogues on Kie",
     "google/gemini-3.8-flash-tts": "70 voices, a style in words, dialogues of two",
     "bytedance-seed/seed-audio-1-0": "ByteDance's voice model",
-    "minimax/speech-2.8-hd": "MiniMax's HD voices at a low price"
+    "minimax/speech-2.8-hd": "MiniMax's HD voices at a low price",
+    "suno/v6": "Suno's newest, full songs with vocals up to 6 min, 2 takes a request",
+    "google/lyria-3-pro-preview": "Google's music model, full songs in 48 kHz, its lyrics as text",
+    "suno/sounds": "Sounds and loops with their tempo and key",
+    "suno/stems": "Suno's own split of the songs it made",
+    "suno/extras": "Suno's own tools for the songs it made"
   }
 }

@@ -5,18 +5,18 @@ import { cn } from "cn"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, plain, type Element, type Voice } from "@/lib/api"
+import { api, fileUrl, plain, type Element, type Model, type Voice } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Label } from "@/components/chips"
 import { Listen } from "@/components/inputs"
 
-// the voice lists of Voice (a speech model's own voices) and Change voice (the Library's and ElevenLabs'): one
-// searchable list, each voice with its circle to listen to its sample, and the ElevenLabs voices filtered on their
+// the voice lists of Voice (a speech model's own voices, the Library's) and Change voice (the Library's and ElevenLabs'):
+// one searchable list, each voice with its circle to listen to its sample, and the ElevenLabs voices filtered on their
 // language (the sample then in it), gender, age, accent, style and use. A voice of the Library has no such labels: it
 // is always shown
 
 // a row: what is picked (a voice id, a model's voice name, or @name), what is shown, its ElevenLabs voice if any, and
 // the heading it sits under (none: one list without headings)
-type Row = { value: string; title: string; note: string; voice?: Voice; file?: string; group?: string }
+type Row = { value: string; title: string; note: string; voice?: Voice; file?: string; group?: string; image?: string; disabled?: boolean }
 
 // the filters, kept for this browser and shared by both lists
 type Filters = { language: string; gender: string; age: string; accent: string; descriptive: string; use_case: string }
@@ -157,6 +157,7 @@ function VoiceList({ label, hint, rows, value, onChange, placeholder, status, fo
             aria-label={`${label}: ${current?.title ?? "none"}. Change it`}
             className="flex min-h-12 w-full min-w-0 items-center gap-2.5 rounded-lg border border-input px-2 py-1.5 text-left shadow-xs transition-colors outline-none hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:border-space/60 dark:bg-input/30 dark:hover:bg-input/50"
           >
+            {current?.image && <img src={fileUrl(current.image)} alt="" className="size-9 shrink-0 rounded-md object-cover" />}
             <Circle row={current} lang={labelled ? f.language : ""} play={false} />
             <span className="min-w-0 flex-1">
               <span className={cn("block truncate text-sm font-medium", !current && "text-muted-foreground")}>{current?.title ?? placeholder}</span>
@@ -194,7 +195,8 @@ function VoiceList({ label, hint, rows, value, onChange, placeholder, status, fo
               {groups.map((g) => (
                 <CommandGroup key={g.heading || "voices"} heading={g.heading || undefined}>
                   {g.list.map((r) => (
-                    <CommandItem key={r.value} value={`${r.value} ${r.title} ${r.note}`} data-checked={r.value === value} onSelect={() => (onChange(r.value), setOpen(false))}>
+                    <CommandItem key={r.value} value={`${r.value} ${r.title} ${r.note}`} disabled={r.disabled} data-checked={r.value === value} onSelect={() => (onChange(r.value), setOpen(false))}>
+                      {r.image && <img src={fileUrl(r.image)} alt="" className="size-9 shrink-0 rounded-md object-cover" />}
                       <Circle row={r} lang={labelled ? f.language : ""} play />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium">{r.title}</span>
@@ -288,11 +290,11 @@ function minimax(name: string): Voice {
   return { voice_id: name, name: title, labels: { ...(gender && { gender }), ...(age && { age }) }, languages: LANG[prefix] ? [LANG[prefix]] : [] }
 }
 
-// a router speech model's own voices: Gemini's and MiniMax's with what their makers say of them, filtered, without a
-// sample. ElevenLabs' are reached straight (VoicePicker); the Library's voices stay in their own field
-export function ModelVoices({ model, voices, value, onChange, label = "Voice", placeholder = "Pick a voice" }: { model: string; voices: string[]; value: string; onChange: (v: string) => void; label?: string; placeholder?: string }) {
+// a speech model's own voices: ElevenLabs' with their line, labels and samples (the engine's voice_info), Gemini's and
+// MiniMax's with what their makers say of them (no sample), filtered; the Library's voices stay in their own field
+export function ModelVoices({ model, voices, info, value, onChange, label = "Voice", placeholder = "Pick a voice" }: { model: string; voices: string[]; info?: Model["params"]["voice_info"]; value: string; onChange: (v: string) => void; label?: string; placeholder?: string }) {
   const rows: Row[] = voices.map((name) => {
-    const v = model.startsWith("google/") && GEMINI[name]
+    const v: Voice | undefined = info?.[name] ? { voice_id: name, ...info[name] } : model.startsWith("google/") && GEMINI[name]
       ? { voice_id: name, name: `${name} - ${GEMINI[name]}`, labels: { descriptive: GEMINI[name].toLowerCase() } }
       : model.startsWith("minimax/")
         ? minimax(name)
@@ -304,6 +306,43 @@ export function ModelVoices({ model, voices, value, onChange, label = "Voice", p
 
 // Voice's own field for the Library's voices: one picked sends its clips to be cloned and says how it sounds; « The
 // model's voices » leaves the choice to the list below
+// a song's singer: the Library's singers, each with its picture (its song's cover) and its clip to listen to; one Suno
+// has not heard yet is shown, not picked (its phrase is sung from its card). Its value is @name, or "" for Suno's own
+export function SingerPicker({ singers, value, onChange, label = "Singer" }: { singers: Element[]; value: string; onChange: (v: string) => void; label?: string }) {
+  const ready = (e: Element) => !!(e.suno?.persona_id || e.suno?.voice_id)
+  const rows: Row[] = [
+    { value: "", title: "Suno's own", note: "No singer of yours" },
+    ...singers.map((e) => ({
+      value: `@${e.name}`,
+      title: `@${e.name}`,
+      note: [e.words, !ready(e) ? "needs its phrase: sing it in its card" : e.suno?.persona_id ? "from a song" : "your own voice"].filter(Boolean).join(" · "),
+      disabled: !ready(e),
+      file: e.files[0],
+      image: e.cover ?? undefined,
+      group: ready(e) ? "Ready" : "Needs its phrase",
+    })),
+  ]
+  return (
+    <VoiceList
+      label={label}
+      hint={singers.length ? `${singers.filter(ready).length} of ${singers.length} ready` : undefined}
+      rows={rows}
+      value={value}
+      onChange={onChange}
+      placeholder="Suno's own"
+      footer={
+        <>
+          {singers.length ? "Another singer" : "No singer yet"}: Audio › Create › Singer makes one, or add your own voice in{" "}
+          <a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">
+            Library › Elements
+          </a>
+          .
+        </>
+      }
+    />
+  )
+}
+
 export function LibraryVoices({ voices, value, onChange }: { voices: Element[]; value: string | null; onChange: (name: string | null) => void }) {
   if (!voices.length)
     return (

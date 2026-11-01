@@ -1,6 +1,7 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   AudioLinesIcon,
+  MicVocalIcon,
   BoxIcon,
   CopyIcon,
   FolderOpenIcon,
@@ -32,8 +33,9 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, currentOf, ELEMENT_TYPES, fileUrl, mediaKind, outputPath, plain, typeLabel, type Element, type ElementType, type Kind, type State, type Tool } from "@/lib/api"
-import { Chips, Label } from "@/components/chips"
+import { api, currentOf, ELEMENT_TYPES, fileUrl, heard, mediaKind, needsPhrase, outputPath, plain, typeLabel, type Element, type ElementType, type Kind, type State, type Tool } from "@/lib/api"
+import { Chips, Label, Price } from "@/components/chips"
+import { Switch } from "@/components/ui/switch"
 import { LibraryList, Listen, upload, type Pick } from "@/components/inputs"
 import type { Compose } from "@/components/composer"
 import { Main, Side } from "@/components/pages"
@@ -53,6 +55,7 @@ export const TYPE_ICON: Record<ElementType, LucideIcon> = {
   pose: PersonStandingIcon,
   brand: TagIcon,
   voice: AudioLinesIcon,
+  singer: MicVocalIcon,
   other: ShapesIcon,
 }
 // the References tool that makes a type's sheets, and the field its words go to
@@ -71,11 +74,14 @@ const WORDS: Record<ElementType, string> = {
   pose: "mid-jump, arms raised, knees bent",
   brand: "a specialty coffee roaster, warm and premium",
   voice: "warm, slow, a smile in the voice",
+  singer: "a breathy female pop voice, wide vibrato",
   other: "what it is, in a few words",
 }
 const NAME = /^[\w-]+$/
-const medium = (t: ElementType) => (t === "voice" ? "audio" : "image")
-const count = (n: number, t: ElementType) => `${n} ${t === "voice" ? "clip" : "image"}${n === 1 ? "" : "s"}`
+// a name like the type's, for its placeholder
+const NAMED: Record<ElementType, string> = { character: "ava", outfit: "biker-jacket", object: "blue-bottle", location: "lisbon-street", pose: "mid-jump", brand: "roastery", voice: "narrator", singer: "nova", other: "my-thing" }
+const medium = (t: ElementType) => (heard(t) ? "audio" : "image")
+const count = (n: number, t: ElementType) => `${n} ${heard(t) ? "clip" : "image"}${n === 1 ? "" : "s"}`
 
 // the results of one medium, to pick from
 export const results = (state: State, kind: "image" | "audio"): Pick[] =>
@@ -156,7 +162,7 @@ export function ElementsTab({
         </nav>
         <p className="text-xs leading-relaxed text-muted-foreground">
           Cite an element in any image or video prompt with <span className="font-medium text-foreground">@name</span>: its images go with the request, and the prompt says what
-          they are. A voice is picked in Audio › Voice. The References tools make clean sheets for a character, an outfit, an object, a place or a pose.
+          they are. A voice is picked in Audio › Voice, a singer in Music. The References tools make clean sheets for a character, an outfit, an object, a place or a pose.
         </p>
       </Side>
       <Main title="Elements" aside={<span className="text-sm text-muted-foreground">{list.length} of {all.length}</span>}>
@@ -208,13 +214,25 @@ export function ElementsTab({
 
 // an Element's picture: its images (the first large), a brand's logo on its colors, a voice's clips
 function Cover({ el, className }: { el: Element; className?: string }) {
-  if (el.type === "voice")
+  if (heard(el.type)) {
+    const Icon = TYPE_ICON[el.type]
+    // a singer from a song shows its song's cover
+    if (el.cover)
+      return (
+        <div className={cn("relative", className)}>
+          <img src={fileUrl(el.cover)} alt="" className="size-full object-cover" />
+          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-white backdrop-blur-sm">
+            <Icon className="size-3.5" /> {count(el.files.length, el.type)}
+          </span>
+        </div>
+      )
     return (
       <div className={cn("flex flex-col items-center justify-center gap-2 bg-linear-to-br from-aud/25 to-aud/5", className)}>
-        <AudioLinesIcon className="size-8 text-aud" />
-        <span className="text-xs text-muted-foreground">{count(el.files.length, "voice")}</span>
+        <Icon className="size-8 text-aud" />
+        <span className="text-xs text-muted-foreground">{count(el.files.length, el.type)}</span>
       </div>
     )
+  }
   if (el.type === "brand")
     return (
       <div className={cn("relative flex items-center justify-center bg-muted p-6", className)}>
@@ -254,7 +272,10 @@ export function ElementCard({ el, onOpen, className }: { el: Element; onOpen: ()
       onClick={onOpen}
       className={cn("group flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card text-left transition-[border-color,box-shadow] duration-150 outline-none hover:border-foreground/30 focus-visible:ring-3 focus-visible:ring-ring/50", className)}
     >
-      <Cover el={el} className="aspect-[4/3] w-full overflow-hidden" />
+      <span className="relative block">
+        <Cover el={el} className="aspect-[4/3] w-full overflow-hidden" />
+        {needsPhrase(el) && <span className="absolute top-2 left-2 rounded-md bg-black/65 px-1.5 py-0.5 text-xs text-white backdrop-blur-sm">needs its phrase</span>}
+      </span>
       <span className="flex min-w-0 items-center gap-2 px-3 py-2.5">
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold">@{el.name}</span>
@@ -410,18 +431,15 @@ export function ConfirmDelete({ what, open, onCancel, onConfirm, text = "It leav
 export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: { el: Element; state: State; tools: Tool[]; onClose: () => void; onUse: Use; onChanged: () => void }) {
   const [words, setWords] = useState(el.words)
   const [font, setFont] = useState(el.font)
-  const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(false)
+  const [phrase, setPhrase] = useState(false)
   const sheets = SHEETS[el.type], tool = sheets && tools.find((t) => t.id === sheets.tool)
   async function save(body: Omit<Parameters<typeof api.elements>[0], "name">) {
-    setBusy(true)
     try {
       await api.elements({ name: el.name, ...body })
       onChanged()
     } catch (e) {
       toast.error(plain((e as Error).message))
-    } finally {
-      setBusy(false)
     }
   }
   const Icon = TYPE_ICON[el.type]
@@ -436,25 +454,26 @@ export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: {
             <DialogTitle className="truncate">@{el.name}</DialogTitle>
             <DialogDescription className="mt-0.5">
               {typeLabel(el.type)} · {count(el.files.length, el.type)}
-              {el.type === "voice" ? ", picked in Audio › Voice" : ", all sent with every @name"}
+              {el.type === "voice" ? ", picked in Audio › Voice" : el.type === "singer" ? ", picked as Music's singer" : ", all sent with every @name"}
+              {needsPhrase(el) && <Badge variant="secondary" className="ml-2">needs its phrase</Badge>}
             </DialogDescription>
+            {phrase && <PhraseDialog name={el.name} state={state} onClose={() => setPhrase(false)} />}
           </div>
         </div>
 
-        {el.type !== "voice" && (
-          <div>
-            <Label>Type</Label>
-            <Chips
-              options={ELEMENT_TYPES.filter((t) => t.type !== "voice" && (t.type !== "other" || el.type === "other")).map((t) => t.type)}
-              value={el.type}
-              label={typeLabel}
-              onChange={(type) => save({ type })}
-            />
-          </div>
-        )}
+        {/* an image's type among the image types, a clip's between voice and singer */}
+        <div>
+          <Label>Type</Label>
+          <Chips
+            options={ELEMENT_TYPES.filter((t) => heard(t.type) === heard(el.type) && (t.type !== "other" || el.type === "other")).map((t) => t.type)}
+            value={el.type}
+            label={typeLabel}
+            onChange={(type) => save({ type })}
+          />
+        </div>
 
         <div>
-          <Label hint={el.type === "voice" ? "how it sounds" : "sent with every @name"}>What it is</Label>
+          <Label hint={heard(el.type) ? "how it sounds" : "sent with every @name"}>What it is</Label>
           <Textarea value={words} placeholder={WORDS[el.type]} onChange={(e) => setWords(e.target.value)} onBlur={() => words !== el.words && save({ words })} className="min-h-16" />
         </div>
 
@@ -476,30 +495,35 @@ export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: {
           files={el.files}
           kind={medium(el.type)}
           state={state}
-          label={el.type === "voice" ? "Clips" : el.type === "brand" ? "Logos" : "Images"}
-          max={el.type === "voice" ? 3 : undefined}
+          label={heard(el.type) ? "Clips" : el.type === "brand" ? "Logos" : "Images"}
+          max={heard(el.type) ? 3 : undefined}
           onAdd={(paths) => save({ paths })}
           onDrop={(f) => save({ drop: [f.split("/").pop()!] })}
         />
-
-        {el.type === "voice" && (
-          <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3 text-sm">
-            <span className="min-w-0 flex-1">
-              <span className="block font-medium">{el.voice_id ? "On your ElevenLabs account" : "Change voice (ElevenLabs)"}</span>
-              <span className="block text-xs text-muted-foreground">
-                {el.voice_id ? `Pick it in Audio › Change voice (${el.voice_id}).` : "An instant clone on your account, to put this voice on a clip. ElevenLabs needs a paid plan for it."}
-              </span>
-            </span>
-            {!el.voice_id && (
-              <Button size="sm" variant="outline" disabled={busy || !state.keys.elevenlabs} onClick={() => save({ elevenlabs: true })}>
-                Add to ElevenLabs
-              </Button>
-            )}
+        {/* a singer of one's own Suno has not heard yet: its phrase, from here */}
+        {needsPhrase(el) && (
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <p className="flex-1">
+              <span className="block font-medium text-foreground">Its phrase for Suno</span>
+              Suno sings with a voice of your own once it heard you sing a short phrase in it. Free, once.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setPhrase(true)}>
+              <MicVocalIcon /> Sing its phrase
+            </Button>
           </div>
         )}
 
         <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-          {el.type !== "voice" ? (
+          {el.type === "singer" ? (
+            <Button
+              variant="outline"
+              disabled={needsPhrase(el)}
+              title={needsPhrase(el) ? "Sing its phrase first" : undefined}
+              onClick={() => (onClose(), onUse("audio", "music", { fields: { mode: "write", singer: `@${el.name}` } }))}
+            >
+              <MicVocalIcon /> Sing with it
+            </Button>
+          ) : el.type !== "voice" ? (
             <Button variant="outline" onClick={() => copy(`@${el.name}`, `@${el.name}`, "Paste it in any image or video prompt.")}>
               <CopyIcon /> Copy @{el.name}
             </Button>
@@ -538,6 +562,10 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
   // the workspace it is linked to: the current one, another, or none
   const [ws, setWs] = useState(currentOf(state)?.slug ?? "none")
   const [busy, setBusy] = useState(false)
+  // a singer of one's own: its recordings cleaned first (ElevenLabs' Voice Isolator, priced), then its phrase sung here
+  const [clean, setClean] = useState(false)
+  const [cleanPrice, setCleanPrice] = useState<string | null>(null)
+  const [made, setMade] = useState<string | null>(null)
   const kind = medium(type), files = paths.filter((p) => mediaKind(p) === kind)
   const taken = (state.elements ?? []).some((e) => e.name === name)
   const sheets = SHEETS[type], tool = sheets && tools.find((t) => t.id === sheets.tool)
@@ -547,13 +575,42 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
   // the type's References tool, with what is here: the images as its photos, the words as its subject
   const openTool = () => tool && sheets && (onClose(), onUse("image", tool.id, { inputs: files.length ? { references: files.slice(0, 4) } : {}, fields: words ? { [sheets.field]: words } : {} }))
   const hint = ELEMENT_TYPES.find((t) => t.type === type)!.hint
+  // Create one with AI: the tool that makes this type, with what is already here
+  const ai =
+    type === "singer"
+      ? { label: "Singer", text: "Suno sings a short song in the voice you describe, then its voice is taken apart. Make a singer, on the voice you like, keeps it here. Or add your own singing above.", open: () => (onClose(), onUse("audio", "create-singer", { fields: { ...(name ? { name } : {}), ...(words ? { voice: words } : {}) } })) }
+      : type === "voice"
+        ? { label: "Voice", text: "Voice speaks your words in a voice of its own (ElevenLabs, Gemini…). Make a voice, on its result, brings it back here.", open: () => (onClose(), onUse("audio", "voice", words ? { fields: { instructions: words } } : {})) }
+        : tool && sheets
+          ? { label: tool.label, text: `${tool.label} makes clean sheets from a photo or words. Make an element, on one of them, brings it back here.`, open: openTool }
+          : null
+  // the price of cleaning these recordings: each an Isolate voice of its own
+  const cleanKey = JSON.stringify(files)
+  useEffect(() => {
+    if (!clean || type !== "singer" || !files.length) return
+    Promise.all(files.map((f) => api.estimate({ kind: "audio", tool: "isolate-voice", prompt: "", fields: {}, inputs: { clip: [f] }, params: {} })))
+      .then((all) => setCleanPrice(`≈ ${all.reduce((n, a) => n + (a.estimate.amount ?? 0), 0).toLocaleString("en-US")} ElevenLabs credits`))
+      .catch((e) => setCleanPrice(plain((e as Error).message)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clean, type, cleanKey])
 
   async function save() {
     setBusy(true)
     try {
-      await api.elements({ name, type, words, paths: files, workspace: ws === "none" ? null : ws, ...(type === "brand" ? { colors, font } : {}) })
-      toast.success(`@${name} saved`, { description: type === "voice" ? "Pick it in Audio › Voice." : "Cite it in any image or video prompt." })
-      onSaved(name)
+      let kept = files
+      if (type === "singer" && clean) {
+        // Suno hears a voice best a cappella: each recording through the Voice Isolator first (a job of the Library)
+        const run = (confirm: boolean) => api.clean(files, confirm)
+        kept = (await run(false).catch((e: Error & { status?: number; body?: { shown?: string; needs?: string } }) => {
+          if (e.status === 409 && window.confirm(`Cleaning costs ${e.body?.shown ?? "credits"} (${e.body?.needs ?? "over a limit"}). Go on?`)) return run(true)
+          throw e
+        })).paths
+      }
+      await api.elements({ name, type, words, paths: kept, workspace: ws === "none" ? null : ws, ...(type === "brand" ? { colors, font } : {}) })
+      toast.success(`@${name} saved`, { description: type === "voice" ? "Pick it in Audio › Voice." : type === "singer" ? "Sing its phrase below so Suno knows it." : "Cite it in any image or video prompt." })
+      // one's own singer: its phrase next, here
+      if (type === "singer") setMade(name)
+      else onSaved(name)
     } catch (e) {
       toast.error(plain((e as Error).message))
     } finally {
@@ -573,6 +630,9 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
     ].filter(Boolean).join("\n")
     copy(text, "Prompt", "Paste it in Claude Code: Claude makes the element.")
   }
+
+  // one's own singer, saved: its phrase sung here
+  if (made) return <PhraseDialog name={made} state={state} onClose={() => onSaved(made)} />
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -594,11 +654,11 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
             <Label hint={taken ? "adds to it" : undefined}>Name</Label>
             <InputGroup>
               <InputGroupAddon>@</InputGroupAddon>
-              <InputGroupInput value={name} placeholder="lulu" aria-label="Name" onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))} />
+              <InputGroupInput value={name} placeholder={NAMED[type]} aria-label="Name" onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))} />
             </InputGroup>
           </div>
           <div>
-            <Label hint={type === "voice" ? "how it sounds" : "sent with every @name"}>What it is</Label>
+            <Label hint={heard(type) ? "how it sounds" : "sent with every @name"}>What it is</Label>
             <Input value={words} placeholder={WORDS[type]} onChange={(e) => setWords(e.target.value)} />
           </div>
         </div>
@@ -633,22 +693,38 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
           files={files}
           kind={kind}
           state={state}
-          label={type === "voice" ? "Clips, 1 to 3 of clean speech" : type === "brand" ? "Logos" : "Images"}
-          max={type === "voice" ? 3 : undefined}
+          label={type === "voice" ? "Clips, 1 to 3 of clean speech" : type === "singer" ? "Your singing, 1 to 3 clips" : type === "brand" ? "Logos" : "Images"}
+          max={heard(type) ? 3 : undefined}
           onAdd={(more) => setPaths((p) => [...p, ...more.filter((m) => !p.includes(m))])}
           onDrop={(f) => setPaths((p) => p.filter((x) => x !== f))}
         />
+        {type === "singer" && files.length > 0 && (
+          <label className="flex items-center gap-3 rounded-lg border p-3 text-sm">
+            <Switch checked={clean} onCheckedChange={setClean} aria-label="Clean my recording" />
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">Clean my recording</span>
+              <span className="block text-xs text-muted-foreground">Music and noise taken out by ElevenLabs' Voice Isolator: Suno hears a voice best a cappella. 4.6 s at least each.</span>
+            </span>
+            {clean && cleanPrice && <Price>{cleanPrice}</Price>}
+          </label>
+        )}
         {kind === "image" && (
           <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
             <p className="flex-1">
               {have >= 2 ? "Two views or more: every model gets the element well." : have === 1 ? "One more image: an element takes 2 at least (another view, another angle)." : "Two images at least: two views of it, or two angles."}
-              {tool ? ` ${tool.label} makes clean sheets from a photo or words; « Make an element » on one brings it back here.` : ""}
             </p>
-            {tool && (
-              <Button size="sm" variant="outline" onClick={openTool} title={`Opens ${tool.label} with ${files.length ? "these images and words" : "these words"}`}>
-                <SparklesIcon /> Open {tool.label}
-              </Button>
-            )}
+          </div>
+        )}
+        {/* the tool that makes this type, last: a References sheet, a voice, a singer (none redraws a logo) */}
+        {ai && (
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <p className="flex-1">
+              <span className="block font-medium text-foreground">Create one with AI</span>
+              {ai.text}
+            </p>
+            <Button size="sm" variant="outline" onClick={ai.open} title={`Opens ${ai.label}`}>
+              <SparklesIcon /> Open {ai.label}
+            </Button>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2 border-t pt-4">
@@ -663,5 +739,99 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// a singer of one's own, its phrase sung for Suno in a dialog of its own: right after New element, or again from its
+// dialog while it needs it (the state comes back with it every 2 s)
+export function PhraseDialog({ name, state, onClose }: { name: string; state: State; onClose: () => void }) {
+  const singer = (state.elements ?? []).find((e) => e.name === name), ready = !!singer?.suno?.voice_id
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex flex-col gap-4 sm:max-w-[520px]">
+        <div>
+          <DialogTitle>@{name}, its phrase</DialogTitle>
+          <DialogDescription className="mt-1">Suno sings with a voice of your own once it heard you sing its phrase: free, once.</DialogDescription>
+        </div>
+        {!singer ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" /> Saving…</p>
+        ) : ready ? (
+          <p className="rounded-lg border bg-muted/40 p-3 text-sm">@{name} sings in Suno now: pick it as the Singer in Music, Extend, Cover, Mashup or Replace section.</p>
+        ) : (
+          <SingerPhrase el={singer} router={state.router} onChanged={() => {}} />
+        )}
+        <div className="flex justify-end gap-2 border-t pt-4">
+          {!ready && <Button variant="ghost" onClick={onClose}>Later</Button>}
+          <Button variant="space" disabled={!ready} onClick={onClose}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// one's own singing voice made a Suno voice (free, on Kie): Suno gives a phrase to sing (from where its first clip sings
+// the most), the same voice recorded singing it proves it is one's own; then Music's Singer takes it. Shown under the
+// Singer field and in New element, never on a singer Suno has
+export function SingerPhrase({ el, router, onChanged }: { el: Element; router: string; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [rec, setRec] = useState<MediaRecorder | null>(null)
+  const pending = el.suno?.pending
+  async function run(body: { verify?: string }, done: string) {
+    setBusy(true)
+    try {
+      await api.sunoVoice({ name: el.name, ...body })
+      toast.success(done)
+      onChanged()
+    } catch (e) {
+      toast.error(plain((e as Error).message))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const send = async (file: File) => run({ verify: await upload(file) }, `@${el.name} sings in Suno now`)
+  // the phrase sung in the browser: its recording sent as the proof
+  async function record() {
+    if (rec) return rec.stop()
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }), r = new MediaRecorder(stream), parts: Blob[] = []
+      r.ondataavailable = (e) => parts.push(e.data)
+      r.onstop = () => (stream.getTracks().forEach((x) => x.stop()), setRec(null), send(new File(parts, `${el.name}-phrase.webm`, { type: "audio/webm" })))
+      r.start()
+      setRec(r)
+    } catch {
+      toast.error("The microphone is not allowed here: add a recording instead")
+    }
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
+      <span className="font-medium">@{el.name} needs its phrase</span>
+      {router !== "kie" ? (
+        <span className="text-xs text-muted-foreground">Suno is on Kie.ai: switch the router in Settings.</span>
+      ) : !pending ? (
+        <div className="flex items-center gap-3">
+          <span className="flex-1 text-xs text-muted-foreground">Free, once. Suno gives a phrase to sing in this voice: that proves it is yours.</span>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => run({}, "Suno gave its phrase")}>
+            {busy && <LoaderCircleIcon className="animate-spin" />} Get its phrase
+          </Button>
+        </div>
+      ) : (
+        <>
+          <span className="text-xs text-muted-foreground">Sing this in the same voice, then send the recording:</span>
+          <blockquote className="rounded-md border-l-2 border-space bg-background/60 px-3 py-2 text-[15px] italic">{pending.phrase}</blockquote>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant={rec ? "destructive" : "outline"} disabled={busy} onClick={record}>
+              {busy ? <LoaderCircleIcon className="animate-spin" /> : <MicVocalIcon />} {rec ? "Stop and send" : "Record it"}
+            </Button>
+            <label className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline">
+              or add a recording
+              <input type="file" accept="audio/*,video/*" className="hidden" onChange={(e) => e.target.files?.[0] && send(e.target.files[0])} />
+            </label>
+            <button type="button" className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline" disabled={busy} onClick={() => run({}, "Suno gave another phrase")}>
+              Another phrase
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }

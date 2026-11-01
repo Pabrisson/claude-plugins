@@ -5,9 +5,9 @@
     "inputs": [{ "key": "voice_clips", "kind": "audio", "label": "Voice to clone", "optional": true, "multiple": true }],
     "fields": [{ "key": "instructions", "label": "How it sounds", "type": "text", "placeholder": "warm, slow, a smile in the voice" }],
     "template": "{prompt}",
-    "models": ["eleven_v4", "google/gemini-3.8-flash-tts", "bytedance-seed/seed-audio-1-0", "minimax/speech-2.8-hd"],
-    "also": ["eleven_v3", "eleven_v4_turbo", "eleven_multilingual_v2", "eleven_flash_v2_5"],
-    "kie": { "models": ["eleven_v4", "google/gemini-3.8-flash-tts"], "also": ["eleven_v3", "eleven_v4_turbo", "eleven_multilingual_v2", "google/gemini-3.8-flash-lite-tts"] }
+    "models": ["eleven_v4", "elevenlabs/eleven-v4", "google/gemini-3.8-flash-tts", "bytedance-seed/seed-audio-1-0", "minimax/speech-2.8-hd"],
+    "also": ["eleven_v3", "eleven_v4_turbo", "eleven_multilingual_v2", "eleven_flash_v2_5", "elevenlabs/eleven-v3", "elevenlabs/eleven-v4-turbo", "elevenlabs/eleven-multilingual-v2", "elevenlabs/eleven-flash-v2.5"],
+    "kie": { "models": ["eleven_v4", "elevenlabs/eleven-v3", "google/gemini-3.8-flash-tts"], "also": ["eleven_v3", "eleven_v4_turbo", "eleven_multilingual_v2", "elevenlabs/eleven-multilingual-v2", "elevenlabs/eleven-turbo-v2.5", "google/gemini-3.8-flash-lite-tts"] }
   },
   {
     "id": "change-voice", "label": "Change voice", "group": "Voice", "mode": "edit", "icon": "repeat",
@@ -27,5 +27,173 @@
     ],
     "template": "",
     "provider": "elevenlabs"
+  },
+  {
+    "id": "music", "label": "Music", "group": "Music", "mode": "create", "icon": "music", "action": "music",
+    "description": "A song or an instrumental: describe it (with images, a video or a sound for inspiration), or write its title, style and lyrics.",
+    "inputs": [
+      { "key": "references", "kind": "image", "label": "Images", "optional": true, "multiple": true, "when": { "mode": "describe" } },
+      { "key": "ref_videos", "kind": "video", "label": "Video", "optional": true, "when": { "mode": "describe" } },
+      { "key": "ref_audios", "kind": "audio", "label": "Sound", "optional": true, "when": { "mode": "describe" } }
+    ],
+    "fields": [
+      { "key": "mode", "label": "Mode", "type": "choice", "options": [{ "value": "describe", "label": "Describe" }, { "value": "write", "label": "Write" }], "default": "describe" },
+      { "key": "description", "label": "Description", "type": "lines", "placeholder": "an upbeat summer pop song about a road trip, French lyrics", "when": { "mode": "describe" } },
+      { "key": "title", "label": "Title", "type": "text", "placeholder": "Night Drive", "when": { "mode": "write" } },
+      { "key": "style", "label": "Style", "type": "text", "placeholder": "synthwave, female vocals, 100 BPM", "when": { "mode": "write" } },
+      { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "[Verse]\nCity lights are passing by…\n[Chorus]\n…", "when": { "mode": "write", "vocals": "sung" } },
+      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung" }, { "value": "instrumental", "label": "Instrumental" }], "default": "sung" },
+      { "key": "length", "label": "Length (0: its own)", "type": "number", "min": 0, "max": 360, "step": 10, "unit": " s", "default": 0, "when": { "mode": "write" } },
+      { "key": "singer", "label": "Singer", "type": "singer", "optional": true, "when": { "vocals": "sung" } }
+    ],
+    "template": "",
+    "models": ["google/lyria-3-pro-preview"], "also": ["google/lyria-3-clip-preview"],
+    "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+  },
+  {
+    "id": "create-singer", "label": "Singer", "group": "Voice", "mode": "create", "icon": "mic-vocal", "action": "singer_song",
+    "description": "A singer made by AI: Suno sings a short song in the voice you describe, then its voice is taken apart from the music. « Make a singer » on the voice you like keeps it in the Library.",
+    "inputs": [],
+    "fields": [
+      { "key": "name", "label": "Name", "type": "text", "placeholder": "nova" },
+      { "key": "voice", "label": "The voice", "type": "text", "placeholder": "a warm, breathy female pop voice, wide vibrato" },
+      { "key": "style", "label": "Style", "type": "text", "placeholder": "dreamy synth-pop, 100 BPM", "optional": true }
+    ],
+    "template": "", "routers": ["kie"], "models": [],
+    "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+  },
+  {
+    "id": "sound-effect", "label": "Sound effect", "group": "Sound", "mode": "create", "icon": "volume-2", "action": "sounds",
+    "description": "A sound, an ambience or a loop from words; its loop, tempo and key in the model's options.",
+    "inputs": [], "fields": [], "template": "{prompt}",
+    "routers": ["kie"], "models": [], "kie": { "models": ["suno/sounds"] }
+  },
+  {
+    "id": "extend-music", "label": "Extend music", "group": "Music", "mode": "edit", "icon": "arrow-right-to-line", "action": "extend",
+    "description": "A song goes on from the second you pick, in its style; a Suno song by its own take, any other sound sent whole.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Song" }],
+    "fields": [
+      { "key": "from", "label": "From (s)", "type": "text", "placeholder": "its end, or a second: 60" },
+      { "key": "style", "label": "Style", "type": "text", "placeholder": "its own, or: a guitar solo, slower", "optional": true },
+      { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "the words of what follows", "optional": true, "when": { "vocals": "sung" } },
+      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung" }, { "value": "instrumental", "label": "Instrumental" }], "default": "sung" },
+      { "key": "singer", "label": "Singer", "type": "singer", "optional": true, "when": { "vocals": "sung" } }
+    ],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+  },
+  {
+    "id": "cover", "label": "Cover", "group": "Music", "mode": "edit", "icon": "disc-3", "action": "cover",
+    "description": "The same melody in another style, with other words or another singer: any song or sound, even hummed.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Song" }],
+    "fields": [
+      { "key": "style", "label": "Style", "type": "text", "placeholder": "acoustic folk, a male voice" },
+      { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "new words, or none to keep the song's", "optional": true, "when": { "vocals": "sung" } },
+      { "key": "vocals", "label": "Vocals", "type": "choice", "options": [{ "value": "sung", "label": "Sung" }, { "value": "instrumental", "label": "Instrumental" }], "default": "sung" },
+      { "key": "singer", "label": "Singer", "type": "singer", "optional": true, "when": { "vocals": "sung" } }
+    ],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+  },
+  {
+    "id": "add-vocals", "label": "Add vocals", "group": "Music", "mode": "edit", "icon": "mic-vocal", "action": "add_vocals",
+    "description": "An instrumental gets a voice singing your words over it.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Instrumental" }],
+    "fields": [
+      { "key": "title", "label": "Title", "type": "text", "placeholder": "Night Drive" },
+      { "key": "style", "label": "Style", "type": "text", "placeholder": "soft female vocals, dreamy" },
+      { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "[Verse]\n…\n[Chorus]\n…" }
+    ],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+  },
+  {
+    "id": "add-instrumental", "label": "Add instrumental", "group": "Music", "mode": "edit", "icon": "guitar", "action": "add_instrumental",
+    "description": "A voice alone (sung or a cappella) gets the music under it.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Vocals" }],
+    "fields": [
+      { "key": "title", "label": "Title", "type": "text", "placeholder": "Night Drive" },
+      { "key": "style", "label": "Style", "type": "text", "placeholder": "piano and strings, cinematic" }
+    ],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+  },
+  {
+    "id": "replace-section", "label": "Replace section", "group": "Music", "mode": "edit", "icon": "replace", "action": "replace",
+    "description": "A part of a Suno song (10 s at least) made again with new words, blended into the rest.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song" }],
+    "fields": [
+      { "key": "start", "label": "From (s)", "type": "text", "placeholder": "30" },
+      { "key": "end", "label": "To (s)", "type": "text", "placeholder": "45" },
+      { "key": "change", "label": "What changes", "type": "text", "placeholder": "a quieter bridge, only piano" },
+      { "key": "lyrics", "label": "Its new words", "type": "lines", "placeholder": "the words sung in that part", "optional": true },
+      { "key": "full_lyrics", "label": "The whole song's words", "type": "lines", "placeholder": "the song's own, with that part changed", "optional": true },
+      { "key": "style", "label": "Style", "type": "text", "placeholder": "the song's own", "optional": true },
+      { "key": "singer", "label": "Singer", "type": "singer", "optional": true }
+    ],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+  },
+  {
+    "id": "mashup", "label": "Mashup", "group": "Music", "mode": "edit", "icon": "combine", "action": "mashup",
+    "description": "Two songs blended into a new one, in the style you say.",
+    "inputs": [{ "key": "clips", "kind": "audio", "label": "Two songs", "multiple": true, "count": 2 }],
+    "fields": [
+      { "key": "title", "label": "Title", "type": "text", "placeholder": "Night Drive Remix" },
+      { "key": "style", "label": "Style", "type": "text", "placeholder": "house, 124 BPM" },
+      { "key": "lyrics", "label": "Lyrics", "type": "lines", "placeholder": "words of its own, or none", "optional": true },
+      { "key": "length", "label": "Length (0: its own)", "type": "number", "min": 0, "max": 360, "step": 10, "unit": " s", "default": 0 },
+      { "key": "singer", "label": "Singer", "type": "singer", "optional": true }
+    ],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+  },
+  {
+    "id": "stems", "label": "Stems", "group": "Music", "mode": "edit", "icon": "layers", "action": "stems",
+    "description": "A Suno song split in tracks: the voice and the music, up to 12 instruments, or one instrument taken out.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song" }],
+    "fields": [
+      { "key": "split", "label": "Split", "type": "choice", "options": [{ "value": "separate_vocal", "label": "Voice + music" }, { "value": "split_stem", "label": "Up to 12" }, { "value": "split_stem_advanced", "label": "One instrument" }], "default": "separate_vocal" },
+      { "key": "instrument", "label": "Instrument", "type": "select", "options": "stems", "default": "Lead Vocal", "when": { "split": "split_stem_advanced" } }
+    ],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/stems"] }
+  },
+  {
+    "id": "isolate-voice", "label": "Isolate voice", "group": "Voice", "mode": "edit", "icon": "audio-waveform",
+    "description": "The voice of a clip alone: music, noise and room taken out, a video's back on it. ElevenLabs' Voice Isolator.",
+    "inputs": [{ "key": "clip", "kind": "media", "label": "Clip (audio or video)" }],
+    "fields": [], "template": "",
+    "provider": "elevenlabs"
+  },
+  {
+    "id": "wav", "label": "WAV", "group": "Suno", "mode": "edit", "icon": "file-audio", "action": "wav", "hidden": true,
+    "description": "The Suno song as a WAV file.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song" }], "fields": [], "template": "",
+    "routers": ["kie"], "models": [], "kie": { "models": ["suno/extras"] }
+  },
+  {
+    "id": "lyrics-timings", "label": "Lyrics with timings", "group": "Suno", "mode": "edit", "icon": "captions", "action": "timings", "hidden": true,
+    "description": "Each sung word of a Suno song with its time: lyrics.srt for captions, lyrics.json.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song" }], "fields": [], "template": "",
+    "routers": ["kie"], "models": [], "kie": { "models": ["suno/extras"] }
+  },
+  {
+    "id": "music-video", "label": "Music video", "group": "Suno", "mode": "edit", "icon": "clapperboard", "action": "video", "hidden": true,
+    "description": "An MP4 of the Suno song with its cover and a visualizer.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song" }],
+    "fields": [{ "key": "author", "label": "Signed", "type": "text", "placeholder": "your name, 50 characters", "optional": true }, { "key": "domain_name", "label": "Watermark", "type": "text", "placeholder": "your site, 50 characters", "optional": true }],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/extras"] }
+  },
+  {
+    "id": "midi", "label": "MIDI", "group": "Suno", "mode": "edit", "icon": "piano", "action": "midi", "hidden": true,
+    "description": "The notes of a stem as a MIDI file.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Stem" }], "fields": [], "template": "",
+    "routers": ["kie"], "models": [], "kie": { "models": ["suno/extras"] }
+  },
+  {
+    "id": "singer", "label": "Make a singer", "group": "Suno", "mode": "edit", "icon": "user-round-plus", "action": "persona", "hidden": true,
+    "description": "The voice and style of a Suno song (or of its voice taken apart by the Singer tool) kept as a singer of the Library, for the Singer fields.",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song or its voice" }],
+    "fields": [
+      { "key": "name", "label": "Name", "type": "text", "placeholder": "Nova" },
+      { "key": "description", "label": "Described", "type": "text", "placeholder": "a warm, breathy female pop voice" },
+      { "key": "start", "label": "Sung from (s)", "type": "text", "placeholder": "found: 30 s where it sings the most", "optional": true },
+      { "key": "end", "label": "To (s)", "type": "text", "placeholder": "10 to 30 s after", "optional": true }
+    ],
+    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/extras"] }
   }
 ]

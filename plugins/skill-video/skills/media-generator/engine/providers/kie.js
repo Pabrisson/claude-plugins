@@ -7,6 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { retry429, windowed } from '../lib/limit.js'
 import { OPTIONS, palette, resolveOptions } from '../lib/options.js'
+import { voiceInfo } from '../lib/voices.js'
 
 const base = () => (process.env.KIE_BASE ?? 'https://api.kie.ai').replace(/\/$/, '')
 const uploads = () => (process.env.KIE_UPLOAD_BASE ?? 'https://kieai.redpandaai.co').replace(/\/$/, '')
@@ -32,10 +33,12 @@ async function call(url, init = {}, key = process.env.KIE_API_KEY) {
 const get = route => retry429(() => call(base() + route), { wait: RETRY() })
 const slot = windowed(+(process.env.KIE_RATE ?? 20), +(process.env.KIE_RATE_MS ?? 10e3))
 const waiting = progress => () => progress?.('waiting for Kie\'s rate limit (20 new generations per 10 s)…')
-const create = (model, input, progress) => retry429(async () => {
+// a new task, in the account's window: its answer (a synchronous one's result is in it), or its id
+const submit = (model, input, progress) => retry429(async () => {
   await slot(waiting(progress))
-  return (await call(`${base()}/api/v1/jobs/createTask`, { method: 'POST', body: JSON.stringify({ model, input }) })).data.taskId
+  return (await call(`${base()}/api/v1/jobs/createTask`, { method: 'POST', body: JSON.stringify({ model, input }) })).data
 }, { wait: RETRY(), onWait: waiting(progress) })
+const create = async (model, input, progress) => (await submit(model, input, progress)).taskId
 
 // a local file or a data: URL becomes a URL Kie fetches
 const TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4' }
@@ -176,7 +179,7 @@ async function fetchCatalog(hand, before) {
     pages[u] = spec ?? { models: [], title: null }
   }
   const out = { image: [], video: [], speech: [], unwired: [] }
-  for (const name of paths.filter(n => !known.has(n) && !n.startsWith('elevenlabs/'))) {
+  for (const name of paths.filter(n => !known.has(n))) {
     const spec = Object.values(pages).find(s => s.models?.includes(name))
     if (!spec) continue
     const m = fromSpec(name, spec)
@@ -284,6 +287,55 @@ export function estimateKie(kind, m, est, rows = prices?.rows ?? {}) {
 
 // ---------- the tasks ----------
 
+// Suno's tasks by what they do, all through createTask; those that take a version (V6, V6 Mini, V6 Wild)
+export const SUNO = { music: 'ai-music-api/generate', extend: 'ai-music-api/extend', upload_extend: 'ai-music-api/upload-and-extend-audio',
+  cover: 'ai-music-api/upload-and-cover-audio', add_vocals: 'ai-music-api/add-vocals', add_instrumental: 'ai-music-api/add-instrumental',
+  replace: 'ai-music-api/replace-section', mashup: 'ai-music-api/mashup', sounds: 'ai-music-api/sounds', stems: 'ai-music-api/separate-vocals',
+  wav: 'ai-music-api/convert-to-wav-format', timings: 'ai-music-api/timeStamped-lyrics', video: 'ai-music-api/create-music-video',
+  midi: 'ai-music-api/generate-midi-from-audio', persona: 'ai-music-api/generate-persona', lyrics: 'ai-music-api/generate-lyrics',
+  boost: 'ai-music-api/boost-music-style', phrase: 'ai-music-api/validation-phrase', voice: 'ai-music-api/create-voice', check: 'ai-music-api/check-voice' }
+const VERSIONED = new Set(['music', 'extend', 'upload_extend', 'cover', 'add_vocals', 'add_instrumental', 'replace', 'mashup', 'sounds'])
+// answered at once, no task to follow (their docs, 2026-10-31: timed lyrics, a persona, a voice's check)
+const SYNC = new Set(['timings', 'persona', 'check'])
+// a task's record once it ends: Suno's takes are under response.data, the others' files and data in resultJson
+// ready: a task that answers before it ends (Suno's validation phrase: its phrase while it waits for the recording)
+async function record(id, progress, ready) {
+  for (;;) {
+    const d = (await get(`/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(id)}`)).data, state = STATUS[d.state] ?? d.state
+    if (state === 'failed') throw new Error(`${d.failMsg || 'the generation failed'}${d.failCode ? ` (${d.failCode})` : ''}`)
+    if (ready && d.resultJson) {
+      let result = {}
+      try { result = JSON.parse(d.resultJson) } catch { /* not yet */ }
+      if (ready(result)) return { id, result, response: null, cost: null }
+    }
+    if (state === 'completed') {
+      let result = {}
+      try { result = d.resultJson ? JSON.parse(d.resultJson) : {} } catch { /* none */ }
+      return { id, result, response: d.response ?? null, cost: d.creditsConsumed != null ? Math.round(d.creditsConsumed * USD * 1e4) / 1e4 : null }
+    }
+    progress?.(`${state === 'pending' ? 'queued' : 'generating'} on Kie (${id})`)
+    await sleep(POLL())
+  }
+}
+// what a task made: Suno's takes (out-1, out-2) with their covers and words, or its files (named by Kie: a stem's ends
+// with its name), and its data as given
+const pickUrl = (o, ...keys) => keys.map(k => o?.[k]).find(v => typeof v === 'string' && /^https?:/.test(v))
+export function made(r) {
+  const data = r.result?.resultObject ?? r.result ?? {}
+  const takes = [r.response?.data, r.response?.sunoData, data?.data, data?.sunoData].find(Array.isArray) ?? []
+  if (takes.length && takes.some(t => pickUrl(t, 'audio_url', 'audioUrl'))) {
+    const files = takes.flatMap((t, i) => [{ url: pickUrl(t, 'audio_url', 'audioUrl'), name: `out-${i + 1}` }, ...(pickUrl(t, 'image_url', 'imageUrl') ? [{ url: pickUrl(t, 'image_url', 'imageUrl'), name: `cover-${i + 1}` }] : [])])
+    return { files, data, tracks: takes.map((t, i) => ({ file: `out-${i + 1}`, audio_id: t.id ?? t.audioId ?? null, title: t.title ?? '', tags: t.tags ?? '', lyrics: t.prompt ?? t.lyrics ?? '', duration: t.duration ?? null })) }
+  }
+  // a text Kie puts among its « URLs » (Boost style's: the style written out) is a text, not a file
+  const all = r.result?.resultUrls ?? [], urls = all.filter(u => /^https?:/.test(u)), safe = s => s.replace(/[^\w-]/g, '_')
+  // one instrument taken out (Stems): each take's instrument alone, and the song without it
+  const apart = new Map((data.origin_data ?? []).flatMap((x, i) => [[x.extract, ''], [x.remove, 'without-']].filter(([o]) => pickUrl(o, 'audio_url'))
+    .map(([o, pre]) => [decodeURI(o.audio_url), `${pre}${safe(o.stem_type_group_name ?? 'stem')}-${i + 1}`])))
+  const named = u => apart.get(decodeURI(u)) ?? (urls.length > 1 ? safe(decodeURIComponent(path.parse(new URL(u).pathname).name)) : 'out')
+  return { files: urls.map(u => ({ url: u, name: named(u) })), data, tracks: null, texts: all.filter(u => !/^https?:/.test(u)) }
+}
+
 // Kling 4.0's element tag by the Library's type
 const TAGS = { character: 'character', outfit: 'costume', object: 'prop', brand: 'prop', location: 'scene', pose: 'others', other: 'others' }
 const STATUS = { waiting: 'pending', queuing: 'pending', generating: 'in_progress', success: 'completed', fail: 'failed' }
@@ -366,8 +418,12 @@ export default {
             // its editors: Kling's shots, middle frames (Grok's at their times), OmniHuman's masks of who speaks, Kling
             // 4.0's voices of the Library, Seedance 2.5's draft then its final
             shots: m.shots ?? null, mid_frames: m.mid_frames ?? null, cite: m.cite ?? null, ref_seconds: m.ref_seconds ?? null, materials: m.materials ?? null, element_views: m.element_views ?? null, follows_audio: !!m.follows_audio, masks: m.masks?.max ?? 0, named_voices: m.named_voices?.max ?? 0, draft: !!m.draft,
-            options: resolveOptions(m.options) }
-          : { voices: m.voices ?? null, clone: false, dialogue: m.dialogue === 'gemini', speakers: m.dialogue === 'gemini' ? 2 : 0, options: resolveOptions(m.options) },
+            // a sound's length makes its frames (Wan 2.2 Speech to Video: 40 to 120 at 16 a second)
+            // the sound it takes, in seconds (OmniHuman 2.0: 4 to 300)
+            audio_seconds: m.audio_seconds ?? null,
+            audio_frames: m.audio_frames ?? null, sound_or_frames: !!m.sound_or_frames, prompt: !m.fields || !!m.fields.prompt || typeof m.kie !== 'string', options: resolveOptions(m.options) }
+          // a voice: its voices (ElevenLabs' with their samples), a dialogue of 2 (Gemini) or of several (Eleven v3)
+          : { voices: m.voices ?? null, voice_info: voiceInfo(m.voices), clone: false, dialogue: !!m.dialogue, speakers: m.dialogue === 'gemini' ? 2 : m.speakers ?? 0, tags: !!m.tags, seed: !!m.seed, options: resolveOptions(m.options) },
       pricing: m.price?.length ? m.price : CATALOG_PRICES.models[m.id] ?? [],
     }))
   },
@@ -382,7 +438,7 @@ export default {
   },
 
   // refs: images as data: URLs, videos and voices as files; all uploaded first
-  async video({ model, prompt, frames = {}, refs = [], elements = [], duration, resolution, aspect_ratio, generate_audio, seed, upscale_factor, options = {}, shots, mid_frames = [], masks = [], voices = [], draft_of }, { progress } = {}) {
+  async video({ model, prompt, frames = {}, refs = [], elements = [], duration, resolution, aspect_ratio, generate_audio, seed, upscale_factor, options = {}, shots, mid_frames = [], masks = [], voices = [], draft_of, audio_seconds }, { progress } = {}) {
     const m = entry('video', model)
     // Seedance 2.5's final, from its draft: the draft's task and the final's resolution, nothing else
     if (draft_of) return { id: await create(m.draft.model, await withOptions(m, { draft_task_id: draft_of, resolution: m.draft.resolution }, Object.fromEntries(Object.entries(options).filter(([k]) => ['output_format', 'return_last_frame'].includes(k)))), progress) }
@@ -417,6 +473,11 @@ export default {
     if (m.masks && masks.length) input[m.masks.key] = await Promise.all(masks.map(upload))
     // Kling 4.0's voices of the Library, cited @name
     if (m.named_voices && voices.length) input[m.named_voices.key] = await Promise.all(voices.map(async v => ({ name: v.name, audio_url: await upload(v.file) })))
+    // its frames from the sound's length, at its rate, in its steps
+    if (m.audio_frames && audio_seconds) {
+      const a = m.audio_frames
+      Object.assign(input, { num_frames: Math.min(a.max, Math.max(a.min, Math.round((audio_seconds * a.fps) / a.step) * a.step)), frames_per_second: a.fps })
+    }
     return { id: await create(name, await withOptions(m, input, options), progress) }
   },
   poll: job => status(job.id),
@@ -426,16 +487,51 @@ export default {
     const m = entry('speech', model)
     // Gemini's clone on Kie also wants the person's recorded consent: not offered
     if (refs.length) throw Object.assign(new Error(`${m.name} on Kie clones no voice: pick a preset voice, or switch the router to OpenRouter in Settings`), { status: 400 })
-    // Gemini: one speaker or two, a voice each, its turns in order, « how it sounds » as each turn's style
+    // Gemini: one speaker or two, a voice each, its turns in order, « how it sounds » as each turn's style; Eleven v3:
+    // its lines, each its voice (one line for one voice)
     const lines = dialogue?.length ? dialogue : [{ voice, text }], speakers = [...new Set(lines.map(l => l.voice ?? ''))]
     const id = v => `Speaker ${speakers.indexOf(v ?? '') + 1}`
     const { model: name, input } = m.dialogue === 'gemini'
       ? { model: kieModel(m, 'text').model, input: { ...m.set, speakers: speakers.map(v => ({ speaker_id: id(v), ...(v ? { voice_name: v } : {}) })),
         dialogue_turns: lines.map(l => ({ speaker_id: id(l.voice), text: l.text, ...(instructions ? { style: instructions } : {}) })) } }
-      : build(m, 'text', { text, voice })
+      : m.dialogue === 'list'
+        ? { model: kieModel(m, 'text').model, input: { ...m.set, dialogue: lines.map(l => ({ text: l.text, voice: l.voice || m.voices[0] })) } }
+        : build(m, 'text', { text, voice: voice ?? m.voices?.[0] })
     await withOptions(m, input, options)
     const s = await finish(await create(name, input, progress), progress)
     return { data: await download(s.urls[0]), format: extOf(s.urls[0]) || 'mp3', cost: s.cost }
+  },
+
+  // music and sounds (Suno), their edits and extras, and the Voice Isolator: the files uploaded under the keys asked,
+  // the task followed to its end. What it made: its files named by what they are (Suno's takes and their covers), its
+  // data (lyrics, timings, a persona's id…) and its task's id for what follows from it (an extend, the stems)
+  async audio({ model, action, input = {}, files = {}, options = {} }, { progress } = {}) {
+    const m = entry('speech', model), name = m.kie === 'suno' ? SUNO[action] : m.kie
+    if (!name) throw new Error(`${m.name} on Kie does no ${action}`)
+    for (const [k, f] of Object.entries(files)) input[k] = Array.isArray(f) ? await Promise.all(f.map(upload)) : await upload(f)
+    // a Suno version where the task takes one: the model's own, or the one its options pick (Sounds)
+    const { version, ...rest } = options
+    if (m.kie === 'suno' && VERSIONED.has(action)) input.model = version ?? m.suno
+    const sent = Object.fromEntries(Object.entries({ ...input, ...rest }).filter(([, v]) => v !== undefined && v !== null))
+    if (SYNC.has(action)) {
+      const d = await submit(name, sent, progress)
+      if (d?.code != null && d.code !== 200) throw new Error(`Kie ${name}: ${d.code} ${d.msg ?? ''}`.trim())
+      return { task_id: null, files: [], data: d?.data ?? d ?? {}, tracks: null, texts: [], cost: null }
+    }
+    // one's own voice for Suno (2026-11-01, Kie's docs and a real run): the validation phrase stays « generating » until
+    // the recording comes, its phrase in resultJson.data.verify_phrase_text; create-voice answers at once and the voice
+    // is ready when the phrase's task turns « success » (« fail »: not the same voice). Its id is the phrase task's
+    if (action === 'phrase') {
+      const r = await record(await create(name, sent, progress), progress, res => typeof res?.data?.verify_phrase_text === 'string')
+      return { task_id: r.id, files: [], data: { phrase: r.result.data.verify_phrase_text, ...r.result.data }, tracks: null, texts: [], cost: null }
+    }
+    if (action === 'voice') {
+      await create(name, sent, progress)
+      try { await record(input.task_id, progress) } catch (e) { throw new Error(`Suno did not hear the same voice in that recording: sing the phrase again, or ask another one (${e.message})`) }
+      return { task_id: input.task_id, files: [], data: { voice_id: input.task_id }, tracks: null, texts: [], cost: null }
+    }
+    const r = await record(await create(name, sent, progress), progress)
+    return { task_id: r.id, ...made(r), cost: r.cost }
   },
 
   async balance() {

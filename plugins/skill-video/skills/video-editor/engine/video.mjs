@@ -832,7 +832,7 @@ async function subscription() {
   return r.ok ? j : { error: j.detail?.message ?? `ElevenLabs answered ${r.status}` }
 }
 
-// a paid command on any file (voice-change, dub): --estimate prints its credits as JSON; without the user's yes as
+// a paid command on any file (voice-change, dub, isolate): --estimate prints its credits as JSON; without the user's yes as
 // --spend <credits>, it stops with exit code 2 and the same JSON
 function spendGate(credits, detail) {
   console.log(JSON.stringify({ credits, detail }))
@@ -850,7 +850,10 @@ async function spentSince(before, credits) {
     await new Promise(ok => setTimeout(ok, +(process.env.VIDEO_EDITOR_POLL ?? 2000)))
     after = await subscription()
   }
-  console.log(before.error || after.error || after.character_count === before.character_count ? `spent: about ${credits} credits (estimated)` : `spent: ${after.character_count - before.character_count} credits`)
+  // the account's count moves with every spend: another one at the same time (a voice, a second job) shows as a gap from
+  // the estimate, and the estimate stands
+  const moved = after.character_count - before.character_count, near = Math.abs(moved - credits) <= Math.max(5, credits * 0.25)
+  console.log(before.error || after.error || !moved ? `spent: about ${credits} credits (estimated)` : near ? `spent: ${moved} credits` : `spent: about ${credits} credits (estimated: the account moved by ${moved} meanwhile)`)
 }
 
 // a file's sound and length, for the commands that work on any file
@@ -904,6 +907,29 @@ async function voiceChange(file) {
   else run('ffmpeg', ['-y', '-v', 'error', '-i', voice, '-b:a', '256k', dest])
   fs.rmSync(tmp, { recursive: true, force: true })
   console.log(`voice changed: ${dest}`)
+  await spentSince(before, credits)
+}
+
+// isolate <file> [--out <file>]: the voice alone, music, noise and room taken out (ElevenLabs' Voice Isolator, 1,000
+// credits a minute: its help center, 2026-11-01), back on the video when it is one
+// ponytail: one call, ElevenLabs takes up to an hour and 500 MB; cut in pieces like voice-change if that is ever short
+async function isolate(file) {
+  const p = soundOf(file), credits = Math.ceil((p.duration / 60) * 1000)
+  // ElevenLabs' own minimum (its 400, free, 2026-11-01)
+  if (p.duration < 4.6) die(`ElevenLabs' Voice Isolator takes 4.6 s at least: ${path.basename(file)} lasts ${p.duration.toFixed(1)} s`)
+  spendGate(credits, `voice isolation of ${ms(p.duration)} s`)
+  const before = await subscription(), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'isolate-'))
+  const sound = path.join(tmp, 'in.mp3'), voice = path.join(tmp, 'voice.mp3'), form = new FormData()
+  run('ffmpeg', ['-y', '-v', 'error', '-i', file, '-vn', '-b:a', '192k', sound])
+  form.append('audio', await fs.openAsBlob(sound), 'audio.mp3')
+  console.log('isolating the voice…')
+  fs.writeFileSync(voice, await eleven('/v1/audio-isolation', { method: 'POST', body: form }))
+  const ext = path.extname(file), dest = path.resolve(opt.out ?? path.join(path.dirname(file), `${path.basename(file, ext)}-voice-only${p.width ? ext : '.mp3'}`))
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  if (p.width) run('ffmpeg', ['-y', '-v', 'error', '-i', file, '-i', voice, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-shortest', dest])
+  else run('ffmpeg', ['-y', '-v', 'error', '-i', voice, '-b:a', '256k', dest])
+  fs.rmSync(tmp, { recursive: true, force: true })
+  console.log(`voice isolated: ${dest}`)
   await spentSince(before, credits)
 }
 
@@ -2149,7 +2175,7 @@ const commands = {
   style: () => style(...args), serve, rules: () => rules(...args), check, sync: () => syncMedia(args[0]), beats: () => beatGrid(args[0]), thumbnail,
   fix: () => fixWord(args[0], args[1]), feedback: () => feedback(args[0], args[1]), status: () => status(...args), voice: voiceOver, voices: () => voices(args[0]),
   elevenlabs: () => elevenlabs(...args), credits: () => credits(...args),
-  'voice-change': () => voiceChange(args[0]), 'voice-clone': () => voiceClone(...args), dub: () => dub(args[0]),
+  'voice-change': () => voiceChange(args[0]), 'voice-clone': () => voiceClone(...args), dub: () => dub(args[0]), isolate: () => isolate(args[0]),
   music: () => music(args[0]), sfx: () => sfx(...args), sounds,
 }
 if (!commands[cmd]) die(`usage: video.mjs <${Object.keys(commands).join(' | ')}> [--project <slug>]`)
