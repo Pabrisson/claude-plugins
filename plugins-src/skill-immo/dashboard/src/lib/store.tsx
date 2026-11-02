@@ -1,7 +1,7 @@
 import { reference, typeOf } from "@engine/market.js"
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
-import { api, type Listing, type MapRow, type Poi, type Profile, type PropertyType, type SearchData, type State, type Stats } from "@/lib/api"
+import { api, EXPLORE, EXPLORE_SLUG, type Listing, type MapRow, type Poi, type Point, type Profile, type PropertyType, type Search, type SearchData, type State, type Stats } from "@/lib/api"
 
 // what the user asks the agent, collected across the dashboard and copied as one prompt
 export type FeedbackKind = "affiner" | "élargir" | "zone" | "annonces" | "analyser" | "comparer" | "ajouter" | "chercher" | "message" | "question" | "parcelle"
@@ -59,6 +59,19 @@ export const useSearch = () => useContext(SearchContext)!
 // the prompt's items stay in this browser per search, across reloads
 const load = (key: string) => { try { return JSON.parse(localStorage.getItem(key) ?? "[]") } catch { return [] } }
 const save = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* private window */ } }
+// The page without a search: an empty search at `point`, without a zone (every DPE out of it: its listing unknown) nor
+// listings. Its maps start where they were left, across its two tabs and reloads, else at that point.
+export const emptySearch = (point: Point): SearchData => ({
+  search: {
+    slug: EXPLORE_SLUG, query: "", label: "Sans recherche", mode: "classic", types: ["flat", "house"], type: "address", point, insee: "", city: "la commune affichée", district: null, street: null, ban: "",
+    zone: { how: "none", kind: "polygon", geometry: { type: "MultiPolygon", coordinates: [] }, label: "" }, criteria: {}, stream: null, last_fetch: null, last_refresh: null, last_visit: null,
+  },
+  listings: [], market: {}, area: {}, alerts: {}, feed: { read_at: null, stream: null, items: [] }, unread: 0, version: 0,
+})
+const AT = "immo:explorer:at"
+export const rememberAt = (p: Point) => { if (EXPLORE) save(AT, p) }
+export const startOf = (s: Search): Point => { const at = EXPLORE ? load(AT) : []; return at.length === 2 ? at : (s.zone.center ?? s.point) }
+
 // what this tab shows (its view, the dossier open) survives a reload of the page, in this tab only
 export function useTabState<T>(key: string, initial: T) {
   const [v, setV] = useState<T>(() => { try { const x = sessionStorage.getItem(key); return x == null ? initial : JSON.parse(x) } catch { return initial } })
@@ -93,6 +106,7 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
   // every few seconds, while the page is shown: a newer version than the data's is a change made elsewhere. The
   // page's own changes reload the data, which moves its version along.
   useEffect(() => {
+    if (EXPLORE) return
     const t = setInterval(() => {
       if (document.visibilityState === "visible") api.version(slug).then(v => { if (v.version > data.version) setStale(true); setUnread(v.unread) }, () => {})
     }, 4000)

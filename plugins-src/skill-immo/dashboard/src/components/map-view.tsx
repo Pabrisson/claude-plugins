@@ -20,10 +20,10 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, type AuditRow, type DpeRow, type Hit, type IrisOdds, type Listing, type Odds, type OddsPlace, type PermitKind, type PermitRow, type Poi, type Point, type PropertyType } from "@/lib/api"
+import { api, EXPLORE, type AuditRow, type DpeRow, type Hit, type IrisOdds, type Listing, type Odds, type OddsPlace, type PermitKind, type PermitRow, type Poi, type Point, type PropertyType } from "@/lib/api"
 import { auditAsk, date, dpeAsk, eur, keur, LEVEL_LABEL, m2, month, num, pct, PERMIT_LABEL, permitLabel, permitWhat, perUnit, POI_LABEL, share, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
 import { shelved } from "@/lib/rank"
-import { useSearch } from "@/lib/store"
+import { rememberAt, startOf, useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
 import { geometryOf, ringsOf, zoneEditor, type Rings } from "@/components/zone-editor"
@@ -101,7 +101,7 @@ export const esc = (x: string) => x.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<"
 export function dpeTip(g: DpeGroup, listings: Listing[], buttons = false) {
   const rows = g.items.slice(0, 8).map(d => {
     const l = d.listing && listings.find(x => x.id === d.listing!.id)
-    const found = l ? `${d.listing!.how === "near" ? "Annonce probable" : "Annonce"} ${keur(l.price)}` : g.out ? "Hors de la zone suivie : annonce inconnue" : "Aucune annonce trouvée"
+    const found = l ? `${d.listing!.how === "near" ? "Annonce probable" : "Annonce"} ${keur(l.price)}` : g.out ? (EXPLORE ? "Annonce inconnue" : "Hors de la zone suivie : annonce inconnue") : "Aucune annonce trouvée"
     return `<div class="dpe-row"><b class="dpe-chip" style="background:${DPE_HEX[d.energy]};color:${dpeInk(d.energy)}">${esc(d.energy)}</b>${TYPE_LABEL[d.type]}${d.area ? ` · ${num(d.area)} m²` : ""} · ${date(d.date)}<br><span>${found}</span>${buttons && !d.listing ? `<button type="button" data-n="${esc(d.number)}">Chercher l'annonce</button>` : ""}</div>`
   })
   const more = g.items.length > 8 ? `<span>+ ${g.items.length - 8} autres</span>` : ""
@@ -128,7 +128,7 @@ function placeTip(g: OddsPlace, buttons = false) {
   const chip = (x: string, bg: string, ink: string) => `<b class="dpe-chip" style="background:${bg};color:${ink}">${esc(x)}</b>`
   const rows = g.signals.slice(0, 8).map(s => {
     const n = s.rows?.length ?? 1
-    const what = s.kind === "dpe" ? `${chip(s.row.energy, DPE_HEX[s.row.energy], dpeInk(s.row.energy))}${n > 1 ? `${n} DPE du ${date(s.row.date)}, comptés une fois` : `DPE du ${date(s.row.date)}`} · ${TYPE_LABEL[s.row.type]}${s.row.area ? ` ${num(s.row.area)} m²` : ""}<br><span>${share(s.p)} · ${g.out ? "hors de la zone suivie : annonce inconnue" : "sans annonce"}</span>`
+    const what = s.kind === "dpe" ? `${chip(s.row.energy, DPE_HEX[s.row.energy], dpeInk(s.row.energy))}${n > 1 ? `${n} DPE du ${date(s.row.date)}, comptés une fois` : `DPE du ${date(s.row.date)}`} · ${TYPE_LABEL[s.row.type]}${s.row.area ? ` ${num(s.row.area)} m²` : ""}<br><span>${share(s.p)} · ${g.out ? (EXPLORE ? "annonce inconnue" : "hors de la zone suivie : annonce inconnue") : "sans annonce"}</span>`
       : s.kind === "audit" ? `${chip(s.row.energy, DPE_HEX[s.row.energy], dpeInk(s.row.energy))}Audit énergétique du ${date(s.row.date)}<br><span>${share(s.p)} · ${s.row.building ? "immeuble entier" : TYPE_LABEL[s.row.type].toLowerCase()}</span>`
       : `${chip(s.row.form, `var(--permit-${s.row.kind})`, "#fff")}${permitLabel(s.row)} du ${date(s.row.date)}<br><span>${share(s.p)}${permitWhat(s.row) ? ` · ${permitWhat(s.row)}` : ""}</span>`
     return `<div class="dpe-row">${what}${buttons && s.kind !== "permit" ? `<button type="button" data-n="${esc(s.row.number)}">Chercher l'annonce</button>` : ""}</div>`
@@ -358,8 +358,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
     // the style, and the audits' and permits' badges in this theme's colors (without them, the map still comes)
     Promise.all([loadStyle(dark), mapBadges(cssColor, cssColor("--card")).catch(e => { console.error(e); return {} })]).then(([style, badges]) => {
       if (gone || !box.current) return
-      const z = data.search.zone, center = z.center ?? data.search.point
-      const m = new MapLibre({ container: box.current, style, center, zoom: 15, attributionControl: { compact: true }, locale: LOCALE })
+      const m = new MapLibre({ container: box.current, style, center: startOf(data.search), zoom: 15, attributionControl: { compact: true }, locale: LOCALE })
       map.current = m
       m.setPadding({ top: 0, bottom: 0, left, right })
       m.addControl(new NavigationControl({ showCompass: false }), "top-right")
@@ -443,6 +442,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
           const c = m.getContainer(), x0 = left < c.clientWidth - right ? left : 0, x1 = left < c.clientWidth - right ? c.clientWidth - right : c.clientWidth
           const a = m.unproject([x0, c.clientHeight]), b = m.unproject([x1, 0])
           oddsRef.current?.onView({ bbox: [a.lng, a.lat, b.lng, b.lat], zoom: m.getZoom() })
+          rememberAt(m.getCenter().toArray())
         }
         m.on("moveend", view)
         view()
@@ -581,19 +581,22 @@ export function DpeControls({ layers, toggle, dpe, mode, id = "" }: {
           <ToggleGroup type="single" size="sm" variant="outline" value={dpe.days} onValueChange={v => v && dpe.setDays(v)} className="justify-start" aria-label="Période des DPE">
             {PERIODS.map(([v, l]) => <ToggleGroupItem className={CHIP} key={v} value={v}><CalendarIcon />{l}</ToggleGroupItem>)}
           </ToggleGroup>
-          <ToggleGroup type="single" size="sm" variant="outline" value={dpe.scope} onValueChange={v => v && dpe.setScope(v)} className="justify-start" aria-label="DPE affichés">
-            <ToggleGroupItem className={CHIP} value="all"><ListIcon />Tous</ToggleGroupItem>
-            <Hint text="Seulement les DPE des types de bien et des critères de la recherche (surface, classe énergie)."><ToggleGroupItem className={CHIP} value="criteria"><FilterIcon />Dans mes critères</ToggleGroupItem></Hint>
-          </ToggleGroup>
+          {!EXPLORE && (
+            <ToggleGroup type="single" size="sm" variant="outline" value={dpe.scope} onValueChange={v => v && dpe.setScope(v)} className="justify-start" aria-label="DPE affichés">
+              <ToggleGroupItem className={CHIP} value="all"><ListIcon />Tous</ToggleGroupItem>
+              <Hint text="Seulement les DPE des types de bien et des critères de la recherche (surface, classe énergie)."><ToggleGroupItem className={CHIP} value="criteria"><FilterIcon />Dans mes critères</ToggleGroupItem></Hint>
+            </ToggleGroup>
+          )}
           <div className="flex flex-wrap items-center gap-1 text-muted-foreground">
             {Object.entries(DPE_HEX).map(([k, c]) => <i key={k} className="grid size-4 place-items-center rounded-sm text-[10px] font-bold not-italic" style={{ background: c, color: dpeInk(k) }}>{k}</i>)}
             <span className="ml-1">la classe du dernier DPE, le nombre à l'adresse</span>
           </div>
-          <div className="flex items-center gap-2">
+          {/* without a search, no listing is known: nothing to flag */}
+          {!EXPLORE && <div className="flex items-center gap-2">
             <Switch id={`${id}dpe-open`} checked={layers.includes("dpe-open")} onCheckedChange={v => toggle("dpe-open", v)} />
             <Label htmlFor={`${id}dpe-open`} className="text-xs"><i className="size-3 rounded-full border-2 border-foreground" />Signaler les DPE sans annonce <span className="text-muted-foreground">({num(dpe.open)})</span></Label>
-          </div>
-          {layers.includes("dpe-open") && (
+          </div>}
+          {!EXPLORE && layers.includes("dpe-open") && (
             <>
               <div className="flex items-center gap-2">
                 <Switch id={`${id}dpe-only`} checked={layers.includes("dpe-only")} onCheckedChange={v => toggle("dpe-only", v)} />
@@ -787,14 +790,14 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                   </>
                 )}
               </Group>
-              <Group title="Annonces">
+              {!EXPLORE && <Group title="Annonces">
                 <div className="flex items-center gap-2">
                   <Switch id="listings" checked={layers.includes("listings")} onCheckedChange={v => toggle("listings", v)} />
                   <Label htmlFor="listings" className="text-xs">Annonces de la recherche <span className="text-muted-foreground">({num(odds.listings)})</span></Label>
                 </div>
                 <p className="text-muted-foreground">Celles déjà chargées dans l'onglet Annonces, aux mêmes positions.</p>
-              </Group>
-              {zone}
+              </Group>}
+              {!EXPLORE && zone}
             </>
           ) : (
             <>

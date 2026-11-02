@@ -273,3 +273,7 @@ export const api = {
 
 // the search a URL is about: /<slug>/
 export const slugOfUrl = () => location.pathname.split("/").filter(Boolean)[0] ?? null
+// the page without a search (« Explorer » on the home page): /explorer/, its
+// « Prospection » and « Cadastre » tabs only. The engine never gives a search that slug.
+export const EXPLORE_SLUG = "explorer"
+export const EXPLORE = slugOfUrl() === EXPLORE_SLUG

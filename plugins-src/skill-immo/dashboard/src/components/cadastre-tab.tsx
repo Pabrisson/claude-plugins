@@ -21,10 +21,10 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api, type Cadastre, type OwnerKind, type ParcelSale, type Sold, type SoldKind } from "@/lib/api"
+import { api, EXPLORE, type Cadastre, type OwnerKind, type ParcelSale, type Sold, type SoldKind } from "@/lib/api"
 import { date, dpeAsk, eur, m2, num, permitLabel, permitWhat, titleOf, TYPE_LABEL } from "@/lib/format"
 import { shelved } from "@/lib/rank"
-import { useSearch } from "@/lib/store"
+import { rememberAt, startOf, useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
 
@@ -203,7 +203,7 @@ export function CadastreTab() {
         <ToggleGroupItem value="info"><ListIcon />Infos{picked && <span className="size-1.5 rounded-full bg-primary" />}</ToggleGroupItem>
       </ToggleGroup>
       {show === "map" ? (
-        <div className="relative mt-3 mb-16 min-h-0 flex-1">
+        <div className={cn("relative mt-3 min-h-0 flex-1", !EXPLORE && "mb-16")}>
           <CadastreMap className="absolute inset-0" {...map} />
           <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-center">{status}</div>
         </div>
@@ -248,7 +248,7 @@ function CadastreMap({ className, right = 0, layers, setLayers, hover, picked, s
     const dark = resolvedTheme === "dark"
     loadStyle(dark).then(style => {
       if (gone || !box.current) return
-      const z = data.search.zone, m = new MapLibre({ container: box.current, style, center: z.center ?? data.search.point, zoom: 16.5, attributionControl: { compact: true }, locale: LOCALE })
+      const z = data.search.zone, m = new MapLibre({ container: box.current, style, center: startOf(data.search), zoom: 16.5, attributionControl: { compact: true }, locale: LOCALE })
       map.current = m
       m.setPadding({ top: 0, bottom: 0, left, right })
       m.addControl(new NavigationControl({ showCompass: false }), "top-right")
@@ -338,6 +338,7 @@ function CadastreMap({ className, right = 0, layers, setLayers, hover, picked, s
           const key = `${zoom.toFixed(2)}|${m.getBounds().toArray().flat().map(x => x.toFixed(5))}|${parcels.size}`
           if (key === last) return
           last = key
+          rememberAt(m.getCenter().toArray())
           const all = [...parcels.values()], count: { [k: string]: number } = {}
           for (const p of all) count[p.commune] = (count[p.commune] ?? 0) + 1
           const commune = Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
@@ -467,10 +468,10 @@ function CadastreLayers({ docked, layers, setLayers, range, setRange, years, set
               </div>
             )}
           </Group>
-          <Group title="Recherche">
+          {!EXPLORE && <Group title="Recherche">
             {sw("listings", <>Annonces de la recherche <span className="text-muted-foreground">({num(listings)})</span></>)}
             {sw("zone", "Zone de la recherche")}
-          </Group>
+          </Group>}
         </div>
       )}
     </div>

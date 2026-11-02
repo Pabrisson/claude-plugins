@@ -1,4 +1,4 @@
-import { BarChart3Icon, BellRingIcon, EllipsisIcon, LandPlotIcon, ListIcon, MapIcon, PlusIcon, RadarIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SettingsIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
+import { BarChart3Icon, BellRingIcon, CompassIcon, EllipsisIcon, HomeIcon, LandPlotIcon, ListIcon, MapIcon, PlusIcon, RadarIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SettingsIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
 import { ThemeProvider } from "next-themes"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -17,7 +17,7 @@ import { MarketTab } from "@/components/market-tab"
 import { OddsTab } from "@/components/odds-tab"
 import { RunProvider } from "@/components/run-dialog"
 import { AccountDialog, SettingsTab } from "@/components/settings-tab"
-import { NewSearch, StaleBar, ThemeButton, TopBar } from "@/components/top-bar"
+import { NewSearch, PromptButton, StaleBar, ThemeButton, TopBar } from "@/components/top-bar"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
@@ -32,9 +32,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { TypeIcon } from "@/components/type-icon"
-import { api, slugOfUrl, type Profile, type SearchData, type SearchSummary, type State } from "@/lib/api"
+import { api, EXPLORE, EXPLORE_SLUG, slugOfUrl, type Point, type Profile, type SearchData, type SearchSummary, type State } from "@/lib/api"
 import { date, TYPE_PLURAL } from "@/lib/format"
-import { SearchProvider, useSearch, useTabState } from "@/lib/store"
+import { emptySearch, SearchProvider, useSearch, useTabState } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
 
@@ -42,7 +42,7 @@ export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
       <TooltipProvider>
-        {slugOfUrl() ? <SearchPage slug={slugOfUrl()!} /> : <Home />}
+        {EXPLORE ? <ExplorePage /> : slugOfUrl() ? <SearchPage slug={slugOfUrl()!} /> : <Home />}
         <Toaster position="bottom-center" />
       </TooltipProvider>
     </ThemeProvider>
@@ -61,6 +61,45 @@ function SearchPage({ slug }: { slug: string }) {
   return (
     <SearchProvider slug={slug} initial={boot.data} state={boot.state} profile={boot.profile} lastVisit={boot.lastVisit}>
       <Workspace />
+    </SearchProvider>
+  )
+}
+
+// The page without a search (/explorer/, the home page's « Explorer »): the « Prospection » and « Cadastre » tabs
+// over an empty search, the hash naming the tab (Prospection without one). Its maps start where they were
+// left (store startOf), else at the latest search, else in Paris.
+const PARIS: Point = [2.3522, 48.8566]
+function ExplorePage() {
+  const [boot, setBoot] = useState<{ data: SearchData; state: State; profile: Profile } | { error: string } | null>(null)
+  useEffect(() => {
+    const latest = api.searches().then(l => l.toSorted((a, b) => b.created.localeCompare(a.created))[0]).then(s => (s ? api.search(s.slug).then(d => d.search.point) : PARIS)).catch(() => PARIS)
+    Promise.all([latest, api.state(), api.profile()]).then(([point, state, profile]) => setBoot({ data: emptySearch(point), state, profile }), e => setBoot({ error: e.message }))
+  }, [])
+  const [view, setView] = useState(() => (location.hash === "#cadastre" ? "cadastre" : "odds"))
+  const pick = (v: string) => { setView(v); history.replaceState(null, "", v === "cadastre" ? "#cadastre" : "#prospection") }
+  if (!boot) return <div className="grid h-dvh grid-rows-[auto_1fr] gap-2 p-3"><Skeleton className="h-12" /><Skeleton /></div>
+  if ("error" in boot) return <Home error={`La carte n'a pas pu s'ouvrir (${boot.error}).`} />
+  return (
+    <SearchProvider slug={EXPLORE_SLUG} initial={boot.data} state={boot.state} profile={boot.profile} lastVisit={null}>
+      <div className="flex h-dvh flex-col">
+        <header className="flex items-center gap-2 border-b bg-card px-3 py-2 md:px-4">
+          <Button variant="ghost" size="icon-sm" asChild aria-label="Toutes les recherches"><a href="/"><HomeIcon /></a></Button>
+          <div className="flex min-w-0 flex-col">
+            <h1 className="truncate text-sm font-bold md:text-base">Explorer</h1>
+            <span className="truncate text-xs text-muted-foreground">Sans recherche : l'open data du secteur affiché</span>
+          </div>
+          <span className="flex-1" />
+          <PromptButton />
+          <ThemeButton />
+        </header>
+        <Tabs value={view} onValueChange={pick} className="min-h-0 flex-1 gap-0">
+          <TabsList variant="line" className="w-full justify-start rounded-none border-b bg-card px-3">
+            {VIEWS.filter(v => v.id === "odds" || v.id === "cadastre").map(v => <TabsTrigger key={v.id} value={v.id} className="flex-none"><v.icon />{v.label}</TabsTrigger>)}
+          </TabsList>
+          <TabsContent value="odds" className="min-h-0"><OddsTab /></TabsContent>
+          <TabsContent value="cadastre" className="min-h-0"><CadastreTab /></TabsContent>
+        </Tabs>
+      </div>
     </SearchProvider>
   )
 }
@@ -189,12 +228,17 @@ function Home({ error }: { error?: string }) {
           <Button size="xs" variant="secondary" onClick={() => location.reload()}>Recharger</Button>
         </div>
       )}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Recherche immobilière</h1>
           <p className="text-sm text-muted-foreground">{stream ? "API activée" : "Mode OpenData : open data et annonces trouvées par l'agent"}</p>
         </div>
-        <span className="flex gap-1.5"><NewSearch streamEstate={stream} trigger={trigger} /><ThemeButton /></span>
+        {/* the map's tabs without a search (ExplorePage) */}
+        <span className="flex flex-wrap gap-1.5">
+          <NewSearch streamEstate={stream} trigger={trigger} />
+          <Button variant="outline" asChild><a href={`/${EXPLORE_SLUG}/`}><CompassIcon data-icon="inline-start" />Explorer</a></Button>
+          <ThemeButton />
+        </span>
       </div>
       <AccountDialog />
       {error && <p className="text-sm text-destructive">{error}</p>}

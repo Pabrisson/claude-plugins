@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api, type IrisOdds, type Odds, type OddsPlace } from "@/lib/api"
+import { api, EXPLORE, type IrisOdds, type Odds, type OddsPlace } from "@/lib/api"
 import { auditAsk, date, dpeAsk, keur, m2, num, permitLabel, permitWhat, share, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
@@ -84,7 +84,7 @@ export function OddsTab() {
         <ToggleGroupItem value="info"><ListIcon />Infos</ToggleGroupItem>
       </ToggleGroup>
       {show === "map" ? (
-        <div className="relative mt-3 mb-16 min-h-0 flex-1">
+        <div className={cn("relative mt-3 min-h-0 flex-1", !EXPLORE && "mb-16")}>
           <MapView className="absolute inset-0" odds={odds} typeFilter={typeFilter} />
           <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-center">{status}</div>
         </div>
@@ -193,7 +193,7 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, pl
           <Stat label="Vente à 12 mois" help={METRICS.odds.help} value={homes ? share(sold / homes, 1) : "—"} hint={data.years.length ? `d'un logement · ${num(Math.round(sold))} ventes par an (DVF ${data.years[0]}–${data.years.at(-1)})` : "Pas de DVF ici"} />
           <Stat label="Successions" help={METRICS.successions.help} value={perYear(sum(data.iris, i => i.successions))} hint="ventes après le décès d'un propriétaire vivant seul" />
           <Stat label="Séparations" help={METRICS.separations.help} value={perYear(sum(data.iris, i => i.separations))} hint="ventes après la séparation d'un couple de propriétaires" />
-          <Stat label="DPE récents" help={DPE_HELP} value={num(items.length)} hint={`${num(open)} sans annonce dans votre zone`} />
+          <Stat label="DPE récents" help={DPE_HELP} value={num(items.length)} hint={EXPLORE ? "sans recherche : annonces inconnues" : `${num(open)} sans annonce dans votre zone`} />
           <Stat label="Audits énergétiques" help={AUDIT_HELP} value={num(audits.length)} hint={`sur ${months.audit} mois · ${num(audits.filter(a => a.building).length)} immeubles entiers`} />
           <Stat label="Permis" help={PERMIT_HELP} value={num(permits.length)} hint={`sur ${months.permit} mois · ${num(permits.filter(p => p.kind === "demolish").length)} démolitions, ${num(permits.reduce((a, p) => a + (p.homes ?? 0), 0))} logements créés`} />
           <Stat label="Logements vacants" help={METRICS.vacant.help} value={homes ? share(vacant / homes, 1) : "—"} hint={`${num(vacant)} logements vides au recensement`} />
@@ -211,7 +211,7 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, pl
                     <i className="size-2.5 shrink-0 rounded-sm" style={{ background: `var(--estim-${1 + PROBA.steps.filter(s => g.odds >= s).length})` }} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{g.address ?? "Adresse inconnue"}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{g.signals.map(s => (s.kind === "permit" ? permitLabel(s.row) : `${s.kind === "dpe" ? "DPE" : "Audit"} ${s.row.energy}${(s.rows?.length ?? 1) > 1 ? ` ×${s.rows!.length}` : ""}`)).join(" · ")}{g.out ? " · hors de votre zone" : ""}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{g.signals.map(s => (s.kind === "permit" ? permitLabel(s.row) : `${s.kind === "dpe" ? "DPE" : "Audit"} ${s.row.energy}${(s.rows?.length ?? 1) > 1 ? ` ×${s.rows!.length}` : ""}`)).join(" · ")}{g.out && !EXPLORE ? " · hors de votre zone" : ""}</span>
                     </span>
                     <span className="tabular-nums">{share(g.odds)}</span>
                   </button>
@@ -309,7 +309,7 @@ export function DpeBlock({ groups, onPick, hover }: { groups: DpeGroup[]; onPick
       action={
         <Select value={sort} onValueChange={v => setSort(v as keyof typeof DPE_SORTS)}>
           <SelectTrigger size="sm" className="h-7 text-xs" aria-label="Trier les DPE"><SelectValue /></SelectTrigger>
-          <SelectContent align="end"><SelectGroup>{Object.entries(DPE_SORTS).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectGroup></SelectContent>
+          <SelectContent align="end"><SelectGroup>{Object.entries(DPE_SORTS).filter(([k]) => !EXPLORE || k !== "unlisted").map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectGroup></SelectContent>
         </Select>
       }>
       {sorted.length ? (
@@ -323,7 +323,7 @@ export function DpeBlock({ groups, onPick, hover }: { groups: DpeGroup[]; onPick
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{g.address ?? "Adresse inconnue"}</span>
                     <span className="block text-xs text-muted-foreground">
-                      {TYPE_LABEL[d.type]}{d.area ? ` · ${num(d.area)} m²` : ""} · {date(d.date)}{g.items.length > 1 ? ` · ${g.items.length} DPE` : ""} · {l ? `Annonce ${keur(l.price)}` : g.out ? "hors de votre zone : annonce inconnue" : "sans annonce"}
+                      {TYPE_LABEL[d.type]}{d.area ? ` · ${num(d.area)} m²` : ""} · {date(d.date)}{g.items.length > 1 ? ` · ${g.items.length} DPE` : ""} · {l ? `Annonce ${keur(l.price)}` : g.out ? (EXPLORE ? "annonce inconnue" : "hors de votre zone : annonce inconnue") : "sans annonce"}
                     </span>
                   </span>
                 </button>
@@ -410,7 +410,7 @@ function PlaceBlock({ g, i, onClose, hover }: { g: OddsPlace; i: IrisOdds | unde
   return (
     <div ref={ref} className="scroll-mt-3" onMouseEnter={hover.onMouseEnter} onMouseLeave={hover.onMouseLeave}>
       <Block icon={MapPinnedIcon} title={g.address ?? "Adresse inconnue"} help={`L'adresse ouverte : ses DPE, audits énergétiques et permis des 12 derniers mois avec leur chance, et les chiffres de son quartier. ${PROBA_HELP}`} action={<Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Fermer l'adresse"><XIcon /></Button>}>
-        <p className="text-xs text-muted-foreground">{[i?.commune, i && `quartier ${i.name}`, g.out ? "hors de votre zone : annonces inconnues" : "dans votre zone"].filter(Boolean).join(" · ")}</p>
+        <p className="text-xs text-muted-foreground">{[i?.commune, i && `quartier ${i.name}`, g.out ? (EXPLORE ? "annonces inconnues" : "hors de votre zone : annonces inconnues") : "dans votre zone"].filter(Boolean).join(" · ")}</p>
         <div className="flex items-center gap-2">
           <i className="size-3 shrink-0 rounded-sm" style={{ background: `var(--estim-${1 + PROBA.steps.filter(x => g.odds >= x).length})` }} />
           <span className="text-2xl font-semibold tracking-tight tabular-nums">{share(g.odds)}</span>

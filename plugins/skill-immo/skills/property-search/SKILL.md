@@ -229,6 +229,10 @@ apply this feedback (recherche <slug>)
 11. [parcelle] étudier la parcelle DN 68 (69383000DN0068), Lyon 3e, 990 m²
 ```
 
+`(sans recherche)` in place of `(recherche <slug>)`: the dashboard's page without a search (« Explorer » on its home
+page), with only `[parcelle]`, `[chercher]` and `[question]` items. No slug: a `[chercher]` listing found is given
+by its link, with the offer to create a search there (`add` needs one).
+
 Do every item in order:
 - `[affiner]`: what the user changed in the dashboard's « Critères » (only that): `search -p <slug> --criteria "…"` with
   the criteria (`k=` drops one), `--types` with `types=` and `--mode` with `mode=` when present. Then, in Stream Estate

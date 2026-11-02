@@ -587,7 +587,8 @@ async function search(query) {
     if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris|drawn] [--radius m] [--criteria "k=v …"]')
     const [f] = await od.geocode(query, { type: opt.type, limit: 1 })
     if (!f) die(`no place found for "${query}": try geocode "${query}" and a more precise query`)
-    const x = f.properties, slug = (() => { const b = slugify(opt.slug ?? x.label); let sl = b; for (let i = 2; fs.existsSync(path.join(HOME, sl)); i++) sl = `${b}-${i}`; return sl })()
+    // « explorer » is the dashboard's page without a search (/explorer/)
+    const x = f.properties, slug = (() => { const b = slugify(opt.slug ?? x.label); let sl = b; for (let i = 2; fs.existsSync(path.join(HOME, sl)) || sl === 'explorer'; i++) sl = `${b}-${i}`; return sl })()
     const [, voie] = x.id.split('_')
     s = {
       slug, query, label: x.label, created: now(), type: x.type, point: f.geometry.coordinates, insee: x.citycode, city: x.city, district: x.district ?? null,

@@ -22,7 +22,7 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, type Criteria, type Profile, type PropertyType, type ScoreKey } from "@/lib/api"
+import { api, EXPLORE, type Criteria, type Profile, type PropertyType, type ScoreKey } from "@/lib/api"
 import { criteriaLabels, eur, SCORE_LABEL, TYPE_PLURAL } from "@/lib/format"
 import { useSearch, type Feedback } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils"
 
 // the Copy prompt, as the skill's "apply this feedback" mode reads it
 export const promptText = (slug: string, items: Feedback[]) =>
-  `/skill-immo:property-search apply this feedback (recherche ${slug})\n${items.map((f, i) => `${i + 1}. [${f.kind}] ${f.text}`).join("\n")}`
+  `/skill-immo:property-search apply this feedback (${EXPLORE ? "sans recherche" : `recherche ${slug}`})\n${items.map((f, i) => `${i + 1}. [${f.kind}] ${f.text}`).join("\n")}`
 
 export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings: () => void }) {
   const { data, state, feedback, addFeedback } = useSearch()
@@ -349,7 +349,8 @@ function BudgetPicker({ pct, setPct, way }: { pct: number; setPct: (v: number) =
     </FieldSet>
   )
 }
-function PromptButton() {
+// without a search (the map's page), only the items and the request: nothing to widen
+export function PromptButton() {
   const { slug, data, feedback, removeFeedback, clearFeedback } = useSearch()
   const widen = useWiden()
   const [question, setQuestion] = useState(""), [picked, setPicked] = useState<string[]>([]), [other, setOther] = useState("")
@@ -381,7 +382,7 @@ function PromptButton() {
               <Button variant="ghost" size="icon-xs" aria-label="Retirer" onClick={() => removeFeedback(i)}><Trash2Icon /></Button>
             </div>
           ))}
-          <FieldGroup className="gap-3">
+          {!EXPLORE && <><FieldGroup className="gap-3">
             <FieldLabel>Élargir la recherche</FieldLabel>
             <ZonePicker how={how} setHow={setHow} radius={radius} setRadius={setRadius} way={zoneWay} />
             {data.search.criteria.budget_max && <BudgetPicker pct={pct} setPct={setPct} way={budgetWay} />}
@@ -397,10 +398,10 @@ function PromptButton() {
             <Input value={other} onChange={e => setOther(e.target.value)} placeholder="Autre : la rue voisine, une autre commune…" aria-label="Autre façon d'élargir" />
             <FieldDescription>L'agent change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode API, le coût est annoncé avant.</FieldDescription>
           </FieldGroup>
-          <Separator />
+          <Separator /></>}
           <Field>
             <FieldLabel htmlFor="question">Votre demande</FieldLabel>
-            <Textarea id="question" value={question} onChange={e => setQuestion(e.target.value)} placeholder="Affine à 3 pièces, compare les deux T3 du haut…" rows={3} />
+            <Textarea id="question" value={question} onChange={e => setQuestion(e.target.value)} placeholder={EXPLORE ? "Que vaut ce terrain, peut-on y construire…" : "Affine à 3 pièces, compare les deux T3 du haut…"} rows={3} />
           </Field>
           <Button onClick={copy} disabled={!items.length}><ClipboardCopyIcon data-icon="inline-start" />Copier{items.length ? ` (${items.length})` : ""}</Button>
         </div>
