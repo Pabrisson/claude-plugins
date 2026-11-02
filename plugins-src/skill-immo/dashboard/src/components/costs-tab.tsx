@@ -31,16 +31,17 @@ const title = "flex items-center gap-2"
 
 // what a call was for, in the user's words: the routes of the API v1 (references/stream-estate.md)
 const USES = {
-  fetched: "Annonces récupérées",
+  fetched: "Annonces récupérées ou relues",
   counts: "Comptages",
   asking: "Prix affichés du marché",
   alert: "Suppression d'une ancienne alerte",
   other: "Autres appels",
 } as const
 type Use = keyof typeof USES
-const purposeOf = (e: UsageEntry): Use => (e.route === "GET /documents/properties" ? (e.results ? "fetched" : "counts") : e.route === "GET /indicators/price_per_meter" ? "asking" : e.route.startsWith("DELETE /searches") ? "alert" : "other")
+const purposeOf = (e: UsageEntry): Use => (e.route.startsWith("GET /documents/properties") ? (e.results ? "fetched" : "counts") : e.route === "GET /indicators/price_per_meter" ? "asking" : e.route.startsWith("DELETE /searches") ? "alert" : "other")
 const ROUTE_LABEL: Record<string, string> = {
   "GET /documents/properties": "Annonces (récupération, comptage)",
+  "GET /documents/properties/{id}": "Annonce relue (photos, prix, disparition)",
   "GET /indicators/price_per_meter": "Prix affichés du marché",
   "DELETE /searches/{id}": "Suppression d'une ancienne alerte",
 }

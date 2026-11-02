@@ -12,7 +12,7 @@ const api = await fakeStreamEstate({ total: 12 }, 41899)
 console.log(`fake Stream Estate on ${api.url}`)
 const server = spawn(process.execPath, [ENGINE, 'serve'], {
   stdio: 'inherit',
-  env: { ...process.env, IMMO_DIR: path.resolve(dir), IMMO_PORT: port, IMMO_NOTIFY: '0', STREAM_ESTATE_BASE: api.url, STREAM_ESTATE_API_KEY: 'demo-key' },
+  env: { ...process.env, IMMO_DIR: path.resolve(dir), IMMO_PORT: port, IMMO_NOTIFY: '0', IMMO_LINKS: '0', STREAM_ESTATE_BASE: api.url, STREAM_ESTATE_API_KEY: 'demo-key' },
 })
 server.on('exit', code => { api.close(); process.exit(code ?? 0) })
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => server.kill(sig))

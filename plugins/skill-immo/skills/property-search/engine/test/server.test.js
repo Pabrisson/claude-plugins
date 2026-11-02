@@ -13,7 +13,7 @@ const { home, dir } = searchesFolder(), port = 41700 + Math.floor(Math.random() 
 // nor permit yet, so that it finds the zone's
 const ademe = path.join(home, '.cache/ademe'), dpe = JSON.parse(fs.readFileSync(path.join(ademe, fs.readdirSync(ademe).find(f => f.startsWith('recent-'))), 'utf8'))
 fs.writeFileSync(path.join(dir, 'area.json'), JSON.stringify({ dpe_recent: dpe.filter(d => d.number === '2669E0000002B'), audit_recent: [], permit_recent: [] }))
-const server = spawn(process.execPath, [ENGINE, 'serve'], { env: { ...process.env, IMMO_DIR: home, IMMO_PORT: `${port}`, IMMO_NOTIFY: '0', STREAM_ESTATE_BASE: api.url, STREAM_ESTATE_API_KEY: 'test-key' } })
+const server = spawn(process.execPath, [ENGINE, 'serve'], { env: { ...process.env, IMMO_DIR: home, IMMO_PORT: `${port}`, IMMO_NOTIFY: '0', IMMO_LINKS: '0', STREAM_ESTATE_BASE: api.url, STREAM_ESTATE_API_KEY: 'test-key' } })
 const base = `http://127.0.0.1:${port}`
 test.after(() => { server.kill(); api.close() })
 

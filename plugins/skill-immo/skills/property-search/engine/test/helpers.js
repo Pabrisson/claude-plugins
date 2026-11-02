@@ -56,6 +56,10 @@ export function searchesFolder(mode = 'stream-estate') {
   return { home, dir }
 }
 
+// a property as the API gives it now: its adverts online crawled a moment ago (an advert not crawled for 30 days is
+// gone, lib/listings.js deadAd)
+const crawled = p => { const at = new Date().toISOString(); return { ...p, lastCrawledAt: at, adverts: (p.adverts ?? []).map(a => (a.expired ? a : { ...a, lastCrawledAt: at })) } }
+
 // the fake API v1: state.price changes the property's price, state.total the number of matches, state.broke answers
 // 402. What it matches is online (an expired=true query matches none) and not excluded. On a free port, or `port`
 // (test/demo.mjs).
@@ -78,12 +82,21 @@ export async function fakeStreamEstate(state = {}, port = 0) {
         if (state.properties) {
           const t = k => q.get(k) && Date.parse(q.get(k)), after = t('fromDate'), before = t('toDate')
           const hits = q.get('expired') === 'true' ? [] : state.properties.filter(p => !out.includes(p.uuid) && !(after && Date.parse(p.createdAt) < after) && !(before && Date.parse(p.createdAt) > before))
-          return send(200, { '@type': 'hydra:Collection', 'hydra:member': hits.slice(from, from + size), 'hydra:totalItems': hits.length })
+          return send(200, { '@type': 'hydra:Collection', 'hydra:member': hits.slice(from, from + size).map(crawled), 'hydra:totalItems': hits.length })
         }
         const total = q.get('expired') === 'true' || out.includes(property.uuid) ? 0 : state.total ?? 1
-        const member = Array.from({ length: Math.max(0, Math.min(size, total - from)) }, () => ({ ...property, price: state.price ?? property.price }))
+        const member = Array.from({ length: Math.max(0, Math.min(size, total - from)) }, () => crawled({ ...property, price: state.price ?? property.price }))
         return send(200, { '@type': 'hydra:Collection', 'hydra:member': member, 'hydra:totalItems': total })
       }
+      // one property read again (reread): the fixture's, or one of state.properties; state.deleted: 404
+      const one = url.pathname.match(/^\/documents\/properties\/([\w-]+)$/)
+      if (req.method === 'GET' && one) {
+        const p = state.deleted?.includes(one[1]) ? null : (state.properties ?? [property]).find(x => x.uuid === one[1])
+        return p ? send(200, crawled({ ...p, price: state.price ?? p.price })) : send(404, { title: 'Not found' })
+      }
+      // a listing's page on a portal, for the link check: /page/410 answers 410, /page/200 200
+      const page = url.pathname.match(/^\/page\/(\d{3})/)
+      if (page) { res.writeHead(+page[1], { 'Content-Type': 'text/html' }); return res.end('<html></html>') }
       if (req.method === 'GET' && url.pathname === '/indicators/price_per_meter') return send(200, [{ average: 4900, median: 4800, series: { '2026-09': 4750, '2026-10': 4820 } }])
       if (req.method === 'DELETE' && url.pathname.startsWith('/searches/')) return send(204, null)
       send(404, { title: 'Not found' })

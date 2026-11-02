@@ -202,8 +202,9 @@ and ask nothing it gives.
 Without a search, ask which search it goes to, or start one from the listing's address.
 ## refresh, alert and the watch
 
-Read `references/follow-up.md` and follow it: `refresh`, the alerts (make, change or turn off one), the « Prospection »
-map and its odds, the dashboard server's free watch and its news.
+Read `references/follow-up.md` and follow it: `refresh`, `reread` (listings read again, 1 credit each: their full
+photos, the gone ones expire), the alerts (make, change or turn off one), the « Prospection » map and its odds, the
+dashboard server's free watch, its daily link check and its news.
 
 ## Analyse, compare and messages
 

@@ -47,6 +47,23 @@ test('a fetch waits for the user: estimate, then --spend; the credits are logged
   assert.equal(api.seen.at(-1).key, 'test-key')
 })
 
+test('reread: the listings online read again one by one, a credit each, logged; one Stream Estate deleted expires', async () => {
+  const { home, dir } = searchesFolder()
+  assert.equal((await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])).status, 0)
+  let r = await run(home, ['reread', '-p', 'paul-bert', '--estimate'])
+  assert.deepEqual(JSON.parse(r.out), { what: 'reread 1 listings', route: 'GET /documents/properties/{id}', credits: 1, eur: 0.01, unknown: false, spent: 1, cap: 500, remaining: 499 })
+  r = await run(home, ['reread', '-p', 'paul-bert', '--spend', '1', '--id', property.uuid])
+  assert.equal(r.status, 0, r.err)
+  assert.match(r.out, /reread 1 listings: 0 new.*0 expired; 1 photos/)
+  assert.deepEqual(read(home, '.cache/api-usage.json').at(-1), { ...read(home, '.cache/api-usage.json').at(-1), route: 'GET /documents/properties/{id}', credits: 1, results: 1, search: 'paul-bert' })
+  api.state.deleted = [property.uuid]
+  try { r = await run(home, ['reread', '-p', 'paul-bert', '--spend', '1']) } finally { delete api.state.deleted }
+  assert.match(r.out, /1 expired/)
+  assert.equal(read(dir, 'listings.json')[0].status, 'EXPIRED')
+  // nothing left online: nothing to read, nothing paid
+  assert.match((await run(home, ['reread', '-p', 'paul-bert'])).out, /no Stream Estate listing/)
+})
+
 test('hundreds fetched: left out over windows of creation dates, so never counted nor paid again', async () => {
   const { home, dir } = searchesFolder(), file = path.join(dir, 'search.json')
   // a zone drawn on the map: its 60 corners leave the least room in the URL

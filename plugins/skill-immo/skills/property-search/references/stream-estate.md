@@ -32,10 +32,11 @@ items billed since the account opened. `costs account <€ deposited> <items>` k
 | Route | Use | Cost |
 |---|---|---|
 | `GET /documents/properties` | Listings of the zone, counts, refresh | 1 credit per item returned; `itemsPerPage=0` (a count) returns none |
+| `GET /documents/properties/{id}` | One listing read again (`reread`) | 1 credit (one item) |
 | `GET /indicators/price_per_meter` | The zone's asking €/m² (`market`) | Unknown |
 | `DELETE /searches/{id}` | Deleting an alert of skill-immo 1.6 or before | Unknown |
 
-Not used: `GET /documents/properties/{id}` (the collection returns the same document), `similar-properties`,
+Not used: `similar-properties`,
 `/indicators/points_of_interest` (Overpass does it), `/public/location-autocomplete` and `/cities` (the zones are the
 engine's own), `GET`, `POST`, `PUT /searches` and `/webhook-tester` (the saved searches, below).
 
@@ -79,6 +80,18 @@ insee, zipcode }` and `adverts[]`, one per portal, each with:
 - `expired`, `expiredAt`, `createdAt`, `lastCrawledAt`, `daysOnMarket`;
 - `events[] { fieldName (price, expired, title, description, pictures…), fieldOldValue, fieldNewValue (strings),
   percentVariation, createdAt }`.
+
+**Gone listings.** The v1 rarely sets `expired` when an advert leaves its portal, so a fetch pays for ghosts too: on
+2026-11-02, Louveciennes (75 flats online by the v1's rule), every advert not crawled (`lastCrawledAt`) for 50 days or
+more answered `410 Gone` or « ad-not-found », those crawled within 14 days `200`. The engine takes an advert not crawled
+for 30 days when read as gone, and a property without any advert left as `EXPIRED` (16 of the 75 that day). Later, the
+dashboard server reads each advert's page once a day (free): `404`, `410` or a redirect to a « not found » page marks it
+gone; Leboncoin, SeLoger, Le Figaro and PAP answer `403` to it, unknown. `reread` (1 credit a listing) reads them again.
+
+**Photos.** The property's `pictures` and each advert's are Stream Estate's copies, 1 to 5; each advert's
+`picturesRemote` is its portal's whole gallery (10 to 20 photos, 2026-11-02), which loads from the dashboard while the
+advert is online and answers `404` once it is gone. The engine keeps the gallery of the advert online with the most,
+and the copies aside.
 
 What the engine makes of it (`fromStreamEstate`): the DPE class most adverts give (one portal often mistypes it), one
 publisher per phone number, the `price` events of all the adverts once each as the price history, the features from

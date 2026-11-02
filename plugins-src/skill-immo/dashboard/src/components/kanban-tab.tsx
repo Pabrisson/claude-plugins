@@ -6,7 +6,7 @@ import { Dpe } from "@/components/dpe"
 import { Gap } from "@/components/ruler"
 import { FavoriteButton } from "@/components/favorite"
 import { Origin } from "@/components/origin"
-import { StatusDot, statusTint, tint } from "@/components/status"
+import { NewBadge, StatusDot, statusTint, tint } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { api, type Listing, type PropertyType, type Status } from "@/lib/api"
 import { eur, SALE_STATUS, titleOf, TYPE_PLURAL } from "@/lib/format"
-import { FLOORS, floorOk, isNew, shelved, SORTS, useRanked, type Floor, type Sort } from "@/lib/rank"
+import { FLOORS, floorOk, isNew, shelved, SORTS, unseen, useRanked, type Floor, type Sort } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -96,7 +96,7 @@ export function KanbanTab() {
               </header>
               <div className="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
                 {items.map(({ l, score: sc }) => (
-                  <KanbanCard key={l.id} l={l} score={sc} fresh={isNew(l, lastVisit)} spotted={spot === l.id} onOpen={() => select(l.id)} onMove={s => move(l.id, s)} />
+                  <KanbanCard key={l.id} l={l} score={sc} fresh={unseen(l)} spotted={spot === l.id} onOpen={() => select(l.id)} onMove={s => move(l.id, s)} />
                 ))}
                 {!items.length && <p className="px-1 py-4 text-center text-xs text-muted-foreground">Glissez un bien ici</p>}
               </div>
@@ -126,7 +126,7 @@ function KanbanCard({ l, score, fresh, spotted, onOpen, onMove }: { l: Listing; 
         <Gap ppm2={unitPrice(l)} refPpm2={marketFor(l).ref?.ppm2} />
         {isHome(typeOf(l)) && <Dpe value={l.dpe?.energy} />}
         {days != null && <span className="text-muted-foreground">{days} j</span>}
-        {fresh && <Badge className="h-4 px-1.5 text-[10px]">Nouveau</Badge>}
+        {fresh && <NewBadge className="h-4 px-1.5 text-[10px]" />}
         {l.status !== "AVAILABLE" && <Badge variant="outline" className="h-4 px-1.5 text-[10px]">{SALE_STATUS[l.status] ?? l.status}</Badge>}
         <Origin l={l} />
         {messages > 0 && <span className="flex items-center gap-1 text-muted-foreground" title={`${messages} message${messages > 1 ? "s" : ""}`}><MailIcon className="size-3.5" />{messages}</span>}

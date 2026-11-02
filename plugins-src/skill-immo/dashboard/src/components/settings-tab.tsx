@@ -317,7 +317,7 @@ function AccountForm({ onSave, footer }: { onSave: (x: { deposited: number; item
       </Field>
       <Field>
         <FieldLabel htmlFor="a-items">Requêtes totales</FieldLabel>
-        <Input id="a-items" type="number" min={0} step={1} inputMode="numeric" className="w-32" value={items} onChange={e => setItems(e.target.value)} placeholder="4" />
+        <Input id="a-items" type="number" min={0} step={1} inputMode="numeric" className="w-32" value={items} onChange={e => setItems(e.target.value)} placeholder="0" />
         <FieldDescription>Les crédits consommés depuis l'ouverture du compte (« API items returned » dans la <Billing>console de facturation</Billing>).</FieldDescription>
       </Field>
       {footer ? footer(ready) : <Button type="submit" size="sm" className="self-start" disabled={!ready}>Enregistrer</Button>}

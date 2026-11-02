@@ -1,3 +1,4 @@
+import { SparklesIcon } from "lucide-react"
 import type { CSSProperties } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -22,4 +23,9 @@ export function StatusDot({ status, className }: { status: Status; className?: s
 
 export function StatusBadge({ status }: { status: Status }) {
   return status ? <Badge variant="secondary"><StatusDot status={status} />{STATUS_LABEL[status]}</Badge> : null
+}
+
+// the chip of a listing never opened (lib/rank unseen)
+export function NewBadge({ className }: { className?: string }) {
+  return <Badge className={className} title="Jamais ouverte"><SparklesIcon data-icon="inline-start" />Nouveau</Badge>
 }

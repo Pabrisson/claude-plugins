@@ -12,6 +12,7 @@ import { nearby } from "@/components/map-view"
 import { Gap, Ruler } from "@/components/ruler"
 import { FavoriteButton } from "@/components/favorite"
 import { Origin } from "@/components/origin"
+import { Photos } from "@/components/photos"
 import { useRun } from "@/components/run-dialog"
 import { StatusDot } from "@/components/status"
 import { StaleBar } from "@/components/top-bar"
@@ -206,6 +207,8 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
   const near = nearby(l.location.point, Array.isArray(data.area.pois) ? data.area.pois : [])
   const travel = (data.area.isochrones ?? []).filter(i => i.geometry && l.location.point && inGeometry(l.location.point, i.geometry))
   const short = `${titleOf(l)}, ${eur(l.price)}${l.location.address ? `, ${l.location.address}` : ""}`
+  // opened: no longer « Nouveau » (lib/rank unseen)
+  useEffect(() => { if (!l.seen_at) api.listing(slug, l.id, { seen: true }).then(reload, () => {}) }, [slug, l.id, l.seen_at, reload])
 
   async function setStatus(s: string) {
     await api.listing(slug, l.id, { my_status: (s || null) as Status })
@@ -220,11 +223,7 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
 
   return (
     <div className="flex flex-col gap-3">
-      {l.pictures.length > 0 && (
-        <div className="flex snap-x gap-2 overflow-x-auto pb-1">
-          {l.pictures.map(p => <img key={p} src={p} alt="" loading="lazy" className="h-40 snap-start rounded-lg object-cover" onError={e => e.currentTarget.remove()} />)}
-        </div>
-      )}
+      <Photos l={l} />
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <span className="flex items-center gap-1">
           <span className="text-3xl font-bold tracking-tight">{eur(l.price)}</span>

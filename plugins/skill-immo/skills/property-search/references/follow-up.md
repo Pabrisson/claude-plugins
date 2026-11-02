@@ -14,6 +14,12 @@ last refresh (the credits rule; it pays only for what changed).
 Report the new listings, the price drops (old → new), the offers and the expiries. For assisted listings, offer to
 recheck the ones the user follows, one WebFetch each.
 
+A refresh only brings what Stream Estate changed: a listing that left the portals quietly stays online until the
+dashboard server's daily link check finds its pages gone (free; Leboncoin and SeLoger never answer it). To check some
+at once, or to get their full photo galleries (listings fetched before 1.20 have 1 to 5 photos),
+`immo.mjs reread -p <slug> [--id <id,…>]`: each listing read again, 1 credit each (the credits rule), those still online
+without `--id`; the ones gone expire. The dashboard's list offers it on the rows ticked (« Relire sur l'API »).
+
 Its DPE line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
 refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or
 a lease, so a recent one without a listing may be a home about to go on sale (ADEME does not say which). Say the new ones

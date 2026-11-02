@@ -6,7 +6,7 @@ import { Dpe } from "@/components/dpe"
 import { FavoriteButton } from "@/components/favorite"
 import { Origin } from "@/components/origin"
 import { Gap, Ruler } from "@/components/ruler"
-import { StatusBadge, statusTint, tint } from "@/components/status"
+import { NewBadge, StatusBadge, statusTint, tint } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,7 +14,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Listing, PropertyType } from "@/lib/api"
 import { date, eur, num, perUnit, SALE_STATUS, TYPE_PLURAL, UNIT } from "@/lib/format"
-import { floorOk, isNew, shelved, SORTS, useRanked, type Floor, type Sort } from "@/lib/rank"
+import { floorOk, isNew, shelved, SORTS, unseen, useRanked, type Floor, type Sort } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -103,7 +103,7 @@ export function ListingList({ className, shownTypes, floor }: { className?: stri
           </EmptyHeader>
         </Empty>
       )}
-      {shown.map(({ l, score }) => <ListingCard key={l.id} l={l} score={score} active={selected === l.id || spot === l.id} fresh={isNew(l, lastVisit)} onOpen={() => select(l.id)} />)}
+      {shown.map(({ l, score }) => <ListingCard key={l.id} l={l} score={score} active={selected === l.id || spot === l.id} fresh={unseen(l)} onOpen={() => select(l.id)} />)}
     </div>
   )
 }
@@ -130,7 +130,7 @@ function ListingCard({ l, score, active, fresh, onOpen }: { l: Listing; score: n
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-base font-bold whitespace-nowrap"><TypeIcon type={t} className="size-4 text-muted-foreground" />{eur(l.price)}</span>
           <span className="flex flex-wrap justify-end gap-1">
-            {fresh && <Badge>Nouveau</Badge>}
+            {fresh && <NewBadge />}
             {l.status !== "AVAILABLE" && <Badge variant="outline">{SALE_STATUS[l.status] ?? l.status}</Badge>}
             <StatusBadge status={l.my_status} />
             {score != null && <span className="rounded-md bg-muted px-1.5 text-xs leading-5 font-semibold tabular-nums" title="Score sur 100">{score}</span>}

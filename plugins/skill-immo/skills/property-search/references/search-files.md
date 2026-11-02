@@ -19,7 +19,8 @@ snake_case.
 | `property_type` | `flat`, `house`, `land`, `parking` or `premises` (Stream Estate's office and shop); absent means flat |
 | `se_id` | The Stream Estate id, or null |
 | `se_created_at` | When Stream Estate created the property (it never changes): the window of creation dates that leaves it out of the next counts and fetches; `published_at` stands in for it on a listing fetched before 1.19 |
-| `urls[]` | `{ url, source, published_at, expired_at, last_seen_at, favorites, urgent }` for each portal it is on (`source`: the portal, SL, LBC, Bienici…) |
+| `read_at` | When Stream Estate last gave it (fetch, refresh, reread): its adverts' crawl dates are read against it |
+| `urls[]` | `{ url, source, published_at, expired_at, last_seen_at, checked_at, gone_at, favorites, urgent }` for each portal it is on (`source`: the portal, SL, LBC, Bienici…). `last_seen_at`: Stream Estate's last crawl; `checked_at`, `gone_at`: the dashboard server's daily link check (404, 410, a « not found » page). An advert is gone when expired, found gone (and not crawled since), or not crawled for 30 days at `read_at`; a listing all of whose adverts are gone becomes `EXPIRED` (lib/listings.js `deadAd`) |
 | `price`, `net_price`, `area`, `carrez`, `land_area`, `price_per_m2` | Asking price (€, fees as listed), net seller price, m², Carrez, land in m², €/m² (of land for a plot) |
 | `rooms`, `bedrooms`, `floor`, `floors`, `last_floor`, `ground_floor` | The flat |
 | `dpe` | `{ energy, energy_value, ghg, date, reference }` from the listing |
@@ -29,13 +30,13 @@ snake_case.
 | `fees` | `{ agency: { amount, percentage, included, paid_by }, condo_yearly, property_tax }` (€ a year) |
 | `status` | `AVAILABLE`, `UNDER_OFFER`, `SOLD`, `WITHDRAWN` or `EXPIRED` (Stream Estate: `AVAILABLE` or `EXPIRED` only) |
 | `publishers[]` | `{ type, name, card, website, phone, email, profile_url, mandate }` |
-| `pictures[]`, `title`, `description` | Up to 12 pictures |
+| `pictures[]`, `se_pictures[]`, `title`, `description` | The photos: the whole gallery of its best advert still online, on the portal's servers (gone with the advert), else Stream Estate's copies (1 to 5, they stay); `se_pictures`: those copies when the gallery is shown, the dashboard's fallback |
 | `published_at`, `updated_at` | The first publication on any portal, the last crawl |
 | `urgent`, `favorites` | Urgent on a portal (a lever), the highest favorite count (competition); a listing you read only |
 | `price_changes[]` | The portals' price history `{ date, from, to, pct }`, each change once |
 | `first_seen`, `price_history[]` | When this search first saw it, each price it saw `{ date, price }` |
 | `changes[]` | `{ date, kind: new\|price_drop\|price_rise\|status\|expired, from, to }`, for the "new since your last visit" view |
-| `my_status`, `favorite`, `notes` | The user's: `to_visit`, `visited`, `offer`, `dropped` or null; their star (the dashboard's ☆, apart from the status); free notes |
+| `my_status`, `favorite`, `seen_at`, `notes` | The user's: `to_visit`, `visited`, `offer`, `dropped` or null; their star (the dashboard's ☆, apart from the status); when they first opened its dossier (« Nouveau » until then, or until a status or a star); free notes |
 | `messages[]` | Its conversation with the agency or the seller (`message`, the dossier's « Ajouter »): `{ id, date, from: me\|them, kind: offer\|question\|visit\|reply\|follow_up\|documents\|other, channel: email\|sms\|phone\|visit\|null, amount, to, text, sent_at }`. `from: me` is a draft until `sent_at` (the user marks it sent); `from: them` is received; `to` is the one on the other side. An old message without `from` is the user's |
 | `building` | Added by the enrichment: `{ ban, dpe[], dpe_match, dpe_cost_yearly, construction_year, copro, risks, sales[] }` |
 

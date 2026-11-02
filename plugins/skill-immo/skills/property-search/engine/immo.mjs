@@ -19,7 +19,7 @@ import { review, score, WEIGHTS } from './lib/decide.js'
 import { recentDpe } from './lib/dpe.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, band, bbox, center, circle, corridor, distance, IDU, inGeometry, inZone, middleOf, thin } from './lib/geo.js'
-import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from './lib/listings.js'
+import { addressQuery, deadAd, fromInput, fromStreamEstate, linkGone, merge, normUrl } from './lib/listings.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
 import { openData, pool } from './lib/opendata.js'
@@ -750,7 +750,7 @@ async function fetchListings() {
   }
   approve('GET /documents/properties', n, `fetch ${n} of ${total} listings`)
   const raw = await withCredits(() => seFetch(s.slug, queries, Math.min(n, +opt.spend || n)))
-  const changes = saveMerged(dir, raw.map(fromStreamEstate))
+  const changes = saveMerged(dir, raw.map(d => fromStreamEstate(d)))
   Object.assign(s, { last_fetch: now(), last_refresh: s.last_refresh ?? now(), stream: { total: total - raw.length, counted_at: now() } })
   writeJson(path.join(dir, 'search.json'), s)
   const enriched = await autoEnrich(dir, s, changes)
@@ -849,13 +849,52 @@ async function refresh() {
   const queries = seQueries(s, { since: s.last_refresh }), total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? profile().max_fetch))
   if (n) approve('GET /documents/properties', n, `refresh ${n} changed listings`)
   const raw = n ? await withCredits(() => seFetch(s.slug, queries, n)) : []
-  const changes = saveMerged(dir, raw.map(fromStreamEstate))
+  const changes = saveMerged(dir, raw.map(d => fromStreamEstate(d)))
   s.last_refresh = now()
   writeJson(path.join(dir, 'search.json'), s)
   await autoEnrich(dir, s, changes)
   console.log(`refresh: ${raw.length} changed since the last one: ${describe(changes)}`)
   for (const c of changes.filter(c => c.kind !== 'new')) console.log(`  ${c.id} ${c.kind}: ${c.from} → ${c.to}`)
   await dpe(changes)
+}
+
+// reread -p <slug> [--id <id,…>] [--spend n]: Stream Estate listings read again one by one (1 credit each): their
+// photos, price and adverts as the portals show them now, so that those gone expire. Without --id, those still online.
+// One Stream Estate no longer holds (404) expires.
+async function reread() {
+  const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
+  requireStream(s)
+  const ls = listingsOf(dir), todo = (opt.id ? opt.id.split(',').map(id => ls.find(l => l.id === id) ?? die(`no listing ${id} in ${s.slug}`)) : ls.filter(l => l.status !== 'EXPIRED')).filter(l => l.se_id)
+  if (!todo.length) return console.log('reread: no Stream Estate listing to read again')
+  approve('GET /documents/properties/{id}', todo.length, `reread ${todo.length} listings`)
+  const raw = [], gone = []
+  for (const l of todo) {
+    const { data } = await withCredits(() => api(s.slug, 'GET', `/documents/properties/${l.se_id}`))
+    if (data) raw.push(fromStreamEstate(data))
+    else gone.push(l.id)
+  }
+  const { listings, changes } = merge(listingsOf(dir), raw, now(), gone)
+  writeJson(path.join(dir, 'listings.json'), listings)
+  console.log(`reread ${todo.length} listings: ${describe(changes)}; ${raw.reduce((n, l) => n + l.pictures.length, 0)} photos`)
+  for (const c of changes) console.log(`  ${c.id} ${c.kind}: ${c.from} → ${c.to}`)
+}
+
+// The pages of the listings still online, once a day (the watch): an advert whose page is gone (lib/listings.js
+// linkGone) is marked so, and a listing all of whose adverts are gone expires (merge). The pages are read first, then
+// listings.json is read and written at once (the user may change a status meanwhile). Returns the changes, with their
+// listing, for the alerts. IMMO_LINKS=0 turns it off (the tests and the demo: their links are made up).
+async function checkLinks(dir) {
+  if (process.env.IMMO_LINKS === '0') return []
+  const day = Date.now() - 20 * 3600000, urls = [...new Set(listingsOf(dir).filter(l => l.status !== 'EXPIRED')
+    .flatMap(l => l.urls.filter(u => u.url && !deadAd(u, l.read_at ?? l.first_seen) && !(Date.parse(u.checked_at ?? 0) > day)).map(u => u.url)))]
+  const found = new Map((await pool(urls, 4, async u => [u, await linkGone(u)])))
+  const at = now(), ls = listingsOf(dir)
+  for (const l of ls) for (const u of l.urls) if (found.has(u.url)) { u.checked_at = at; if (found.get(u.url)) u.gone_at = at }
+  const { listings, changes } = merge(ls, [], at)
+  writeJson(path.join(dir, 'listings.json'), listings)
+  const gone = [...found.values()].filter(Boolean).length
+  if (urls.length) console.log(`links ${path.basename(dir)}: ${urls.length} read, ${gone} gone, ${changes.length} listings expired`)
+  return changes.map(c => ({ ...c, l: listings.find(l => l.id === c.id) }))
 }
 
 // alerts -p <slug> [--file <alerts.json>]: the search's alerts (lib/alerts.js), each with how many news it took;
@@ -1019,7 +1058,7 @@ function sendFile(res, file) {
 // What the dashboard may run, as engine commands with their flags: the paid ones go through the same estimate and
 // approval as the agent's (estimate: true first, then spend / accept_unknown once the user confirmed in the dialog).
 const RUN = {
-  search: ['query', 'mode', 'types', 'criteria', 'zone', 'radius', 'max'], fetch: ['spend', 'max'], market: [], refresh: ['spend'], enrich: ['id', 'all'],
+  search: ['query', 'mode', 'types', 'criteria', 'zone', 'radius', 'max'], fetch: ['spend', 'max'], market: [], refresh: ['spend'], enrich: ['id', 'all'], reread: ['id', 'spend'],
   usage: [],
 }
 function runArgs(body) {
@@ -1059,7 +1098,7 @@ async function handle(req, res) {
     // the credits a day over the last 60 days (all, and the automatic fetch's), a month (the automatic fetch's), and
     // per use: listings fetched, free counts, asking prices, an old alert deleted
     const since = new Date(Date.now() - 60 * 86400000).toISOString(), daily = {}, daily_auto = {}, monthly_auto = {}, by_use = {}
-    const useOf = e => (e.route === 'GET /documents/properties' ? (e.results ? 'fetched' : 'counts') : e.route === 'GET /indicators/price_per_meter' ? 'asking' : e.route.startsWith('DELETE /searches') ? 'alert' : 'other')
+    const useOf = e => (e.route.startsWith('GET /documents/properties') ? (e.results ? 'fetched' : 'counts') : e.route === 'GET /indicators/price_per_meter' ? 'asking' : e.route.startsWith('DELETE /searches') ? 'alert' : 'other')
     for (const e of log) {
       const d = e.date.slice(0, 10), c = e.credits ?? 0, add = (o, k) => { o[k] = (o[k] ?? 0) + c }
       if (e.date >= since) { add(daily, d); if (e.by === 'auto') add(daily_auto, d) }
@@ -1228,6 +1267,8 @@ async function handle(req, res) {
       if ('my_status' in body) { if (![null, 'to_visit', 'visited', 'offer', 'dropped'].includes(body.my_status)) return reply(res, 400, { error: 'bad status' }); l.my_status = body.my_status }
       if (typeof body.notes === 'string') l.notes = body.notes.slice(0, 5000)
       if (typeof body.favorite === 'boolean') l.favorite = body.favorite
+      // opened: no longer « Nouveau »; seen: false puts it back
+      if (typeof body.seen === 'boolean') l.seen_at = body.seen ? l.seen_at ?? now() : null
       // the conversation: a message the user adds (a reply received, a call), one marked sent or not, one deleted
       if (body.message?.add) {
         try { l.messages = [...(l.messages ?? []), newMessage(l, body.message.add)] } catch (e) { return reply(res, 400, { error: e.message }) }
@@ -1323,7 +1364,7 @@ function watchAll() {
   watching ??= (async () => {
     for (const x of searches()) {
       try {
-        const dir = path.join(HOME, x), { s, news: found, api } = await watch(dir), auto = await autoFetch(dir, s, api), alerts = alertsAt(dir)
+        const dir = path.join(HOME, x), { s, news: zone, api } = await watch(dir), links = await checkLinks(dir), found = [...zone, ...links], auto = await autoFetch(dir, s, api), alerts = alertsAt(dir)
         const fired = [...found, ...auto].map(n => firing(alerts, n, s)), news = [...found, ...auto].filter((_, i) => fired[i].length)
         const of = k => news.filter(n => n.kind === k).length, [d, au, pe] = ['dpe', 'audit', 'permit'].map(of), l = news.length - d - au - pe
         const mine = [...new Set(fired.flat().filter(a => !a.builtin).map(a => `« ${a.name} »`))]
@@ -1466,7 +1507,7 @@ async function dashboard() {
 }
 
 const commands = {
-  doctor, setup: () => setup(...args), geocode: () => geocode(args.join(' ')), search: () => search(args.join(' ')), fetch: fetchListings, market, add, enrich, refresh,
+  doctor, setup: () => setup(...args), geocode: () => geocode(args.join(' ')), search: () => search(args.join(' ')), fetch: fetchListings, market, add, enrich, refresh, reread,
   alert: () => alert(args[0]), alerts: alertsCmd, cadastre: () => cadastre(args.join(' ')), usage: usageCmd, costs: () => costs(...args), show, message, list, dashboard, serve,
 }
 if (!commands[cmd]) die(`usage: immo.mjs <${Object.keys(commands).join(' | ')}> [-p <slug>]`)

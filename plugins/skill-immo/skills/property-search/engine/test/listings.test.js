@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from '../lib/listings.js'
+import { addressQuery, allGone, fromInput, fromStreamEstate, linkGone, merge, normUrl } from '../lib/listings.js'
 import { badge, daysOnline, dropped, matches, negotiation } from '../lib/market.js'
 
 // a v1 PropertyDocument with the shape of a recorded one (2026-10-28), its values made up, placed rue Paul Bert
 const raw = JSON.parse(fs.readFileSync(new URL('./fixtures/se-property.json', import.meta.url), 'utf8'))
-const se = fromStreamEstate(raw)
+// read the day after its adverts were crawled
+const se = fromStreamEstate(raw, '2026-10-28T00:00:00.000Z')
 
 test('a Stream Estate property becomes a listing', () => {
   assert.equal(se.id, raw.uuid)
@@ -81,4 +82,56 @@ test("the address the enrichment geocodes: with the listing's postcode and town 
   assert.equal(addressQuery("11 Rue de l'Etang", loc), "11 Rue de l'Etang 78430 Louveciennes")
   assert.equal(addressQuery("11 Rue de l'Etang", { postcode: null, city: 'Louveciennes' }), "11 Rue de l'Etang Louveciennes")
   assert.equal(addressQuery('Rue Paul Bert, 69003 Lyon', { postcode: '69003', city: 'Lyon' }), 'Rue Paul Bert, 69003 Lyon')
+})
+
+test('an advert not crawled for 30 days is gone; a property all of whose adverts are gone expires', () => {
+  // read on 2026-12-01, its adverts last crawled on 2026-10-27
+  const late = fromStreamEstate(raw, '2026-12-01T00:00:00.000Z')
+  assert.equal(late.status, 'EXPIRED')
+  assert.equal(se.status, 'AVAILABLE')
+  // known online, read again late: the expiry is logged
+  const r = merge(merge([], [se], '2026-10-28').listings, [late], '2026-12-01')
+  assert.deepEqual(r.changes.map(c => [c.kind, c.to]), [['expired', 'EXPIRED']])
+  // fetched before 1.20 (no read_at): read against its first day
+  const old = { ...se, read_at: undefined, first_seen: '2026-12-01T00:00:00.000Z' }
+  assert.equal(allGone(old), true)
+})
+
+test('the link check: a gone page is kept through a refresh, until a later crawl brings it back', () => {
+  let r = merge([], [se], '2026-10-28')
+  const [l] = r.listings
+  for (const u of l.urls) Object.assign(u, { checked_at: '2026-10-29T00:00:00.000Z', gone_at: '2026-10-29T00:00:00.000Z' })
+  r = merge([l], [], '2026-10-29')
+  assert.deepEqual(r.changes.map(c => c.kind), ['expired'])
+  // read again, crawled the same day as before: still gone, no change logged
+  r = merge(r.listings, [se], '2026-10-30')
+  assert.deepEqual([r.listings[0].status, r.changes], ['EXPIRED', []])
+  assert.ok(r.listings[0].urls.every(u => u.gone_at))
+  // crawled after the check: online again
+  const back = fromStreamEstate({ ...raw, adverts: raw.adverts.map(a => ({ ...a, lastCrawledAt: '2026-11-05T00:00:00+01:00' })) }, '2026-11-05T12:00:00.000Z')
+  r = merge(r.listings, [back], '2026-11-05')
+  assert.deepEqual(r.changes.map(c => [c.kind, c.to]), [['status', 'AVAILABLE']])
+})
+
+test('the photos: the gallery of the best advert online, Stream Estate copies kept aside', () => {
+  const remote = n => Array.from({ length: n }, (_, i) => `https://portal.example/p${n}-${i}.jpg`)
+  const d = { ...raw, pictures: ['https://pictures.notif.immo/a.jpg'], adverts: raw.adverts.map((a, i) => ({ ...a, pictures: ['https://pictures.notif.immo/a.jpg'], picturesRemote: remote(i ? 13 : 8) })) }
+  const l = fromStreamEstate(d, '2026-10-28T00:00:00.000Z')
+  assert.deepEqual([l.pictures.length, l.pictures[0], l.se_pictures], [13, 'https://portal.example/p13-0.jpg', ['https://pictures.notif.immo/a.jpg']])
+  // a gone advert's gallery is never taken
+  const gone = fromStreamEstate({ ...d, adverts: d.adverts.map((a, i) => (i ? { ...a, expired: true, expiredAt: '2026-10-01T00:00:00+02:00' } : a)) }, '2026-10-28T00:00:00.000Z')
+  assert.equal(gone.pictures.length, 8)
+  // no gallery: the copies
+  assert.deepEqual(se.pictures, raw.pictures)
+})
+
+test('a page gone, one online, one blocked', async () => {
+  const http = await import('node:http')
+  const server = http.createServer((req, res) => {
+    if (req.url === '/moved') { res.writeHead(302, { Location: '/search?toast=ad-not-found' }); return res.end() }
+    res.writeHead({ '/gone': 410, '/blocked': 403 }[req.url] ?? 200); res.end()
+  })
+  await new Promise(ok => server.listen(0, '127.0.0.1', ok))
+  const at = p => linkGone(`http://127.0.0.1:${server.address().port}${p}`)
+  try { assert.deepEqual(await Promise.all(['/gone', '/moved', '/ok', '/blocked'].map(at)), [true, true, false, null]) } finally { server.close() }
 })

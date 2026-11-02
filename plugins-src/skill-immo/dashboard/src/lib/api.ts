@@ -15,7 +15,8 @@ export type Listing = {
   se_id: string | null
   source: "stream-estate" | "websearch" | "pasted" | "manual"
   property_type?: PropertyType
-  urls: { url: string | null; source: string | null; published_at: string | null; expired_at: string | null; favorites: number | null; urgent: boolean }[]
+  // an advert per portal: last crawled by Stream Estate, and what the link check found (lib/listings.js deadAd)
+  urls: { url: string | null; source: string | null; published_at: string | null; expired_at: string | null; last_seen_at?: string | null; checked_at?: string; gone_at?: string; favorites: number | null; urgent: boolean }[]
   title: string | null
   description: string | null
   price: number | null
@@ -40,7 +41,9 @@ export type Listing = {
   fees: { agency: { amount: number | null; percentage: number | null; included: boolean | null; paid_by: string | null } | null; condo_yearly: number | null; property_tax: number | null }
   status: string
   publishers: { type: string | null; name: string | null; card: string | null; phone: string | null; email: string | null; website: string | null }[]
+  // the portal's gallery, and Stream Estate's copies when they were not shown (they stay after the portal's go)
   pictures: string[]
+  se_pictures?: string[]
   published_at: string | null
   urgent: boolean
   favorites: number | null
@@ -51,6 +54,8 @@ export type Listing = {
   my_status: Status
   // the user's star, apart from the status
   favorite?: boolean
+  // when the user first opened it (« Nouveau » until then)
+  seen_at?: string | null
   notes: string
   messages?: Message[]
   building?: {
@@ -253,7 +258,7 @@ export const api = {
   cache: (clear = false) => json<{ files: number; bytes: number }>("/api/cache", clear ? { method: "DELETE" } : undefined),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; seen?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
   saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),

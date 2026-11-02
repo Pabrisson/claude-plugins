@@ -10,8 +10,10 @@ import { useSearch } from "@/lib/store"
 // it on demand. One they follow stays, and its expiry is news (the default alert « Annonces suivies expirées »).
 export const shelved = (l: Listing) => l.status === "EXPIRED" && !l.my_status
 
-// what is new since the user's last visit: a listing first seen, or a change logged, after it
-export const isNew = (l: Listing, since: string | null) => !!since && (l.first_seen > since || (l.changes ?? []).some(c => c.date > since && c.kind !== "new"))
+// « Nouveau »: a listing online the user never opened; one they gave a status or a star counts as seen
+export const unseen = (l: Listing) => !l.seen_at && !l.my_status && !l.favorite && l.status !== "EXPIRED"
+// the « Nouveautés » filters: the listings never opened, and those that changed (price, status) since the last visit
+export const isNew = (l: Listing, since: string | null) => unseen(l) || (!!since && (l.changes ?? []).some(c => c.date > since && c.kind !== "new"))
 
 // the floor filter of the map, the list and the board, on flats only (the other types pass): « Rez-de-chaussée » keeps
 // the ground floors, « Étages » the others, and a flat whose floor is unknown shows with neither

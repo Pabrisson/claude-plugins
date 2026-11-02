@@ -79,6 +79,13 @@ export function useTabState<T>(key: string, initial: T) {
   return [v, setV] as const
 }
 
+// what this browser keeps for a search across tabs and reloads (the list's filters), `initial` filling what is missing
+export function useStoredState<T extends object>(key: string, initial: T) {
+  const [v, setV] = useState<T>(() => { try { return { ...initial, ...JSON.parse(localStorage.getItem(key) ?? "{}") } } catch { return initial } })
+  useEffect(() => save(key, v), [key, v])
+  return [v, setV] as const
+}
+
 export function SearchProvider({ slug, initial, state: initialState, profile: initialProfile, lastVisit, children }: { slug: string; initial: SearchData; state: State; profile: Profile; lastVisit: string | null; children: ReactNode }) {
   const [data, setData] = useState(initial)
   const [state, setState] = useState(initialState)

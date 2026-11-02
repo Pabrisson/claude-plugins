@@ -38,7 +38,45 @@ function publishersOf(ads) {
   }))
 }
 
-export function fromStreamEstate(d) {
+// An advert gone from its portal: expired, found gone by the link check (linkGone), or not crawled by Stream Estate for
+// 30 days when the property was read (`readAt`). The v1 never expires most of what leaves the portals: on 2026-11-02,
+// Louveciennes, every advert not crawled for 50 days or more answered 410 or « not found », those crawled within 14
+// days 200.
+export const STALE_DAYS = 30
+// (a crawl after the link check found it gone brings it back)
+const t = d => (d ? Date.parse(d) : 0)
+export const deadAd = (u, readAt) => !!(u.expired_at || (u.gone_at && t(u.last_seen_at) < t(u.gone_at)) || (u.last_seen_at && readAt && t(readAt) - t(u.last_seen_at) > STALE_DAYS * 86400000))
+// a listing all of whose adverts are gone (one without a link stays as it is); read when it was first seen, for one
+// fetched before skill-immo 1.20
+export const allGone = l => l.urls.length > 0 && l.urls.every(u => deadAd(u, l.read_at ?? l.first_seen))
+
+// The photos of a property: the whole gallery of its best advert still online (the most photos, the latest crawled),
+// on the portal's own servers (`picturesRemote`: 10 to 20 photos where Stream Estate's copies hold 1 to 5; a gone
+// advert's answer 404); the property's copies by Stream Estate (`pictures`, they stay) when no advert has more, else
+// kept aside for when the portal's are gone. The adverts' own copies are left out: the same photos again, taken at
+// each crawl of each portal.
+function photosOf(d, live) {
+  const copies = [...new Set(d.pictures ?? [])]
+  const best = live.toSorted((a, b) => (b.picturesRemote?.length ?? 0) - (a.picturesRemote?.length ?? 0) || (b.lastCrawledAt ?? '').localeCompare(a.lastCrawledAt ?? ''))[0]
+  const gallery = [...new Set(best?.picturesRemote ?? [])]
+  return gallery.length > copies.length ? { pictures: gallery, se_pictures: copies } : { pictures: copies, se_pictures: [] }
+}
+
+const UA = 'skill-immo/1.20 (+https://github.com/Pabrisson/claude-plugins)'
+// Is a listing's page gone from its portal? true: 404, 410, or a redirect to a « not found » page; false: it answers;
+// null: unknown (blocked: Leboncoin, SeLoger, Le Figaro and PAP answer 403; 429; no answer)
+// ponytail: a portal that sends a gone listing to a search page with a 200 (ParuVendu, once) reads as online
+export async function linkGone(url, { timeout = 12000 } = {}) {
+  try {
+    const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(timeout), headers: { 'User-Agent': UA, Accept: 'text/html' } })
+    await res.body?.cancel()
+    if (res.status === 404 || res.status === 410) return true
+    return res.ok ? res.redirected && /not.?found|introuvable|expir|supprim/i.test(res.url) : null
+  } catch { return null }
+}
+
+// `at`: when Stream Estate gave the document (the dead adverts are read against it)
+export function fromStreamEstate(d, at = new Date().toISOString()) {
   // the adverts still online first: what a field says now
   const ads = d.adverts ?? [], now = [...ads.filter(a => !a.expired), ...ads.filter(a => a.expired)]
   const pick = k => now.map(a => a[k]).find(x => x != null) ?? null
@@ -50,9 +88,11 @@ export function fromStreamEstate(d) {
   const floor = d.floor ?? null, floors = pick('floorQuantity'), energy = most('energy'), ghg = most('greenHouseGas')
   const fees = pick('feesPercentage'), paidBy = pick('feesResponsibility'), accuracy = Math.min(...ads.map(a => a.geoAccuracy ?? 9))
   const seen = new Set(), changes = ads.flatMap(a => a.events ?? []).filter(e => e.fieldName === 'price' && e.fieldNewValue != null)
+  const urls = ads.map(a => ({ url: a.url ?? null, source: a.publisher?.name ?? null, published_at: a.createdAt ?? null, expired_at: a.expiredAt ?? (a.expired ? at : null), last_seen_at: a.lastCrawledAt ?? null, favorites: null, urgent: false }))
+  const live = ads.filter((_, i) => !deadAd(urls[i], at))
   return {
-    id: d.uuid, se_id: d.uuid, se_created_at: d.createdAt ?? null, source: 'stream-estate', property_type: type,
-    urls: ads.map(a => ({ url: a.url ?? null, source: a.publisher?.name ?? null, published_at: a.createdAt ?? null, expired_at: a.expiredAt ?? null, last_seen_at: a.lastCrawledAt ?? null, favorites: null, urgent: false })),
+    id: d.uuid, se_id: d.uuid, se_created_at: d.createdAt ?? null, read_at: at, source: 'stream-estate', property_type: type,
+    urls,
     title: d.title ?? null, description: d.description ?? null,
     price, net_price: pick('priceExcludingFees'), area, carrez: null, land_area: land,
     price_per_m2: ppm2(price, type === 'land' ? land ?? area : area),
@@ -73,9 +113,9 @@ export function fromStreamEstate(d) {
       agency: fees != null || paidBy != null ? { amount: null, percentage: fees, included: null, paid_by: { 0: 'SELLER', 1: 'BUYER' }[paidBy] ?? null } : null,
       condo_yearly: pick('condominiumFees') ? Math.round(pick('condominiumFees')) : null, property_tax: null,
     },
-    status: d.expired ? 'EXPIRED' : 'AVAILABLE',
+    status: d.expired || (ads.length && !live.length) ? 'EXPIRED' : 'AVAILABLE',
     publishers: publishersOf(ads),
-    pictures: (d.pictures ?? []).slice(0, 12),
+    ...photosOf(d, live),
     published_at: first([d.createdAt, ...ads.map(a => a.createdAt)]), updated_at: d.updatedAt ?? null,
     urgent: false, favorites: null,
     // the portals' own price changes, oldest first, once each (the same drop shows on every portal)
@@ -108,13 +148,14 @@ export function fromInput(x, source) {
   }
 }
 
-// what the user keeps on a listing (their star, the messages the agent wrote for it included), and what the engine
-// adds, through every refresh
-const KEPT = ['first_seen', 'price_history', 'my_status', 'favorite', 'notes', 'messages', 'building', 'changes']
+// what the user keeps on a listing (their star, when they first opened it, the messages the agent wrote for it
+// included), and what the engine adds, through every refresh
+const KEPT = ['first_seen', 'price_history', 'my_status', 'favorite', 'seen_at', 'notes', 'messages', 'building', 'changes']
 
 // Merges listings into the known ones (by id, else by URL) on day `now`. A listing seen again keeps the user's status,
-// notes and history; a new price, status or expiry is logged in its `changes` and returned. `gone`: ids a complete
-// listing of the zone no longer holds, which become EXPIRED.
+// notes and history, and what the link check found of its adverts; a new price, status or expiry is logged in its
+// `changes` and returned. `gone`: ids a complete listing of the zone no longer holds; they, and every listing all of
+// whose adverts are gone (allGone), become EXPIRED.
 export function merge(known, incoming, now, gone = []) {
   const all = known.map(l => ({ ...l })), byId = new Map(all.map(l => [l.id, l])), changes = []
   const byUrl = new Map(all.flatMap(l => l.urls.map(u => [normUrl(u.url), l])).filter(([k]) => k))
@@ -134,17 +175,17 @@ export function merge(known, incoming, now, gone = []) {
     if (n.source === 'stream-estate' && old.source !== 'stream-estate') byId.delete(old.id)
     // what the agent did not read stays as it was
     for (const [k, v] of Object.entries(n)) if (!KEPT.includes(k) && v != null && !(Array.isArray(v) && !v.length && old[k]?.length)) old[k] = v
-    old.urls = [...new Map([...before.urls, ...n.urls].map(u => [normUrl(u.url) ?? u.source, u])).values()]
+    const urls = new Map(before.urls.map(u => [normUrl(u.url) ?? u.source, u]))
+    for (const u of n.urls) { const k = normUrl(u.url) ?? u.source; urls.set(k, { ...urls.get(k), ...u }) }
+    old.urls = [...urls.values()]
     byId.set(old.id, old)
     if (n.price && before.price && n.price !== before.price) {
       old.price_history = [...(old.price_history ?? []), { date: now, price: n.price }]
       log(old, n.price < before.price ? 'price_drop' : 'price_rise', before.price, n.price)
     }
-    if (n.status && n.status !== before.status) log(old, n.status === 'EXPIRED' ? 'expired' : 'status', before.status, n.status)
+    if (old.status !== 'EXPIRED' && allGone(old)) old.status = 'EXPIRED'
+    if (old.status !== before.status) log(old, old.status === 'EXPIRED' ? 'expired' : 'status', before.status, old.status)
   }
-  for (const id of gone) {
-    const l = byId.get(id)
-    if (l && l.status !== 'EXPIRED') { log(l, 'expired', l.status, 'EXPIRED'); l.status = 'EXPIRED' }
-  }
+  for (const l of new Set(byId.values())) if (l.status !== 'EXPIRED' && (gone.includes(l.id) || allGone(l))) { log(l, 'expired', l.status, 'EXPIRED'); l.status = 'EXPIRED' }
   return { listings: [...new Set(byId.values())], changes }
 }

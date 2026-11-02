@@ -3,17 +3,19 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
-import { fromStreamEstate } from '../lib/listings.js'
+import { fromInput, fromStreamEstate } from '../lib/listings.js'
 import { ENGINE, fakeStreamEstate, property, searchesFolder } from './helpers.js'
 
 // A search refreshed once, its one listing fetched: the fake API says it changed since (it matches the refresh's
 // query, and nothing does once it is excluded). An alert watches the DPE of the rue Garibaldi, outside the zone: it
-// already saw one, ADEME now has two more. The automatic fetch is on, 5 credits a month.
+// already saw one, ADEME now has two more. The automatic fetch is on, 5 credits a month. The link check reads the
+// listing's page (online) and a pasted listing's (gone, 410), both on the fake API.
 const api = await fakeStreamEstate()
 const { home, dir } = searchesFolder(), port = 42000 + Math.floor(Math.random() * 300)
 const write = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v)) }
 write(path.join(dir, 'search.json'), { ...JSON.parse(fs.readFileSync(path.join(dir, 'search.json'), 'utf8')), last_refresh: '2026-10-20T10:00:00.000Z' })
-write(path.join(dir, 'listings.json'), [{ ...fromStreamEstate(property), first_seen: '2026-10-20T10:00:00.000Z', price_history: [], my_status: null, notes: '', messages: [], changes: [] }])
+const kept = { first_seen: '2026-10-20T10:00:00.000Z', price_history: [], my_status: null, notes: '', messages: [], changes: [] }, se = fromStreamEstate(property, '2026-10-28T00:00:00.000Z')
+write(path.join(dir, 'listings.json'), [{ ...se, ...kept, urls: se.urls.map(u => ({ ...u, url: `${api.url}/page/200` })) }, { ...fromInput({ url: `${api.url}/page/410`, price: 250000, area: 50, rooms: 3 }, 'websearch'), ...kept }])
 const place = { how: 'street', ban: '69383_3030', label: 'Rue Garibaldi 69003 Lyon', point: [4.853, 45.753] }
 write(path.join(dir, 'alerts.json'), { off: [], custom: [{ id: 'a-gar', name: 'Passoires rue Garibaldi', event: 'dpe', place, conditions: [{ field: 'energy', op: 'gte', value: 'F' }], enabled: true }] })
 const row = (number, energy, n) => ({ number, date: '2026-10-25', energy, type: 'flat', area: 50, address: `${n} Rue Garibaldi 69003 Lyon`, ban: `69383_3030_000${n}`, point: [4.853, 45.753] })
@@ -38,4 +40,9 @@ test('the watch: a DPE at an alert outside the zone, the changed listings counte
   // the counts paid nothing; the automatic refresh paid its one item, marked as the watch's
   const log = JSON.parse(fs.readFileSync(usage, 'utf8'))
   assert.deepEqual(log.map(e => [e.route, e.credits, e.by]), [['GET /documents/properties', 0, 'auto'], ['GET /documents/properties', 0, 'auto'], ['GET /documents/properties', 1, 'auto']])
+  // the pasted listing's page is gone: it expired (followed by no one, no alert); the other's answers
+  const [online, pasted] = s.listings
+  assert.deepEqual([pasted.status, !!pasted.urls[0].gone_at, pasted.changes.at(-1).kind], ['EXPIRED', true, 'expired'])
+  assert.equal(online.status, 'AVAILABLE')
+  assert.ok(online.urls.some(u => u.checked_at && !u.gone_at))
 })
