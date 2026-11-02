@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api, type Listing, type MapRow, type Poi, type Profile, type PropertyType, type SearchData, type State, type Stats } from "@/lib/api"
 
 // what the user asks Claude, collected across the dashboard and copied as one prompt
-export type FeedbackKind = "affiner" | "élargir" | "zone" | "annonces" | "analyser" | "comparer" | "ajouter" | "chercher" | "message" | "question"
+export type FeedbackKind = "affiner" | "élargir" | "zone" | "annonces" | "analyser" | "comparer" | "ajouter" | "chercher" | "message" | "question" | "parcelle"
 export type Feedback = { kind: FeedbackKind; text: string }
 // the sold unit price a type is weighed against, and the stats of its scope
 export type Ref = { ppm2: number; scope: string; count: number; type: PropertyType }
@@ -35,6 +35,9 @@ type Ctx = {
   // a DPE, an audit or a permit of the follow-up to show on the « Prospection » map, taken once it is shown
   mapFocus: MapRow | null
   focusMap: (r: MapRow | null) => void
+  // a parcel (its IDU) a listing's dossier sends to the « Cadastre » tab, taken once it is opened
+  parcelFocus: string | null
+  focusParcel: (idu: string | null) => void
   // a listing its dossier sends to the map, the board or the list (« Voir »): shown there, lit up, kept by the list's
   // filters until another one
   spot: string | null
@@ -77,6 +80,7 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
   const [unread, setUnread] = useState(initial.unread)
   const [newsFocus, focusNews] = useState<string | null>(null)
   const [mapFocus, focusMap] = useState<MapRow | null>(null)
+  const [parcelFocus, focusParcel] = useState<string | null>(null)
   const [spot, spotListing] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
@@ -110,7 +114,7 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
     marketOf: t => markets[t],
     marketFor: l => markets[typeOf(l) as PropertyType],
     aidsFor: l => ({ ref: markets[typeOf(l) as PropertyType].ref, pois, isochrones: data.area.isochrones ?? [], profile, criteria: data.search.criteria }),
-    lastVisit, stale, unread, newsFocus, focusNews, mapFocus, focusMap, spot, spotListing, selected, select, compare,
+    lastVisit, stale, unread, newsFocus, focusNews, mapFocus, focusMap, parcelFocus, focusParcel, spot, spotListing, selected, select, compare,
     toggleCompare: id => setCompare(c => (c.includes(id) ? c.filter(x => x !== id) : [...c, id].slice(-4))),
     clearCompare: () => setCompare([]),
     feedback,

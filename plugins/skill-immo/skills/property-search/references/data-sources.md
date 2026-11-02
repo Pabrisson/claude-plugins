@@ -1,6 +1,6 @@
 # Open data
 
-Contents: Notes per source · The odds map (« Prospection »)
+Contents: Notes per source · The odds map (« Prospection ») · The cadastre (« Cadastre »)
 
 Every source below is free and needs no key. All were checked live on 2026-10-27, on 20 rue Paul Bert, Lyon 3e. The
 engine keeps each answer in the searches folder's `.cache/` for the time given (TTL). If a source changes, fix
@@ -27,7 +27,15 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 | A street's line | IGN WFS `BDTOPO_V3:troncon_de_route`, `CQL_FILTER=identifiant_voie_ban_gauche='<ban>' OR …_droite` | 30 d |
 | IRIS of a box (odds map) | The same WFS, `BBOX=<s>,<w>,<n>,<e>` | none |
 | Census per IRIS (odds map) | INSEE Melodi `DS_RP_MENAGES_PRINC_IRIS` and `DS_RP_LOGEMENT_PRINC_IRIS`, `?GEO=IRIS-<code>&GEO=…` | 90 d |
-| Recent DPE of a commune (odds map) | ADEME `lines?code_insee_ban_eq=<insee>&date_etablissement_dpe_gte=<12 months ago>` | 7 d |
+| Recent DPE of a commune (odds and cadastre maps, `GET /api/dpe?insee=`) | ADEME `lines?code_insee_ban_eq=<insee>&date_etablissement_dpe_gte=<12 months ago>` | 7 d; the search's commune at each watch |
+| Parcels, sections, buildings (cadastre map) | Etalab's vector tiles (cadastre.data.gouv.fr) `https://openmaptiles.geo.data.gouv.fr/data/cadastre.json` | (browser) |
+| A parcel's record | API Carto (IGN) `https://apicarto.ign.fr/api/cadastre/parcelle?code_insee=&section=&numero=` and `code_arr` or `com_abs` | 30 d |
+| A parcel's sales | geo-DVF, the commune's CSV indexed by `id_parcelle` | 30 d (recent years), 180 d (older) |
+| A parcel at a point | API Carto `…/cadastre/parcelle?geom=<a 40 m box>`, the parcel holding the point, else the nearest | 30 d |
+| A parcel's urban plan | API Carto GPU `https://apicarto.ign.fr/api/gpu/<document\|zone-urba\|prescription-surf\|assiette-sup-s…>?geom=` (13 calls) | 30 d |
+| A parcel's buildings | BDNB (CSTB) `https://api.bdnb.io/v1/bdnb/donnees/batiment_groupe_complet/parcelle?parcelle_id=eq.<IDU>&select=…` | 30 d |
+| A legal person's category | API Recherche d'entreprises `https://recherche-entreprises.api.gouv.fr/search?q=<SIREN>` (its `nature_juridique`) | 90 d |
+| Audits of an address | ADEME `ync2epx48x9azbdnggbygqp0/lines?identifiant_ban_eq=<BAN id>&categorie_scenario_eq=état initial` | 30 d |
 | Base map | IGN vector tiles, style `https://data.geopf.fr/annexes/ressources/vectorTiles/styles/PLAN.IGN/standard.json` | (browser) |
 
 ## Notes per source
@@ -76,10 +84,15 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 - **Condominium register (RNIC)**:
   - The CSV weighs 450 MB, so the tabular API is queried instead:
     `https://tabular-api.data.gouv.fr/api/resources/<rid>/data/?longitude__greater=&longitude__less=&latitude__greater=&latitude__less=`.
-  - The resource is the one titled "RNIC - Actualisation quotidienne". Its id is found through
-    `https://www.data.gouv.fr/api/1/datasets/62da71c068871f4c54258c7c/` (fallback `3ea8e2c3-…`).
-  - Its columns were renamed in April 2026: `numero_immatriculation`, `nombre_total_lots`, `nombre_lots_habitation`,
-    `periode_construction`, `type_syndic`, `longitude`, `latitude`.
+  - The daily file (« RNIC - Actualisation quotidienne ») was deleted by its producer on 2026-11-02: the resource is
+    now the quarterly one titled « Registre d'Immatriculation des Copropriétés T3 2025 - nouveau format de colonnes »,
+    found through `https://www.data.gouv.fr/api/1/datasets/62da71c068871f4c54258c7c/` (fallback `cc062fa7-…`; the
+    « Fichier T… » ones are not in the tabular API).
+  - Its columns (2026-11-02): `numero_d_immatriculation`, `nom_d_usage_de_la_copropriete`, `adresse_de_reference`,
+    `nombre_total_de_lots`, `nombre_de_lots_a_usage_d_habitation`, `nombre_de_lots_de_stationnement`,
+    `periode_de_construction`, `type_de_syndic_benevole_professionnel_non_connu`, `raison_sociale_du_representant_legal`,
+    `date_d_immatriculation`, `long`, `lat` (filtered `long__greater`…), and up to 3 parcels (`section_1`,
+    `numero_parcelle_1`…, often « non connu »). A building's number comes from the BDNB (`numero_d_immatriculation__exact`).
 - **Overpass**:
   - It refuses curl's default User-Agent (`406`): the engine sends `skill-immo/1.0 (+repo URL)`.
   - When it is busy it answers `502` or `429`: three tries, 2 then 4 s apart.
@@ -190,3 +203,52 @@ time, about 1 s once kept.
 - Tried and dropped (2026-10-28): calibrating « a DPE without a listing → a listing » on DVF. Among the 3,480 DPE of
   2023 around rue Paul Bert, 24 % were followed by a sale at the same address and surface (±8 %) within 18 months, 177
   days later at the median (C 30 %, D 22 %, G 14 %). The user kept the recent DPE as they are.
+
+## The cadastre (« Cadastre »)
+
+The dashboard's « Cadastre » tab draws Etalab's cadastre itself (the browser reads the tiles, no engine call): layers
+`parcelles` (`id` the IDU, `commune`, `prefixe`, `section` unpadded, `numero` unpadded, `contenance` in m², `arpente`,
+`created`, `updated`; zoom 13 to 16, the small ones merged below 15), `sections` (`code`) and `batiments`. Its
+attribution says the edition (« Septembre 2026 »). The tab reads the parcels the map shows from zoom 15 on.
+
+A parcel clicked, searched or sent by a listing's dossier asks the server `GET /api/cadastre?idu=<IDU>` (or
+`?point=<lon,lat>`, the parcel there): `parcelData` in `immo.mjs`, which `immo.mjs cadastre` prints too. Each source
+apart, one that fails named in `failed`. The map's « Parcelles vendues » asks `GET /api/cadastre/sold?insee=` per commune
+shown (each parcel's latest mutation, its kind and count; Lyon 3e: 2,048 parcels, 160 kB) and colors them through
+the tiles' feature state (`promoteId` on `parcelles`). A first parcel of a city takes 5 to 15 s (its Sitadel permits,
+then kept a week), another 1 to 2 s, one seen 0.1 s.
+
+- **The IDU** (14 characters): the commune's code (the arrondissement's in Paris, Lyon, Marseille: 69383), the prefix
+  of an absorbed commune (`000` else), the section on 2 characters (`0A` for A), the number on 4 (`0213`). DVF's
+  `id_parcelle` and Etalab's `id` are this IDU. The dashboard's search takes « AO 213 » in the commune at the map's
+  center, or a whole IDU (`iduOf` in `lib/geo.js`).
+- **API Carto** wants the section on 2 characters and the number on 4 (400 otherwise). Paris, Lyon and Marseille are
+  asked as their city (`code_insee=69123`) with `code_arr=383`; another commune with `com_abs=<prefix>`. A feature
+  carries `idu`, `nom_com`, `code_arr`, `com_abs`, `section`, `numero`, `feuille`, `contenance` and the parcel's
+  MultiPolygon. No match: an empty FeatureCollection (the route answers 404). Checked live on 2026-11-02: Lyon 3e, Paris
+  15e and L'Abergement-Clémenciat (01001), 0.2 to 0.9 s.
+- **A parcel's sales** (`parcelIndex` in `lib/dvf.js`): every mutation of the commune's geo-DVF years, whatever its
+  nature (a sale off plan, an auction, an exchange) and whatever it sells (a whole building), indexed by each parcel it
+  touches and kept apart from the market's sales (`.cache/dvf/parcels-<insee>-<year>.json`). Each has its locals (a
+  flat's Carrez area, else the built area; an outbuilding none, its row repeating its lot's Carrez), its land and its
+  parcels: one price for the whole mutation. 69383000DN0068 (308 rue Paul Bert): 6 flats sold 2021 to 2025.
+- **The urban plan** (GPU through API Carto, checked on 2026-11-02): each endpoint takes `geom` (the parcel's outline,
+  its middle when the outline is longer than 4,000 characters) and answers features. `document`: `du_type` (PLU, PLUi,
+  CC, POS), `grid_title`, `gpu_doc_id` (its page `https://www.geoportail-urbanisme.gouv.fr/document/by-id/<id>`);
+  `municipality`: `is_rnu`; `zone-urba`: `libelle` (URm1), `libelong` (cut at 254 characters), `typezone` (U, AUc, AUs,
+  A, N), `datvalid`; `secteur-cc` the same for a carte communale; `prescription-surf|lin|pct`: `libelle`, `txt` (Lyon
+  writes « Hauteur Max-16 »); `info-surf|lin|pct`: `libelle`; `assiette-sup-s|l|p`: `suptype` (ac1, pm1, t1…),
+  `nomsuplitt`. 308 rue Paul Bert: PLUi of the Métropole, zone URm1, 11 prescriptions, PM1 (PPRNi).
+- **The BDNB** (`api.bdnb.io`, open, 120 calls a minute): one row per building group of a parcel, `select=` the fields
+  read (`BDNB_FIELDS` in `lib/opendata.js`): `annee_construction`, `nb_niveau`, `hauteur_mean`, `nb_log`,
+  `surface_emprise_sol`, `mat_mur_txt` (capitals, no accents), `type_energie_chauffage`, `classe_bilan_dpe` and
+  `nb_classe_bilan_dpe_<a…g>`, `alea_argile`, `perimetre_bat_historique` (near a historic monument), `l_cle_interop_adr`
+  (its BAN addresses: their DPE and audits), `numero_immat_principal` (its condominium), `l_siren` (the legal persons
+  of the DGFiP's « fichiers des locaux et parcelles des personnes morales »: owners, managers…). Only their category is
+  shown, from the INSEE legal form (`KIND_OF`: OPH and SA d'HLM a social landlord, 71 the État, 72 a local authority,
+  6540 an SCI…), never their name (`l_denomination_proprietaire` is not read): an SCI may bear a person's.
+- **The permits on a parcel**: Sitadel's lists carry `SEC_CADASTRE1…3` and `NUM_CADASTRE1…3` (section « A », number
+  « 1026 »); the engine keeps them as an IDU's end (`0A1026`) with the commune the BAN placed the permit in
+  (`result_citycode`, an arrondissement's), in `.cache/sitadel/permits-v2-<city>.json`.
+- **Géorisques' risk report** (`resultats_rapport_risque`) answered an HTTP/2 INTERNAL_ERROR on and off on 2026-11-02
+  (its other endpoints did not): the parcel and the listings then name it among the sources that failed.

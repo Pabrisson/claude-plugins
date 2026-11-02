@@ -59,8 +59,8 @@ export type Listing = {
     dpe_match: string | null
     dpe_cost_yearly: number | null
     construction_year: number | null
-    copro: { number: string; name: string; address: string; lots: number; dwellings: number; parking: number; period: string; syndic: string | null; syndic_name: string | null } | null
-    risks: { natural: { key: string; label: string }[]; technological: { key: string; label: string }[]; url: string | null } | null
+    copro: Copro | null
+    risks: Risks | null
     sales: { id: string; date: string; price: number; area: number; ppm2: number; rooms: number | null }[]
   }
 }
@@ -116,6 +116,27 @@ export type Census = {
 }
 export type IrisOdds = { code: string; name: string; insee: string; commune: string; kind: string; geometry: Geometry; census: Census | null; sold: number | null; odds: number | null; successions: number | null; separations: number | null; ppm2?: number | null; ppm2_flat?: number | null; ppm2_house?: number | null }
 export type Odds = { bbox: number[]; years: string[]; failed: string[]; iris: IrisOdds[]; communes: { insee: string; name: string; alsace_moselle: boolean }[]; dpe: DpeRow[]; audits: AuditRow[]; permits: PermitRow[] }
+// a parcel of the « Cadastre » tab (GET /api/cadastre, references/data-sources.md): API Carto's record (IGN; null when it
+// failed) and the mutations DVF has on it, each as it is (every nature, its locals, its land), the sources that failed
+export type ParcelRecord = { idu: string; commune: string; insee: string; arrondissement: string | null; prefix: string; section: string; number: string; sheet: number; area: number; geometry: Geometry }
+export type ParcelSale = { id: string; date: string; nature: string; price: number | null; parcels: string[]; locals: { type: "flat" | "house" | "premises" | "outbuilding"; area: number | null; rooms: number | null }[]; land: number | null; address: string | null }
+export type Copro = { number: string; name: string; address: string; lots: number; dwellings: number; parking: number; period: string; syndic: string | null; syndic_name: string | null }
+export type Risks = { natural: { key: string; label: string }[]; technological: { key: string; label: string }[]; url: string | null }
+// what the urban plan (PLU, PLUi, carte communale) and the public easements say of a parcel (GPU)
+export type Urbanism = { document: { kind: string; name: string; id: string; file: string } | null; rnu: boolean; zones: { label: string; name: string | null; kind: string | null; date: string | null }[]; prescriptions: { label: string; value: string | null }[]; infos: string[]; easements: { kind: string; name: string | null }[] }
+// a building group of the parcel (BDNB)
+export type ParcelBuilding = { id: string; address: string | null; use: string | null; year: number | null; levels: number | null; height: number | null; homes: number | null; footprint: number | null; walls: string | null; roof: string | null; heating: string | null; dpe: string | null; dpe_classes: Record<string, number>; clay: string | null; monument: boolean; copro: string | null }
+// the category of a legal person holding rights on the parcel, never its name
+export type OwnerKind = "state" | "local" | "public" | "social" | "sci" | "civil" | "condo" | "association" | "company" | "other"
+export type Cadastre = {
+  idu: string; parcel: ParcelRecord | null; dvf: { sales: ParcelSale[]; years: string[]; alsace_moselle: boolean } | null; urbanism: Urbanism | null; permits: (PermitRow & { parcels: string[] })[] | null
+  buildings: ParcelBuilding[]; owners: Partial<Record<OwnerKind, number>>; copro: Copro | null; risks: Risks | null; middle: Point | null; failed: string[]
+  dpe: { number: string; date: string; energy: string; ghg: string | null; area: number | null; floor: number | null; address: string | null }[] | null
+  audits: { number: string; date: string; energy: string; building: boolean; area: number | null }[] | null
+}
+// the parcels of a commune with a DVF mutation, each with its latest (GET /api/cadastre/sold)
+export type SoldKind = "flat" | "house" | "premises" | "parking" | "land" | "other"
+export type Sold = Record<string, { date: string; price: number | null; kind: SoldKind; count: number }>
 export type Area = {
   center?: Point
   pois?: Poi[] | { error: string }
@@ -241,6 +262,12 @@ export const api = {
   saveZone: (slug: string, geometry: Geometry) => post<{ geometry: Geometry }>(`/api/s/${slug}/zone`, { geometry }),
   autocomplete: (q: string) => json<Hit[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),
   odds: (bbox: number[], signal?: AbortSignal) => json<Odds>(`/api/odds?bbox=${bbox.join(",")}`, { signal }),
+  cadastre: (idu: string, signal?: AbortSignal) => json<Cadastre>(`/api/cadastre?idu=${idu}`, { signal }),
+  // the parcel at a point (a listing's), with all of it
+  cadastreAt: (point: Point, signal?: AbortSignal) => json<Cadastre>(`/api/cadastre?point=${point.join(",")}`, { signal }),
+  sold: (insee: string) => json<Sold>(`/api/cadastre/sold?insee=${insee}`),
+  // a commune's recent DPE (the « Cadastre » map's layer)
+  dpe: (insee: string) => json<DpeRow[]>(`/api/dpe?insee=${insee}`),
   run: (body: { cmd: string; slug?: string; args?: Record<string, string | number | boolean>; estimate?: boolean; accept_unknown?: boolean }) => post<RunResult>("/api/run", body),
 }
 

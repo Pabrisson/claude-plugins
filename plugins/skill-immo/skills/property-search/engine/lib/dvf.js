@@ -69,6 +69,29 @@ export function dvfSales(rows) {
   return out.sort((x, y) => x.date.localeCompare(y.date))
 }
 
+const KIND = { ...Object.fromEntries(Object.entries(LOCAL).map(([t, name]) => [name, t])), Dépendance: 'outbuilding' }
+// Every mutation of DVF rows, whatever it is and sells (a whole building, a sale off plan, an exchange), indexed by
+// each parcel it touches: { <IDU>: [{ id, date, nature, price, parcels, locals: [{ type, area, rooms }], land, address }] }.
+// A parcel's history (the dashboard's « Cadastre »): its sales as they are, not the clean ones of the market.
+export function parcelIndex(rows) {
+  const ix = {}
+  for (const [id, rs] of Map.groupBy(rows, r => r.id_mutation)) {
+    const a = rs[0], once = (key, f) => [...new Map(rs.filter(f).map(r => [key(r), r])).values()]
+    // a flat's Carrez area, else the built area (an outbuilding has none: its row repeats its lot's Carrez)
+    const locals = once(r => `${r.id_parcelle}|${r.lot1_numero}|${r.surface_reelle_bati}`, r => KIND[r.type_local]).map(r => ({
+      type: KIND[r.type_local], area: Math.round((r.type_local === LOCAL.flat && +r.lot1_surface_carrez) || +r.surface_reelle_bati) || null, rooms: +r.nombre_pieces_principales || null,
+    }))
+    const land = once(r => `${r.id_parcelle}|${r.code_nature_culture}`, r => +r.surface_terrain > 0).reduce((s, r) => s + +r.surface_terrain, 0)
+    const parcels = [...new Set(rs.map(r => r.id_parcelle))]
+    const m = { id, date: a.date_mutation, nature: a.nature_mutation, price: +a.valeur_fonciere || null, parcels, locals, land: land || null, address: [a.adresse_numero && `${a.adresse_numero}${a.adresse_suffixe ?? ''}`, a.adresse_nom_voie].filter(Boolean).join(' ') || null }
+    for (const p of parcels) (ix[p] ??= []).push(m)
+  }
+  return ix
+}
+
+// what a mutation mostly sold: a flat, a house, premises, outbuildings only (a parking, a cellar), land only (a plot)
+export const saleKind = m => ['flat', 'house', 'premises'].find(t => m.locals.some(l => l.type === t)) ?? (m.locals.length ? 'parking' : m.land ? 'land' : 'other')
+
 export function quantile(xs, q) {
   if (!xs.length) return null
   const s = xs.toSorted((a, b) => a - b), i = (s.length - 1) * q, lo = Math.floor(i)

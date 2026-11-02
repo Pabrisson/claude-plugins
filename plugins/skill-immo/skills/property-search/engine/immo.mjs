@@ -18,11 +18,11 @@ import { estimate, gate, table, usage } from './lib/costs.js'
 import { review, score, WEIGHTS } from './lib/decide.js'
 import { recentDpe } from './lib/dpe.js'
 import { building, median, summary } from './lib/dvf.js'
-import { around, band, bbox, center, circle, corridor, distance, inGeometry, inZone, thin } from './lib/geo.js'
+import { around, band, bbox, center, circle, corridor, distance, IDU, inGeometry, inZone, middleOf, thin } from './lib/geo.js'
 import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from './lib/listings.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
-import { openData } from './lib/opendata.js'
+import { openData, pool } from './lib/opendata.js'
 import { members, NoCredits, se, testApi } from './lib/stream.js'
 
 const SELF = fileURLToPath(import.meta.url)
@@ -434,7 +434,6 @@ function alertLine(dir, s, news) {
   for (const x of news) for (const a of firing(mine, x, s)) n[a.name] = (n[a.name] ?? 0) + 1
   return Object.keys(n).length ? `alerts: ${Object.entries(n).map(([k, v]) => `« ${k} » ${v}`).join(', ')}` : null
 }
-const pool = async (items, n, fn) => { const out = [], it = items.entries(); await Promise.all(Array.from({ length: n }, async () => { for (const [i, x] of it) out[i] = await fn(x) })); return out }
 
 // the free market and neighborhood data of a search: DVF sales, shops and services, travel times to the user's
 // places, crime, income and risks at its center, the DPE and energy audits of the last 12 months in the zone (for a
@@ -499,6 +498,85 @@ async function oddsOf(bb) {
     // a city's permits once, though several of its arrondissements are in the box
     permits: [...new Map(communes.flatMap(c => c.permits ?? []).filter(d => inBox(d.point)).map(d => [d.number, d])).values()],
   }
+}
+
+// Everything the open data says of a parcel (the « Cadastre » tab, `cadastre`): IGN's record (API Carto), the urban
+// plan and easements over it (GPU), the mutations DVF has on it, its building permits of the last 12 months (Sitadel, by
+// its reference), its buildings (BDNB) with the DPE and energy audits of their addresses (ADEME), the categories of the
+// legal persons holding rights on it, its condominium (RNIC) and its risks (Géorisques, at its middle). Each source
+// apart: one that fails is named in `failed`, the rest still comes. Null when IGN has no such parcel.
+async function parcelData(idu) {
+  const failed = [], settle = (pr, what) => pr.catch(e => { failed.push(`${what} (${e.message.slice(0, 80)})`); return null })
+  const insee = idu.slice(0, 5), ref = idu.slice(8)
+  const [parcel, dvf, found, permits] = await Promise.all([
+    settle(od.parcel(idu), 'API Carto'), settle(od.parcelSales(idu), 'DVF'), settle(od.buildings(idu), 'BDNB'),
+    settle(od.cityPermits(insee), 'Sitadel').then(ps => ps && ps.filter(x => x.insee === insee && x.parcels?.includes(ref))),
+  ])
+  if (parcel === null && !failed.some(f => f.startsWith('API Carto'))) return null
+  const buildings = found ?? [], middle = parcel && middleOf(parcel.geometry)
+  // the addresses (4 at most) and legal persons (12) of its buildings, its main condominium
+  const bans = [...new Set(buildings.flatMap(b => b.bans))].slice(0, 4), sirens = [...new Set(buildings.flatMap(b => b.sirens))].slice(0, 12), number = buildings.find(b => b.copro)?.copro
+  const [urbanism, risks, dpe, audits, kinds, copro] = await Promise.all([
+    parcel ? settle(od.urbanism(idu, parcel.geometry), "Géoportail de l'urbanisme") : null,
+    middle ? settle(od.georisques(middle), 'Géorisques') : null,
+    settle(Promise.all(bans.map(ban => od.ademe({ ban }))).then(xs => xs.flat()), 'DPE'),
+    settle(Promise.all(bans.map(ban => od.banAudits(ban))).then(xs => xs.flat()), 'audits'),
+    settle(pool(sirens, 3, siren => od.ownerKind(siren)), "Recherche d'entreprises"),
+    number ? settle(od.coproByNumber(number), 'RNIC') : null,
+  ])
+  const owners = {}
+  for (const k of kinds ?? []) if (k) owners[k] = (owners[k] ?? 0) + 1
+  return {
+    idu, parcel, dvf, urbanism, permits, buildings: buildings.map(({ sirens: _, bans: __, ...b }) => b), owners, copro, risks, failed, middle,
+    dpe: dpe && [...new Map(dpe.map(d => [d.numero_dpe, d])).values()].sort((a, b) => b.date_etablissement_dpe.localeCompare(a.date_etablissement_dpe)).slice(0, 30)
+      .map(d => ({ number: d.numero_dpe, date: d.date_etablissement_dpe, energy: d.etiquette_dpe, ghg: d.etiquette_ges, area: d.surface_habitable_logement ?? null, floor: d.numero_etage_appartement ?? null, address: d.adresse_ban ?? null })),
+    audits: audits && audits.sort((a, b) => b.date.localeCompare(a.date)),
+  }
+}
+
+// a parcel's reference as the cadastre writes it (« DN 68 », « 123 ZA 45 » with an absorbed commune's prefix) and its
+// contenance in ares and centiares, as a deed or an offer says them
+const parcelRef = p => `${p.prefix !== '000' ? `${p.prefix} ` : ''}${p.section.replace(/^0(?=[A-Z])/, '')} ${+p.number}`
+const ares = m2 => `${Math.floor(m2 / 10000) ? `${Math.floor(m2 / 10000)} ha ` : ''}${Math.floor((m2 % 10000) / 100)} a ${m2 % 100} ca`
+// Lyon's arrondissements are 381–389, Paris's 101–120, Marseille's 201–216
+const arrondissement = a => { const n = +a >= 380 ? +a - 380 : +a % 100; return `${n}${n === 1 ? 'er' : 'e'}` }
+
+// cadastre <IDU | lon,lat | address> | -p <slug> --id <listing>: what the open data says of a parcel, free (an offer's
+// designation, a parcel's study, a listing's land)
+async function cadastre(query) {
+  let idu = (query ?? '').toUpperCase().replace(/\s+/g, '')
+  if (!IDU.test(idu)) {
+    let point
+    if (opt.id) point = listingsOf(searchDir()).find(l => l.id === opt.id)?.location.point ?? die(`listing ${opt.id} has no point`)
+    else if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(query ?? '')) point = query.split(',').map(Number)
+    else if (query) point = (await od.geocode(query, { limit: 1 }))[0]?.geometry.coordinates ?? die(`no place found for "${query}"`)
+    else die('usage: cadastre <IDU | lon,lat | address> | -p <slug> --id <listing>')
+    idu = (await od.parcelAt(point)) ?? die(`no parcel at ${point.join(',')}`)
+  }
+  const d = await parcelData(idu)
+  if (!d) die(`IGN has no parcel ${idu}`)
+  if (opt.json) return console.log(JSON.stringify({ ...d, parcel: d.parcel && { ...d.parcel, geometry: undefined } }))
+  const p = d.parcel, u = d.urbanism, line = (k, v) => v && console.log(`${k}: ${v}`)
+  if (p) {
+    console.log(`parcel ${idu}: ${p.commune}${p.arrondissement ? ` ${arrondissement(p.arrondissement)}` : ''} (${p.insee}), section ${p.section} no ${+p.number}${p.prefix !== '000' ? ` (prefix ${p.prefix}: an absorbed commune)` : ''}, sheet ${p.sheet}, contenance ${p.area} m² (${ares(p.area)})`)
+    console.log(`designation (an offer, a deed): « cadastré section ${p.section.replace(/^0(?=[A-Z])/, '')} n° ${+p.number}, pour une contenance de ${ares(p.area)} » (reference ${parcelRef(p)})`)
+  } else console.log(`parcel ${idu}: IGN's record unavailable`)
+  if (u) {
+    line('urban plan', u.rnu ? "none: the national rules (RNU)" : u.document ? `${u.document.kind} « ${u.document.name} », https://www.geoportail-urbanisme.gouv.fr/document/by-id/${u.document.id}` : 'no document found')
+    line('zones', u.zones.map(z => `${z.label}${z.kind ? ` (${z.kind})` : ''}${z.name ? `: ${z.name}` : ''}`).join('; '))
+    line('prescriptions', u.prescriptions.map(x => `${x.label}${x.value && !x.label.includes(x.value) ? ` (${x.value})` : ''}`).join('; '))
+    line('informations', u.infos.join('; '))
+    line('public easements (SUP)', u.easements.map(x => `${x.kind.toUpperCase()}${x.name ? ` ${x.name}` : ''}`).join('; '))
+  }
+  for (const b of d.buildings) line('building', [b.address, b.use, b.year && `built ${b.year}`, b.levels && `${b.levels} levels`, b.height && `${b.height} m`, b.homes && `${b.homes} homes`, b.footprint && `footprint ${b.footprint} m²`, b.walls && `walls ${b.walls.toLowerCase()}`, b.dpe && `DPE ${b.dpe}`, Object.keys(b.dpe_classes).length && `DPE classes ${Object.entries(b.dpe_classes).map(([c, n]) => `${c} ${n}`).join(', ')}`, b.clay && `clay hazard ${b.clay.toLowerCase()}`, b.monument && 'near a historic monument (ABF)'].filter(Boolean).join(', '))
+  if (d.copro) line('condominium', `${d.copro.number} « ${d.copro.name} », ${d.copro.lots} lots (${d.copro.dwellings} homes, ${d.copro.parking} parkings), syndic ${d.copro.syndic ?? 'unknown'}`)
+  line('legal persons holding rights (categories only)', Object.entries(d.owners).map(([k, n]) => `${n} ${k}`).join(', '))
+  if (d.dpe?.length) line('DPE at its addresses', `${d.dpe.length}, newest ${d.dpe.slice(0, 5).map(x => `${x.energy} ${x.area ?? '?'} m² ${x.date}`).join('; ')}`)
+  if (d.audits?.length) line('energy audits', d.audits.map(a => `${a.energy} ${a.date}${a.building ? ' (whole building)' : ''}`).join('; '))
+  line('permits of the last 12 months', d.permits?.map(x => `${x.form} ${x.number} ${x.date}${x.homes ? `, ${x.homes} homes` : ''}${x.demolished ? `, ${x.demolished} demolished` : ''}`).join('; '))
+  if (d.dvf) console.log(d.dvf.alsace_moselle ? 'DVF: none in Alsace-Moselle' : `DVF ${d.dvf.years[0] ?? '—'}–${d.dvf.years.at(-1) ?? '—'}: ${d.dvf.sales.length} mutations${d.dvf.sales.length ? `: ${d.dvf.sales.slice(0, 12).map(m => `${m.date} ${m.nature} ${fmt(m.price)} € (${m.locals.filter(l => l.type !== 'outbuilding').map(l => `${l.type}${l.area ? ` ${l.area} m²` : ''}`).join(', ') || (m.land ? `land ${m.land} m²` : 'outbuildings')}${m.parcels.length > 1 ? `, ${m.parcels.length} parcels` : ''})`).join('; ')}` : ''}`)
+  if (d.risks) line('risks', [...d.risks.natural, ...d.risks.technological].map(r => r.label).join(', ') || 'none listed')
+  if (d.failed.length) console.log(`failed: ${d.failed.join('; ')}`)
 }
 
 // search "<address | street | neighborhood>" [--zone …] [--radius m] [--criteria …]: a new search, or -p
@@ -996,6 +1074,32 @@ async function handle(req, res) {
     if (bb[2] - bb[0] > 0.3 || bb[3] - bb[1] > 0.2) return reply(res, 400, { error: 'zoom' })
     try { return reply(res, 200, await oddsOf(bb)) } catch (e) { return reply(res, 502, { error: e.message }) }
   }
+  // a parcel of the « Cadastre » tab by its IDU: API Carto's record (IGN) and the mutations DVF has on it, each source
+  // apart (one that fails is named, the other still comes)
+  // a parcel by its IDU, or the one at a point (a listing's dossier): everything parcelData says of it
+  if (p === '/api/cadastre') {
+    let idu = (url.searchParams.get('idu') ?? '').toUpperCase()
+    const point = (url.searchParams.get('point') ?? '').split(',').map(Number)
+    if (!idu && point.length === 2 && point.every(Number.isFinite)) {
+      try { idu = (await od.parcelAt(point)) ?? '' } catch (e) { return reply(res, 502, { error: e.message }) }
+      if (!idu) return reply(res, 404, { error: 'not found' })
+    }
+    if (!IDU.test(idu)) return reply(res, 400, { error: 'expects ?idu=<14 characters> or ?point=<lon,lat>' })
+    const d = await parcelData(idu)
+    return d ? reply(res, 200, d) : reply(res, 404, { error: 'not found' })
+  }
+  // the parcels of a commune with a DVF mutation, each with its latest (the « Cadastre » map's « Parcelles vendues »)
+  // the recent DPE of a commune (the « Cadastre » map's layer), kept a week, the watch's commune fresher
+  if (p === '/api/dpe') {
+    const insee = url.searchParams.get('insee') ?? ''
+    if (!/^(\d{2}|2[AB])\d{3}$/.test(insee)) return reply(res, 400, { error: 'expects ?insee=<commune>' })
+    try { return reply(res, 200, await od.communeDpe(insee)) } catch (e) { return reply(res, 502, { error: e.message }) }
+  }
+  if (p === '/api/cadastre/sold') {
+    const insee = url.searchParams.get('insee') ?? ''
+    if (!/^(\d{2}|2[AB])\d{3}$/.test(insee)) return reply(res, 400, { error: 'expects ?insee=<commune>' })
+    try { return reply(res, 200, await od.soldParcels(insee)) } catch (e) { return reply(res, 502, { error: e.message }) }
+  }
   if (p === '/api/run' && post) {
     let argv
     try { argv = runArgs(await readBody(req)) } catch (e) { return reply(res, 400, { error: e.message }) }
@@ -1120,6 +1224,9 @@ async function watch(dir) {
     if (!before || rows.length !== before.size || rows.some(d => !before.has(d.number))) writeJson(f, { ...readJson(f, {}), [SOURCES[k].key]: rows })
   }
   news.push(...await placeNews(dir, s, days))
+  // the maps' DPE and audits of the search's commune (« Prospection », « Cadastre »), as fresh as the news
+  // ponytail: the search's commune only; the maps' other communes stay a week, all the zone's if a zone crosses one
+  if (typesOf(s).some(isHome)) await Promise.all([od.communeDpe(s.insee, days), od.communeAudits(s.insee, days)]).catch(e => console.log(`watch ${s.slug} commune: ${e.message}`))
   // the API's counts are no news: « Suivi » shows them in its bar, to fetch; they grow the notification
   if (streamOn(s)) {
     const known = listingsOf(dir).map(l => l.se_id).filter(Boolean), count = q => seCount(s.slug, q, { quiet: true })
@@ -1300,7 +1407,7 @@ async function dashboard() {
 
 const commands = {
   doctor, setup: () => setup(...args), geocode: () => geocode(args.join(' ')), search: () => search(args.join(' ')), fetch: fetchListings, market, add, enrich, refresh,
-  alert: () => alert(args[0]), alerts: alertsCmd, usage: usageCmd, costs: () => costs(...args), show, message, list, dashboard, serve,
+  alert: () => alert(args[0]), alerts: alertsCmd, cadastre: () => cadastre(args.join(' ')), usage: usageCmd, costs: () => costs(...args), show, message, list, dashboard, serve,
 }
 if (!commands[cmd]) die(`usage: immo.mjs <${Object.keys(commands).join(' | ')}> [-p <slug>]`)
 await commands[cmd]()

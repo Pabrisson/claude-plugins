@@ -4,7 +4,7 @@ Read it before analysing or comparing listings, a question on a listing or on th
 to write (an offer, questions, a visit, a reply, a reminder, documents). `immo.mjs` means `node "${CLAUDE_SKILL_DIR}/engine/immo.mjs"`, as in SKILL.md; the credits rule and the
 assisted mode are SKILL.md's.
 
-Contents: analyse and compare (`show`, `market.json`, the verdict) · messages and the conversation (one received, one to write) · `market.json`
+Contents: analyse and compare (`show`, `market.json`, the verdict) · messages and the conversation (one received, one to write) · a parcel (`cadastre`) · `market.json`
 
 ## Analyse and compare
 
@@ -58,7 +58,10 @@ Each listing keeps its conversation with the agent or the seller. The user adds 
 2. Write it in French, short and polite, from those facts only, following on from the conversation:
    - an offer: its amount inside the negotiation range unless the user gave one; ask in one AskUserQuestion when neither
      is clear (the range's low end first). Two or three arguments the data backs (time online, drops, DPE and works,
-     sales of the street), the financing in one line, how long it stays valid (10 days by default);
+     sales of the street), the financing in one line, how long it stays valid (10 days by default). Designate the
+     property with its parcel when the listing is placed at its address: `immo.mjs cadastre -p <slug> --id <id>` prints
+     the line to use (« cadastré section DN n° 68, pour une contenance de 9 a 90 ca »; a flat's is its building's,
+     with « lot n° … » left for the seller to fill), « sous réserve de vérification sur le titre de propriété »;
    - a reply to a counter-offer: where it stands against the range and what the seller said;
    - questions or documents: those of `review.questions` that still matter, minus what the conversation already
      answered.
@@ -70,6 +73,29 @@ Each listing keeps its conversation with the agent or the seller. The user adds 
    `immo.mjs message -p <slug> --id <id> --kind <kind> [--amount <€>] [--to "<who>"] [--sent] --file <file>` (`--sent`
    for « déjà envoyé »). The dossier shows it in « Conversation », with « Copier » and « Marquer envoyé »; an offer
    marked sent moves the listing to « Offre faite ».
+
+## A parcel
+
+`immo.mjs cadastre <IDU | lon,lat | address>` (or `-p <slug> --id <listing>`, the parcel at the listing's point; `--json`
+for everything) prints, free, what the open data says of a parcel: IGN's record and its designation for a deed or an
+offer, the urban plan (document, zone, prescriptions, informations, public easements), its buildings (BDNB: year,
+levels, homes, footprint, DPE classes, clay hazard, near a historic monument), its condominium, the categories of the
+legal persons holding rights on it (never a name), the DPE and audits of its addresses, its permits of the last 12
+months, DVF's mutations on it, its risks, and the sources that failed. The dashboard's « Cadastre » tab shows the same.
+
+A parcel's study (a `[parcelle]` item, « que vaut ce terrain », « peut-on construire ») answers, in French, from those
+facts only:
+- what the zone allows: its type (U urban, AU to urbanise, A farming, N natural; RNU: the national rules), the
+  prescriptions that bind (height, setbacks, social mix, heritage), the easements (a PPR, a monument's surroundings: the
+  Architecte des Bâtiments de France's opinion). Name the zone's rules document (its GPU link) as the one that decides,
+  and never assert a building right the data does not show;
+- the land: its contenance, the buildings' footprint and share of it, the free part; several parcels together for an
+  « étudier ensemble » item;
+- the market: its mutations (a whole building, a plot, flats), the street's and the commune's sales of land and homes
+  (`show`, `market.json`), a price per m² of land only from sales of plots;
+- the building, its energy (DPE classes, audits), its risks, the permits filed on it;
+- what to check before buying: the title, a surveyor's boundary (bornage) for a plot, a certificat d'urbanisme
+  opérationnel to build, the condominium's documents for a flat.
 
 ## `market.json`
 

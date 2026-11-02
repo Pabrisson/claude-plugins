@@ -2,8 +2,8 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { useEffect, useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
 
@@ -32,7 +32,7 @@ import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api, type Channel, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
+import { api, type Cadastre, type Channel, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
 import { ACCURACY_LABEL, CHANNEL_LABEL, date, dateTime, eur, keur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
 import { shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
@@ -122,7 +122,7 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
   const mobile = useIsMobile()
   const l = data.listings.find(x => x.id === selected)
   const title = l ? <span className="flex items-center gap-2"><TypeIcon type={l.property_type} className="size-4 shrink-0 text-muted-foreground" />{titleOf(l)}</span> : ""
-  const body = l && <DossierBody key={l.id} l={l} />
+  const body = l && <DossierBody key={l.id} l={l} onView={onView} />
   if (mobile)
     return (
       <Drawer open={!!l} onOpenChange={o => !o && select(null)}>
@@ -151,6 +151,44 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
   )
 }
 
+// The listing's parcel (the cadastre at its point, when the listing is placed at its address): its reference, its
+// contenance against the land the listing states (a house, a plot), its zone in the urban plan, the sales DVF has on
+// it; « Voir au cadastre » opens it in the « Cadastre » tab
+function ParcelSection({ l, onView }: { l: Listing; onView: (v: string) => void }) {
+  const { focusParcel, select } = useSearch()
+  const point = l.location.point, precise = !!point && (l.location.accuracy === "PRECISE" || !!l.building?.ban)
+  const [d, setD] = useState<Cadastre | "none" | "error" | null>(null)
+  useEffect(() => {
+    if (!precise || !point) return
+    const ctl = new AbortController()
+    api.cadastreAt(point, ctl.signal).then(setD, e => { if (!ctl.signal.aborted) setD(e.message === "not found" ? "none" : "error") })
+    return () => ctl.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [precise, point?.join(",")])
+  const t = typeOf(l), p = d && typeof d === "object" ? d.parcel : null
+  const ref = p && `${p.prefix !== "000" ? `${p.prefix} ` : ""}${p.section.replace(/^0(?=[A-Z])/, "")} ${+p.number}`
+  // the land the listing states against the parcel's contenance (a house, a plot): more than 10 % apart is worth asking
+  const gap = (t === "house" || t === "land") && l.land_area && p?.area ? l.land_area / p.area - 1 : null
+  const go = () => { if (typeof d !== "object" || !d) return; focusParcel(d.idu); select(null); onView("cadastre") }
+  return (
+    <Section title="Parcelle" action={d && typeof d === "object" && <Button size="xs" variant="outline" onClick={go}><LandPlotIcon data-icon="inline-start" />Voir au cadastre</Button>}>
+      {!precise ? <p className="text-sm text-muted-foreground">L'annonce n'est pas placée à son adresse : sa parcelle n'est pas connue.</p>
+        : d === null ? <p className="text-sm text-muted-foreground">Recherche de la parcelle…</p>
+        : d === "none" ? <p className="text-sm text-muted-foreground">Aucune parcelle au point de l'annonce.</p>
+        : d === "error" ? <p className="text-sm text-muted-foreground">Le cadastre ne répond pas pour l'instant.</p>
+        : (
+          <>
+            <Row label="Référence" hint="La parcelle au point de l'annonce : celle de l'immeuble pour un appartement. À vérifier sur le titre de propriété.">{ref ? `section ${ref}` : d.idu} · {d.idu}</Row>
+            <Row label="Contenance">{p ? `${p.area.toLocaleString("fr-FR")} m²` : "—"}{gap != null && Math.abs(gap) > 0.1 && <span className="ml-2 text-xs text-[var(--above)]">terrain annoncé {l.land_area} m² ({pct(gap)}) : le bien peut couvrir plusieurs parcelles, ou une partie</span>}</Row>
+            {d.urbanism && <Row label="Urbanisme">{d.urbanism.rnu ? "RNU (pas de PLU)" : d.urbanism.zones.map(z => `zone ${z.label}`).join(", ") || "—"}{d.urbanism.document ? ` · ${d.urbanism.document.kind}` : ""}</Row>}
+            {d.dvf && !d.dvf.alsace_moselle && <Row label="Ventes sur la parcelle">{d.dvf.sales.length ? `${d.dvf.sales.length} depuis ${d.dvf.years[0]}, la dernière le ${date(d.dvf.sales[0].date)} (${eur(d.dvf.sales[0].price)})` : `aucune depuis ${d.dvf.years[0] ?? "5 ans"}`}</Row>}
+            {d.buildings[0] && <Row label="Bâtiment (BDNB)">{[d.buildings[0].year && `construit en ${d.buildings[0].year}`, d.buildings[0].levels && `${d.buildings[0].levels} niveaux`, d.buildings[0].homes && `${d.buildings[0].homes} logements`, d.buildings[0].monument && "abords d'un monument historique"].filter(Boolean).join(" · ") || "—"}</Row>}
+          </>
+        )}
+    </Section>
+  )
+}
+
 // what Claude is asked to write, from the dossier's menu: the prompt says what, Claude reads the conversation first
 const DRAFTS = {
   offer: "une offre d'achat (montant et arguments à partir de la marge de négociation)", question: "les questions à poser à l'agent ou au vendeur", visit: "une demande de visite",
@@ -158,7 +196,7 @@ const DRAFTS = {
   documents: "une demande des documents (diagnostics complets, PV des 3 dernières AG, relevé de charges, avis de taxe foncière, pré-état daté)",
 } as const
 
-function DossierBody({ l }: { l: Listing }) {
+function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void }) {
   const { slug, data, profile, marketFor, aidsFor, reload, compare, toggleCompare, addFeedback } = useSearch()
   const run = useRun()
   const [notes, setNotes] = useState(l.notes)
@@ -260,6 +298,8 @@ function DossierBody({ l }: { l: Listing }) {
           </>
         ) : null}
       </Section>
+
+      <ParcelSection l={l} onView={onView} />
 
       <Section title="Quartier et trajets">
         {Object.keys(POI_LABEL).filter(k => near[k]).map(k => (

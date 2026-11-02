@@ -168,3 +168,23 @@ export function around(p, pois, radius_m = 500) {
   }
   return out
 }
+
+// the outer rings of a polygon or a multipolygon
+export const ringsOf = g => (g?.type === 'Polygon' ? [g.coordinates[0]] : g?.type === 'MultiPolygon' ? g.coordinates.map(p => p[0]) : [])
+// a point standing for a shape: the middle of its largest outer ring's corners
+// ponytail: a corner average, which can fall just outside an L-shaped parcel; a pole of inaccessibility if it matters
+export function middleOf(g) {
+  const ring = ringsOf(g).sort((a, b) => Math.abs(area(b)) - Math.abs(area(a)))[0] ?? [], pts = ring.slice(0, -1).length ? ring.slice(0, -1) : ring
+  return pts.length ? [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length] : null
+}
+
+// A parcel's IDU: its commune (or arrondissement), the prefix of an absorbed commune (000 else), its section, its number
+export const IDU = /^((?:\d{2}|2[AB])\d{3})(\d{3})([0-9A-Z]{2})(\d{4})$/
+// The IDU of a cadastral reference typed in the commune `insee`: « AO 213 », « a 12 », « 123 ZA 45 » (an absorbed
+// commune's prefix), or a whole IDU, valid anywhere; null when it is none of them
+export function iduOf(text, insee) {
+  const t = text.toUpperCase().trim(), whole = t.replace(/\s+/g, '')
+  if (IDU.test(whole)) return whole
+  const m = t.match(/^(?:(\d{3})\s*)?(\d?[A-Z]{1,2})\s*(\d{1,4})$/)
+  return m && m[2].length <= 2 ? `${insee}${m[1] ?? '000'}${m[2].padStart(2, '0')}${m[3].padStart(4, '0')}` : null
+}

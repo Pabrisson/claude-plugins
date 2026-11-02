@@ -42,13 +42,16 @@ export function searchesFolder(mode = 'stream-estate') {
     { number: '2669E0000002B', date: ago(40), energy: 'G', type: 'house', area: 120, address: null, ban: null, point: [4.844, 45.7555] },
     { number: '2669E0000003C', date: ago(5), energy: 'C', type: 'flat', area: 70, address: null, ban: null, point: [4.8392, 45.7516] },
   ])
+  // the commune's DPE and audits as the maps keep them (the watch reads them, fresh)
+  cache('ademe/recent-69383.json', [{ number: '2669E0000001A', date: ago(10), energy: 'E', type: 'flat', area: 40, address: '10 Rue Paul Bert 69003 Lyon', ban: '69383_5245_00010', point: [4.846, 45.7565] }])
+  cache('ademe/audits-69383.json', [])
   // its energy audits (one in the zone) and Lyon's building permits (one in the zone, one in the 9e)
   cache(`ademe/audits-${bbox(zone).map(x => x.toFixed(4)).join(',')}.json`, [
     { number: 'A26690000001A', date: ago(20), energy: 'F', type: 'house', building: false, area: 90, period: 'avant 1948', address: '12 Rue Paul Bert 69003 Lyon', ban: '69383_5245_00012', point: [4.8462, 45.7562] },
   ])
-  cache('sitadel/permits-69123.json', [
-    { number: 'PD06912326V0001', kind: 'demolish', form: 'PD', date: ago(60), homes: null, demolished: null, land: 400, address: '14 Rue Paul Bert 69003 Lyon', ban: '69383_5245_00014', point: [4.8458, 45.7561] },
-    { number: 'PC06912325V0002', kind: 'build', form: 'PC', date: ago(200), homes: 21, demolished: null, land: 3000, address: '3 Avenue de Ménival 69005 Lyon', ban: '69385_4710_00003', point: [4.787, 45.751] },
+  cache('sitadel/permits-v2-69123.json', [
+    { number: 'PD06912326V0001', kind: 'demolish', form: 'PD', date: ago(60), homes: null, demolished: null, land: 400, address: '14 Rue Paul Bert 69003 Lyon', ban: '69383_5245_00014', point: [4.8458, 45.7561], insee: '69383', parcels: ['DN0068'] },
+    { number: 'PC06912325V0002', kind: 'build', form: 'PC', date: ago(200), homes: 21, demolished: null, land: 3000, address: '3 Avenue de Ménival 69005 Lyon', ban: '69385_4710_00003', point: [4.787, 45.751], insee: '69385', parcels: [] },
   ])
   return { home, dir }
 }

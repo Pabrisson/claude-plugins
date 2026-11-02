@@ -1,9 +1,10 @@
-import { BarChart3Icon, BellRingIcon, EllipsisIcon, ListIcon, MapIcon, PlusIcon, RadarIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SettingsIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
+import { BarChart3Icon, BellRingIcon, EllipsisIcon, LandPlotIcon, ListIcon, MapIcon, PlusIcon, RadarIcon, ReceiptEuroIcon, RefreshCwIcon, RouteIcon, ScaleIcon, SettingsIcon, SquareKanbanIcon, Trash2Icon } from "lucide-react"
 import { ThemeProvider } from "next-themes"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
 import { AlertsTab } from "@/components/alerts-tab"
+import { CadastreTab } from "@/components/cadastre-tab"
 import { CompareTab } from "@/components/compare-tab"
 import { CostsTab } from "@/components/costs-tab"
 import { Dossier } from "@/components/dossier"
@@ -67,6 +68,7 @@ function SearchPage({ slug }: { slug: string }) {
 const VIEWS = [
   { id: "listings", label: "Annonces", icon: MapIcon },
   { id: "odds", label: "Prospection", icon: RadarIcon },
+  { id: "cadastre", label: "Cadastre", icon: LandPlotIcon },
   { id: "list", label: "Liste", icon: ListIcon },
   { id: "kanban", label: "Kanban", icon: SquareKanbanIcon },
   { id: "market", label: "Marché", icon: BarChart3Icon },
@@ -80,8 +82,9 @@ const VIEWS = [
 const BAR = ["listings", "list", "kanban", "follow"]
 
 // The map and the listings' cards side by side (one or the other on a phone), the map of the odds that a home goes on
-// sale beside its figures, the kanban and the list of every listing, each listing's dossier on top; market, comparison,
-// follow-up as tabs, the alerts, the settings and the API costs apart on the right
+// sale beside its figures, the cadastre's parcels beside their record, the kanban and the list of every listing, each
+// listing's dossier on top; market, comparison, follow-up as tabs, the alerts, the settings and the API costs apart on
+// the right
 function Workspace() {
   const { slug, reload, compare, data, spotListing, types } = useSearch()
   const mobile = useIsMobile()
@@ -124,6 +127,7 @@ function Workspace() {
             )}
           </TabsContent>
           <TabsContent value="odds" className="min-h-0"><OddsTab /></TabsContent>
+          <TabsContent value="cadastre" className="min-h-0"><CadastreTab /></TabsContent>
           <TabsContent value="kanban" className="min-h-0 pb-16 md:pb-0"><KanbanTab /></TabsContent>
           <TabsContent value="list" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><ListTab /></TabsContent>
           <TabsContent value="market" className="min-h-0 overflow-y-auto pb-16 md:pb-0"><MarketTab /></TabsContent>

@@ -3,13 +3,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { atPlace, BAN_STREET, cityCodes } from './alerts.js'
-import { dvfSales, parseCsv } from './dvf.js'
+import { dvfSales, parcelIndex, parseCsv, saleKind } from './dvf.js'
+import { distance, IDU, inGeometry, middleOf, ringsOf } from './geo.js'
 
 const UA = 'skill-immo/1.0 (+https://github.com/Pabrisson/claude-plugins)'
 const GEOPF = 'https://data.geopf.fr'
 const TABULAR = 'https://tabular-api.data.gouv.fr/api/resources'
 // data.gouv datasets whose resources are found by title: their ids change with each release
-const RNIC = { dataset: '62da71c068871f4c54258c7c', title: /actualisation quotidienne/i, fallback: '3ea8e2c3-0038-464a-b17e-cd5c91f65ce2' }
+// the condominiums' register: its quarterly file « Registre d'Immatriculation des Copropriétés T3 2025 - nouveau format de
+// colonnes » (the daily one was deleted on 2026-11-02)
+const RNIC = { dataset: '62da71c068871f4c54258c7c', title: /Registre d'Immatriculation des Copropri/i, fallback: 'cc062fa7-4a80-449c-ab73-d2856b455ec9' }
 const SSMSI = { dataset: '621df2954fa5a3b5a023e23c', com: /^COM - /, dep: /^DEP - /, fallback: { com: '604d71b8-337d-4869-9226-49e01bae87df', dep: '2b27a675-e3bf-41ef-a852-5fb9ab483967' } }
 // Overpass: what is within reach of a flat, by category
 const POI = {
@@ -34,7 +37,26 @@ const PERMITS = { build: '65a9e264-7a20-46a9-9d98-66becb817bc3', demolish: '8f73
 // ADEME's energy audits of existing homes (since September 2023)
 const AUDITS = 'ync2epx48x9azbdnggbygqp0'
 const sleep = t => new Promise(ok => setTimeout(ok, t))
+// `fn` on each item, `n` at a time, the results in order
+export const pool = async (items, n, fn) => { const out = [], it = items.entries(); await Promise.all(Array.from({ length: n }, async () => { for (const [i, x] of it) out[i] = await fn(x) })); return out }
+// API Carto's Géoportail de l'urbanisme (GPU): what each call says of a place
+const GPU = 'https://apicarto.ign.fr/api/gpu'
+const GPU_PARTS = ['document', 'municipality', 'zone-urba', 'secteur-cc', 'prescription-surf', 'prescription-lin', 'prescription-pct', 'info-surf', 'info-lin', 'info-pct', 'assiette-sup-s', 'assiette-sup-l', 'assiette-sup-p']
+// the BDNB's building groups of a parcel (CSTB, open API), the fields read
+const BDNB = 'https://api.bdnb.io/v1/bdnb/donnees/batiment_groupe_complet/parcelle'
+const BDNB_FIELDS = ['batiment_groupe_id', 'libelle_adr_principale_ban', 'l_cle_interop_adr', 'usage_principal_bdnb_open', 'annee_construction', 'nb_niveau', 'hauteur_mean', 'nb_log', 'surface_emprise_sol',
+  'mat_mur_txt', 'mat_toit_txt', 'type_energie_chauffage', 'classe_bilan_dpe', ...'abcdefg'.split('').map(c => `nb_classe_bilan_dpe_${c}`), 'alea_argile', 'perimetre_bat_historique', 'numero_immat_principal', 'l_siren']
+// a legal person's category by its INSEE legal form (catégorie juridique): never its name
+// ponytail: the social landlords by their legal forms (OPH, SA d'HLM); a coop HLM counts as a company
+const KIND_OF = [[/^4140$/, 'social'], [/^5[56]4[67]$/, 'social'], [/^71/, 'state'], [/^72/, 'local'], [/^7[34]/, 'public'], [/^4/, 'public'], [/^6540$/, 'sci'], [/^65/, 'civil'], [/^9110$/, 'condo'], [/^9[2-3]/, 'association'], [/^[56]/, 'company']]
 const MELODI = 'https://api.insee.fr/melodi/data'
+
+// a condominium of the register (its quarterly file's columns)
+const copro = x => ({
+  number: x.numero_d_immatriculation, name: x.nom_d_usage_de_la_copropriete, address: x.adresse_de_reference, lots: x.nombre_total_de_lots,
+  dwellings: x.nombre_de_lots_a_usage_d_habitation, parking: x.nombre_de_lots_de_stationnement, period: x.periode_de_construction, syndic: x.type_de_syndic_benevole_professionnel_non_connu,
+  syndic_name: x.raison_sociale_du_representant_legal?.trim() || null, registered: x.date_d_immatriculation, point: [x.long, x.lat],
+})
 
 export function openData(cacheDir) {
   // an answer kept `days` days under .cache/<key> (undefined when none is), and kept again
@@ -69,6 +91,17 @@ export function openData(cacheDir) {
     const d = await get(`https://www.data.gouv.fr/api/1/datasets/${dataset}/`)
     return d?.resources.filter(r => title.test(r.title)).sort((a, b) => b.last_modified.localeCompare(a.last_modified))[0]?.id ?? fallback
   })
+  // geo-DVF's CSV of a commune for the last `back` years and this one, each parsed by `parse` and kept under
+  // dvf/<kind>-<insee>-<year>.json (`none` for a year it lacks); null for the Bas-Rhin, the Haut-Rhin and the Moselle,
+  // whose land register is not in DVF
+  function geoDvf(insee, back, kind, parse, none) {
+    const dep = insee.startsWith('97') ? insee.slice(0, 3) : insee.slice(0, 2), now = new Date().getFullYear()
+    if (['57', '67', '68'].includes(dep)) return null
+    return Promise.all(Array.from({ length: back + 1 }, (_, i) => now - back + i).map(y => cached(`dvf/${kind}-${insee}-${y}.json`, y >= now - 1 ? 30 : 180, async () => {
+      const csv = await get(`https://files.data.gouv.fr/geo-dvf/latest/csv/${y}/communes/${dep}/${insee}.csv`, { text: true })
+      return csv ? parse(parseCsv(csv)) : none
+    })))
+  }
   const tabular = (rid, params) => get(`${TABULAR}/${rid}/data/?${new URLSearchParams({ page_size: 50, ...params })}`)
   // ADEME's DPE of the last 12 months where `where` says (a box, a commune), one per home: the building DPE and the
   // flats' DPE generated from them are left out
@@ -115,7 +148,7 @@ export function openData(cacheDir) {
   // built (a permit or a prior declaration), the demolitions, the plots divided. One call places them all (the BAN's
   // CSV geocoding): a permit it cannot place is left out. The applicant is never kept (some SCI bear a person's name).
   // Kept a week: Sitadel comes out monthly.
-  const cityPermits = insee => cached(`sitadel/permits-${cityOf(insee)}.json`, 7, async () => {
+  const cityPermits = insee => cached(`sitadel/permits-v2-${cityOf(insee)}.json`, 7, async () => {
     const since = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10), rows = []
     for (const [kind, rid] of Object.entries(PERMITS)) {
       for (let page = 1; page <= 10; page++) {
@@ -142,6 +175,8 @@ export function openData(cacheDir) {
         // the lists type their numbers apart (a land area may come as text)
         homes: r.NB_LGT_TOT_CREES == null ? null : +r.NB_LGT_TOT_CREES, demolished: +r.NB_LGT_DEMOLIS || null, land: +r.SUPERFICIE_TERRAIN || null,
         address: g.result_label, ban: g.result_id || null, point: [+g.longitude, +g.latitude],
+        // its commune (an arrondissement's in Paris, Lyon, Marseille), its parcels as an IDU ends: section and number
+        insee: g.result_citycode || null, parcels: [1, 2, 3].filter(k => r[`SEC_CADASTRE${k}`] && r[`NUM_CADASTRE${k}`]).map(k => `${String(r[`SEC_CADASTRE${k}`]).trim().padStart(2, '0')}${String(r[`NUM_CADASTRE${k}`]).trim().padStart(4, '0')}`),
       }]
     }).sort((a, b) => b.date.localeCompare(a.date))
   })
@@ -216,15 +251,31 @@ export function openData(cacheDir) {
     // The sales of a commune, every type, over the years geo-DVF publishes (the last five), or the last `back` years:
     // none for the Bas-Rhin, the Haut-Rhin and the Moselle, whose land register is not in DVF.
     async dvf(insee, back = 6) {
-      const dep = insee.startsWith('97') ? insee.slice(0, 3) : insee.slice(0, 2), now = new Date().getFullYear()
-      if (['57', '67', '68'].includes(dep)) return { sales: [], years: [], alsace_moselle: true }
-      const years = await Promise.all(Array.from({ length: back + 1 }, (_, i) => now - back + i).map(y => cached(`dvf/v2-${insee}-${y}.json`, y >= now - 1 ? 30 : 180, async () => {
-        const csv = await get(`https://files.data.gouv.fr/geo-dvf/latest/csv/${y}/communes/${dep}/${insee}.csv`, { text: true })
-        return csv ? dvfSales(parseCsv(csv)) : []
-      })))
+      const years = await geoDvf(insee, back, 'v2', dvfSales, [])
+      if (!years) return { sales: [], years: [], alsace_moselle: true }
       const sales = years.flat()
       return { sales, years: [...new Set(sales.map(s => s.date.slice(0, 4)))], alsace_moselle: false }
     },
+    // The mutations DVF has on a parcel (its IDU, 14 characters), newest first, over the years geo-DVF publishes: each
+    // commune's years indexed by parcel once (lib/dvf.js parcelIndex), apart from the market's sales
+    async parcelSales(idu) {
+      const years = await geoDvf(idu.slice(0, 5), 6, 'parcels', parcelIndex, null)
+      if (!years) return { sales: [], years: [], alsace_moselle: true }
+      const now = new Date().getFullYear(), had = years.map((ix, i) => ix && `${now - 6 + i}`).filter(Boolean)
+      return { sales: years.flatMap(ix => ix?.[idu] ?? []).sort((a, b) => b.date.localeCompare(a.date)), years: had, alsace_moselle: false }
+    },
+
+    // A parcel of API Carto's cadastre (IGN) by its IDU: <commune><prefix><section><number>, the arrondissement's code
+    // for Paris, Lyon and Marseille (asked as their city's with code_arr), the prefix of an absorbed commune (com_abs).
+    // Null when IGN has none. Kept 30 days: the cadastre comes out every quarter.
+    parcel: idu => cached(`cadastre/${idu}.json`, 30, async () => {
+      const [, insee, prefix, section, number] = idu.match(IDU)
+      const city = cityOf(insee), q = { code_insee: city, section, numero: number, ...(city === insee ? { com_abs: prefix } : { code_arr: insee.slice(2) }) }
+      const f = (await get(`https://apicarto.ign.fr/api/cadastre/parcelle?${new URLSearchParams(q)}`))?.features?.[0]
+      if (!f) return null
+      const p = f.properties
+      return { idu: p.idu, commune: p.nom_com, insee, arrondissement: city === insee ? null : p.code_arr, prefix: p.com_abs, section: p.section, number: p.numero, sheet: p.feuille, area: p.contenance, geometry: f.geometry }
+    }),
 
     // The asking rent of a commune (or arrondissement) from the latest carte des loyers: € per m² a month, charges
     // included, with its 95 % range, for flats (all, 1–2 rooms, 3 rooms and more) and houses
@@ -267,8 +318,9 @@ export function openData(cacheDir) {
     // above, each with its BAN address and point. Kept a week, or `days` (the dashboard server's watch reads them
     // fresher): they are the zone's news.
     recentDpe: (bb, days = 7) => lastYearDpe({ bbox: bb.join(',') }, `ademe/recent-${bb.map(x => x.toFixed(4)).join(',')}.json`, days),
-    // the same in a commune (or an arrondissement): the prospection map asks each commune it shows once a week
-    communeDpe: insee => lastYearDpe({ code_insee_ban_eq: insee }, `ademe/recent-${insee}.json`, 7),
+    // the same in a commune (or an arrondissement): the « Prospection » and « Cadastre » maps ask each commune they
+    // show once a week; the server's watch keeps each search's commune as fresh as its news (`days`)
+    communeDpe: (insee, days = 7) => lastYearDpe({ code_insee_ban_eq: insee }, `ademe/recent-${insee}.json`, days),
     // the same at an alert's place (lib/alerts.js): a street by its BAN id, a circle, a commune (its arrondissements for
     // Paris, Lyon and Marseille), kept `days`
     placeDpe: (p, days = 7) => lastYearDpe(
@@ -277,7 +329,7 @@ export function openData(cacheDir) {
 
     // the energy audits of the last 12 months in a box, a commune and at an alert's place, as the DPE above
     recentAudits: (bb, days = 7) => lastYearAudits({ bbox: bb.join(',') }, `ademe/audits-${bb.map(x => x.toFixed(4)).join(',')}.json`, days),
-    communeAudits: insee => lastYearAudits({ code_insee_ban_eq: insee }, `ademe/audits-${insee}.json`, 7),
+    communeAudits: (insee, days = 7) => lastYearAudits({ code_insee_ban_eq: insee }, `ademe/audits-${insee}.json`, days),
     placeAudits: (p, days = 7) => lastYearAudits(
       p.how === 'street' ? { identifiant_ban_starts: `${p.ban}_` } : p.how === 'radius' ? { geo_distance: `${p.point[0]},${p.point[1]},${p.radius_m}` } : { code_insee_ban_in: cityCodes(p.insee).join(',') },
       `ademe/audits-place-${p.how === 'radius' ? `${p.point.map(x => x.toFixed(4)).join(',')}-${p.radius_m}` : p.ban ?? p.insee}.json`, days),
@@ -318,17 +370,84 @@ export function openData(cacheDir) {
       return { natural: list(r.risquesNaturels), technological: list(r.risquesTechnologiques), url: r.url }
     }),
 
-    // the registered condominiums within `radius` m of a point, nearest first (registre national, updated daily)
+    // the registered condominiums within `radius` m of a point, nearest first (registre national, quarterly)
     async rnic([lon, lat], radius = 40) {
       const rid = await resourceOf(RNIC.dataset, RNIC.title, RNIC.fallback), dLat = radius / 111320, dLon = dLat / Math.cos((lat * Math.PI) / 180)
-      return cached(`rnic/${lon.toFixed(5)},${lat.toFixed(5)}-${radius}.json`, 30, async () => {
-        const d = await tabular(rid, { longitude__greater: lon - dLon, longitude__less: lon + dLon, latitude__greater: lat - dLat, latitude__less: lat + dLat })
-        return (d?.data ?? []).map(x => ({
-          number: x.numero_immatriculation, name: x.nom_usage_copropriete, address: x.adresse_reference, lots: x.nombre_total_lots,
-          dwellings: x.nombre_lots_habitation, parking: x.nombre_lots_stationnement, period: x.periode_construction, syndic: x.type_syndic,
-          syndic_name: x.raison_sociale_representant_legal, registered: x.date_immatriculation, point: [x.longitude, x.latitude],
-        })).sort((a, b) => Math.hypot(a.point[0] - lon, a.point[1] - lat) - Math.hypot(b.point[0] - lon, b.point[1] - lat))
+      return cached(`rnic/v2-${lon.toFixed(5)},${lat.toFixed(5)}-${radius}.json`, 30, async () => {
+        const d = await tabular(rid, { long__greater: lon - dLon, long__less: lon + dLon, lat__greater: lat - dLat, lat__less: lat + dLat })
+        return (d?.data ?? []).map(copro).sort((a, b) => Math.hypot(a.point[0] - lon, a.point[1] - lat) - Math.hypot(b.point[0] - lon, b.point[1] - lat))
       })
+    },
+    // a condominium by its registration number (the BDNB gives a building's)
+    coproByNumber: number => cached(`rnic/n-${number}.json`, 30, async () => {
+      const rid = await resourceOf(RNIC.dataset, RNIC.title, RNIC.fallback), x = (await tabular(rid, { numero_d_immatriculation__exact: number, page_size: 1 }))?.data?.[0]
+      return x ? copro(x) : null
+    }),
+
+    // The parcel at a point (API Carto, IGN): the one it is in, else, for a point on a street or a yard, the nearest
+    // within about 20 m. Its IDU, or null.
+    parcelAt: ([lon, lat]) => cached(`cadastre/at-${lon.toFixed(6)},${lat.toFixed(6)}.json`, 30, async () => {
+      const d = 0.0002, box = { type: 'Polygon', coordinates: [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat + d], [lon - d, lat + d], [lon - d, lat - d]]] }
+      const fs = (await get(`https://apicarto.ign.fr/api/cadastre/parcelle?${new URLSearchParams({ geom: JSON.stringify(box), _limit: 100 })}`))?.features ?? []
+      const near = f => (inGeometry([lon, lat], f.geometry) ? 0 : Math.min(...ringsOf(f.geometry).flat().map(p => distance(p, [lon, lat]))))
+      return fs.map(f => ({ idu: f.properties.idu, d: near(f) })).sort((a, b) => a.d - b.d)[0]?.idu ?? null
+    }),
+
+    // What the local urban plan (PLU, PLUi, carte communale) and the public easements say of a parcel (GPU, through
+    // API Carto): its document, its zones, the prescriptions and informations over it, the easements (SUP), the RNU
+    // when the commune has no plan. Kept 30 days.
+    urbanism: (idu, geometry) => cached(`gpu/${idu}.json`, 30, async () => {
+      // the parcel's outline, or its middle when the outline is too long for a URL
+      const shape = JSON.stringify({ type: geometry.type, coordinates: JSON.parse(JSON.stringify(geometry.coordinates), (k, v) => (typeof v === 'number' ? Math.round(v * 1e6) / 1e6 : v)) })
+      const geom = shape.length < 4000 ? shape : JSON.stringify({ type: 'Point', coordinates: middleOf(geometry) })
+      const parts = Object.fromEntries(await pool(GPU_PARTS, 4, async k => [k, (await get(`${GPU}/${k}?${new URLSearchParams({ geom })}`))?.features?.map(f => f.properties) ?? []]))
+      const once = xs => [...new Map(xs.map(x => [JSON.stringify(x), x])).values()]
+      const doc = parts.document.find(d => d.du_type) ?? null
+      return {
+        document: doc && { kind: doc.du_type, name: doc.grid_title, id: doc.gpu_doc_id, file: doc.name },
+        rnu: parts.municipality.some(m => m.is_rnu),
+        zones: once([...parts['zone-urba'], ...parts['secteur-cc']].map(z => ({ label: z.libelle, name: z.libelong || null, kind: z.typezone ?? z.typesect ?? null, date: z.datvalid ?? null }))),
+        prescriptions: once(['surf', 'lin', 'pct'].flatMap(k => parts[`prescription-${k}`]).map(x => ({ label: x.libelle, value: x.txt || null }))),
+        infos: once(['surf', 'lin', 'pct'].flatMap(k => parts[`info-${k}`]).map(x => x.libelle)),
+        easements: once(['s', 'l', 'p'].flatMap(k => parts[`assiette-sup-${k}`]).map(x => ({ kind: x.suptype, name: x.nomsuplitt || null }))),
+      }
+    }),
+
+    // The BDNB's building groups of a parcel (CSTB, base de données nationale des bâtiments): built when, how high, how
+    // many homes, of what, its DPE classes, the clay hazard, near a historic monument, its condominium's number, the
+    // SIREN of the legal persons holding rights on it. Kept 30 days.
+    buildings: idu => cached(`bdnb/${idu}.json`, 30, async () => {
+      const rows = await get(`${BDNB}?${new URLSearchParams({ parcelle_id: `eq.${idu}`, select: BDNB_FIELDS.join(','), limit: 10 })}`)
+      return (rows ?? []).map(r => ({
+        id: r.batiment_groupe_id, address: r.libelle_adr_principale_ban ?? null, bans: r.l_cle_interop_adr ?? [], use: r.usage_principal_bdnb_open ?? null, year: r.annee_construction ?? null,
+        levels: r.nb_niveau ?? null, height: r.hauteur_mean ?? null, homes: r.nb_log ?? null, footprint: r.surface_emprise_sol ?? null, walls: r.mat_mur_txt ?? null, roof: r.mat_toit_txt ?? null,
+        heating: r.type_energie_chauffage ?? null, dpe: r.classe_bilan_dpe ?? null, dpe_classes: Object.fromEntries('ABCDEFG'.split('').map(c => [c, r[`nb_classe_bilan_dpe_${c.toLowerCase()}`] ?? 0]).filter(([, n]) => n)),
+        clay: r.alea_argile ?? null, monument: !!r.perimetre_bat_historique, copro: r.numero_immat_principal ?? null, sirens: r.l_siren ?? [],
+      }))
+    }),
+    // The category of a legal person by its SIREN (the État, a local authority, a social landlord, an SCI, a company…),
+    // from its INSEE legal form (API Recherche d'entreprises): never its name, which may be a person's (an SCI's)
+    ownerKind: siren => cached(`siren/${siren}.json`, 90, async () => {
+      const code = (await get(`https://recherche-entreprises.api.gouv.fr/search?${new URLSearchParams({ q: siren, page: 1, per_page: 1 })}`))?.results?.find(r => r.siren === siren)?.nature_juridique
+      return code ? KIND_OF.find(([re]) => re.test(code))?.[1] ?? 'other' : null
+    }),
+
+    // ADEME's energy audits of a BAN address, all of them (since September 2023), newest first
+    banAudits: ban => cached(`ademe/audits-ban-${ban}.json`, 30, async () =>
+      ((await get(`https://data.ademe.fr/data-fair/api/v1/datasets/${AUDITS}/lines?${new URLSearchParams({ identifiant_ban_eq: ban, categorie_scenario_eq: 'état initial', size: 50, sort: '-date_etablissement_audit', select: 'n_audit,date_etablissement_audit,classe_bilan_dpe,methode_application_dpe,surface_habitable_logement,surface_habitable_immeuble' })}`))?.results ?? [])
+        .map(r => ({ number: r.n_audit, date: r.date_etablissement_audit, energy: r.classe_bilan_dpe, building: /immeuble/.test(r.methode_application_dpe ?? ''), area: (/immeuble/.test(r.methode_application_dpe ?? '') ? r.surface_habitable_immeuble : r.surface_habitable_logement) ?? null }))),
+
+    // The parcels of a commune DVF has a mutation on (lib/dvf.js parcelIndex), each with its latest: { <IDU>: { date,
+    // price, kind, count } } over the years geo-DVF publishes (the « Cadastre » map's « Parcelles vendues »)
+    async soldParcels(insee) {
+      const years = await geoDvf(insee, 6, 'parcels', parcelIndex, null)
+      const out = {}
+      for (const ix of years ?? []) for (const [idu, ms] of Object.entries(ix ?? {})) for (const m of ms) {
+        const had = out[idu]
+        if (!had || m.date > had.date) out[idu] = { date: m.date, price: m.price, kind: saleKind(m), count: (had?.count ?? 0) + 1 }
+        else had.count++
+      }
+      return out
     },
 
     // shops, schools, transport, parks… in a box [w, s, e, n], one point per place

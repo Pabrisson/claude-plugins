@@ -175,6 +175,44 @@ test('the odds of a box of the map: refused without a box, or too wide for the m
   assert.deepEqual(await (await fetch(base + '/api/odds?bbox=4.5,45.5,5,45.9')).json(), { error: 'zoom' })
 })
 
+test("a parcel of the « Cadastre » tab: refused without an IDU, everything the open data says of it, by its IDU or a point; unknown to IGN a 404; the parcels sold", async () => {
+  for (const q of ['', '?idu=69383DN68', '?idu=69383000DN006']) assert.equal((await fetch(base + '/api/cadastre' + q)).status, 400)
+  // the cache as API Carto and geo-DVF left it: one parcel, one mutation in 2024, none another year
+  const cache = (rel, v) => { fs.mkdirSync(path.dirname(path.join(home, '.cache', rel)), { recursive: true }); fs.writeFileSync(path.join(home, '.cache', rel), JSON.stringify(v)) }
+  const parcel = { idu: '69383000DN0068', commune: 'Lyon', insee: '69383', arrondissement: '383', prefix: '000', section: 'DN', number: '0068', sheet: 1, area: 990, geometry: { type: 'Polygon', coordinates: [] } }
+  cache('cadastre/69383000DN0068.json', parcel)
+  cache('cadastre/69383000DN9999.json', null)
+  const y = new Date().getFullYear(), sale = { id: '2024-826626', date: '2024-01-19', nature: 'Vente', price: 150000, parcels: ['69383000DN0068'], locals: [{ type: 'flat', area: 48, rooms: 2 }], land: null, address: '308 RUE PAUL BERT' }
+  for (let k = y - 6; k <= y; k++) cache(`dvf/parcels-69383-${k}.json`, k === 2024 ? { '69383000DN0068': [sale] } : null)
+  // its urban plan (GPU), its building (BDNB) with its address's DPE, the legal person's category, its condominium
+  const urbanism = { document: { kind: 'PLUi', name: 'PLUI GRAND LYON LA METROPOLE', id: '4f3ddc27', file: 'x' }, rnu: false, zones: [{ label: 'URm1', name: 'Zone mixte', kind: 'U', date: '20260326' }], prescriptions: [], infos: [], easements: [] }
+  cache('gpu/69383000DN0068.json', urbanism)
+  const building = { id: 'bdnb-bg-1', address: '308 Rue Paul Bert 69003 Lyon', use: 'Résidentiel collectif', year: 1988, levels: 6, height: 16, homes: 31, footprint: 508, walls: 'BETON', roof: null, heating: null, dpe: 'C', dpe_classes: { C: 10 }, clay: 'Moyen', monument: false, copro: 'AB2859320' }
+  cache('bdnb/69383000DN0068.json', [{ ...building, bans: ['69383_5245_00308'], sirens: ['440869154'] }])
+  cache('ademe/69383_5245_00308.json', [{ numero_dpe: '2569E3425125K', date_etablissement_dpe: '2025-10-30', etiquette_dpe: 'C', etiquette_ges: 'A', surface_habitable_logement: 82.8, numero_etage_appartement: 3, adresse_ban: '308 Rue Paul Bert 69003 Lyon' }])
+  cache('ademe/audits-ban-69383_5245_00308.json', [])
+  cache('siren/440869154.json', 'sci')
+  const copro = { number: 'AB2859320', name: 'LE SAINT EUSEBE', lots: 64, dwellings: 30, parking: 0 }
+  cache('rnic/n-AB2859320.json', copro)
+  cache('cadastre/at-4.873000,45.756000.json', '69383000DN0068')
+  const all = {
+    idu: '69383000DN0068', parcel, dvf: { sales: [sale], years: ['2024'], alsace_moselle: false }, urbanism, buildings: [building], owners: { sci: 1 }, copro, risks: null, failed: [], middle: null, audits: [],
+    // the permit of 14 rue Paul Bert is on DN 68 by its reference (Sitadel), Lyon 5e's is not
+    permits: [JSON.parse(fs.readFileSync(path.join(home, '.cache/sitadel/permits-v2-69123.json'), 'utf8'))[0]],
+    dpe: [{ number: '2569E3425125K', date: '2025-10-30', energy: 'C', ghg: 'A', area: 82.8, floor: 3, address: '308 Rue Paul Bert 69003 Lyon' }],
+  }
+  assert.deepEqual(await (await fetch(base + '/api/cadastre?idu=69383000dn0068')).json(), all)
+  assert.deepEqual(await (await fetch(base + '/api/cadastre?point=4.873,45.756')).json(), all)
+  assert.equal((await fetch(base + '/api/cadastre?idu=69383000DN9999')).status, 404)
+  assert.equal((await fetch(base + '/api/cadastre/sold?insee=6938')).status, 400)
+  assert.deepEqual(await (await fetch(base + '/api/cadastre/sold?insee=69383')).json(), { '69383000DN0068': { date: '2024-01-19', price: 150000, kind: 'flat', count: 1 } })
+})
+
+test("a commune's recent DPE for the « Cadastre » map: refused without a commune, the cache the maps and the watch share", async () => {
+  assert.equal((await fetch(base + '/api/dpe?insee=Lyon')).status, 400)
+  assert.deepEqual((await (await fetch(base + '/api/dpe?insee=69383')).json()).map(d => d.number), ['2669E0000001A'])
+})
+
 test('nothing from a foreign site', async () => {
   assert.equal((await post('/api/profile', { rate: 9 }, { Origin: 'https://evil.example' })).status, 403)
   // DNS rebinding: a page of another host name that resolves here (fetch cannot set Host, http can)

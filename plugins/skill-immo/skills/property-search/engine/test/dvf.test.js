@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import { building, byRooms, dvfSales, median, parseCsv, quantile, stats, streets, summary, trend } from '../lib/dvf.js'
+import { building, byRooms, dvfSales, median, parcelIndex, parseCsv, quantile, stats, streets, summary, trend } from '../lib/dvf.js'
 import { distance, inZone } from '../lib/geo.js'
 
 // 17 real mutations of Lyon 3e in 2024 (geo-DVF): 14 on rue Paul Bert, 2 selling several apartments, a house, a
@@ -62,4 +62,15 @@ test('the trend, the prices by rooms and the streets around', () => {
   assert.deepEqual(st.map(s => [s.code_voie, s.count, s.distance]), [['A', 30, 0], ['B', 5, 776]])
   assert.equal(st[0].change, 0.313)
   assert.equal(st[1].change, null)
+})
+
+test("a parcel's mutations as they are: every nature, each local once, an outbuilding without the lot's Carrez, the land", () => {
+  const ix = parcelIndex(rows), flats = ix['69383000DN0068']
+  assert.deepEqual(flats.map(m => [m.id, m.price, m.parcels]), [['2024-826289', 313000, ['69383000DN0068']], ['2024-826459', 248850, ['69383000DN0068']], ['2024-826626', 150000, ['69383000DN0068']]])
+  assert.deepEqual(flats[0].locals, [{ type: 'outbuilding', area: null, rooms: null }, { type: 'flat', area: 90, rooms: 5 }, { type: 'outbuilding', area: null, rooms: null }])
+  const house = ix['69383000DN0026'][0]
+  assert.deepEqual([house.locals, house.land, house.address], [[{ type: 'house', area: 63, rooms: 3 }, { type: 'outbuilding', area: null, rooms: null }], 163, '225 AV FELIX FAURE'])
+  // a sale off plan: in the parcel's history, not in the market's sales
+  assert.equal(ix['69383000BV0001'][0].nature, "Vente en l'état futur d'achèvement")
+  assert.ok(!all.some(s => s.id === '2024-826330'))
 })

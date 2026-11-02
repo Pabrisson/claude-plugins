@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { band, bbox, center, circle, corridor, distance, inGeometry, inZone, thin } from '../lib/geo.js'
+import { band, bbox, center, circle, corridor, distance, iduOf, inGeometry, inZone, middleOf, ringsOf, thin } from '../lib/geo.js'
 
 // rue Paul Bert (Lyon 3e) runs about 2 km west to east, from the Guillotière to Montchat
 const west = [4.8455, 45.7560], east = [4.8720, 45.7568], middle = [4.8590, 45.7564]
@@ -68,4 +68,21 @@ test('an outline cut to 60 vertices keeps its shape', () => {
   // the street stays inside it
   for (const p of bends) assert.ok(inGeometry(m(p), { type: 'Polygon', coordinates: [cut] }), String(p))
   assert.equal(thin(ring.slice(0, 10), 60).length, 10)
+})
+
+test("a cadastral reference typed: a section and a number in the map's commune, an absorbed commune's prefix, a whole IDU anywhere", () => {
+  assert.equal(iduOf('AO 213', '69383'), '69383000AO0213')
+  assert.equal(iduOf(' a12 ', '01001'), '010010000A0012')
+  assert.equal(iduOf('123 za 45', '01001'), '01001123ZA0045')
+  assert.equal(iduOf('0A 0012', '01001'), '010010000A0012')
+  assert.equal(iduOf('75115 000 AB 0001', '69383'), '75115000AB0001')
+  assert.equal(iduOf('2A004000AB0012', '69383'), '2A004000AB0012')
+  for (const bad of ['', 'AO', '213', 'ABC 12', 'AO 12345', 'rue Paul Bert']) assert.equal(iduOf(bad, '69383'), null, bad)
+})
+
+test("a shape's outer rings and its middle: the largest ring's", () => {
+  const sq = (x, d) => [[x, 0], [x + d, 0], [x + d, d], [x, d], [x, 0]]
+  assert.deepEqual(ringsOf({ type: 'Polygon', coordinates: [sq(0, 2), sq(0.5, 1)] }), [sq(0, 2)])
+  assert.deepEqual(middleOf({ type: 'MultiPolygon', coordinates: [[sq(10, 1)], [sq(0, 4)]] }), [2, 2])
+  assert.equal(middleOf(null), null)
 })

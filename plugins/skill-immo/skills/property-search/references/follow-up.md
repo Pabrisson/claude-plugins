@@ -44,7 +44,9 @@ joining people to homes is not allowed.
 While the dashboard server runs (`dashboard` starts it, it stops once every Claude it worked for has quit), it watches
 every search, free: at its start, then every 6 hours (« Réglages »: off, 30 min, 1 h, 6 h, 12 h, 24 h; the header
 counts down to the next one, and pauses or resumes it: a pause keeps the period). It reads the zone's new DPE that no listing matches, its new energy audits and building
-permits, the same at the places of the user's alerts (outside the zone too) and, in Stream Estate mode, counts (free,
+permits, the same at the places of the user's alerts (outside the zone too), reloads the recent DPE and energy audits
+of the search's commune that the « Prospection » and « Cadastre » maps show (as fresh as the news; their other communes
+a week) and, in Stream Estate mode, counts (free,
 no item returned) the listings not
 fetched yet and the fetched ones that changed on the portals since the last refresh. The news go to
 `<slug>/feed.json`; those the search's alerts take get a desktop notification (« Réglages »: on or off, sound, quiet

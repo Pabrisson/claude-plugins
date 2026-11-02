@@ -1,6 +1,6 @@
 ---
 name: property-search
-description: Helps the user buy property in France (a flat, a house, a plot, a parking, a shop or office). Finds what is for sale around an address, a street or a neighborhood, weighs each against the real sales of its type (DVF), its building, neighborhood, rent and the user's budget, writes offer letters, and opens a local dashboard. Listings come from the Stream Estate API (paid, the user's yes on every credit) or from WebSearch, one WebFetch per listing page, or pasted text. Use it whenever the user looks for property to buy, gives an address or a listing to assess, wants an offer or a message to a seller, or wants to be told of what comes up ("trouve-moi un appartement", "cherche une maison à …", "un terrain", "une place de parking", "analyse cette annonce", "ça vaut combien", "marge de négociation", "rédige une offre", "préviens-moi d'un nouveau DPE rue …", "crée une alerte", "j'ai rajouté 30 € sur Stream Estate", "achat immobilier"), or pastes "apply this feedback" from the dashboard.
+description: Helps the user buy property in France (a flat, a house, a plot, a parking, a shop or office). Finds what is for sale around an address, a street or a neighborhood, weighs each against the real sales of its type (DVF), its building, neighborhood, rent and the user's budget, writes offer letters, and opens a local dashboard. Listings come from the Stream Estate API (paid, the user's yes on every credit) or from WebSearch, one WebFetch per listing page, or pasted text. Use it whenever the user looks for property to buy, gives an address or a listing to assess, wants an offer or a message to a seller, or wants to be told of what comes up ("trouve-moi un appartement", "cherche une maison à …", "un terrain", "une place de parking", "analyse cette annonce", "ça vaut combien", "marge de négociation", "rédige une offre", "préviens-moi d'un nouveau DPE rue …", "crée une alerte", "quelle est la parcelle", "que dit le PLU", "j'ai rajouté 30 € sur Stream Estate", "achat immobilier"), or pastes "apply this feedback" from the dashboard.
 argument-hint: "[setup | <adresse | rue | quartier> [type] [critères] | add <url | texte> | refresh [<slug>] | alerte … | dashboard [<slug>] | apply this feedback …]"
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/immo.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/immo.mjs *)
 ---
@@ -194,7 +194,8 @@ map and its odds, the dashboard server's free watch and its news.
 ## Analyse, compare and messages
 
 Read `references/analyse-and-messages.md` and follow it: what `show` gives, how to answer on a listing or the market,
-a message received, a message to write (an offer, questions, a visit, a reply, a reminder, documents).
+a message received, a message to write (an offer, questions, a visit, a reply, a reminder, documents), a parcel (its
+cadastre, urban plan and sales: `cadastre`).
 
 ## Other public data: the data.gouv.fr MCP
 
@@ -219,6 +220,7 @@ apply this feedback (recherche <slug>)
 8. [ajouter] <url or text>
 9. [chercher] l'annonce du DPE <number> : maison 204 m², DPE D du 19 oct. 2026, <address>
 10. [question] <free text>
+11. [parcelle] étudier la parcelle DN 68 (69383000DN0068), Lyon 3e, 990 m²
 ```
 
 Do every item in order:
@@ -252,6 +254,8 @@ Do every item in order:
   page at a time, 5 at most. Found: `add --file`; its DPE
   then matches it on the map. Not found: say so in one line (not online yet, sold off the portals, or let).
 - `[question]`: answer it.
+- `[parcelle]`: a parcel (or several, « étudier ensemble ») of the « Cadastre » tab: `immo.mjs cadastre <IDU>` for each, then
+  the study as `references/analyse-and-messages.md` « A parcel » says.
 
 Then say in one line per item what you did. The open dashboard sees the change within seconds and shows « Recharger »:
 no need to tell the user to reload it.

@@ -100,10 +100,10 @@ export function OddsTab() {
   )
 }
 
-// the pill over the map: zoom closer, loading, or the call that failed with « Réessayer »
-function MapStatus({ near, loading, error, retry }: { near: boolean; loading: boolean; error: string | null; retry: () => void }) {
+// the pill over the map: zoom closer (`far` says what for), loading, or the call that failed with « Réessayer »
+export function MapStatus({ near, loading, error, retry, far = "Zoomez pour charger la carte" }: { near: boolean; loading: boolean; error: string | null; retry: () => void; far?: string }) {
   const pill = "pointer-events-auto flex items-center gap-2 rounded-full border bg-card/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-md"
-  if (!near) return <div className={pill}><InfoIcon className="size-4" />Zoomez pour charger la carte</div>
+  if (!near) return <div className={pill}><InfoIcon className="size-4" />{far}</div>
   if (loading) return <div className={pill} role="status"><Spinner />Chargement…</div>
   if (error) return <div className={cn(pill, "text-destructive")} role="alert">Données indisponibles ({error === "zoom" ? "zone trop large" : error})<Button size="xs" variant="outline" onClick={retry}><RefreshCwIcon data-icon="inline-start" />Réessayer</Button></div>
   return null
@@ -114,7 +114,7 @@ const sum = (xs: IrisOdds[], f: (i: IrisOdds) => number | null | undefined) => x
 const perYear = (x: number) => `≈ ${num(x < 10 ? Math.round(x * 10) / 10 : Math.round(x))} par an`
 
 // a figure of the box, what it is on hovering it
-function Stat({ label, value, hint, help }: { label: string; value: string; hint: string; help: string }) {
+export function Stat({ label, value, hint, help }: { label: string; value: string; hint: string; help: string }) {
   return (
     <Hint text={help}>
       <div tabIndex={0} className="flex cursor-help flex-col gap-0.5 rounded-lg border bg-background/60 p-2.5 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
@@ -142,7 +142,7 @@ const DPE_SORTS = {
 
 // A block of the column, as the layers' column: its icon and title over it (what it shows on hovering them), then its
 // `action` (a sort, a close) beside the chevron; the title and the chevron fold it
-function Block({ icon: Icon, title, help, action, folded = false, children }: { icon: LucideIcon; title: React.ReactNode; help: string; action?: React.ReactNode; folded?: boolean; children: React.ReactNode }) {
+export function Block({ icon: Icon, title, help, action, folded = false, children }: { icon: LucideIcon; title: React.ReactNode; help: string; action?: React.ReactNode; folded?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(!folded)
   return (
     <section className="rounded-lg border bg-card/70">
@@ -173,8 +173,8 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, pl
 }) {
   // a row or a block the pointer (or the keyboard) is on: its IRIS or DPE set off on the map
   const on = (h: OddsMap["hover"]) => ({ onMouseEnter: () => onHover(h), onMouseLeave: () => onHover(null), onFocus: () => onHover(h), onBlur: () => onHover(null) })
-  const { data: search, types } = useSearch()
-  const [all, setAll] = useState(false), [dpeSort, setDpeSort] = useState<keyof typeof DPE_SORTS>("newest")
+  const { types } = useSearch()
+  const [all, setAll] = useState(false)
   if (!near) return <Empty className="border"><EmptyHeader><EmptyTitle>Zoomez sur la carte</EmptyTitle><EmptyDescription>Les quartiers et les DPE se chargent à partir du zoom {MIN_ZOOM}, pour quelques kilomètres à la fois. Ou cherchez un lieu au-dessus des calques.</EmptyDescription></EmptyHeader></Empty>
   if (!data) return <div className="flex flex-col gap-3"><Skeleton className="h-10" /><div className="grid grid-cols-2 gap-2">{[0, 1, 2, 3].map(k => <Skeleton key={k} className="h-20" />)}</div><Skeleton className="h-40" /></div>
   const m = METRICS[metric], homes = sum(data.iris, i => i.census?.homes), sold = sum(data.iris, i => i.sold), ranked = data.iris.filter(i => m.of(i) != null).sort((a, b) => m.of(b)! - m.of(a)!)
@@ -184,7 +184,6 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, pl
   // the quarters' median prices, their median: the box's price in one figure
   const prices = data.iris.map(i => i.ppm2).filter((x): x is number => !!x).sort((a, b) => a - b), price = prices.length ? prices[Math.floor(prices.length / 2)] : null
   const row = "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-  const sorted = [...groups].sort(DPE_SORTS[dpeSort].by)
   return (
     <div className={cn("flex flex-col gap-3 transition-opacity", loading && "opacity-60")} aria-busy={loading}>
       <Block icon={MapIcon} title={<>Carte affichée{loading && <Spinner />}</>} help="Les chiffres de la partie de carte visible, tous quartiers réunis. Ils se rechargent à chaque déplacement de la carte, à partir du zoom 14.">
@@ -239,37 +238,7 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, pl
         </ol>
         {ranked.length > 8 && <Button variant="ghost" size="xs" className="self-start" onClick={() => setAll(!all)}>{all ? "Moins" : `Voir les ${ranked.length}`}</Button>}
       </Block>}
-      {!places && types.some(isHome) && (
-        <Block icon={GaugeIcon} title="DPE récents" help={`${DPE_HELP} Ceux de la carte visible, avec les filtres du calque « DPE récents », dans l'ordre choisi ; un clic centre la carte sur l'adresse.`}
-          action={
-            <Select value={dpeSort} onValueChange={v => setDpeSort(v as keyof typeof DPE_SORTS)}>
-              <SelectTrigger size="sm" className="h-7 text-xs" aria-label="Trier les DPE"><SelectValue /></SelectTrigger>
-              <SelectContent align="end"><SelectGroup>{Object.entries(DPE_SORTS).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectGroup></SelectContent>
-            </Select>
-          }>
-          {sorted.length ? (
-            <ul className="-mx-1 flex flex-col">
-              {sorted.slice(0, 30).map(g => {
-                const d = g.items[0], l = d.listing && search.listings.find(x => x.id === d.listing!.id)
-                return (
-                  <li key={g.key}>
-                    <button type="button" onClick={() => onFocus({ kind: "dpe", group: g })} {...on({ dpe: g.key })} className={row}>
-                      <b className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-sm text-[10px]" style={{ background: DPE_HEX[d.energy], color: dpeInk(d.energy) }}>{d.energy}</b>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{g.address ?? "Adresse inconnue"}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          {TYPE_LABEL[d.type]}{d.area ? ` · ${num(d.area)} m²` : ""} · {date(d.date)}{g.items.length > 1 ? ` · ${g.items.length} DPE` : ""} · {l ? `Annonce ${keur(l.price)}` : g.out ? "hors de votre zone : annonce inconnue" : "sans annonce"}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          ) : <p className="text-xs text-muted-foreground">Aucun DPE récent sur la carte avec ces filtres (calque « DPE récents »).</p>}
-          {sorted.length > 30 && <p className="text-xs text-muted-foreground">+ {num(sorted.length - 30)} autres adresses sur la carte.</p>}
-        </Block>
-      )}
+      {!places && types.some(isHome) && <DpeBlock groups={groups} onPick={g => onFocus({ kind: "dpe", group: g })} hover={g => on({ dpe: g.key })} />}
       {!places && types.some(isHome) && (
         <Block icon={ClipboardCheckIcon} title="Audits énergétiques récents" help={`${AUDIT_HELP} Ceux de la carte visible, sur la période du calque « Audits énergétiques », les plus récents d'abord ; un clic centre la carte sur l'adresse.`}>
           {audits.length ? (
@@ -329,8 +298,47 @@ function OddsPanel({ data, near, loading, metric, iris, onIris, groups, rows, pl
   )
 }
 
+// The recent DPE of a map's column (« Prospection », « Cadastre »), in the order chosen: an address each, its newest
+// DPE's class, what it is, its listing if any; a click goes there (`onPick`), the pointer on a row lights its dot
+export function DpeBlock({ groups, onPick, hover }: { groups: DpeGroup[]; onPick: (g: DpeGroup) => void; hover: (g: DpeGroup) => object }) {
+  const { data: search } = useSearch(), [sort, setSort] = useState<keyof typeof DPE_SORTS>("newest")
+  const sorted = [...groups].sort(DPE_SORTS[sort].by)
+  const row = "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+  return (
+    <Block icon={GaugeIcon} title="DPE récents" help={`${DPE_HELP} Ceux de la carte visible, avec les filtres du calque « DPE récents », dans l'ordre choisi ; un clic centre la carte sur l'adresse.`}
+      action={
+        <Select value={sort} onValueChange={v => setSort(v as keyof typeof DPE_SORTS)}>
+          <SelectTrigger size="sm" className="h-7 text-xs" aria-label="Trier les DPE"><SelectValue /></SelectTrigger>
+          <SelectContent align="end"><SelectGroup>{Object.entries(DPE_SORTS).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectGroup></SelectContent>
+        </Select>
+      }>
+      {sorted.length ? (
+        <ul className="-mx-1 flex flex-col">
+          {sorted.slice(0, 30).map(g => {
+            const d = g.items[0], l = d.listing && search.listings.find(x => x.id === d.listing!.id)
+            return (
+              <li key={g.key}>
+                <button type="button" onClick={() => onPick(g)} {...hover(g)} className={row}>
+                  <b className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-sm text-[10px]" style={{ background: DPE_HEX[d.energy], color: dpeInk(d.energy) }}>{d.energy}</b>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{g.address ?? "Adresse inconnue"}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {TYPE_LABEL[d.type]}{d.area ? ` · ${num(d.area)} m²` : ""} · {date(d.date)}{g.items.length > 1 ? ` · ${g.items.length} DPE` : ""} · {l ? `Annonce ${keur(l.price)}` : g.out ? "hors de votre zone : annonce inconnue" : "sans annonce"}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      ) : <p className="text-xs text-muted-foreground">Aucun DPE récent sur la carte avec ces filtres (calque « DPE récents »).</p>}
+      {sorted.length > 30 && <p className="text-xs text-muted-foreground">+ {num(sorted.length - 30)} autres adresses sur la carte.</p>}
+    </Block>
+  )
+}
+
 // the column scrolls to the block opened (made again for each IRIS or address)
-function useScrolledTo() {
+export function useScrolledTo() {
   const ref = useRef<HTMLDivElement>(null)
   // braces: Chrome's scrollIntoView returns a promise, which React would take for the effect's cleanup
   useEffect(() => { ref.current?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }) }, [])
