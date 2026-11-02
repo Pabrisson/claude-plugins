@@ -41,7 +41,7 @@ joining people to homes is not allowed.
 
 ## The dashboard server's watch
 
-While the dashboard server runs (`dashboard` starts it, it stops once every Claude it worked for has quit), it watches
+While the dashboard server runs (`dashboard` starts it, it stops once every agent it worked for has quit), it watches
 every search, free: at its start, then every 6 hours (« Réglages »: off, 30 min, 1 h, 6 h, 12 h, 24 h; the header
 counts down to the next one, and pauses or resumes it: a pause keeps the period). It reads the zone's new DPE that no listing matches, its new energy audits and building
 permits, the same at the places of the user's alerts (outside the zone too), reloads the recent DPE and energy audits

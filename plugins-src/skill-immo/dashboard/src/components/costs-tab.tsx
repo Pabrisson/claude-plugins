@@ -45,7 +45,7 @@ const ROUTE_LABEL: Record<string, string> = {
   "DELETE /searches/{id}": "Suppression d'une ancienne alerte",
 }
 const chartConfig = {
-  me: { label: "Vous et Claude", color: "var(--chart-2)" },
+  me: { label: "Vous et l'agent", color: "var(--chart-2)" },
   auto: { label: "Récupération automatique", color: "var(--chart-4)" },
   cumul: { label: "Cumul du mois", color: "var(--chart-1)" },
   projected: { label: "Prévision", color: "var(--chart-1)" },
@@ -75,7 +75,7 @@ export function CostsTab({ onView }: { onView: (v: string) => void }) {
           <InfoIcon />
           <AlertTitle>{state.has_key ? "API coupée" : "Pas de clé de l'API"}</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {state.has_key ? "Rien n'est facturé : les recherches se contentent des données ouvertes et des annonces trouvées par Claude." : "Rien n'est facturé. Pour l'API : /plugin configure skill-immo@pabrisson, puis redémarrez Claude Code."}
+            {state.has_key ? "Rien n'est facturé : les recherches se contentent des données ouvertes et des annonces trouvées par l'agent." : "Rien n'est facturé. Pour l'API : /plugin configure skill-immo@pabrisson ou la variable STREAM_ESTATE_API_KEY, puis redémarrez l'agent."}
             {state.has_key && <Button size="xs" variant="outline" onClick={() => onView("settings")}>Réglages</Button>}
           </AlertDescription>
         </Alert>

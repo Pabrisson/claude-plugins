@@ -1,5 +1,5 @@
 // listings.json: one format whatever the source (references/search-files.md). A property of Stream Estate (its v1
-// PropertyDocument, with one advert per portal) or a listing Claude read (WebSearch, WebFetch, pasted text) becomes
+// PropertyDocument, with one advert per portal) or a listing the agent read (WebSearch, WebFetch, pasted text) becomes
 // the same object; a refresh merges the new state into the old one and says what changed.
 import { createHash } from 'node:crypto'
 import { TYPES } from './market.js'
@@ -85,7 +85,7 @@ export function fromStreamEstate(d) {
   }
 }
 
-// A listing Claude read, or the user typed in the dashboard (manual): the fields of listing-format.md, whatever it
+// A listing the agent read, or the user typed in the dashboard (manual): the fields of listing-format.md, whatever it
 // found. Its id is its URL's, else its text's.
 export function fromInput(x, source) {
   const url = x.url ?? null, price = +x.price || null, area = +x.area || null, land = +x.land_area || null
@@ -108,7 +108,7 @@ export function fromInput(x, source) {
   }
 }
 
-// what the user keeps on a listing (their star, the messages Claude wrote for it included), and what the engine
+// what the user keeps on a listing (their star, the messages the agent wrote for it included), and what the engine
 // adds, through every refresh
 const KEPT = ['first_seen', 'price_history', 'my_status', 'favorite', 'notes', 'messages', 'building', 'changes']
 
@@ -132,7 +132,7 @@ export function merge(known, incoming, now, gone = []) {
     const before = { price: old.price, status: old.status, urls: old.urls }
     // a Stream Estate property found for an assisted listing takes its place, and its id
     if (n.source === 'stream-estate' && old.source !== 'stream-estate') byId.delete(old.id)
-    // what Claude did not read stays as it was
+    // what the agent did not read stays as it was
     for (const [k, v] of Object.entries(n)) if (!KEPT.includes(k) && v != null && !(Array.isArray(v) && !v.length && old[k]?.length)) old[k] = v
     old.urls = [...new Map([...before.urls, ...n.urls].map(u => [normUrl(u.url) ?? u.source, u])).values()]
     byId.set(old.id, old)

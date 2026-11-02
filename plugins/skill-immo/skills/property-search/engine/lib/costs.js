@@ -39,7 +39,7 @@ export function usage(log, now = new Date()) {
   }
 }
 
-// null when the call may go, else what Claude must ask the user first
+// null when the call may go, else what the agent must ask the user first
 export function gate({ credits, spend, cap, spent, force = false, acceptUnknown = false, eur = 0.01 }) {
   const euros = n => `${(n * eur).toFixed(2).replace('.', ',')} €`
   if (credits == null && !acceptUnknown) return 'unknown cost: this route was not measured yet. Ask the user, then run again with --accept-unknown'

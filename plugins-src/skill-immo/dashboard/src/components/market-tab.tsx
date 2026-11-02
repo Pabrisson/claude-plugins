@@ -290,7 +290,7 @@ function WatchCard({ type, listings }: { type: PropertyType; listings: Listing[]
     <Card>
       <CardHeader>
         <Title icon={EyeIcon} tone="var(--chart-4)">Veille des annonces</Title>
-        <CardDescription>{data.search.mode === "stream-estate" ? "Les annonces de la zone suivies par la recherche, semaine par semaine." : "Les annonces trouvées par Claude, semaine par semaine : un échantillon, pas tout le marché."}</CardDescription>
+        <CardDescription>{data.search.mode === "stream-estate" ? "Les annonces de la zone suivies par la recherche, semaine par semaine." : "Les annonces trouvées par l'agent, semaine par semaine : un échantillon, pas tout le marché."}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid grid-cols-3 gap-x-3 gap-y-2 sm:grid-cols-6 xl:grid-cols-3 2xl:grid-cols-6">

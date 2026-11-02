@@ -112,7 +112,7 @@ test('a message marked sent: an offer puts the listing in "Offre faite"', async 
   assert.ok(l.messages[0].sent_at)
   assert.equal(l.my_status, 'offer')
   assert.equal((await post(`/api/s/paul-bert/listings/${property.uuid}`, { message: { id: 'nope', sent: true } })).status, 404)
-  // the user adds the agent's reply, then deletes it; a bad one is refused
+  // the user adds the agency's reply, then deletes it; a bad one is refused
   const msg = (body) => post(`/api/s/paul-bert/listings/${property.uuid}`, { message: body })
   let c = await (await msg({ add: { from: 'them', channel: 'email', text: 'Le vendeur accepte 255 000 €.' } })).json()
   const got = c.messages.at(-1)
@@ -154,7 +154,7 @@ test('the version follows the files; a search is deleted, not one with an alert'
   assert.equal((await fetch(`${base}/api/s/paul-bert`, { method: 'DELETE', headers: { Origin: 'https://evil.example' } })).status, 403)
 })
 
-test('a zone drawn on the map: kept as a draft for Claude, closed and rounded; the search does not change', async () => {
+test('a zone drawn on the map: kept as a draft for the agent, closed and rounded; the search does not change', async () => {
   const v = (await (await fetch(base + '/api/s/paul-bert/version')).json()).version
   for (const geometry of [null, { type: 'Point', coordinates: [4.85, 45.75] }, { type: 'Polygon', coordinates: [[[4.85, 45.75], [4.86, 45.75]]] }, { type: 'Polygon', coordinates: [[[4.85, 45.75], [4.86, 'x'], [4.86, 45.76]]] }, { type: 'Polygon', coordinates: [Array.from({ length: 61 }, (_, i) => [4.85 + i / 1e5, 45.75 + (i % 2) / 1e4])] }])
     assert.equal((await post('/api/s/paul-bert/zone', { geometry })).status, 400, JSON.stringify(geometry).slice(0, 80))

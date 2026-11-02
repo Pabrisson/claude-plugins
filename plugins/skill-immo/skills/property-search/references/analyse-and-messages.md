@@ -16,7 +16,7 @@ Contents: analyse and compare (`show`, `market.json`, the verdict) · messages a
 - `score`: out of 100, each part (price, budget, energy, transport, travel, outdoor) and its weight;
 - `rent`: the rent of the same home, the owner's monthly cost, the gross yield, and the years before buying beats
   renting (null: renting stays cheaper over the loan); `budget.works`, the work a DPE E, F or G calls for;
-- `messages`: its conversation with the agent or the seller, in order: `from: me` (yours and the user's, a draft until
+- `messages`: its conversation with the agency or the seller, in order: `from: me` (yours and the user's, a draft until
   `sent_at`) or `from: them` (received: a reply the user pasted, a call summed up), with `channel` and `amount`;
 - the negotiation range and its reasons;
 - the days online, the drops already made;
@@ -37,16 +37,16 @@ visit: start from `review` (its points to watch and questions), the DPE against 
 
 ## Messages and the conversation
 
-Each listing keeps its conversation with the agent or the seller. The user adds what they receive in the dossier
+Each listing keeps its conversation with the agency or the seller. The user adds what they receive in the dossier
 (« Ajouter »: a reply pasted, a call summed up), or pastes it to you.
 
-**A message the user received** (« l'agent m'a répondu… », a call): add it to the conversation as they give it,
+**A message the user received** (« l'agence m'a répondu… », a call): add it to the conversation as they give it,
 `immo.mjs message -p <slug> --id <id> --from them [--channel email|sms|phone|visit] [--amount <€ proposed>] [--date
 <iso>] --file <file>`, and say so in one line.
 
 **A message to write**, when the user asks for one or a `[message]` item of the dashboard does:
 - `offer`: an offer;
-- `question`: the questions for the agent;
+- `question`: the questions for the agency;
 - `visit`: a visit request;
 - `reply`: an answer to the last message received;
 - `follow_up`: a reminder of the last message sent that got no answer;

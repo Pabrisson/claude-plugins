@@ -190,7 +190,7 @@
     {
       "id": 13,
       "prompt": "/skill-immo:property-search apply this feedback (recherche louveciennes)\n1. [chercher] l'annonce du DPE 2678E2076323U : maison 52 m², DPE G du 4 août 2026, 13 Rue de Montbuisson 78430 Louveciennes",
-      "expected_output": "A recent DPE without a listing: Claude looks for its listing the assisted way, adds it if found, or says it is not online.",
+      "expected_output": "A recent DPE without a listing: the agent looks for its listing the assisted way, adds it if found, or says it is not online.",
       "files": [],
       "env": {
         "STREAM_ESTATE_API_KEY": ""

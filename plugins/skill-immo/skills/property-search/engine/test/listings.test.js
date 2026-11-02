@@ -70,7 +70,7 @@ test('criteria, market badge and negotiation margin', () => {
   // 3 % + half of the 25 % above + 2 % (147 days) − half of the 6.7 % already dropped (capped at 5 %)
   assert.equal(n.high, 0.15)
   assert.deepEqual(n.reasons.map(r => r[0]), ['above_market', 'days_online', 'already_dropped'])
-  // an urgent mention (the API has none, a listing Claude read may) adds a lever
+  // an urgent mention (the API has none, a listing the agent read may) adds a lever
   assert.deepEqual(negotiation({ ...se, urgent: true }, 4000, Date.parse('2026-10-27')).reasons.map(r => r[0]), ['above_market', 'days_online', 'urgent', 'already_dropped'])
   assert.equal(negotiation({ ...se, status: 'UNDER_OFFER' }, 4000), null)
 })

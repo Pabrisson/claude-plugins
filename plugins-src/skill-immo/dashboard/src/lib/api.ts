@@ -4,7 +4,7 @@ export type Point = [number, number]
 export type Geometry = { type: "Polygon" | "MultiPolygon"; coordinates: unknown }
 export type Status = "to_visit" | "visited" | "offer" | "dropped" | null
 export type PropertyType = "flat" | "house" | "land" | "parking" | "premises"
-// a message of a listing's conversation: the user's (from: me, a draft until sent_at) or the agent's or seller's
+// a message of a listing's conversation: the user's (from: me, a draft until sent_at) or the agency's or seller's
 // (from: them, received); `to` is the one on the other side
 export type Channel = "email" | "sms" | "phone" | "visit"
 export type Message = { id: string; date: string; from?: "me" | "them"; kind: "offer" | "question" | "visit" | "reply" | "follow_up" | "documents" | "other"; channel?: Channel | null; amount: number | null; to: string | null; text: string; sent_at: string | null }
@@ -170,7 +170,7 @@ export type Search = {
   last_fetch: string | null
   last_refresh: string | null
   last_visit: string | null
-  // a Stream Estate alert skill-immo 1.6 and before made: only Claude deletes it (alert delete)
+  // a Stream Estate alert skill-immo 1.6 and before made: only the agent deletes it (alert delete)
   alert?: { searches: { id: string; type: PropertyType }[] } | null
 }
 export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" | "area_max" | "rooms_min" | "rooms_max" | "floor_min" | "land_min", number>> & { dpe_max?: string; elevator?: boolean; outdoor?: boolean }
@@ -258,7 +258,7 @@ export const api = {
   // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
   saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),
   addListing: (slug: string, body: Record<string, unknown>) => post<Listing>(`/api/s/${slug}/listings`, body),
-  // the zone drawn on the map, kept as a draft until Claude applies it
+  // the zone drawn on the map, kept as a draft until the agent applies it
   saveZone: (slug: string, geometry: Geometry) => post<{ geometry: Geometry }>(`/api/s/${slug}/zone`, { geometry }),
   autocomplete: (q: string) => json<Hit[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),
   odds: (bbox: number[], signal?: AbortSignal) => json<Odds>(`/api/odds?bbox=${bbox.join(",")}`, { signal }),

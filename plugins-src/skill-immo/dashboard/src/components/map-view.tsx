@@ -288,7 +288,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
   // the DPE groups, audits, permits and listings a click on the map reads, the odds tab's callbacks (the map's
   // handlers are made once), and how a card is pinned (made with the map)
   // the zone being edited (the listings' map only: « Modifier la zone »), its rings as they go, and the zone drawn and
-  // sent to the prompt, dashed until Claude applies it. `ready` counts the map's loads (a theme change makes it again).
+  // sent to the prompt, dashed until the agent applies it. `ready` counts the map's loads (a theme change makes it again).
   const [editing, setEditing] = useState(false), [edit, setEdit] = useState({ corners: 0, drawing: false }), [drawn, setDrawn] = useState<Rings | null>(null)
   const [ready, setReady] = useState(0), rings = useRef<Rings>([]), editor = useRef<ReturnType<typeof zoneEditor> | null>(null), editingRef = useRef(false)
   useEffect(() => { editingRef.current = editing })
@@ -447,7 +447,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
         m.on("moveend", view)
         view()
         // a DPE, an audit or a permit clicked: its card stays, each DPE without a listing and each audit with « Chercher
-        // l'annonce » (a prompt item for Claude)
+        // l'annonce » (a prompt item for the agent)
         const pinned = new Popup({ className: "immo-popup", maxWidth: "300px" })
         const clicked = (e: MapLayerMouseEvent) => e.features?.[0]?.properties
         m.on("click", "dpe", e => { const g = dpeRef.current.groups.get(clicked(e)?.key); if (g) pin.current({ kind: "dpe", group: g }) })
@@ -462,7 +462,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
             // the DPE or the audit of the button
             const r = s.kind === "place" ? s.place.signals.find(x => x.row.number === b.dataset.n)! : s.kind === "dpe" ? { kind: "dpe" as const, row: s.group.items.find(d => d.number === b.dataset.n)! } : s
             addFeedback({ kind: "chercher", text: r.kind === "audit" ? auditAsk(r.row) : dpeAsk(r.row as DpeRow) })
-            toast.success("Ajouté au prompt : Claude cherchera l'annonce")
+            toast.success("Ajouté au prompt : l'agent cherchera l'annonce")
             b.disabled = true
           }
           popup.remove()
@@ -511,7 +511,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
     rings.current = rs.map(r => (thin([...r, r[0]], each + 1) as Rings[number]).slice(0, -1))
     setEditing(true)
   }
-  // « Valider »: the draft kept by the server, one [zone] item in the prompt (the last one drawn); Claude applies it
+  // « Valider »: the draft kept by the server, one [zone] item in the prompt (the last one drawn); the agent applies it
   async function saveZone() {
     try { await api.saveZone(slug, geometryOf(rings.current)) } catch (e) { return void toast.error(`Zone non enregistrée : ${(e as Error).message}`) }
     setDrawn(rings.current.map(r => r.slice()))
@@ -519,7 +519,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
     const i = feedback.findIndex(f => f.kind === "zone")
     if (i >= 0) removeFeedback(i)
     addFeedback({ kind: "zone", text: `dessinée sur la carte (${edit.corners} sommets)` })
-    toast.success("Zone enregistrée : copiez le prompt, Claude l'appliquera")
+    toast.success("Zone enregistrée : copiez le prompt, l'agent l'appliquera")
   }
 
   // a DPE, an audit, a permit or an address picked in the odds tab's column: the map goes to it and pins its card (an
@@ -657,7 +657,7 @@ export function PlaceSearch({ onPlace }: { onPlace: (h: Hit) => void }) {
 }
 
 // The panel of the map's layers. On the listings' map: the listings shown, the zone (darkened outside or not: it changes
-// through Claude), the sales, the walking areas to the user's places and the places of the neighborhood, each with its
+// through the agent), the sales, the walking areas to the user's places and the places of the neighborhood, each with its
 // color and its count. On the odds map: a search to move it, the IRIS's figure, the recent DPE, the search's listings,
 // the zone. On a computer a column docked on the left, its whole height, always open (the listings' column on the
 // right); on a phone it floats, folded until tapped.
@@ -699,7 +699,7 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
     <Group title="Zone">
       <div className="flex items-center gap-2"><Switch id="veil" checked={layers.includes("veil")} onCheckedChange={v => toggle("veil", v)} /><Label htmlFor="veil" className="text-xs">Assombrir l'extérieur de la zone</Label></div>
       {edit && <Button size="xs" variant="outline" className="self-start" onClick={edit.start} disabled={edit.editing}><PencilIcon data-icon="inline-start" />Modifier la zone</Button>}
-      {edit?.drawn && <p className="text-muted-foreground">En pointillés : la zone dessinée, ajoutée au prompt. Claude l'applique quand vous le collez.</p>}
+      {edit?.drawn && <p className="text-muted-foreground">En pointillés : la zone dessinée, ajoutée au prompt. L'agent l'applique quand vous le collez.</p>}
     </Group>
   )
   return (

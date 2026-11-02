@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// property-search CLI and local dashboard server. The searches live in the folder Claude Code runs in ($IMMO_DIR
+// property-search CLI and local dashboard server. The searches live in the folder the agent runs in ($IMMO_DIR
 // overrides it): one folder per search (<slug>/: search.json, listings.json, market.json, area.json, feed.json, alerts.json), the buyer's
 // profile (.profile.json), the measured API prices (.costs.json), the open data cache and the credits log (.cache/).
 // Each search has a mode: stream-estate (listings, asking prices, free counts from the API v1) or classic (open data and
@@ -29,7 +29,7 @@ const SELF = fileURLToPath(import.meta.url)
 // the code this process runs: a dashboard server started from an older immo.mjs gets replaced
 const LOADED = fs.statSync(SELF).mtimeMs
 const ENGINE = path.dirname(SELF)
-// the searches folder: $IMMO_DIR, else the folder Claude Code runs in (its parent, when run inside a search)
+// the searches folder: $IMMO_DIR, else the folder the agent runs in (its parent, when run inside a search)
 const HOME = (() => {
   if (process.env.IMMO_DIR) return path.resolve(process.env.IMMO_DIR)
   return fs.existsSync(path.join(process.cwd(), 'search.json')) ? path.dirname(process.cwd()) : process.cwd()
@@ -228,7 +228,7 @@ async function doctor() {
     ['dashboard built', fs.existsSync(path.join(DASHBOARD, 'index.html')), `npm run build in plugins-src/skill-immo/dashboard (${DASHBOARD})`],
   ]
   for (const [name, ok, fix] of checks) console.log(`${ok ? 'ok     ' : 'MISSING'} ${name}${ok ? '' : `: ${fix}`}`)
-  console.log(hasKey() ? `stream-estate: ${apiOn() ? `on (API v1: listings, asking prices)${testApi() ? `, the tests' fake API at ${testApi()}: no real credit` : ''}` : "off: turned off in the dashboard's Réglages (assisted mode)"}` : "stream-estate: off (assisted mode: listings from WebSearch, WebFetch or pasted text); the plugin's secret: /plugin configure skill-immo@pabrisson")
+  console.log(hasKey() ? `stream-estate: ${apiOn() ? `on (API v1: listings, asking prices)${testApi() ? `, the tests' fake API at ${testApi()}: no real credit` : ''}` : "off: turned off in the dashboard's Réglages (assisted mode)"}` : "stream-estate: off (assisted mode: listings from WebSearch, WebFetch or pasted text); the plugin's secret (/plugin configure skill-immo@pabrisson in Claude Code), or STREAM_ESTATE_API_KEY in the environment")
   // a count returns no item, so it is free: it checks the key
   const key = hasKey() ? await se('GET', '/documents/properties', { query: { itemsPerPage: 0, transactionType: 0 } }).then(() => '; key accepted', e => `; the key fails: ${e.message}`) : ''
   console.log(`credits: ${u.last30} in the last 30 days (${euros(u.last30, p.eur_per_credit)}), ${u.month} this month of the ${p.monthly_credit_cap} cap${u.unknown ? `, ${u.unknown} calls of unknown cost` : ''}${key}`)
@@ -352,7 +352,7 @@ async function makeZone(s, dir) {
 }
 
 const ARRONDISSEMENT = /^(751\d\d|6938\d|132\d\d)$/
-// the recent DPE of a search for Claude: how many, how many no listing matches (homes about to go on sale, or to let),
+// the recent DPE of a search for the agent: how many, how many no listing matches (homes about to go on sale, or to let),
 // how many of those are new since the area.json before (`before`: the numbers it held)
 function dpeLine(rows, listings, before) {
   if (!Array.isArray(rows)) return rows?.error ? `recent DPE: failed (${rows.error})` : null
@@ -376,7 +376,7 @@ const dpeNumbers = dir => numbersOf(dir, 'dpe')
 // ponytail: an audit or a permit is not matched to the listings; its DPE number (numero_dpe) would match an audit's
 const zoneNews = (kind, rows, listings, before) => kind === 'dpe' ? dpeNews(rows, listings, before)
   : rows.filter(d => !before.has(d.number)).map(row => ({ date: now(), kind, [kind]: row }))
-// the line a source gives Claude: how many in the zone over 12 months, how many new since the last refresh
+// the line a source gives the agent: how many in the zone over 12 months, how many new since the last refresh
 function sourceLine(kind, rows, listings, before) {
   if (kind === 'dpe') return dpeLine(rows, listings, before)
   const what = { audit: 'energy audits', permit: 'building permits' }[kind]
@@ -428,7 +428,7 @@ async function placeNews(dir, s, days) {
   }
   return news
 }
-// the user's own alerts that news fired, for Claude to say: alerts: « DPE rue Paul Bert » 2
+// the user's own alerts that news fired, for the agent to say: alerts: « DPE rue Paul Bert » 2
 function alertLine(dir, s, news) {
   const n = {}, mine = alertsAt(dir).filter(a => !a.builtin)
   for (const x of news) for (const a of firing(mine, x, s)) n[a.name] = (n[a.name] ?? 0) + 1
@@ -737,7 +737,7 @@ async function add() {
   console.log(`added ${ls.length} listing${ls.length > 1 ? 's' : ''}: ${describe(changes)}`)
 }
 
-// Listings Claude read or the user typed: placed (an address without a point), merged, given their building data. A
+// Listings the agent read or the user typed: placed (an address without a point), merged, given their building data. A
 // failed enrichment leaves them added (enrich takes them later).
 async function addListings(dir, s, items, source) {
   const ls = await Promise.all(items.map(async x => {
@@ -883,7 +883,7 @@ async function costs(sub, ...rest) {
   for (const [route, c] of Object.entries(table(m))) console.log(`${route}: ${c.credits == null ? 'unknown' : `${c.credits}${c.per ? ' per item' : ''}`}${c.note ? ` (${c.note})` : ''}`)
 }
 
-// show -p <slug> [--id <id[,id…]>]: what Claude needs to analyse or compare listings, computed as the dashboard does
+// show -p <slug> [--id <id[,id…]>]: what the agent needs to analyse or compare listings, computed as the dashboard does
 function show() {
   const dir = searchDir(), { search: s, listings, market: m, area } = load(dir), p = profile()
   const ids = opt.id?.split(',')
@@ -908,8 +908,8 @@ function show() {
   console.log(JSON.stringify(ids?.length === 1 ? out[0] : out, null, 2))
 }
 
-// A message of a listing's conversation with the agent or the seller: one the user sends (from: me, a draft until
-// sent_at; Claude writes them) or one received (from: them: a reply pasted, a call summed up). Its text is kept as given.
+// A message of a listing's conversation with the agency or the seller: one the user sends (from: me, a draft until
+// sent_at; the agent writes them) or one received (from: them: a reply pasted, a call summed up). Its text is kept as given.
 function newMessage(l, { from = 'me', kind = 'other', channel = null, amount = null, to, text, date, sent = false }) {
   if (!['me', 'them'].includes(from)) throw new Error('from is me or them')
   if (!MESSAGE_KINDS.includes(kind)) throw new Error(`kind is ${MESSAGE_KINDS.join(', ')}`)
@@ -966,7 +966,7 @@ function sendFile(res, file) {
 }
 
 // What the dashboard may run, as engine commands with their flags: the paid ones go through the same estimate and
-// approval as Claude's (estimate: true first, then spend / accept_unknown once the user confirmed in the dialog).
+// approval as the agent's (estimate: true first, then spend / accept_unknown once the user confirmed in the dialog).
 const RUN = {
   search: ['query', 'mode', 'types', 'criteria', 'zone', 'radius', 'max'], fetch: ['spend', 'max'], market: [], refresh: ['spend'], enrich: ['id', 'all'],
   usage: [],
@@ -1111,7 +1111,7 @@ async function handle(req, res) {
   if (m) {
     const dir = path.join(HOME, m[1]), sub = m[2] ?? ''
     if (!fs.existsSync(path.join(dir, 'search.json'))) return reply(res, 404, { error: `no search ${m[1]}` })
-    // the search's version: its files' latest change, taken before reading them, so that what Claude writes
+    // the search's version: its files' latest change, taken before reading them, so that what the agent writes
     // meanwhile still shows as new to the page (it asks /version every few seconds)
     if (sub === '/version') return reply(res, 200, { version: version(dir), unread: unread(dir) })
     if (!sub && req.method === 'DELETE') {
@@ -1141,7 +1141,7 @@ async function handle(req, res) {
         return reply(res, 200, { count: hits.length, items: hits.slice(0, 5) })
       } catch (e) { return reply(res, 502, { error: e.message }) }
     }
-    // the zone drawn on the map, kept as a draft: nothing changes until Claude applies it (search --zone drawn)
+    // the zone drawn on the map, kept as a draft: nothing changes until the agent applies it (search --zone drawn)
     if (sub === '/zone' && post) {
       let g
       try { g = cleanDrawn((await readBody(req)).geometry) } catch (e) { return reply(res, 400, { error: e.message }) }
@@ -1340,27 +1340,37 @@ function notify(title, message, url) {
   next(tries)
 }
 
-// the Claude processes the server works for (each `dashboard` adds its own): it quits once they have all quit. A
+// the agent processes the server works for (each `dashboard` adds its own): it quits once they have all quit. A
 // server nobody registered with (started by hand, the tests) runs until stopped
 const owners = new Set()
 function watchOwner(pid) {
   if (!owners.size) setInterval(() => {
     for (const o of owners) try { process.kill(o, 0) } catch (e) { if (e.code === 'ESRCH') owners.delete(o) }
-    if (!owners.size) { console.log('every Claude this dashboard server worked for has quit: stopping'); process.exit(0) }
+    if (!owners.size) { console.log('every agent this dashboard server worked for has quit: stopping'); process.exit(0) }
   }, 2000)
   owners.add(pid)
 }
 
-// the Claude Code (or Claude app) this command runs under: the nearest ancestor named claude, null outside one
+// the agent this command runs under: the nearest ancestor named after one (Claude Code, Codex, OpenCode, Cursor,
+// Goose, Amp…) or a node/bun/python running one (Gemini CLI, Qwen Code, Copilot CLI…); null outside one
+// ponytail: known names only, another agent's server runs until stopped: add its name to AGENT
 // ponytail: null on Windows (no ps -o), its server runs until Windows logs off; Get-CimInstance Win32_Process if that bothers
-function claudePid() {
+const AGENT = /^(claude|codex|gemini|qwen|copilot|opencode|cursor-agent|goose|amp|crush|droid|kiro-cli|auggie)(-cli|-code)?$/i
+function agentPid() {
   try {
     const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8', windowsHide: true }).trim().split('\n').map(l => {
       const [, pid, ppid, comm] = l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
       return [+pid, { ppid: +ppid, comm }]
     }))
-    for (let pid = process.ppid; pid > 1 && procs.has(pid); pid = procs.get(pid).ppid)
-      if (/^claude$/i.test(path.basename(procs.get(pid).comm))) return pid
+    for (let pid = process.ppid; pid > 1 && procs.has(pid); pid = procs.get(pid).ppid) {
+      const name = path.basename(procs.get(pid).comm).replace(/\.exe$/i, '')
+      if (AGENT.test(name)) return pid
+      // node/bun/python running an agent's script: a word of its path names it (…/@google/gemini-cli/dist/index.js)
+      if (/^(node|bun|deno|python3?)$/i.test(name)) {
+        const script = execFileSync('ps', ['-o', 'args=', '-p', `${pid}`], { encoding: 'utf8', windowsHide: true }).trim().split(/\s+/).slice(1).find(a => !a.startsWith('-')) ?? ''
+        if (script.split(/[/\\]/).some(w => AGENT.test(w.replace(/\.(m?js|py)$/i, '')))) return pid
+      }
+    }
   } catch {}
   return null
 }
@@ -1398,7 +1408,7 @@ function openUrl(url) {
 
 async function dashboard() {
   if (!fs.existsSync(path.join(DASHBOARD, 'index.html'))) die(`the dashboard is not built (${DASHBOARD})`)
-  const dir = searchDir(false), base = await findServer(), owner = claudePid()
+  const dir = searchDir(false), base = await findServer(), owner = agentPid()
   if (owner) await fetch(base + `__immo/owner?pid=${owner}`, { method: 'POST' }).catch(() => {})
   const url = dir ? `${base}${path.basename(dir)}/` : base
   console.log(`dashboard: ${url}`)

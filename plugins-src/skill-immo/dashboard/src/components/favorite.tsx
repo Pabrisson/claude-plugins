@@ -11,7 +11,7 @@ export const Star = ({ on, className }: { on: boolean; className?: string }) => 
   <StarIcon className={cn(on ? "fill-amber-400 text-amber-400" : "text-muted-foreground", className)} />
 )
 
-// The user's star on a listing, kept in listings.json (git keeps it, a refresh keeps it, Claude reads it).
+// The user's star on a listing, kept in listings.json (git keeps it, a refresh keeps it, the agent reads it).
 // - card: a round button over a card's corner, its empty star shown only when the card (a `group`) is hovered;
 // - inline: next to the dossier's price, always shown.
 export function FavoriteButton({ l, variant = "card", className }: { l: Listing; variant?: "card" | "inline"; className?: string }) {

@@ -1,9 +1,9 @@
 # Listing format
 
-## `add --file`: what Claude read
+## `add --file`: what you read
 
-When Claude reads a listing itself, it writes what it found in a JSON file (one object, or an array) and runs
-`immo.mjs add -p <slug> --file listing.json`. It reads it from a WebFetch of one listing page, a WebSearch result, or
+When you read a listing yourself, write what you found in a JSON file (one object, or an array) and run
+`immo.mjs add -p <slug> --file listing.json`. You read it from a WebFetch of one listing page, a WebSearch result, or
 the text the user pasted (then with `--source pasted`).
 
 Write only what the listing says, never a guess. Leave unknown fields out. Every field is optional except `price` and

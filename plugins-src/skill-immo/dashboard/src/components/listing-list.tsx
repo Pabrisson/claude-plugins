@@ -98,7 +98,7 @@ export function ListingList({ className, shownTypes }: { className?: string; sho
           <EmptyHeader>
             <EmptyTitle>{data.listings.length ? "Aucune annonce pour ce filtre" : "Pas encore d'annonce"}</EmptyTitle>
             <EmptyDescription>
-              {data.listings.length ? "Changez de filtre pour voir les autres." : data.search.mode === "stream-estate" ? "Récupérez les annonces de la zone avec le bouton « Annonces »." : "Demandez à Claude d'en chercher, ou ajoutez une annonce par son lien ou son texte."}
+              {data.listings.length ? "Changez de filtre pour voir les autres." : data.search.mode === "stream-estate" ? "Récupérez les annonces de la zone avec le bouton « Annonces »." : "Demandez à l'agent d'en chercher, ou ajoutez une annonce par son lien ou son texte."}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>

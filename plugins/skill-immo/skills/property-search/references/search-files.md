@@ -1,7 +1,7 @@
 # The files of a search
 
 What the engine writes and the dashboard reads. Read the part a step names: `listings.json` for a listing's fields. `market.json` is in
-`analyse-and-messages.md`, `alerts.json` in `follow-up.md`, and what Claude writes for `add --file` in
+`analyse-and-messages.md`, `alerts.json` in `follow-up.md`, and what you write for `add --file` in
 `listing-format.md`.
 
 Contents: `listings.json` · the other files of a search (`search.json`, `area.json`, `feed.json`) · the files of the
@@ -30,12 +30,12 @@ snake_case.
 | `publishers[]` | `{ type, name, card, website, phone, email, profile_url, mandate }` |
 | `pictures[]`, `title`, `description` | Up to 12 pictures |
 | `published_at`, `updated_at` | The first publication on any portal, the last crawl |
-| `urgent`, `favorites` | Urgent on a portal (a lever), the highest favorite count (competition); a listing Claude read only |
+| `urgent`, `favorites` | Urgent on a portal (a lever), the highest favorite count (competition); a listing you read only |
 | `price_changes[]` | The portals' price history `{ date, from, to, pct }`, each change once |
 | `first_seen`, `price_history[]` | When this search first saw it, each price it saw `{ date, price }` |
 | `changes[]` | `{ date, kind: new\|price_drop\|price_rise\|status\|expired, from, to }`, for the "new since your last visit" view |
 | `my_status`, `favorite`, `notes` | The user's: `to_visit`, `visited`, `offer`, `dropped` or null; their star (the dashboard's ☆, apart from the status); free notes |
-| `messages[]` | Its conversation with the agent or the seller (`message`, the dossier's « Ajouter »): `{ id, date, from: me\|them, kind: offer\|question\|visit\|reply\|follow_up\|documents\|other, channel: email\|sms\|phone\|visit\|null, amount, to, text, sent_at }`. `from: me` is a draft until `sent_at` (the user marks it sent); `from: them` is received; `to` is the one on the other side. An old message without `from` is the user's |
+| `messages[]` | Its conversation with the agency or the seller (`message`, the dossier's « Ajouter »): `{ id, date, from: me\|them, kind: offer\|question\|visit\|reply\|follow_up\|documents\|other, channel: email\|sms\|phone\|visit\|null, amount, to, text, sent_at }`. `from: me` is a draft until `sent_at` (the user marks it sent); `from: them` is received; `to` is the one on the other side. An old message without `from` is the user's |
 | `building` | Added by the enrichment: `{ ban, dpe[], dpe_match, dpe_cost_yearly, construction_year, copro, risks, sales[] }` |
 
 The listings are deduplicated by id, else by URL (host and path, without the query or a trailing slash). When Stream

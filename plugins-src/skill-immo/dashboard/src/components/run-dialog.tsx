@@ -12,16 +12,16 @@ type Pending = Job & { estimate: Estimate; resolve: (ok: boolean) => void }
 
 // Runs an engine command from the dashboard. A paid one asks the engine for its estimate first and, unless it costs
 // nothing, waits for the user's yes in a dialog: the credits, the euros, what is left of the monthly cap, or « coût
-// inconnu ». The key stays in the engine, which applies the same rules as for Claude.
+// inconnu ». The key stays in the engine, which applies the same rules as for the agent.
 const RunContext = createContext<(job: Job) => Promise<boolean>>(async () => false)
 export const useRun = () => useContext(RunContext)
 
 const lastLine = (s: string) => s.split("\n").filter(Boolean).at(-1) ?? ""
 // what went wrong, in French: the engine's exit codes, else its message (technical, in English)
 const failure = (r: RunResult) => ({
-  2: "Cette action attend votre accord : relancez-la depuis le dashboard ou demandez-la à Claude.",
-  3: "L'API est indisponible (plus de crédits ou pas de clé) : demandez à Claude, il cherchera sans (mode assisté).",
-  4: "L'API ne connaît pas cette annonce : ajoutez-la par « Ajouter », Claude la lira.",
+  2: "Cette action attend votre accord : relancez-la depuis le dashboard ou demandez-la à l'agent.",
+  3: "L'API est indisponible (plus de crédits ou pas de clé) : demandez à l'agent, il cherchera sans (mode assisté).",
+  4: "L'API ne connaît pas cette annonce : ajoutez-la par « Ajouter », l'agent la lira.",
 }[r.code] ?? `Échec. Détail technique : ${lastLine(r.err).replace(/^error: /, "")}`)
 
 export function RunProvider({ children, onDone }: { children: ReactNode; onDone: () => void | Promise<void> }) {

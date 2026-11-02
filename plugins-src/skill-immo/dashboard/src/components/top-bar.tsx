@@ -36,11 +36,11 @@ export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings:
   const { data, state, feedback, addFeedback } = useSearch()
   // the tests' fake API (test/demo.mjs) wears an amber « API test »
   const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate", testApi = s.mode === "stream-estate" && !!state.test_api
-  // new listings asked of Claude: at the API (its credits rule) and on the web, or on the web only
+  // new listings asked of the agent: at the API (its credits rule) and on the web, or on the web only
   function askListings() {
     if (feedback.some(f => f.kind === "annonces")) return toast("Déjà dans le prompt")
     addFeedback({ kind: "annonces", text: streamOn ? "cherche de nouvelles annonces sur l'API (crédits avec mon accord) et sur le web" : "cherche de nouvelles annonces sur le web" })
-    toast.success("Ajouté au prompt", { description: streamOn ? "Claude cherchera sur l'API, après votre accord sur le coût, et sur le web." : "Claude cherchera sur le web, gratuitement." })
+    toast.success("Ajouté au prompt", { description: streamOn ? "L'agent cherchera sur l'API, après votre accord sur le coût, et sur le web." : "L'agent cherchera sur le web, gratuitement." })
   }
   const chips = criteriaLabels(s.criteria)
   return (
@@ -51,7 +51,7 @@ export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings:
           <h1 className="truncate text-sm font-bold md:text-base">{s.label}</h1>
           <Tooltip>
             <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"} className={cn("shrink-0", testApi && "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300")}>{s.mode === "stream-estate" ? (testApi ? "API test" : "API") : "OpenData"}</Badge></TooltipTrigger>
-            <TooltipContent>{testApi ? `Fausse API Stream Estate des tests (${state.test_api}) : annonces fictives, aucun crédit réel` : s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API (payant, avec votre accord)" : "Mode API, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par Claude : gratuit"}</TooltipContent>
+            <TooltipContent>{testApi ? `Fausse API Stream Estate des tests (${state.test_api}) : annonces fictives, aucun crédit réel` : s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API (payant, avec votre accord)" : "Mode API, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par l'agent : gratuit"}</TooltipContent>
           </Tooltip>
         </span>
         <span className="truncate text-xs text-muted-foreground">{s.zone.label}</span>
@@ -66,7 +66,7 @@ export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings:
           <TooltipTrigger asChild>
             <Button size="sm" onClick={askListings}><ListPlusIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span></Button>
           </TooltipTrigger>
-          <TooltipContent>{streamOn ? "Ajoute au prompt une recherche de nouvelles annonces, sur l'API (le coût vous est demandé avant) et sur le web" : "Ajoute au prompt une recherche de nouvelles annonces sur le web, par Claude (gratuit)"}</TooltipContent>
+          <TooltipContent>{streamOn ? "Ajoute au prompt une recherche de nouvelles annonces, sur l'API (le coût vous est demandé avant) et sur le web" : "Ajoute au prompt une recherche de nouvelles annonces sur le web, par l'agent (gratuit)"}</TooltipContent>
         </Tooltip>
         <NewsBell onOpen={onNews} />
         <AddListing />
@@ -115,7 +115,7 @@ function WatchCountdown({ onSettings }: { onSettings: () => void }) {
   )
 }
 
-// The bell: the count of the news not read yet (the server's watch, Claude's refresh), a toast when more come in, and
+// The bell: the count of the news not read yet (the server's watch, the agent's refresh), a toast when more come in, and
 // on a click the latest ones. A listing's opens its dossier, the others the follow-up on them.
 function NewsBell({ onOpen }: { onOpen: () => void }) {
   const { slug, unread, stale, select, focusNews, reload } = useSearch()
@@ -183,7 +183,7 @@ function NewsBell({ onOpen }: { onOpen: () => void }) {
 }
 
 // The criteria, the types and the source of the search: what changed goes into the prompt as [affiner], in the engine's
-// form (an emptied criterion is `k=`, which drops it) then in words. Claude runs the search with it: the dashboard
+// form (an emptied criterion is `k=`, which drops it) then in words. The agent runs the search with it: the dashboard
 // starts nothing itself.
 function CriteriaPopover({ chips }: { chips: string[] }) {
   const { data, state, addFeedback } = useSearch()
@@ -197,7 +197,7 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
   function add() {
     const words = [criteriaLabels(c).join(", ") || "aucun critère", types.map(t => TYPE_PLURAL[t].toLowerCase()).join(", "), mode === "classic" ? "OpenData" : "API"].join(" · ")
     addFeedback({ kind: "affiner", text: `${engine} — ${words}` })
-    toast.success("Ajouté au prompt : Claude enregistrera ces critères")
+    toast.success("Ajouté au prompt : l'agent enregistrera ces critères")
     setOpen(false)
   }
   return (
@@ -210,7 +210,7 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-h-[80dvh] w-[min(30rem,calc(100vw-2rem))] overflow-y-auto" align="center">
-        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>Le prompt copié, Claude enregistre ces critères : la liste se filtre dessus, et l'API les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
+        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>Le prompt copié, l'agent enregistre ces critères : la liste se filtre dessus, et l'API les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
         <div className="mt-3 flex flex-col gap-3">
           <TypesField value={types} onChange={setTypes} />
           <CriteriaFields value={c} onChange={setC} types={types} />
@@ -225,14 +225,14 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
   )
 }
 
-// A listing by its link or its text: Claude reads it (the API has no lookup by link), so it goes into the prompt. One
+// A listing by its link or its text: the agent reads it (the API has no lookup by link), so it goes into the prompt. One
 // typed by hand needs no reading: the second dialog adds it directly.
 function AddListing() {
   const { addFeedback } = useSearch()
   const [open, setOpen] = useState(false), [value, setValue] = useState(""), [manual, setManual] = useState(false)
   function submit() {
     addFeedback({ kind: "ajouter", text: value.trim().replace(/\s+/g, " ") })
-    toast.success("Ajouté au prompt : Claude lira l'annonce")
+    toast.success("Ajouté au prompt : l'agent lira l'annonce")
     setOpen(false)
     setValue("")
   }
@@ -242,7 +242,7 @@ function AddListing() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Ajouter une annonce</DialogTitle>
-          <DialogDescription>Collez son lien ou son texte : Claude la lira et l'ajoutera.</DialogDescription>
+          <DialogDescription>Collez son lien ou son texte : l'agent la lira et l'ajoutera.</DialogDescription>
         </DialogHeader>
         <Field>
           <FieldLabel htmlFor="listing">Lien ou texte de l'annonce</FieldLabel>
@@ -360,7 +360,7 @@ function PromptButton() {
   const items = [...feedback, ...ways.map(text => ({ kind: "élargir" as const, text })), ...(question.trim() ? [{ kind: "question" as const, text: question.trim() }] : [])]
   async function copy() {
     await navigator.clipboard.writeText(promptText(slug, items))
-    toast.success("Prompt copié : collez-le dans Claude Code")
+    toast.success("Prompt copié : collez-le dans votre agent")
     clearFeedback()
     setQuestion("")
     setPicked([])
@@ -373,7 +373,7 @@ function PromptButton() {
     <Popover>
       <PopoverTrigger asChild><Button variant="outline" size="sm"><ClipboardCopyIcon data-icon="inline-start" /><span className="max-sm:sr-only">Copier le prompt</span>{feedback.length ? ` (${feedback.length})` : ""}</Button></PopoverTrigger>
       <PopoverContent align="end" className="max-h-[85dvh] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto">
-        <PopoverHeader><PopoverTitle>Pour Claude</PopoverTitle><PopoverDescription>Ce que vous avez demandé dans le dashboard, à coller dans Claude Code.</PopoverDescription></PopoverHeader>
+        <PopoverHeader><PopoverTitle>Pour l'agent</PopoverTitle><PopoverDescription>Ce que vous avez demandé dans le dashboard, à coller dans votre agent.</PopoverDescription></PopoverHeader>
         <div className="mt-3 flex flex-col gap-3">
           {feedback.map((f, i) => (
             <div key={i} className="flex items-start justify-between gap-2 rounded-md bg-muted px-2.5 py-1.5 text-sm">
@@ -395,7 +395,7 @@ function PromptButton() {
               ))}
             </FieldSet>
             <Input value={other} onChange={e => setOther(e.target.value)} placeholder="Autre : la rue voisine, une autre commune…" aria-label="Autre façon d'élargir" />
-            <FieldDescription>Claude change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode API, le coût est annoncé avant.</FieldDescription>
+            <FieldDescription>L'agent change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode API, le coût est annoncé avant.</FieldDescription>
           </FieldGroup>
           <Separator />
           <Field>
@@ -409,7 +409,7 @@ function PromptButton() {
   )
 }
 
-// the buyer's profile: the numbers of the budget and the score's priorities (the places go through Claude: setup; the
+// the buyer's profile: the numbers of the budget and the score's priorities (the places go through the agent: setup; the
 // credits are in « Coûts API »)
 export function ProfileDialog() {
   const { profile, setProfile } = useSearch()
@@ -425,7 +425,7 @@ export function ProfileDialog() {
     <Dialog onOpenChange={o => o && setP(profile)}>
       <DialogTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Mon profil"><UserRoundIcon /></Button></DialogTrigger>
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader><DialogTitle>Mon profil</DialogTitle><DialogDescription>Gardé sur cette machine (.profile.json). Les lieux clés se règlent avec Claude : « setup ».</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>Mon profil</DialogTitle><DialogDescription>Gardé sur cette machine (.profile.json). Les lieux clés se règlent avec l'agent : « setup ».</DialogDescription></DialogHeader>
         <FieldGroup className="grid grid-cols-2 gap-3">
           {fields.map(([k, label, hint]) => (
             <Field key={k}><FieldLabel htmlFor={k}>{label}</FieldLabel><Input id={k} type="number" step="any" value={p[k] as number} onChange={set(k)} />{hint && <FieldDescription>{hint}</FieldDescription>}</Field>
@@ -451,14 +451,14 @@ export function ProfileDialog() {
   )
 }
 
-// what Claude changed while the page was open: a bar to reload the page, which keeps the tab and the dossier open.
+// what the agent changed while the page was open: a bar to reload the page, which keeps the tab and the dossier open.
 // The dossier shows it too: while open, it keeps the page behind it from being clicked.
 export function StaleBar() {
   const { stale } = useSearch()
   if (!stale) return null
   return (
     <div role="status" className="flex items-center justify-center gap-3 border-b bg-primary px-3 py-1.5 text-sm text-primary-foreground">
-      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (Claude ou la veille du serveur ont mis la recherche à jour).
+      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (l'agent ou la veille du serveur ont mis la recherche à jour).
       <Button size="xs" variant="secondary" onClick={() => location.reload()}>Recharger</Button>
     </div>
   )

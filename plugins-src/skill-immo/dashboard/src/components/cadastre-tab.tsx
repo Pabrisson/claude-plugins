@@ -308,7 +308,7 @@ function CadastreMap({ className, right = 0, layers, setLayers, hover, picked, s
         m.on("mouseleave", "listings", () => { m.getCanvas().style.cursor = ""; popup.remove() })
         m.on("click", "listings", (e: MapLayerMouseEvent) => select(e.features?.[0]?.properties.id ?? null))
         // a DPE: its card on hovering it; clicked, the card stays, « Chercher l'annonce » under each one without a
-        // listing (a prompt item for Claude)
+        // listing (a prompt item for the agent)
         m.on("mouseenter", "dpe", (e: MapLayerMouseEvent) => { m.getCanvas().style.cursor = "pointer"; const f = e.features?.[0]; if (f) popup.setLngLat((f.geometry as GeoPoint).coordinates as [number, number]).setHTML(f.properties.tip).addTo(m) })
         m.on("mouseleave", "dpe", () => { m.getCanvas().style.cursor = ""; popup.remove() })
         const pinned = new Popup({ className: "immo-popup", maxWidth: "300px" })
@@ -317,7 +317,7 @@ function CadastreMap({ className, right = 0, layers, setLayers, hover, picked, s
           el.innerHTML = dpeTip(g, cb.current.listings, true)
           for (const b of el.querySelectorAll<HTMLButtonElement>("button[data-n]")) b.onclick = () => {
             cb.current.addFeedback({ kind: "chercher", text: dpeAsk(g.items.find(d => d.number === b.dataset.n)!) })
-            toast.success("Ajouté au prompt : Claude cherchera l'annonce")
+            toast.success("Ajouté au prompt : l'agent cherchera l'annonce")
             b.disabled = true
           }
           popup.remove()
@@ -521,7 +521,7 @@ function CadastrePanel({ box, near, picked, record, onSearch, onPick, onClose, o
           </ul>
           <div className="flex flex-wrap gap-1.5">
             <Button size="xs" variant="outline" onClick={() => navigator.clipboard.writeText(selection.map(s => `${refOfIdu(s.id)} (${s.id})`).join(", ")).then(() => toast.success("Références copiées"), () => toast.error("Copie impossible"))}><CopyIcon data-icon="inline-start" />Copier les références</Button>
-            <Button size="xs" variant="outline" onClick={() => { addFeedback({ kind: "parcelle", text: `étudier ensemble les parcelles ${selection.map(s => `${refOfIdu(s.id)} (${s.id})`).join(", ")}, ${area(total)} au total` }); toast.success("Ajouté au prompt : Claude étudiera ces parcelles") }}><BotIcon data-icon="inline-start" />Étudier avec Claude</Button>
+            <Button size="xs" variant="outline" onClick={() => { addFeedback({ kind: "parcelle", text: `étudier ensemble les parcelles ${selection.map(s => `${refOfIdu(s.id)} (${s.id})`).join(", ")}, ${area(total)} au total` }); toast.success("Ajouté au prompt : l'agent étudiera ces parcelles") }}><BotIcon data-icon="inline-start" />Étudier avec l'agent</Button>
           </div>
         </Block>
       )}
@@ -606,7 +606,7 @@ function ParcelBlocks({ picked, record, onClose, retry, hover, selected, onToggl
     ...(t ? [["Arpentée", t.arpente ? "Oui" : "Non"], ["Créée le", date(t.created)], ["Mise à jour le", date(t.updated)]] as [string, string][] : []),
   ]
   const u = d?.urbanism, rules = u?.prescriptions ?? [], dvf = d?.dvf
-  const study = () => { addFeedback({ kind: "parcelle", text: `étudier la parcelle ${reference} (${picked.idu}), ${commune}, ${area(contenance)}` }); toast.success("Ajouté au prompt : Claude étudiera la parcelle") }
+  const study = () => { addFeedback({ kind: "parcelle", text: `étudier la parcelle ${reference} (${picked.idu}), ${commune}, ${area(contenance)}` }); toast.success("Ajouté au prompt : l'agent étudiera la parcelle") }
   return (
     <div ref={ref} className="flex scroll-mt-3 flex-col gap-3" onMouseEnter={hover.onMouseEnter} onMouseLeave={hover.onMouseLeave}>
       <Block icon={LandPlotIcon} title={`Parcelle ${reference}`} help={`La parcelle ouverte : sa référence et sa contenance au cadastre (IGN, Etalab), puis tout ce que les données publiques en disent. ${ARPENTE_HELP}`}
@@ -625,8 +625,8 @@ function ParcelBlocks({ picked, record, onClose, retry, hover, selected, onToggl
         {!missing && (loading ? <Skeleton className="h-40" /> : <Rows rows={rows} />)}
         {!missing && (
           <div className="flex flex-wrap gap-1.5">
-            <Hint text="Ajoute au prompt une étude de la parcelle par Claude : ce que permet le PLU, les servitudes et les risques, ses ventes et le prix du terrain, ce qu'on peut y construire ou diviser.">
-              <Button size="xs" onClick={study}><BotIcon data-icon="inline-start" />Étudier avec Claude</Button>
+            <Hint text="Ajoute au prompt une étude de la parcelle par l'agent : ce que permet le PLU, les servitudes et les risques, ses ventes et le prix du terrain, ce qu'on peut y construire ou diviser.">
+              <Button size="xs" onClick={study}><BotIcon data-icon="inline-start" />Étudier avec l'agent</Button>
             </Hint>
             <Button size="xs" variant="outline" onClick={() => onToggle(picked.idu, contenance)}>{selected ? <MinusIcon data-icon="inline-start" /> : <PlusIcon data-icon="inline-start" />}{selected ? "Retirer de la sélection" : "Ajouter à la sélection"}</Button>
           </div>

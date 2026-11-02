@@ -7,7 +7,8 @@ v1 key the same day. The spec itself is not shipped. A v1 key does not work on t
 the v2 is not used.
 
 - **Base**: `https://api.stream.estate`. The header `X-API-KEY: <key>` carries the key, read from
-  `$STREAM_ESTATE_API_KEY` (the plugin's secret, exported by its SessionStart hook). It never leaves the engine.
+  `$STREAM_ESTATE_API_KEY` (the plugin's secret, exported by its SessionStart hook in Claude Code; any other agent
+  reads it from the environment). It never leaves the engine.
 - **Format**: `Accept: application/ld+json` returns a Hydra collection, `{ "hydra:member": [...], "hydra:totalItems" }`.
   `application/json` returns a bare array, with no total: the engine always asks for JSON-LD.
 - **Query strings**: lists as `propertyTypes[]=0&propertyTypes[]=1`, polygons as `geoShapes[0][3][0]=<lon>` and

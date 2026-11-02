@@ -37,7 +37,7 @@ const FEATURES: Record<string, [string, PropertyType[]]> = {
 }
 const PUBLISHER = { PRIVATE_INDIVIDUAL: "Particulier", REAL_ESTATE_AGENCY: "Agence" } as const
 
-// A listing the user saw elsewhere (a shop window, a visit, a tip), typed in a form: the server adds it as Claude's
+// A listing the user saw elsewhere (a shop window, a visit, a tip), typed in a form: the server adds it as the agent's
 // add --file does, free, with its building data. Only what is typed is sent: an empty field stays unknown.
 export function ManualListing({ open, onOpenChange, onBack }: { open: boolean; onOpenChange: (o: boolean) => void; onBack: () => void }) {
   const { slug, data, reload, select } = useSearch()

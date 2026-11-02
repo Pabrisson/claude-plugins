@@ -189,9 +189,9 @@ function ParcelSection({ l, onView }: { l: Listing; onView: (v: string) => void 
   )
 }
 
-// what Claude is asked to write, from the dossier's menu: the prompt says what, Claude reads the conversation first
+// what the agent is asked to write, from the dossier's menu: the prompt says what, the agent reads the conversation first
 const DRAFTS = {
-  offer: "une offre d'achat (montant et arguments à partir de la marge de négociation)", question: "les questions à poser à l'agent ou au vendeur", visit: "une demande de visite",
+  offer: "une offre d'achat (montant et arguments à partir de la marge de négociation)", question: "les questions à poser à l'agence ou au vendeur", visit: "une demande de visite",
   reply: "une réponse au dernier message reçu, d'après toute la conversation", follow_up: "une relance du dernier message resté sans réponse",
   documents: "une demande des documents (diagnostics complets, PV des 3 dernières AG, relevé de charges, avis de taxe foncière, pré-état daté)",
 } as const
@@ -245,8 +245,8 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
         <span className="flex flex-wrap gap-2 sm:ml-auto">
           <Button variant={compare.includes(l.id) ? "secondary" : "outline"} size="sm" aria-pressed={compare.includes(l.id)} onClick={() => toggleCompare(l.id)}>{compare.includes(l.id) ? <CheckIcon data-icon="inline-start" /> : <ScaleIcon data-icon="inline-start" />}Comparer</Button>
           <DraftMenu l={l}
-            onAnalyse={() => { addFeedback({ kind: "analyser", text: `${l.id} — ${short}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il analysera ce bien") }}
-            onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour Claude, il rédigera le message et l'enregistrera ici") }} />
+            onAnalyse={() => { addFeedback({ kind: "analyser", text: `${l.id} — ${short}` }); toast.success("Ajouté au prompt : copiez-le pour l'agent, il analysera ce bien") }}
+            onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour l'agent, il rédigera le message et l'enregistrera ici") }} />
         </span>
       </div>
 
@@ -274,7 +274,7 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
         ) : <p className="text-sm text-muted-foreground">Pas de marge : le bien est sous offre, vendu ou retiré.</p>}
       </Section>
 
-      <Conversation l={l} onDraft={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt pour Claude") }} />
+      <Conversation l={l} onDraft={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt pour l'agent") }} />
 
       <Section title="Bâtiment et risques" action={
         <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
@@ -329,16 +329,16 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
   )
 }
 
-// "Rédiger avec Claude": a message Claude writes from the prompt. A reply needs a message received, a reminder one sent.
-// What Claude may do for a listing, through the prompt: in the dossier's header, analyse it or write a message
-// (« Demander à Claude »); in the conversation, write a message only
+// "Rédiger avec l'agent": a message the agent writes from the prompt. A reply needs a message received, a reminder one sent.
+// What the agent may do for a listing, through the prompt: in the dossier's header, analyse it or write a message
+// (« Demander à l'agent »); in the conversation, write a message only
 function DraftMenu({ l, onPick, onAnalyse, size = "sm" }: { l: Listing; onPick: (k: keyof typeof DRAFTS) => void; onAnalyse?: () => void; size?: "sm" | "xs" }) {
   const ms = l.messages ?? []
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size={size}>
-          {onAnalyse ? <MessageSquarePlusIcon data-icon="inline-start" /> : <PenLineIcon data-icon="inline-start" />}{onAnalyse ? "Demander à Claude" : "Rédiger avec Claude"}<ChevronDownIcon data-icon="inline-end" />
+          {onAnalyse ? <MessageSquarePlusIcon data-icon="inline-start" /> : <PenLineIcon data-icon="inline-start" />}{onAnalyse ? "Demander à l'agent" : "Rédiger avec l'agent"}<ChevronDownIcon data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
@@ -350,7 +350,7 @@ function DraftMenu({ l, onPick, onAnalyse, size = "sm" }: { l: Listing; onPick: 
           </>
         )}
         <DropdownMenuItem onSelect={() => onPick("offer")}>Une offre d'achat</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onPick("question")}>Les questions à l'agent</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onPick("question")}>Les questions à l'agence</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onPick("visit")}>Une demande de visite</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onPick("documents")}>Une demande de documents</DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -452,8 +452,8 @@ function Synthesis({ l, aids }: { l: Listing; aids: Parameters<typeof review>[1]
 }
 
 const CHANNEL_ICON = { email: MailIcon, sms: MessageSquareTextIcon, phone: PhoneIcon, visit: HouseIcon } as const
-// The conversation with the agent or the seller, in order: the user's messages on the right (Claude's drafts, those
-// sent), the received ones on the left (pasted, or a call summed up). Claude reads it before writing the next one.
+// The conversation with the agency or the seller, in order: the user's messages on the right (the agent's drafts, those
+// sent), the received ones on the left (pasted, or a call summed up). The agent reads it before writing the next one.
 function Conversation({ l, onDraft }: { l: Listing; onDraft: (k: keyof typeof DRAFTS) => void }) {
   const { slug, reload } = useSearch()
   const ms = (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date))
@@ -465,7 +465,7 @@ function Conversation({ l, onDraft }: { l: Listing; onDraft: (k: keyof typeof DR
   }
   return (
     <Section title="Conversation" action={<span className="flex flex-wrap justify-end gap-1.5"><AddMessage l={l} /><DraftMenu size="xs" l={l} onPick={onDraft} /></span>}>
-      {!ms.length && <p className="text-sm text-muted-foreground">Aucun message. « Ajouter » garde une réponse de l'agent ou le résumé d'un appel ; « Rédiger avec Claude » met la demande dans le prompt, et Claude lit toute la conversation avant d'écrire.</p>}
+      {!ms.length && <p className="text-sm text-muted-foreground">Aucun message. « Ajouter » garde une réponse de l'agence ou le résumé d'un appel ; « Rédiger avec l'agent » met la demande dans le prompt, et l'agent lit toute la conversation avant d'écrire.</p>}
       <ol className="flex flex-col gap-2">{ms.map(m => <Bubble key={m.id} m={m} onChange={b => change(m, b)} />)}</ol>
     </Section>
   )
@@ -478,7 +478,7 @@ function Bubble({ m, onChange }: { m: Message; onChange: (b: { sent?: boolean; d
     <li className={cn("flex flex-col gap-2 rounded-lg border p-3", mine ? "ml-8 bg-primary/5" : "mr-8 bg-muted/60")}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         <Icon className="size-4 text-muted-foreground" aria-label={m.channel ? CHANNEL_LABEL[m.channel] : "Message"} />
-        <b>{mine ? `Moi${m.to ? ` → ${m.to}` : ""}` : m.to ?? "L'agent ou le vendeur"}</b>
+        <b>{mine ? `Moi${m.to ? ` → ${m.to}` : ""}` : m.to ?? "L'agence ou le vendeur"}</b>
         {m.kind !== "other" && <span className="text-muted-foreground">{MESSAGE_LABEL[m.kind]}</span>}
         {m.amount && <span className="font-semibold">{eur(m.amount)}</span>}
         <span className="text-xs text-muted-foreground">{dateTime(m.date)}</span>
@@ -494,7 +494,7 @@ function Bubble({ m, onChange }: { m: Message; onChange: (b: { sent?: boolean; d
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Supprimer ce message ?</AlertDialogTitle>
-              <AlertDialogDescription>Il sera retiré de la conversation, et Claude ne le lira plus.</AlertDialogDescription>
+              <AlertDialogDescription>Il sera retiré de la conversation, et l'agent ne le lira plus.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Annuler</AlertDialogCancel>
@@ -509,7 +509,7 @@ function Bubble({ m, onChange }: { m: Message; onChange: (b: { sent?: boolean; d
 
 // now as a datetime-local value: "2026-10-27T18:30"
 const localNow = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
-// a message the user adds to the conversation: the agent's reply, a call summed up, or one they sent themselves
+// a message the user adds to the conversation: the agency's reply, a call summed up, or one they sent themselves
 function AddMessage({ l }: { l: Listing }) {
   const { slug, reload } = useSearch()
   const [open, setOpen] = useState(false), [from, setFrom] = useState<"them" | "me">("them"), [channel, setChannel] = useState<Channel>("email")
@@ -530,7 +530,7 @@ function AddMessage({ l }: { l: Listing }) {
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Ajouter un message</DialogTitle>
-          <DialogDescription>Une réponse de l'agent, le résumé d'un appel ou un message que vous avez envoyé : Claude le lira avant d'écrire le suivant.</DialogDescription>
+          <DialogDescription>Une réponse de l'agence, le résumé d'un appel ou un message que vous avez envoyé : l'agent le lira avant d'écrire le suivant.</DialogDescription>
         </DialogHeader>
         <FieldGroup>
           <Field>

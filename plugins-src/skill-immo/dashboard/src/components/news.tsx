@@ -9,7 +9,7 @@ import { num, permitLabel, permitWhat, titleOf, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
-// What the follow-up and the bell list: the feed's news (the server's watch, Claude's refresh) and the listings' own
+// What the follow-up and the bell list: the feed's news (the server's watch, the agent's refresh) and the listings' own
 // changes that an alert on takes (the « Alertes » tab), newest first, with the names of the user's alerts that took
 // them; an unread one has a dot and its tile in full color, the others are dimmed. Each kind has its color (index.css --news-*): the DPE's own class color for its tile, blue for a
 // drop and orange for a rise as the market badges, teal for a new listing, violet for the paid API's, red for an

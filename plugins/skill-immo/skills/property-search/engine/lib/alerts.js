@@ -1,5 +1,5 @@
 // The alerts of a search (<slug>/alerts.json), shared by Node and the dashboard: what of its news reaches « Suivi »,
-// the bell, the desktop notifications and Claude's refresh. An alert takes one event, at a place, when all its
+// the bell, the desktop notifications and the agent's refresh. An alert takes one event, at a place, when all its
 // conditions on the news' fields (FIELDS) hold; a news shows when one alert that is on takes it. The listings' events
 // happen in the search's zone only; a source's (`anywhere`: the DPE, the energy audits, the building permits) is
 // watched at the alert's own place too: a street, around an address, a commune. The default alerts carry the
@@ -133,7 +133,7 @@ function cleanPlace(p, event) {
   throw new Error('bad place')
 }
 
-// alerts.json as the dashboard or Claude sends it, checked at the door: the default ids turned off, 50 alerts of the
+// alerts.json as the dashboard or the agent sends it, checked at the door: the default ids turned off, 50 alerts of the
 // user's at most, each with a name, one event, its place and 10 conditions at most on that event's fields
 export function cleanAlerts(x) {
   const off = [...new Set(x?.off ?? [])].filter(id => DEFAULTS.some(a => a.id === id))

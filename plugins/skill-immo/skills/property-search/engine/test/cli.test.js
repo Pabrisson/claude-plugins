@@ -137,7 +137,7 @@ test('a classic search never calls Stream Estate', async () => {
   assert.equal(api.seen.length, before)
 })
 
-test('add: a URL goes to WebFetch (the API has no lookup by URL), one already fetched is known, a listing Claude read joins', async () => {
+test('add: a URL goes to WebFetch (the API has no lookup by URL), one already fetched is known, a listing the agent read joins', async () => {
   const { home, dir } = searchesFolder()
   const before = api.seen.length
   let r = await run(home, ['add', '-p', 'paul-bert', '--url', 'https://www.leboncoin.fr/ad/ventes_immobilieres/1.htm'])
@@ -159,7 +159,7 @@ test('add: a URL goes to WebFetch (the API has no lookup by URL), one already fe
   assert.equal(r.status, 4)
 })
 
-test("the alerts: the dashboard's, listed and replaced by Claude; an old Stream Estate alert only deleted; usage sums the log", async () => {
+test("the alerts: the dashboard's, listed and replaced by the agent; an old Stream Estate alert only deleted; usage sums the log", async () => {
   const { home, dir } = searchesFolder()
   const file = path.join(home, 'alerts-in.json')
   fs.writeFileSync(file, JSON.stringify({ off: ['status'], custom: [{ id: 'a-1', name: 'DPE rue Paul Bert', event: 'dpe', conditions: [{ field: 'street', op: 'contains', value: 'Paul Bert' }] }] }))
@@ -185,7 +185,7 @@ test("the alerts: the dashboard's, listed and replaced by Claude; an old Stream 
   assert.deepEqual([u.month, u.cap, u.by_search['paul-bert'].credits, u.unknown], [1, 500, 1, 1])
 })
 
-test('market: the asking price per m² of the zone, its last month shown to Claude', async () => {
+test('market: the asking price per m² of the zone, its last month shown to the agent', async () => {
   const { home, dir } = searchesFolder()
   let r = await run(home, ['market', '-p', 'paul-bert', '--accept-unknown'])
   assert.equal(r.status, 0, r.err)
@@ -236,7 +236,7 @@ test('several types: one v1 query per type, each with the criteria it takes', as
   assert.equal((await run(home, ['search', '-p', 'paul-bert', '--types', 'castle'])).status, 1)
 })
 
-test('a message for a listing: kept with it, shown to Claude', async () => {
+test('a message for a listing: kept with it, shown to the agent', async () => {
   const { home, dir } = searchesFolder('classic')
   fs.writeFileSync(path.join(dir, 'l.json'), JSON.stringify({ url: 'https://www.pap.fr/annonces/r1', price: 262000, area: 58, rooms: 3, publisher: 'Particulier' }))
   await run(home, ['add', '-p', 'paul-bert', '--file', path.join(dir, 'l.json')], { key: null })
@@ -277,7 +277,7 @@ function zoneCache(home, zone, classes) {
   put(`ademe/classes-${classes}.json`, { flat: { D: 1 } })
 }
 
-test("a street's zone follows its line in the BD TOPO; a zone drawn on the map replaces it once Claude applies it", async () => {
+test("a street's zone follows its line in the BD TOPO; a zone drawn on the map replaces it once the agent applies it", async () => {
   const { home, dir } = searchesFolder()
   const line = read(path.dirname(new URL('./fixtures/bdtopo-69383_5245.json', import.meta.url).pathname), 'bdtopo-69383_5245.json').features.map(f => f.geometry.coordinates)
   fs.mkdirSync(path.join(home, '.cache/bdtopo'))

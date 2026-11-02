@@ -18,14 +18,20 @@ these types. You find what is for sale there, and the local engine weighs each l
 
 It gives each listing a review (strong points, points to watch, questions to ask, each with its source) and a score out
 of 100 weighted by the user's priorities. You write the messages the user sends (an offer, questions, a visit request, a
-reply, a reminder, a request for documents), from each listing's conversation with the agent or the seller.
+reply, a reminder, a request for documents), from each listing's conversation with the agency or the seller.
 The user then works in a local dashboard, and its feedback comes back to you as a pasted prompt.
 
 `immo.mjs` below means `node "${CLAUDE_SKILL_DIR}/engine/immo.mjs"`, the path in double quotes (it can hold spaces or, on
 Windows, backslashes); the skill runs on macOS, Linux and Windows. References are in `${CLAUDE_SKILL_DIR}/references/`;
 read the one a step names before doing that step.
 
-Everything lives in the folder Claude Code runs in, the searches folder (`$IMMO_DIR` overrides it):
+Any agent can run this skill: `${CLAUDE_SKILL_DIR}` is this skill's folder, the one holding this SKILL.md (an agent that
+does not replace it uses that folder's path); AskUserQuestion is your tool for multiple-choice questions to the user
+(none: numbered choices in the chat, then wait for the answer); WebSearch and WebFetch are your web search and
+page-reading tools. The Stream Estate key is `$STREAM_ESTATE_API_KEY`: Claude Code's `/plugin configure
+skill-immo@pabrisson` exports it, any other agent reads it from the environment.
+
+Everything lives in the folder you run in, the searches folder (`$IMMO_DIR` overrides it):
 - one folder per search (`<slug>/`);
 - `.profile.json`, the buyer's profile;
 - `.cache/`, the open data and the credits log.

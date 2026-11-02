@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { api, type Listing, type MapRow, type Poi, type Profile, type PropertyType, type SearchData, type State, type Stats } from "@/lib/api"
 
-// what the user asks Claude, collected across the dashboard and copied as one prompt
+// what the user asks the agent, collected across the dashboard and copied as one prompt
 export type FeedbackKind = "affiner" | "élargir" | "zone" | "annonces" | "analyser" | "comparer" | "ajouter" | "chercher" | "message" | "question" | "parcelle"
 export type Feedback = { kind: FeedbackKind; text: string }
 // the sold unit price a type is weighed against, and the stats of its scope
@@ -24,7 +24,7 @@ type Ctx = {
   // what the decision aids of a listing read (lib/decide.js)
   aidsFor: (l: Listing) => { ref: Ref | null; pois: Poi[]; isochrones: NonNullable<SearchData["area"]["isochrones"]>; profile: Profile; criteria: SearchData["search"]["criteria"] }
   lastVisit: string | null
-  // the search changed on disk since the page loaded it (Claude or the server's watch at work): reloading the page
+  // the search changed on disk since the page loaded it (the agent or the server's watch at work): reloading the page
   // takes the change
   stale: boolean
   // the news not read yet, as of the last check (every few seconds)

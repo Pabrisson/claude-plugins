@@ -1,7 +1,8 @@
-// The Stream Estate API v1 (references/stream-estate.md), with the key of $STREAM_ESTATE_API_KEY that the plugin's
-// SessionStart hook exports: it never leaves the engine. The v1 says nothing of what a call cost: `charged` gets the
-// number of items it returned, and the log prices them. A 402 (no credits left) throws NO_CREDITS, and the caller
-// falls back to the assisted mode; a 429 waits for the delay the API gives, three times at most.
+// The Stream Estate API v1 (references/stream-estate.md), with the key of $STREAM_ESTATE_API_KEY (the plugin's
+// SessionStart hook exports it in Claude Code, any other agent passes its environment): it never leaves the engine.
+// The v1 says nothing of what a call cost: `charged` gets the number of items it returned, and the log prices them.
+// A 402 (no credits left) throws NO_CREDITS, and the caller falls back to the assisted mode; a 429 waits for the delay
+// the API gives, three times at most.
 import { routeOf } from './costs.js'
 
 export const REAL = 'https://api.stream.estate'

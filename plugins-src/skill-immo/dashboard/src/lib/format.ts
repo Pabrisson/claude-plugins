@@ -29,11 +29,11 @@ export const SCORE_LABEL = { price: "Prix", budget: "Budget", energy: "Énergie"
 export const LEVEL_LABEL = { below: "sous le marché", at: "au prix du marché", above: "au-dessus du marché" } as const
 export const STATUS_LABEL = { to_visit: "À visiter", visited: "Visité", offer: "Offre faite", dropped: "Écarté" } as const
 export const SALE_STATUS = { AVAILABLE: "Disponible", UNDER_OFFER: "Sous offre", SOLD: "Vendu", WITHDRAWN: "Retiré", EXPIRED: "Expiré" } as Record<string, string>
-// where a listing comes from: the API, or Claude (a page it read, a text the user pasted)
+// where a listing comes from: the API, or the agent (a page it read, a text the user pasted)
 export const ORIGIN = {
   "stream-estate": { short: "API", long: "Trouvée par l'API Stream Estate" },
-  websearch: { short: "Claude", long: "Lue par Claude sur le web" },
-  pasted: { short: "Claude", long: "Collée dans Claude" },
+  websearch: { short: "Agent", long: "Lue par l'agent sur le web" },
+  pasted: { short: "Agent", long: "Collée dans l'agent" },
   manual: { short: "Vous", long: "Saisie à la main" },
 } as const
 export const POI_LABEL: Record<string, string> = { transport: "Métro, tram, gare", bus: "Bus", shops: "Commerces", food: "Cafés et restaurants", schools: "Écoles et crèches", health: "Santé", parks: "Parcs" }
@@ -53,7 +53,7 @@ const SMALL = new Set(["de", "des", "du", "la", "le", "les", "et", "au", "aux", 
 export const titleCase = (s: string) => s.toLowerCase().split(" ").map((w, i) => (/^\d/.test(w) ? w.toUpperCase() : i && SMALL.has(w) ? w : w.replace(/^([dl]')?(\p{L})/u, (_, p = "", c: string) => p + c.toUpperCase()))).join(" ")
 // "oct. 2025"
 export const month = (d: string) => new Intl.DateTimeFormat("fr-FR", { month: "short", year: "numeric" }).format(new Date(d))
-// what the prompt asks Claude to look for: the listing of a recent DPE
+// what the prompt asks the agent to look for: the listing of a recent DPE
 export const dpeAsk = (d: DpeRow) => `l'annonce du DPE ${d.number} : ${TYPE_LABEL[d.type].toLowerCase()}${d.area ? ` ${num(d.area)} m²` : ""}, DPE ${d.energy} du ${date(d.date)}, ${d.address ?? `près de ${d.point[1].toFixed(5)}, ${d.point[0].toFixed(5)}`}`
 // the same for an energy audit: a house or a whole building, maybe for sale
 export const auditAsk = (a: AuditRow) => `l'annonce de l'audit énergétique ${a.number} : ${a.building ? "immeuble entier" : TYPE_LABEL[a.type].toLowerCase()}${a.area ? ` ${num(a.area)} m²` : ""}, classe ${a.energy}, audit du ${date(a.date)}, ${a.address ?? `près de ${a.point[1].toFixed(5)}, ${a.point[0].toFixed(5)}`}`
