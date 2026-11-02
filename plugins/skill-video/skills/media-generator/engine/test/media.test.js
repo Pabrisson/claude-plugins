@@ -142,10 +142,16 @@ test('an image: the estimate and exit 2 before the yes, nothing made; then the i
   assert.match(body.input_references[0].image_url.url, /^data:image\/png;base64,/)
   assert.ok(!('aspect_ratio' in body), 'an edit keeps its image\'s ratio')
   const [line] = ledger()
-  assert.deepEqual([line.provider, line.model, line.unit, line.estimate, line.actual, line.actual_known, line.by, line.status], ['openrouter', 'fake/img', 'usd', 0.04, 0.039, true, 'claude', 'done'])
+  assert.deepEqual([line.provider, line.model, line.unit, line.estimate, line.actual, line.actual_known, line.by, line.status], ['openrouter', 'fake/img', 'usd', 0.04, 0.039, true, 'agent', 'done'])
   const [id] = media()
   assert.ok(fs.existsSync(at('media', id, 'out-1.png')))
   assert.ok(fs.existsSync(at('media', id, 'in-references-1.png')), 'the inputs are copied in for a remix')
+  // a job and a ledger line of skill-video 1.49 and before say by: 'claude': the engine reads them as 'agent'
+  const old = f => fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/"by": ?"agent"/g, '"by": "claude"'))
+  old(at('media', id, 'job.json'))
+  old(at('ledger.jsonl'))
+  assert.equal(JSON.parse((await cli('jobs', id)).out).by, 'agent')
+  assert.match((await cli('credits')).out, / · agent\n/)
 })
 
 test('a tool: its template filled from the fields, its inputs sent in order', async () => {
@@ -415,7 +421,7 @@ test('styles: Restyle redraws in a style, Custom adds one if asked; a Library st
   const t = await cli('tools', 'image', '--search', 'restyle')
   assert.match(t.out, /image restyle \(edit, Style\)/)
   assert.match(t.out, /--field style=Hand-painted cel\|.*\|Knitted yarn world\|.*\|<a style of the Library>/)
-  // a long list is printed once: the next tools with the same choices point at it, the output stays short in Claude's context
+  // a long list is printed once: the next tools with the same choices point at it, the output stays short in the agent's context
   const sheets = (await cli('tools', 'image', '--search', 'references')).out
   assert.equal(sheets.match(/Knitted yarn world/g).length, 1, sheets)
   assert.match(sheets, /--field style=<the \d+ choices of image \S+'s style above>\|<a style of the Library>/)
@@ -771,7 +777,7 @@ test('a song on OpenRouter (Lyria): one prompt from what is written, images besi
   assert.equal(sent('/api/v1/chat/completions').body.messages[0].content[1].type, 'image_url')
 })
 
-test('draft: Claude\'s prompt for the composer, nothing generated; credits: balances and this month', async () => {
+test('draft: the agent\'s prompt for the composer, nothing generated; credits: balances and this month', async () => {
   const before = media().length
   await cli('draft', '--space', 'video', '--tool', 'orbit', '--model', 'openrouter:fake/vid', '--prompt', 'slow orbit around the vase')
   const d = JSON.parse(fs.readFileSync(at('.cache', 'drafts.json'), 'utf8')).video
@@ -791,7 +797,7 @@ test('the folder\'s .gitignore keeps the media, elements, styles, ledger and set
   assert.deepEqual(['media/x/out.png', 'elements/Lulu/a.png', 'styles/Ink/a.png', 'ledger.jsonl', 'settings.json', '.cache/models-video.json'].map(ignored), [false, false, false, false, false, true])
 })
 
-test('the server: state, estimate, a threshold asks first (409), a confirmed click runs to the end; it stops with its Claude', { timeout: 30000 }, async t => {
+test('the server: state, estimate, a threshold asks first (409), a confirmed click runs to the end; it stops with its agent', { timeout: 30000 }, async t => {
   const port = 42000 + Math.floor(Math.random() * 500), url = `http://127.0.0.1:${port}`
   // its own catalog: the server reads the fake's at its start
   const srv = spawn(process.execPath, [engine, 'serve'], { cwd: home, env: { ...env, MEDIA_GENERATOR_PORT: `${port}`, MEDIA_GENERATOR_CATALOG: path.join(home, 'catalog-server.json') } })
@@ -923,11 +929,11 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.equal((await post('/api/import', { path: cut.body.path })).body.kind, 'video')
   fs.writeFileSync(at('.cache', 'uploads', '124-notes.txt'), 'hi')
   assert.deepEqual([(await post('/api/import', { path: at('talk.mp4') })).code, (await post('/api/import', { path: at('.cache', 'uploads', '124-notes.txt') })).code], [403, 400])
-  // the Claude it works for quits: the server stops
-  const claude = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'])
-  await post(`/__media-generator/owner?pid=${claude.pid}`, {})
+  // the agent it works for quits: the server stops
+  const agent = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'])
+  await post(`/__media-generator/owner?pid=${agent.pid}`, {})
   const stopped = await new Promise(ok => { const t = setTimeout(() => ok(false), 8000); srv.on('exit', () => { clearTimeout(t); ok(true) }) })
-  assert.ok(stopped, 'the server stops once its Claude has quit')
+  assert.ok(stopped, 'the server stops once its agent has quit')
 })
 
 test('workspaces: the Default one from the start, new generations join the current one; a timeline in words, rendered, zipped', { timeout: 60000 }, async t => {
@@ -939,7 +945,7 @@ test('workspaces: the Default one from the start, new generations join the curre
   const state = () => fetch(url + '/api/state').then(r => r.json())
   const s0 = await state()
   assert.deepEqual([s0.settings.workspace.current, s0.workspaces.find(w => w.slug === 'default').name], ['default', 'Default workspace'])
-  // a new one becomes the current one: Claude's generations and the page's imports join it, --workspace picks another
+  // a new one becomes the current one: the agent's generations and the page's imports join it, --workspace picks another
   assert.match((await cli('workspaces', 'new', 'Pub', 'Lulu')).out, /workspace pub-lulu made, and current/)
   const made = await cli('image', '--prompt', 'a red fox', '--model', 'fake/img', '--spend', '1')
   const fox = made.out.match(/→ media\/(\S+)/)[1]
@@ -1007,7 +1013,7 @@ test('workspaces: the Default one from the start, new generations join the curre
     assert.match(execFileSync('unzip', ['-p', zip, 'Pub Lulu/edit/EDIT.md'], { encoding: 'utf8' }), new RegExp(`\\.\\./videos/${imported['talk.mp4']}-talk\\.mp4, source 0\\.50`))
     assert.equal(execFileSync('unzip', ['-Z1', fs.writeFileSync(zip, Buffer.from(await (await fetch(`${url}/api/workspaces/pub-lulu/zip`)).arrayBuffer())) ?? zip], { encoding: 'utf8' }).includes('edit/'), false)
   }
-  // the CLI shows it to Claude; removed, its media stay and leave it, the Default one is current again and stays
+  // the CLI shows it to the agent; removed, its media stay and leave it, the Default one is current again and stays
   assert.match((await cli('workspaces', 'show', 'pub-lulu')).out, /Pub Lulu \(pub-lulu, current\): 3 files[\s\S]+elements: @Fox[\s\S]+V1 \(video/)
   assert.equal((await post('/api/workspaces', { slug: 'default', remove: true })).code, 400)
   await post('/api/workspaces', { slug: 'pub-lulu', remove: true })

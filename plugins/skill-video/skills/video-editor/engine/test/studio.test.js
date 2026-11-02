@@ -41,7 +41,7 @@ test('reviews are written with their envelope', async () => {
   assert.equal((await fetch(base + 'api/reviews/v9', { method: 'POST', body: '{"comments":[]}' })).status, 400)
 })
 
-test("a stale studio tab keeps Claude's answers", async () => {
+test("a stale studio tab keeps the agent's answers", async () => {
   fs.writeFileSync(path.join(dir, 'files/reviews/v1.json'), JSON.stringify({ comments: [{ id: 'a1', text: 'x', resolved: true, reply: 'done' }] }))
   await save([{ id: 'a1', text: 'x', resolved: false }])
   assert.deepEqual(onDisk().comments[0], { id: 'a1', text: 'x', resolved: true, reply: 'done' })
@@ -130,23 +130,23 @@ test('one studio server per projects folder, side by side', async () => {
   }
 })
 
-test('the server stops once the Claude it works for has quit', async () => {
+test('the server stops once the agent it works for has quit', async () => {
   const p1 = 42500 + Math.floor(Math.random() * 400), at = `http://127.0.0.1:${p1}/__video-editor`
   const other = spawn(process.execPath, [engine, 'serve'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, VIDEO_EDITOR_PORT: `${p1}` } })
-  const claude = spawn('sleep', ['30']), exited = new Promise(ok => other.on('exit', ok))
+  const agent = spawn('sleep', ['30']), exited = new Promise(ok => other.on('exit', ok))
   try {
     for (let i = 0; i < 50 && !(await fetch(at).then(() => true, () => false)); i++) await new Promise(ok => setTimeout(ok, 100))
     assert.equal((await fetch(`${at}/owner?pid=x`, { method: 'POST' })).status, 400)
-    assert.equal((await fetch(`${at}/owner?pid=${claude.pid}`, { method: 'POST' })).status, 200)
-    claude.kill()
+    assert.equal((await fetch(`${at}/owner?pid=${agent.pid}`, { method: 'POST' })).status, 200)
+    agent.kill()
     assert.equal(await Promise.race([exited, new Promise(ok => setTimeout(() => ok('still up'), 6000))]), 0)
   } finally {
-    claude.kill()
+    agent.kill()
     other.kill()
   }
 })
 
-test('progress: the log, and the file Claude changed last (not the engine\'s own files)', async () => {
+test('progress: the log, and the file the agent changed last (not the engine\'s own files)', async () => {
   await up()
   fs.writeFileSync(path.join(dir, 'About.md'), '# demo\n')
   fs.writeFileSync(path.join(dir, 'source/scene.js'), 'export default () => {}')
@@ -160,5 +160,6 @@ test('progress: the log, and the file Claude changed last (not the engine\'s own
   fs.writeFileSync(project, JSON.stringify({ ...JSON.parse(before), created: '2026-10-25T18:00:00.000Z' }))
   p = await (await fetch(base + 'api/progress')).json()
   fs.writeFileSync(project, before)
-  assert.deepEqual([p.steps[0].label, p.started], ['Brief', '2026-10-25T18:00:00.000Z'])
+  // a step of skill-video 1.49 and before (by: claude) comes back as the agent's
+  assert.deepEqual([p.steps[0].label, p.steps[0].by, p.started], ['Brief', 'agent', '2026-10-25T18:00:00.000Z'])
 })

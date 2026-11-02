@@ -15,7 +15,7 @@ import { FAMILIES, familyArt, GroupIcon, lastIn, StyleCard, StyleThumb, styleKey
 
 type Open = { preset: Preset } | { yours: string }
 const SOUND_FAMILIES = ["music", "voice", "sound"] as const
-// how a sound style reads, by its family: the placeholder of its words, what Claude asks to write them
+// how a sound style reads, by its family: the placeholder of its words, what the agent is asked to write them
 const WORDS: Record<SoundFamily, { placeholder: string; parts: string }> = {
   music: { placeholder: "warm analog synths, breathy female vocals, 90 BPM", parts: "genre, instruments, tempo, mood and vocals, an artist's sound described without their name" },
   voice: { placeholder: "a calm narrator, slow and warm, gentle pauses", parts: "the delivery: pace, pitch, mood, how close to the microphone" },
@@ -326,7 +326,7 @@ function NewStyle({ state, engine, sound, onClose, onSaved }: { state: State; en
       setBusy(false)
     }
   }
-  function askClaude() {
+  function askAgent() {
     const n = name || "<a short name>"
     const text = sound
       ? [
@@ -343,7 +343,7 @@ function NewStyle({ state, engine, sound, onClose, onSaved }: { state: State; en
           "Then tell me how to use it.",
         ]
     navigator.clipboard.writeText(text.join("\n")).then(
-      () => toast.success("Prompt copied", { description: "Paste it in Claude Code: Claude makes the style." }),
+      () => toast.success("Prompt copied", { description: "Paste it in your agent: the agent makes the style." }),
       () => toast.error("The clipboard refused the copy")
     )
   }
@@ -401,8 +401,8 @@ function NewStyle({ state, engine, sound, onClose, onSaved }: { state: State; en
           </>
         )}
         <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-          <Button variant="outline" onClick={askClaude} title="Copies a request for Claude: it writes the words and saves the style">
-            <SparklesIcon /> Ask Claude
+          <Button variant="outline" onClick={askAgent} title="Copies a request for the agent: it writes the words and saves the style">
+            <SparklesIcon /> Ask Agent
           </Button>
           <span className="flex-1" />
           <Button variant="ghost" onClick={onClose}>Cancel</Button>

@@ -174,7 +174,7 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
   const [period, setPeriod] = useState<Period>("month")
   const [provider, setProvider] = useState<"all" | Who>("all")
   const [kinds, setKinds] = useState<Kind[]>(KINDS)
-  const [by, setBy] = useState<string[]>(["dashboard", "claude"])
+  const [by, setBy] = useState<string[]>(["dashboard", "agent"])
   const [ws, setWs] = useState("all")
   const inWs = (id: string) => ws === "all" || !!state.media.find((j) => j.id === id)?.workspaces?.includes(ws)
   const [ledger, setLedger] = useState<LedgerLine[]>([])
@@ -243,7 +243,7 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
         </div>
         <div>
           <Label>By</Label>
-          <MultiChips options={["dashboard", "claude"]} value={by} label={(b) => (b === "claude" ? "Claude" : "Dashboard")} icon={(b) => (b === "claude" ? <SparklesIcon /> : <LayoutDashboardIcon />)} onChange={setBy} />
+          <MultiChips options={["dashboard", "agent"]} value={by} label={(b) => (b === "agent" ? "Agent" : "Dashboard")} icon={(b) => (b === "agent" ? <SparklesIcon /> : <LayoutDashboardIcon />)} onChange={setBy} />
         </div>
         <WorkspaceFilter state={state} value={ws} onChange={setWs} />
         <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
@@ -337,13 +337,13 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
                 <td className={cn("p-2 text-right whitespace-nowrap tabular-nums", r.actual ? "font-semibold text-cost" : "text-muted-foreground")}>
                   {r.status === "running" ? "running" : `${money(r.actual, r.unit, usd)}${r.status === "failed" ? ", failed" : r.known ? "" : " (est.)"}`}
                 </td>
-                <td className="p-2 text-xs text-muted-foreground">{r.by === "claude" ? "Claude" : "dashboard"}</td>
+                <td className="p-2 text-xs text-muted-foreground">{r.by === "agent" ? "Agent" : "dashboard"}</td>
                 <td className="p-2 text-right">{r.job && <Button size="xs" variant="ghost" onClick={() => setOpen(r.job)}>View</Button>}</td>
               </tr>
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-muted-foreground">{ledger.length ? "Nothing spent in this period." : <NoGenerations what="Each paid generation lands here with its estimate and its real cost, by you or by Claude." />}</td>
+                <td colSpan={8} className="p-6 text-center text-muted-foreground">{ledger.length ? "Nothing spent in this period." : <NoGenerations what="Each paid generation lands here with its estimate and its real cost, by you or by the agent." />}</td>
               </tr>
             )}
           </tbody>

@@ -1,6 +1,6 @@
 # The tool catalogs
 
-`engine/tools/image.json`, `video.json` and `audio.json` list the tools. The dashboard's tool picker and Claude read
+`engine/tools/image.json`, `video.json` and `audio.json` list the tools. The dashboard's tool picker and the agent read
 the same files: a new tool is a new entry, nothing else to code.
 
 ```json

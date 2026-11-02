@@ -14,7 +14,7 @@ const cli = (...argv) => execFileSync(process.execPath, [engine, ...argv], { env
 const read = rel => fs.readFileSync(path.join(home, rel), 'utf8')
 test.after(() => fs.rmSync(home, { recursive: true, force: true }))
 
-test('without VIDEO_EDITOR_DIR the projects folder is where Claude Code runs, or the parent of the video run in', () => {
+test('without VIDEO_EDITOR_DIR the projects folder is where the agent runs, or the parent of the video run in', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'video-cwd-')), env = { ...process.env }
   delete env.VIDEO_EDITOR_DIR
   const run = (cwd, ...argv) => execFileSync(process.execPath, [engine, ...argv], { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
@@ -413,7 +413,7 @@ test('beats lays the grid of a tempo or measures a track; fix corrects a spoken 
   assert.throws(() => cli('fix', '30', 'x', '-p', 'face'), /no spoken word/)
 })
 
-test('the progress log: the commands and Claude log their steps, a command that dies leaves its step failed', { timeout: 300000 }, () => {
+test('the progress log: the commands and the agent log their steps, a command that dies leaves its step failed', { timeout: 300000 }, () => {
   const steps = () => JSON.parse(read('wait/.cache/progress.json')).steps.map(x => [x.label, x.by, x.state, x.done ?? null, x.total ?? null])
   cli('init', 'wait', '--formats', '16:9', '--renders', '720p', '--rules', 'none')
   assert.deepEqual(steps(), [['Project created', 'engine', 'done', null, null]])
@@ -425,14 +425,14 @@ test('the progress log: the commands and Claude log their steps, a command that 
   cli('render', '-p', 'wait')
   assert.deepEqual(steps(), [
     ['Project created', 'engine', 'done', null, null],
-    ['Writing the brief', 'claude', 'done', null, null],
-    ['Writing the scene', 'claude', 'running', null, null],
+    ['Writing the brief', 'agent', 'done', null, null],
+    ['Writing the scene', 'agent', 'running', null, null],
     ['Delivering the video', 'engine', 'failed', null, null],
     ['Rendering 16:9 720p', 'engine', 'done', 3, 3],
   ])
-  // a version delivered ends Claude's step: the studio offers it once every step of its work is over
+  // a version delivered ends the agent's step: the studio offers it once every step of its work is over
   cli('final', '-p', 'wait')
-  assert.deepEqual(steps().filter(x => x[1] === 'claude').map(x => x[2]), ['done', 'done'])
+  assert.deepEqual(steps().filter(x => x[1] === 'agent').map(x => x[2]), ['done', 'done'])
   assert.throws(() => cli('status', '-p', 'wait'), /usage: status/)
 })
 

@@ -53,7 +53,7 @@
 :root {
     /* the studio's single accent (blue-500): badges, ranges, picks, active toggles */
     --highlight: oklch(0.623 0.214 259.815);
-    /* resolved items and Claude's replies */
+    /* resolved items and the agent's replies */
     --done: oklch(0.765 0.177 163.223);
     --background: oklch(1 0 0);
     --foreground: oklch(0.141 0.005 285.823);

@@ -4,7 +4,7 @@ Contents: the files of `.style/` · the keys of `style.json` · what is not here
 of SKILL.md)
 
 The style is **who the user is and what their videos look and sound like**. Each project has its own: it lives in
-`.style/` at the root of the projects folder (the project Claude Code runs in, next to the videos), never in the
+`.style/` at the root of the projects folder (the project the agent runs in, next to the videos), never in the
 plugin, whose updates replace its folder:
 
 | File | |

@@ -14,7 +14,7 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { Textarea } from "@/components/ui/textarea"
 
-// The prompt sent to Claude, shown before copying; it can be edited first. ⌘↵ copies.
+// The prompt sent to the agent, shown before copying; it can be edited first. ⌘↵ copies.
 export function PromptDialog({
   prompt,
   count,
@@ -42,9 +42,9 @@ export function PromptDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>Prompt for Claude</DialogTitle>
+          <DialogTitle>Prompt for the agent</DialogTitle>
           <DialogDescription>
-            {count} change{count > 1 ? "s" : ""} to apply. Review, edit if needed, copy, then paste it into Claude.
+            {count} change{count > 1 ? "s" : ""} to apply. Review, edit if needed, copy, then paste it into your agent.
           </DialogDescription>
         </DialogHeader>
         <Textarea

@@ -2,7 +2,7 @@
 // media-generator CLI and the dashboard's server. Images, videos, voices, music and sounds through the model routers of
 // providers/; ElevenLabs straight (its voices with their captions, sound effects, music, music for a video, stems, voice
 // design and remix, transcripts), its voice changes, dubbing and voice isolation by eleven.mjs.
-// Everything lives in the folder Claude Code
+// Everything lives in the folder the agent
 // runs in ($MEDIA_GENERATOR_DIR overrides it): media/ (one folder per generation), elements/ (the @ references),
 // styles/ (the Library's styles), ledger.jsonl (what was spent), settings.json (thresholds, caps, defaults), .cache/
 // (catalogs, uploads, drafts)
@@ -250,7 +250,7 @@ async function models(kind, name = active()) {
 // a model of another router (a remix, a default set before a switch) runs on the active one when it has it
 async function modelOf(kind, id) {
   const { name, model, provider } = routerOf(id), all = await models(kind), m = all.find(x => x.model === model)
-  if (!m && name === 'elevenlabs') throw userError(`ElevenLabs' ${model} needs its key (/plugin configure skill-video@pabrisson): media.mjs models audio`)
+  if (!m && name === 'elevenlabs') throw userError(`ElevenLabs' ${model} needs its key (/plugin configure skill-video@pabrisson, or ELEVENLABS_API_KEY): media.mjs models audio`)
   if (!m) throw userError(`no ${kind} model ${model} on ${PROVIDERS[active()].label}${name !== active() ? ` (it is ${provider.label}'s): pick another, or switch the router in Settings` : ''}: media.mjs models ${kind}`)
   return m
 }
@@ -1451,7 +1451,7 @@ async function plan(spec) {
   return { tool, prompt, provider: m.provider, model: m.model, name: m.name, request, estimate }
 }
 
-// whether this spend may go: the CLI needs --spend (Claude asked the user), the dashboard's click is the yes unless
+// whether this spend may go: the CLI needs --spend (the agent asked the user), the dashboard's click is the yes unless
 // a threshold or the cap says otherwise. Throws a code-2 error with the estimate
 function gate(p, { spend, acceptUnknown, force, confirm, by }) {
   if (p.provider === 'local') return
@@ -1467,7 +1467,8 @@ function gate(p, { spend, acceptUnknown, force, confirm, by }) {
 // ---------- a generation: its folder, its run, its ledger line ----------
 
 const mediaDir = id => at('media', id)
-const readJob = id => readJson(path.join(mediaDir(id), 'job.json'))
+// a job of skill-video 1.49 and before says by: 'claude', read as 'agent'
+const readJob = id => (j => (j.by === 'claude' ? { ...j, by: 'agent' } : j))(readJson(path.join(mediaDir(id), 'job.json')))
 const saveJob = job => writeJson(path.join(mediaDir(job.id), 'job.json'), job)
 const alive = pid => { try { return !!pid && (process.kill(pid, 0), true) } catch (e) { return e.code === 'EPERM' } }
 const newId = tool => `${new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)}-${tool}-${randomBytes(2).toString('hex')}`
@@ -1993,7 +1994,7 @@ async function generate(kind) {
       const p = total(await plans(spec))
       return console.log(JSON.stringify({ tool: p.tool.id, provider: p.provider, model: p.model, prompt: p.prompt, estimate: p.estimate, shown: money(p.estimate.amount, p.estimate.unit, per1000()) }))
     }
-    const jobs = await create(spec, { spend: num(opt.spend), acceptUnknown: opt['accept-unknown'], force: opt.force, by: 'claude' })
+    const jobs = await create(spec, { spend: num(opt.spend), acceptUnknown: opt['accept-unknown'], force: opt.force, by: 'agent' })
     for (const job of jobs) console.log(`${job.label} · ${job.name} · ${money(job.estimate.amount, job.estimate.unit, per1000())} → media/${job.id}`)
     // a batch's jobs run side by side
     const all = await Promise.all(jobs.map(j => run(j.id)))
@@ -2029,7 +2030,7 @@ async function cmdModels(kind = 'video') {
 }
 
 // how a field is given on the command line: an option's label (Auto for an empty one), several in order, words. A long
-// list already printed above (the 82 preset styles…) points at it instead: the output stays short in Claude's context
+// list already printed above (the 82 preset styles…) points at it instead: the output stays short in the agent's context
 function fieldHelp(f, seen, where) {
   let list = f.options?.map(o => (typeof o === 'object' ? o.label ?? o.value : o) || 'Auto').join('|')
   if (seen && list?.length > 120) {
@@ -2078,7 +2079,7 @@ async function cmdTools(kind) {
   }
 }
 
-// draft: Claude's prompt for the dashboard's composer (Copy prompt), shown with a Reload bar; nothing is generated
+// draft: the agent's prompt for the dashboard's composer (Copy prompt), shown with a Reload bar; nothing is generated
 function draft() {
   const space = opt.space ?? 'video'
   if (!KINDS.includes(space)) die(`--space is one of ${KINDS.join(', ')}`)
@@ -2329,7 +2330,7 @@ function doctor() {
   console.log(!has('uv') ? `missing uv: ${INSTALL.uv}, for Depth map and Remove background (run here, free); everything else works`
     : fetched ? 'ok      uv and the vision models (Depth map, Remove background)'
       : 'ok      uv; the vision models are not fetched yet: media.mjs setup vision (330 MB, once), or at their first use')
-  console.log(process.env.OPENROUTER_API_KEY ? 'openrouter: key set' : 'openrouter: no key, nothing can be generated; the plugin\'s secret: /plugin configure skill-video@pabrisson')
+  console.log(process.env.OPENROUTER_API_KEY ? 'openrouter: key set' : 'openrouter: no key, nothing can be generated; the plugin\'s secret: /plugin configure skill-video@pabrisson, or OPENROUTER_API_KEY')
   console.log(process.env.OPENROUTER_MANAGEMENT_KEY ? 'openrouter management key: set (the account\'s balance)' : 'openrouter management key: not set (the key\'s own limit only)')
   console.log(process.env.KIE_API_KEY ? 'kie: key set' : 'kie: no key (the default router: with OpenRouter\'s key alone, switch the router in Settings › Router)')
   console.log(`active router: ${PROVIDERS[active()].label}${PROVIDERS[active()].key() ? '' : ', without its key: nothing can be generated'}`)
@@ -2693,26 +2694,37 @@ function serve() {
   }, e => console.error(`${p.label}: its catalog could not be read (${e.message}), the last one kept`))
 }
 
-// the Claude processes the server works for (each `studio` adds its own): it quits once they have all quit, like
+// the agent processes the server works for (each `studio` adds its own): it quits once they have all quit, like
 // video-editor's studio. A server nobody registered with (started by hand, the tests) runs until stopped
 const owners = new Set()
 function watchOwner(pid) {
   if (!pid) return
   if (!owners.size) setInterval(() => {
     for (const o of owners) if (!alive(o)) owners.delete(o)
-    if (!owners.size) { console.log('every Claude this server worked for has quit: stopping'); process.exit(0) }
+    if (!owners.size) { console.log('every agent this server worked for has quit: stopping'); process.exit(0) }
   }, 2000)
   owners.add(pid)
 }
-// the Claude Code this command runs under: the nearest ancestor named claude, null outside one
+// the agent this command runs under: the nearest ancestor named after one (Claude Code, Codex, OpenCode, Cursor,
+// Goose, Amp…) or a node/bun/python running one (Gemini CLI, Qwen Code, Copilot CLI…); null outside one
+// ponytail: known names only, another agent's server runs until stopped: add its name to AGENT
 // ponytail: null on Windows (no ps -o), its server then runs until stopped
-function claudePid() {
+const AGENT = /^(claude|codex|gemini|qwen|copilot|opencode|cursor-agent|goose|amp|crush|droid|kiro-cli|auggie)(-cli|-code)?$/i
+function agentPid() {
   try {
     const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { ...HIDE, encoding: 'utf8' }).trim().split('\n').map(l => {
       const [, pid, ppid, comm] = l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
       return [+pid, { ppid: +ppid, comm }]
     }))
-    for (let pid = process.ppid; pid > 1 && procs.has(pid); pid = procs.get(pid).ppid) if (/^claude$/i.test(path.basename(procs.get(pid).comm))) return pid
+    for (let pid = process.ppid; pid > 1 && procs.has(pid); pid = procs.get(pid).ppid) {
+      const name = path.basename(procs.get(pid).comm).replace(/\.exe$/i, '')
+      if (AGENT.test(name)) return pid
+      // node/bun/python running an agent's script: a word of its path names it (…/@google/gemini-cli/dist/index.js)
+      if (/^(node|bun|deno|python3?)$/i.test(name)) {
+        const script = execFileSync('ps', ['-o', 'args=', '-p', `${pid}`], { ...HIDE, encoding: 'utf8' }).trim().split(/\s+/).slice(1).find(a => !a.startsWith('-')) ?? ''
+        if (script.split(/[/\\]/).some(w => AGENT.test(w.replace(/\.(m?js|py)$/i, '')))) return pid
+      }
+    }
   } catch {}
   return null
 }
@@ -2736,7 +2748,7 @@ async function findServer() {
 }
 async function studio() {
   if (!fs.existsSync(path.join(STUDIO, 'index.html'))) die(`the dashboard is not built (${STUDIO})`)
-  const url = await findServer(), owner = claudePid()
+  const url = await findServer(), owner = agentPid()
   if (owner) await fetch(url + `__media-generator/owner?pid=${owner}`, { method: 'POST' }).catch(() => {})
   console.log(`dashboard: ${url}`)
   if (opt.open) spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open', [url], { detached: true, ...HIDE, stdio: 'ignore' }).on('error', () => {}).unref()
@@ -2760,7 +2772,7 @@ function relay(argv) {
 }
 async function cliAssist(what) {
   try {
-    const r = await assist(what, opt.prompt ?? args.join(' '), { by: 'claude', spend: num(opt.spend), estimate: opt.estimate })
+    const r = await assist(what, opt.prompt ?? args.join(' '), { by: 'agent', spend: num(opt.spend), estimate: opt.estimate })
     if (r.shown) return console.log(JSON.stringify(r))
     for (const [i, x] of r.texts.entries()) console.log(`${r.texts.length > 1 ? `--- version ${i + 1}${x.title ? `: ${x.title}` : ''}\n` : ''}${x.text}`)
   } catch (e) { die(e.message, e.code === 2 ? 2 : 1) }

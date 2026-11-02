@@ -118,7 +118,7 @@ export default function App() {
   }, [])
 
   // what is being done on the video, and a version that lands, once every step of the work that made it is over (final
-  // ends Claude's own): the first one reloads the page by itself, the next ones are offered
+  // ends the agent's own): the first one reloads the page by itself, the next ones are offered
   useEffect(() => {
     if (!project) return
     const poll = () =>
@@ -261,7 +261,7 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(text)
       setPrompt(null)
-      toast.success("Prompt copied. Paste it into Claude.")
+      toast.success("Prompt copied. Paste it into your agent.")
     } catch {
       toast.error("Copy refused by the browser: select the text and copy it by hand.")
     }

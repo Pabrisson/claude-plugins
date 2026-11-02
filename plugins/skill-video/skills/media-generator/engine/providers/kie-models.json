@@ -2816,7 +2816,12 @@
       "name": "H3",
       "kie": {
         "text": "minimax-h3/text-to-video",
-        "frames": "minimax-h3/image-to-video",
+        "frames": {
+          "model": "minimax-h3/image-to-video",
+          "fields": {
+            "aspect_ratio": null
+          }
+        },
         "refs": "minimax-h3/reference-to-video",
         "video": "minimax-h3/reference-to-video"
       },

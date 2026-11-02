@@ -82,7 +82,7 @@ const project = (s: Omit<Settings, "workspace">) => ({
 const typed = (s: Settings): Record<string, Limit> =>
   Object.fromEntries(LIMITS.map((k) => { const [p, key] = k.split(".") as [Provider, "threshold" | "cap"], v = s[p][key]; return [k, { on: v != null, text: v != null ? String(v) : "" }] }))
 
-// Development's prompt for Claude Code: every model of both routers checked against its docs and wired, the ones each
+// Development's prompt for the agent: every model of both routers checked against its docs and wired, the ones each
 // router's catalog adds named first
 const listed = (m: Model) => `- ${m.model} (${m.name}; ${m.kind}, ${m.role}${capsOf(m).length ? `; ${capsOf(m).join(", ")}` : ""})`
 const wirePrompt = (added: Record<Router, Model[]>, engine: string) =>
@@ -152,7 +152,7 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
   const [defaults, setDefaults] = useState(saved.defaults)
   const [limits, setLimits] = useState(() => typed(saved))
   const [developer, setDeveloper] = useState(saved.developer.on)
-  // what this page last sent, and the settings last read: read ones other than it changed elsewhere (Claude's setup),
+  // what this page last sent, and the settings last read: read ones other than it changed elsewhere (the agent's setup),
   // and the page takes them
   const read = JSON.stringify(project(saved))
   const [sent, setSent] = useState(read)
@@ -312,7 +312,7 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
             </button>
           ))}
         </nav>
-        <p className="mt-auto text-xs text-muted-foreground">Saved in this folder's settings.json. The keys stay in Claude Code.</p>
+        <p className="mt-auto text-xs text-muted-foreground">Saved in this folder's settings.json. The keys stay in your agent's settings.</p>
       </Side>
 
       <Main title="Settings">
@@ -359,7 +359,7 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                     <span className="text-xs text-muted-foreground">{p.what}, in {usd ? "USD" : "credits"}</span>
                     <span className={cn("ml-auto text-xs", !t.on && !c.on ? "text-cost" : "text-muted-foreground")}>{summary}</span>
                   </div>
-                  <Row title="Ask before spending more than" about="A generation above this asks for your yes first, here and with Claude." htmlFor={`${p.id}.threshold`}>
+                  <Row title="Ask before spending more than" about="A generation above this asks for your yes first, here and with the agent." htmlFor={`${p.id}.threshold`}>
                     {field(`${p.id}.threshold`, t, `Ask before spending more than, ${p.name}`)}
                     {hint(t)}
                   </Row>
@@ -396,7 +396,7 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
             </Row>
           </Section>
 
-          <Section id="models" icon={LayersIcon} title="Default models" about="The most precise one wins: a tool's own, then its use, then its kind. Each applies only to the tools its model fits, else the tool's first recommended model. Claude follows them too.">
+          <Section id="models" icon={LayersIcon} title="Default models" about="The most precise one wins: a tool's own, then its use, then its kind. Each applies only to the tools its model fits, else the tool's first recommended model. The agent follows them too.">
             {KINDS.map((k) => (
               <Fragment key={k}>
                 <Row title={cap(k)} about={`Every ${k} tool.`}>
@@ -437,13 +437,13 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                 )
               })
             ) : (
-              <Row title="Tools" about="A tool's own default, the most precise one, is set by Claude when you ask.">
+              <Row title="Tools" about="A tool's own default, the most precise one, is set by the agent when you ask.">
                 <span className="text-sm text-muted-foreground">None yet</span>
               </Row>
             )}
           </Section>
 
-          <Section id="keys" icon={KeyRoundIcon} title="API keys" about="They stay in Claude Code, never in this folder.">
+          <Section id="keys" icon={KeyRoundIcon} title="API keys" about="They stay in your agent's settings, never in this folder.">
             {keys.map((k) => (
               <Row key={k.name} title={k.name} icon={k.provider} about={k.about} end>
                 <Badge variant={k.set ? "secondary" : "outline"} className={cn("h-6 px-2.5", k.set && "bg-done/15 text-done")}>
@@ -451,7 +451,7 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                 </Badge>
               </Row>
             ))}
-            <Row title="Set or change a key" about="Run this in Claude Code, then restart it.">
+            <Row title="Set or change a key" about="Run this in your agent, or set its variable (KIE_API_KEY, OPENROUTER_API_KEY, OPENROUTER_MANAGEMENT_KEY, ELEVENLABS_API_KEY), then restart the agent.">
               <InputGroup>
                 <InputGroupInput readOnly value={COMMAND} aria-label="Command" className="font-mono text-xs md:text-xs" />
                 <InputGroupAddon align="inline-end">
@@ -555,12 +555,12 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
               <Row
                 title="Check and wire every model"
                 end
-                about="Copies a prompt to paste in Claude Code: Claude reads the docs and price lists of every model of both routers, Kie.ai and OpenRouter (the ones their catalogs add first), and of ElevenLabs, checks what each one takes (reference images, omni references, video edits, avatars, shots, keyframes, elements, voices…), every option of its API and every rule of its price, wires what is missing into the model lists, their options, their estimates and the tools that fit, then runs the tests and rebuilds this dashboard. Nothing is generated, nothing is spent."
+                about="Copies a prompt to paste in your agent: the agent reads the docs and price lists of every model of both routers, Kie.ai and OpenRouter (the ones their catalogs add first), and of ElevenLabs, checks what each one takes (reference images, omni references, video edits, avatars, shots, keyframes, elements, voices…), every option of its API and every rule of its price, wires what is missing into the model lists, their options, their estimates and the tools that fit, then runs the tests and rebuilds this dashboard. Nothing is generated, nothing is spent."
               >
                 <Button
                   variant="outline"
                   disabled={!catalogs}
-                  onClick={() => navigator.clipboard.writeText(wirePrompt(catalogs!, engine)).then(() => toast.success("Prompt copied: paste it in Claude Code"))}
+                  onClick={() => navigator.clipboard.writeText(wirePrompt(catalogs!, engine)).then(() => toast.success("Prompt copied: paste it in your agent"))}
                 >
                   {catalogs ? <CopyIcon aria-hidden /> : <LoaderCircleIcon className="animate-spin" aria-hidden />} Copy prompt
                 </Button>

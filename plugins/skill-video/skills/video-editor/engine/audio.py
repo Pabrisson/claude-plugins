@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["numpy"]
 # ///
-"""The video's sound. Claude writes the music and the sound design of each video in the project's source/sound.py
+"""The video's sound. The agent writes the music and the sound design of each video in the project's source/sound.py
 (references/sound-format.md); this file runs it and mixes it with the edited voice: the music ducks under the
 voice, the mix goes to -14 LUFS with its true peak under -1.5 dBTP. It is also the kit sound.py imports
 (`from audio import *`): placement, filters, noise, oscillators, envelopes, reverb, tape stop, and play(), which places

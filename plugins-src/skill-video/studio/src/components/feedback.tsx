@@ -94,7 +94,7 @@ function PickBadge({ label, color, icon: Icon, onRemove, onClick }: { label: str
   )
 }
 
-// a thumbnail with its ratio, as the prompt gives it to Claude
+// a thumbnail with its ratio, as the prompt gives it to the agent
 function Thumb({ img }: { img: Image }) {
   return (
     <span className="relative block">
@@ -228,7 +228,7 @@ function Item({
               <TooltipTrigger asChild>
                 <MessagesSquareIcon aria-label="Asked in the conversation" className="size-3.5 shrink-0 text-muted-foreground" />
               </TooltipTrigger>
-              <TooltipContent>Asked in the conversation with Claude</TooltipContent>
+              <TooltipContent>Asked in the conversation with the agent</TooltipContent>
             </Tooltip>
           )}
           {onChange && (

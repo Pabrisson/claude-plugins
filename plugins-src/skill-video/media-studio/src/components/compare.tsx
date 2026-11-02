@@ -55,7 +55,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
     .filter((i) => mediaKind(i.path) === kind)
   const results: Item[] = jobs
     .filter((j) => j.status === "done")
-    .flatMap((j) => j.outputs.map((o) => ({ path: outputPath(home, j, o), title: j.label, detail: `${j.name}${j.by === "claude" ? " · by Claude" : ""}`, cost: costOf(j, per1000), text: j.prompt })))
+    .flatMap((j) => j.outputs.map((o) => ({ path: outputPath(home, j, o), title: j.label, detail: `${j.name}${j.by === "agent" ? " · by Agent" : ""}`, cost: costOf(j, per1000), text: j.prompt })))
     .filter((r) => mediaKind(r.path) === kind)
   const at = results.findIndex((r) => r.path === file)
   const suggested = inputs.find((i) => i.key !== "sketch" && i.key !== "mask")?.path ?? results.find((r, n) => n > at && r.path !== file)?.path ?? results.find((r) => r.path !== file)?.path

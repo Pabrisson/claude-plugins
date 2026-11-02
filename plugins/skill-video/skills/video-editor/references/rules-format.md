@@ -9,7 +9,7 @@ one pack, or none.
 | Where | What |
 |---|---|
 | `<skill>/rules/<name>.md` | The packs of the plugin. Never edit them |
-| `.rules/<name>.md` in the projects folder (the project Claude Code runs in) | Personal packs, and the personal lines of a plugin pack (same name: it wins) |
+| `.rules/<name>.md` in the projects folder (the project the agent runs in) | Personal packs, and the personal lines of a plugin pack (same name: it wins) |
 
 A project freezes its pack's merged params in `source/rules.json` at `init` (`rules use` changes them, `rules set`
 adds the project's overrides). The text is not frozen: `video.mjs rules show -p <slug>` always gives the pack's
@@ -24,7 +24,7 @@ description: One line shown by `rules list` and in the starting question
 params: {"breaths": {"sentence": 0.2, "comma": 0.1}, "captions": true, "speed": 1.05, "hook": 3}
 ---
 ## When writing the scene
-- Instructions for Claude, imperative, one idea per line, with the reason when it is not obvious.
+- Instructions for the agent, imperative, one idea per line, with the reason when it is not obvious.
 
 ## Self-review: picture (stills/contact.jpg)
 - [ ] What to check on the contact sheets before rendering
@@ -50,12 +50,12 @@ keeps getting the plugin's updates and holds only the user's own lines.
 | `face_framing` | `false` | `camera()` keeps the face at 42 % of the height (MediaPipe); otherwise the center |
 | `speed` | `1` | Voice and picture speed-up (`1.15` = 15 % faster, from 0.5 to 2), through `atempo` |
 | `breaths` | none | Cut every silence down to a breath: `{"sentence": 0.08, "comma": 0.05}` (seconds kept after a sentence, a comma). Without it, no automatic cut |
-| `captions` | `false` | Tells Claude to put `captions()` in the scene; `check` makes sure it is there |
-| `music` | `false` | Tells Claude to compose music in `source/sound.py` |
-| `sfx` | `false` | Tells Claude to put `cue()` on key moments and design their sounds in `source/sound.py` |
+| `captions` | `false` | Tells the agent to put `captions()` in the scene; `check` makes sure it is there |
+| `music` | `false` | Tells the agent to compose music in `source/sound.py` |
+| `sfx` | `false` | Tells the agent to put `cue()` on key moments and design their sounds in `source/sound.py` |
 | `freezes` | none | `prepare` lists in `files/freezes.md` where the source's picture stays still for that many seconds or more once cut, with what is said over it (a screen recording waiting) |
 | `shots` | `false` | `prepare` lists in `files/shots.md` the shots of every file of `edit.json`'s media, to pick each clip's `from` and `dur`; it then runs without a source too |
-| `graphics` | none | Tells Claude what carries the video: `lead` (the motion design: the showreel bar of the skill's Direction) or `support` (the footage: the graphics serve it, the footage bar). Without it, Claude decides from the video and writes the choice in the Direction |
+| `graphics` | none | Tells the agent what carries the video: `lead` (the motion design: the showreel bar of the skill's Direction) or `support` (the footage: the graphics serve it, the footage bar). Without it, the agent decides from the video and writes the choice in the Direction |
 
 ## Params `check` measures
 
@@ -80,7 +80,7 @@ Whatever the pack:
   for a phone (under 24 px at 1080 once scaled), cut by the frame (display type from 130 px may cross it), or over the
   face the camera shows, for 0.75 s or more, is a ✗. Captions count; a `data-say=""` decoration does not.
 
-Any other key is read by Claude only, e.g. a threshold the checklists name.
+Any other key is read by the agent only, e.g. a threshold the checklists name.
 
 Merge, lowest priority first: the defaults above, then the pack's params (and the packs it extends), then the
 project's own `overrides` in `source/rules.json`, written by `rules set key=value -p <slug>` ("speed up this one

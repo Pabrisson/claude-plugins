@@ -320,7 +320,7 @@ function Body({
                   <span className="truncate">{job.id}</span>
                   <CopyIcon className="size-3 shrink-0" aria-hidden />
                 </button>
-                {job.by === "claude" && <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">by Claude</span>}
+                {job.by === "agent" && <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">by Agent</span>}
               </p>
             </div>
           </div>

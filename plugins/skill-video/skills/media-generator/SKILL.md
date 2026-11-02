@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos, voices, music and sound effects with AI models through a model router (Kie.ai by default, or OpenRouter) and ElevenLabs, every cost shown and approved first. Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles cited with @name, workspaces with a timeline, and a local dashboard. Use it whenever the user wants an image, a video clip, a voice, a song or a sound made or transformed by AI (create, animate, restyle, upscale, face or object swap, inpaint, camera moves, talking avatar, lip sync, voice-over, voice change, voice design, dubbing, transcripts, music, stems, sound effects), for example "génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "redessine-la en style anime", "crée le personnage Lulu avec ces photos", "crée la voix du narrateur", "voix off", "traduis cette vidéo en anglais", "crée une musique", "un bruitage de pluie", "ouvre le générateur", "transcris cette vidéo", "combien j'ai dépensé", or when they paste a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
+description: Generates and edits images, videos, voices, music and sound effects with AI models through a model router (Kie.ai by default, or OpenRouter) and ElevenLabs, every cost shown and approved first. Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles cited with @name, workspaces with a timeline, and a local dashboard. Use it whenever the user wants an image, a video clip, a voice, a song or a sound made or transformed by AI (create, animate, restyle, upscale, face or object swap, inpaint, camera moves, talking avatar, lip sync, voice-over, voice change, voice design, dubbing, transcripts, music, stems, sound effects), for example "génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "redessine-la en style anime", "crée le personnage Lulu avec ces photos", "crée la voix du narrateur", "voix off", "traduis cette vidéo en anglais", "crée une musique", "un bruitage de pluie", "ouvre le générateur", "transcris cette vidéo", "combien j'ai dépensé", or when they paste a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Agent").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/media.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -18,7 +18,7 @@ so the user always sees the price first and says yes. A local dashboard does the
 
 `media.mjs` below means `node "${CLAUDE_SKILL_DIR}/engine/media.mjs"`: write it out in full in every command, the
 path in double quotes (it can hold spaces or, on Windows, backslashes; a shell variable holding `node …` does not run
-under zsh). The skill runs on macOS, Linux and Windows. Everything lives in the folder Claude Code runs in
+under zsh). The skill runs on macOS, Linux and Windows. Everything lives in the folder the agent runs in
 (`$MEDIA_GENERATOR_DIR` overrides it):
 - `media/<id>/`: one folder per generation, with its outputs (`out-1.png`, `out.mp4`, `out.mp3`, `dub-en.mp4`, a song's `out-1.mp3` and `cover-1.jpg`…), its
   inputs (`in-*`) and its `job.json`;
@@ -29,6 +29,12 @@ under zsh). The skill runs on macOS, Linux and Windows. Everything lives in the 
 - `settings.json`: the active router, the confirmation thresholds, the monthly caps, the ElevenLabs plan and the
   default models.
 
+Any agent can run this skill: `${CLAUDE_SKILL_DIR}` is this skill's folder, the one holding this SKILL.md (an agent
+that does not replace it uses that folder's path); AskUserQuestion is your tool for multiple-choice questions to the
+user (none: numbered choices in the chat, then wait for the answer). The keys are environment variables
+(KIE_API_KEY, OPENROUTER_API_KEY, OPENROUTER_MANAGEMENT_KEY, ELEVENLABS_API_KEY): Claude Code's `/plugin configure
+skill-video@pabrisson` exports them, any other agent reads them from its environment.
+
 Talk to the user in French. Write prompts for the models in English, unless the user wants on-screen text in
 another language. The dashboard is in English.
 
@@ -36,9 +42,9 @@ another language. The dashboard is in English.
 
 Run `media.mjs doctor` once per conversation.
 - A missing tool: give the install command `doctor` prints (it is this OS's: brew, apt or a download page, winget) and
-  stop. On Windows, Claude Code must be restarted after a winget install to see the new PATH.
+  stop. On Windows, the agent must be restarted after a winget install to see the new PATH.
 - `openrouter: no key`: nothing can be generated. Tell the user to set it with `/plugin configure skill-video@pabrisson`
-  (a key from openrouter.ai/keys), then restart the session. `tools`, `models` and the dashboard still work.
+  or `OPENROUTER_API_KEY` (a key from openrouter.ai/keys), then restart the session. `tools`, `models` and the dashboard still work.
 - `active router: …, without its key`: the router picked in Settings has no key. Same as above for that router (a
   Kie key from kie.ai/api-key), or switch back to the other one if the user prefers.
 - `elevenlabs: no key`: no voice change, translation, voice design or transcript, nor ElevenLabs' sound effects and
@@ -59,7 +65,7 @@ Run `media.mjs doctor` once per conversation.
 | `credits`, "combien j'ai dépensé" | `media.mjs credits`, then sum it up |
 | A pasted "Copy prompt" from the dashboard | The model's prompt, as a draft (below) |
 | A pasted "Send to edit" from the dashboard | Hand the file to the video-editor skill |
-| An Element or a style to make, or a pasted "Ask Claude" | `references/library.md` |
+| An Element or a style to make, or a pasted "Ask Agent" | `references/library.md` |
 | A workspace ("crée un workspace", "travaille dans le projet …"), its files or its edit | `references/library.md`, « Workspaces » |
 | Anything else | A generation (below) |
 
@@ -72,7 +78,7 @@ read the one the request touches before its step 1 (once per conversation is eno
 |---|---|
 | A video edit (Inpaint, Object swap, Face swap, Clean up, Custom edit, Restyle, Relight, Recolor), a tool done on this machine (Reframe, FPS boost, SDR to HDR, Depth map, Remove background), Lip sync, Speech to video | `references/video-tools.md` |
 | A model's own setting or editor: `--option`, shots, middle frames, reference videos or sounds, a voice in a video, spoken lines (`--say`), who speaks, a draft | `references/model-options.md` |
-| An Element, a style of the user's own, `@name`, a References sheet, a pasted "Ask Claude", a workspace | `references/library.md` |
+| An Element, a style of the user's own, `@name`, a References sheet, a pasted "Ask Agent", a workspace | `references/library.md` |
 | Any `audio`: speech, a dialogue, Change voice, Translate, music, a song, music for a video, a sound effect, stems, Isolate voice, a singer, a voice designed or remixed, a transcript | `references/audio.md` |
 | A new tool or a new preset style in the engine | `references/tools-format.md` |
 
@@ -214,13 +220,13 @@ rush, or a B-roll clip in the project the prompt names.
 | Code | Meaning | What you do |
 |---|---|---|
 | 2 | The user's yes is needed: the estimate is printed | Ask (step 3), then run again with the flag it names |
-| 3 | No key, a refused key, or no credits left (402) | Say so: the key with `/plugin configure skill-video@pabrisson`, credits on openrouter.ai or kie.ai; on OpenRouter, videos still running hold their price, so with several at once wait for them and retry |
+| 3 | No key, a refused key, or no credits left (402) | Say so: the key with `/plugin configure skill-video@pabrisson` or its variable, credits on openrouter.ai or kie.ai; on OpenRouter, videos still running hold their price, so with several at once wait for them and retry |
 | 1 | Any other error | Read the message: a missing input, a model that does not take a frame, a file over 50 MB… |
 
 ## Good to know
 
 - **The dashboard.** `media.mjs studio` reuses this folder's server or starts one on the first free port from 41287,
-  on 127.0.0.1 only. It stops by itself once every Claude Code session that opened it has quit. A generation started
+  on 127.0.0.1 only. It stops by itself once every agent session that opened it has quit. A generation started
   there runs in its own process and finishes even if the page closes.
 - **Costs.** OpenRouter in USD as it reports them, never converted. Kie in USD from its own price list (its public
   price API, read at each start of the dashboard and once a day; its credits at $0.005 each, shown beside; the models

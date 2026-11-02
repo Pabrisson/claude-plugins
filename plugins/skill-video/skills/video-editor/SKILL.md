@@ -1,6 +1,6 @@
 ---
 name: video-editor
-description: Claude as a video editor for any genre. Edits footage (one or several rushes, local files or URLs, plus B-roll) into a short, a long YouTube video, an interview or podcast clip, a tutorial, a montage on music (travel, vlog, event), a brand film…, or creates a motion-design video from scratch when there is no footage. Renders every chosen format (9:16, 16:9, 1:1, 4:5) in every chosen resolution (4K, 2K, 1080p, 720p) locally and fast, with captions, music and sound effects synthesized or generated (with media-generator, as are voice-overs, transcripts and clips), a local review studio and a style that learns. Use it whenever the user wants to edit, cut, assemble or make a video of any kind ("monte cette vidéo", "monte mes rushes", "fais-moi un short", "crée une vidéo", "montage", "motion design", "video editing"), or gives video files or links to work on. Also use it when they paste "apply this feedback" from the studio, or ask for variations, the video style setup or editing rule packs.
+description: A video editor for any genre. Edits footage (one or several rushes, local files or URLs, plus B-roll) into a short, a long YouTube video, an interview or podcast clip, a tutorial, a montage on music (travel, vlog, event), a brand film…, or creates a motion-design video from scratch when there is no footage. Renders every chosen format (9:16, 16:9, 1:1, 4:5) in every chosen resolution (4K, 2K, 1080p, 720p) locally and fast, with captions, music and sound effects synthesized or generated (with media-generator, as are voice-overs, transcripts and clips), a local review studio and a style that learns. Use it whenever the user wants to edit, cut, assemble or make a video of any kind ("monte cette vidéo", "monte mes rushes", "fais-moi un short", "crée une vidéo", "montage", "motion design", "video editing"), or gives video files or links to work on. Also use it when they paste "apply this feedback" from the studio, or ask for variations, the video style setup or editing rule packs.
 argument-hint: "[setup | <video files or URLs…> [content sources…] [studio] | apply this feedback … | variations <element> | preview | rules …]"
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/video.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/video.mjs *)
 ---
@@ -16,7 +16,13 @@ engine renders it. The user reviews it in a local studio, and their feedback com
 on Windows, backslashes); the skill runs on macOS, Linux and Windows. References are in
 `${CLAUDE_SKILL_DIR}/references/`; read the one a step names before doing that step.
 
-Everything lives in the project Claude Code runs in, the projects folder (`$VIDEO_EDITOR_DIR` overrides it):
+Any agent can run this skill: `${CLAUDE_SKILL_DIR}` is this skill's folder, the one holding this SKILL.md (an agent
+that does not replace it uses that folder's path; media-generator is its sibling folder); AskUserQuestion is your tool
+for multiple-choice questions to the user (none: numbered choices in the chat, then wait for the answer). The keys are
+environment variables (ELEVENLABS_API_KEY, OPENROUTER_API_KEY, OPENROUTER_MANAGEMENT_KEY, KIE_API_KEY): Claude Code's
+`/plugin configure skill-video@pabrisson` exports them, any other agent reads them from its environment.
+
+Everything lives in the project the agent runs in, the projects folder (`$VIDEO_EDITOR_DIR` overrides it):
 - one folder per video (`<slug>/`);
 - `.style/`, the style of this project;
 - `.rules/`, its own rule packs;
@@ -313,9 +319,9 @@ Read `references/rules-format.md` and follow its « The rules mode ». One pack 
 
 Whatever a model makes or changes for the video (a music, sound effects, a voice-over, a transcript, images, clips, a
 rush made ready before the edit, anything else it offers) is made by media-generator, the plugin's other skill.
-Load it with the Skill tool (`skill-video:media-generator`) the first time, then follow its « A generation »: its
-tools (`media.mjs tools <kind> --search "<the need, in English>"`), its models and its estimates. Never pick a tool
-from memory: its list grows. Three rules:
+Load it the first time (the Skill tool's `skill-video:media-generator`, or its sibling folder's SKILL.md), then
+follow its « A generation »: its tools (`media.mjs tools <kind> --search "<the need, in English>"`), its models and
+its estimates. Never pick a tool from memory: its list grows. Three rules:
 - **`--out <folder>`** on each command: the result lands there, in no workspace and with no dashboard. By default the
   video's own folder: `<slug>/assets/sound/` for a sound, `<slug>/assets/clips/` for a clip, `<slug>/assets/` for an
   image, a voice or a transcript; any other folder the user names. Then the engine takes it in: a voice-over with

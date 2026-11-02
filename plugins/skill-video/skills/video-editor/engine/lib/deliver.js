@@ -36,7 +36,7 @@ export function chapters(parts) {
   return { count: seqs.length, problems, text: seqs.map(x => `${clock(x.t0)} ${x.name ?? ''}`.trim()).join('\n') }
 }
 
-// The text to paste under the video: About.md's "## Description" section (title, lines, hashtags written by Claude),
+// The text to paste under the video: About.md's "## Description" section (title, lines, hashtags written by the agent),
 // then the chapters when YouTube would show them; '' when there is neither
 export function description(about, parts) {
   const own = about.match(/^## Description\n([\s\S]*?)(?=^## |(?![\s\S]))/m)?.[1].trim(), ch = chapters(parts)

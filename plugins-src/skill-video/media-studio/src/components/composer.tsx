@@ -223,7 +223,7 @@ export function Composer({
   const keyframe = keyframing && value.params.keyframe_video === value.inputs.video?.[0] ? value.inputs.keyframe?.[0] : undefined
   const promptTool = keyframe ? { ...tool, template: tool.keyframe!.apply } : tool
 
-  // the prompt sent: the tool's template filled with its fields and the user's words, or Claude's prompt (a draft)
+  // the prompt sent: the tool's template filled with its fields and the user's words, or the agent's prompt (a draft)
   // with the user's words after it
   const prompt = value.raw ? [value.rawText, value.intent].filter(Boolean).join(" ").trim() : fill(promptTool, withLooks(tool, value.fields, state.styles ?? []), value.intent, kind, value.inputs)
   // the same, read only, with what is still to fill as {key}, and the @names as the model reads them
@@ -437,7 +437,7 @@ export function Composer({
     }
   }
 
-  // Copy prompt: Claude writes the prompt that suits this model into the composer; nothing is generated
+  // Copy prompt: the agent writes the prompt that suits this model into the composer; nothing is generated
   // the composer emptied, the tool, its model and the count kept; undone from the toast
   function clear() {
     const before = value
@@ -459,18 +459,18 @@ export function Composer({
       "I will read it and click Generate myself.",
     ].filter((l) => l !== "").join("\n")
     navigator.clipboard.writeText(text).then(
-      () => toast.success("Prompt copied", { description: "Paste it in Claude Code: it writes the prompt here, without generating." }),
+      () => toast.success("Prompt copied", { description: "Paste it in your agent: it writes the prompt here, without generating." }),
       () => toast.error("The clipboard refused the copy")
     )
   }
 
-  // a prompt Claude wrote with `media.mjs draft`
+  // a prompt the agent wrote with `media.mjs draft`
   const draft = state.drafts[kind]
   const newDraft = draft && draft.at > draftSeen
   function applyDraft() {
     if (!draft) return
     const t = tools.find((x) => x.id === draft.tool) ?? tool
-    // Claude's prompt replaces the tool's (shown read-only, the user's words still go after it); for a tool whose
+    // the agent's prompt replaces the tool's (shown read-only, the user's words still go after it); for a tool whose
     // prompt is the user's own, it is those words
     const own = ownPrompt(t) && !!draft.prompt
     onChange({ ...value, tool: t.id, model: draft.model ?? value.model, fields: { ...value.fields, ...draft.fields }, raw: !!draft.prompt && !own,
@@ -525,7 +525,7 @@ export function Composer({
         {newDraft && (
           <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
             <span className="size-2 shrink-0 rounded-full bg-highlight" aria-hidden />
-            <span className="flex-1">Claude wrote a prompt for this space.</span>
+            <span className="flex-1">The agent wrote a prompt for this space.</span>
             <Button size="sm" onClick={applyDraft}>
               <RefreshCwIcon /> Reload
             </Button>
@@ -735,7 +735,7 @@ export function Composer({
             {/* the prompt the tool builds, read only: what goes to the model */}
             {!whole && (
               <div>
-                <Label hint={value.raw ? "written by Claude" : "built by the tool, with your words"}>Prompt</Label>
+                <Label hint={value.raw ? "written by the agent" : "built by the tool, with your words"}>Prompt</Label>
                 <div className="relative">
                   <Textarea
                     readOnly
@@ -911,7 +911,7 @@ export function Composer({
           </p>
         )}
         {(eleven || elevenModel) && !state.keys.elevenlabs && (
-          <p className="rounded-lg border p-3 text-xs text-destructive">No ElevenLabs key: set it with /plugin configure skill-video@pabrisson, then restart Claude Code.</p>
+          <p className="rounded-lg border p-3 text-xs text-destructive">No ElevenLabs key: set it with /plugin configure skill-video@pabrisson or ELEVENLABS_API_KEY, then restart your agent.</p>
         )}
         {!eleven && !elevenModel && !local && !state.keys[state.router] && (
           <p className="rounded-lg border p-3 text-xs text-destructive">No {ROUTER_NAME[state.router]} key: prices show, nothing can be generated. Set it with /plugin configure skill-video@pabrisson, or pick the other router in Settings.</p>
@@ -920,7 +920,7 @@ export function Composer({
 
       <div className="border-t p-3">
         <div className="flex gap-2">
-          {/* the prompt for Claude and the composer cleared, in one menu where the copy button was */}
+          {/* the prompt for the agent and the composer cleared, in one menu where the copy button was */}
           {!eleven && !local && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -934,7 +934,7 @@ export function Composer({
                   <span className="flex flex-col gap-0.5">
                     <span className="font-medium">Copy prompt</span>
                     <span className="text-xs text-muted-foreground">
-                      A request for Claude with this tool, {model ? model.name : "the model"} and your inputs: paste it in Claude Code, Claude writes the prompt this model handles best here. Nothing is generated, nothing is spent.
+                      A request for the agent with this tool, {model ? model.name : "the model"} and your inputs: paste it in your agent, the agent writes the prompt this model handles best here. Nothing is generated, nothing is spent.
                     </span>
                   </span>
                 </DropdownMenuItem>

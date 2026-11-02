@@ -25,7 +25,7 @@ and local: no estimate, no yes.
   a router's model that clones, its clips cloned and its words saying how it sounds); a singer sings with `--field
   singer=@name`.
 - **Making one**, when the user asks (« crée le personnage Lulu avec ces photos », « garde ce produit », « fais-en un
-  style ») or pastes « Ask Claude » from the dashboard:
+  style ») or pastes « Ask Agent » from the dashboard:
   1. Look at the images (Read) and write what it is in a few English words: they go with every `@name`.
   2. **2 images at least** (a voice: clips): `elements add` refuses fewer. With one image only, make the second view
      yourself with the type's References tool on it (`media.mjs image --tool character|outfit|object|location|pose

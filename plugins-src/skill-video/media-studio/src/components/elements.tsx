@@ -598,7 +598,7 @@ export function ElementDialog({ el, state, tools, onClose, onUse, onChanged }: {
   )
 }
 
-// a new Element: its type, name, words and files; saved here, or made by Claude from the same (Ask Claude)
+// a new Element: its type, name, words and files; saved here, or made by the agent from the same (Ask Agent)
 export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUse }: { draft: ElementDraft; state: State; tools: Tool[]; engine: string; onClose: () => void; onSaved: (name: string) => void; onUse: Use }) {
   const [type, setType] = useState(draft.type)
   const [name, setName] = useState("")
@@ -664,7 +664,7 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
       setBusy(false)
     }
   }
-  function askClaude() {
+  function askAgent() {
     const label = typeLabel(type).toLowerCase(), n = name || "<a short name>"
     const text = [
       `/skill-video:media-generator Make the ${label} Element @${n} in my Library.`,
@@ -675,7 +675,7 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
       `Save it with: node "${engine}/media.mjs" elements add ${n} <files…> --type ${type} --words "…"${type === "brand" ? ' --colors "#hex,#hex"' : ""} --workspace ${ws} (--from <generation> takes a result's ${kind === "audio" ? "clips" : "images"}).`,
       "Then tell me the @name to cite.",
     ].filter(Boolean).join("\n")
-    copy(text, "Prompt", "Paste it in Claude Code: Claude makes the element.")
+    copy(text, "Prompt", "Paste it in your agent: the agent makes the element.")
   }
 
   // one's own singer, saved: its phrase sung here
@@ -775,8 +775,8 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-          <Button variant="outline" onClick={askClaude} title="Copies a request for Claude: it writes the words, makes the sheets if needed and saves the element">
-            <CopyIcon /> Ask Claude
+          <Button variant="outline" onClick={askAgent} title="Copies a request for the agent: it writes the words, makes the sheets if needed and saves the element">
+            <CopyIcon /> Ask Agent
           </Button>
           <span className="flex-1" />
           <Button variant="ghost" onClick={onClose}>Cancel</Button>

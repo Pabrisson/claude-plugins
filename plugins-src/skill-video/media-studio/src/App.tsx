@@ -47,7 +47,7 @@ const fromHash = (): Page => {
   return (PAGES as string[]).includes(h) ? (h as Page) : "workspace"
 }
 
-// the prompts Claude wrote that the user already applied, per space (this browser only)
+// the prompts the agent wrote that the user already applied, per space (this browser only)
 const SEEN_KEY = "media-generator:drafts-seen"
 // what a space's results show: the current workspace's, or all (this browser only)
 const SCOPE_KEY = "media-generator:results-scope"

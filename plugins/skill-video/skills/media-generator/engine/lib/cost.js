@@ -146,7 +146,8 @@ const round = x => Math.round(x * 10000) / 10000
 const ledgerFile = home => path.join(home, 'ledger.jsonl')
 export function readLedger(home) {
   const f = ledgerFile(home)
-  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []
+  // a line of skill-video 1.49 and before says by: 'claude', read as 'agent'
+  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)).map(e => (e.by === 'claude' ? { ...e, by: 'agent' } : e)) : []
 }
 export function appendLedger(home, entry) {
   fs.appendFileSync(ledgerFile(home), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n')

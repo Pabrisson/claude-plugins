@@ -93,7 +93,7 @@ export function costOf(job: Job, per1000: number | null) {
 
 export function sendToEdit(file: string) {
   const text = `/skill-video:video-editor Use ${file}: make a new video with it, or add it as B-roll to one of my projects. Ask me which.`
-  navigator.clipboard.writeText(text).then(() => toast.success("Prompt copied", { description: "Paste it in Claude Code to edit with it." }))
+  navigator.clipboard.writeText(text).then(() => toast.success("Prompt copied", { description: "Paste it in your agent to edit with it." }))
 }
 
 // a result's shape: what its file turned out to be (measured once a session), else the ratio it asked for, else its medium's usual
@@ -341,7 +341,7 @@ function Tile({
       <figcaption className="flex items-baseline justify-between gap-2 px-0.5 text-xs">
         <span className="min-w-0 truncate">
           <span className="font-medium">{job.label}</span>{" "}
-          <span className="text-muted-foreground">· {job.name}{job.by === "claude" ? " · by Claude" : ""}</span>
+          <span className="text-muted-foreground">· {job.name}{job.by === "agent" ? " · by Agent" : ""}</span>
         </span>
         <span className={cn("font-semibold whitespace-nowrap tabular-nums", job.provider === "local" || failed ? "text-muted-foreground" : "text-cost")}>{costOf(job, per1000)}</span>
       </figcaption>

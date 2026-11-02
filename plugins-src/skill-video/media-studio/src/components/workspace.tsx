@@ -122,7 +122,7 @@ function CopyEdit({ ws, timeline, flush }: { ws: Workspace; timeline: Timeline; 
       const { text } = await api.edit(ws.slug)
       if (!text) return toast.error("The timeline is empty")
       await navigator.clipboard.writeText(`/skill-video:video-editor ${text}`)
-      toast.success("Prompt copied", { description: "Paste it in Claude Code: video-editor makes the video on this edit." })
+      toast.success("Prompt copied", { description: "Paste it in your agent: video-editor makes the video on this edit." })
     } catch (e) {
       toast.error(plain((e as Error).message))
     }
@@ -327,7 +327,7 @@ export function WorkspacePage({
             mine.length ? (
               <p className="text-sm text-muted-foreground">No media matches these filters.</p>
             ) : all ? (
-              <NoGenerations what="What you make in Image, Video and Audio lands here, by you or by Claude; a file dropped on the page is imported here, free." />
+              <NoGenerations what="What you make in Image, Video and Audio lands here, by you or by the agent; a file dropped on the page is imported here, free." />
             ) : (
               <Empty className="border border-dashed">
                 <EmptyHeader>
@@ -335,7 +335,7 @@ export function WorkspacePage({
                     <FolderKanbanIcon />
                   </EmptyMedia>
                   <EmptyTitle>Nothing in {ws.name} yet</EmptyTitle>
-                  <EmptyDescription>What you or Claude generate while it is the current workspace lands here, and the files dropped on the page. Results already made join it by Add to workspace, above.</EmptyDescription>
+                  <EmptyDescription>What you or the agent generate while it is the current workspace lands here, and the files dropped on the page. Results already made join it by Add to workspace, above.</EmptyDescription>
                 </EmptyHeader>
                 {/* the three spaces to make its first media in, each in its space's color, with its icon */}
                 <EmptyContent className="max-w-none flex-row flex-wrap justify-center gap-2">

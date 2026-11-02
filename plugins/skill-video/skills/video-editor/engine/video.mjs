@@ -20,7 +20,7 @@ const SELF = fileURLToPath(import.meta.url)
 // the code this process runs: a studio server started from an older video.mjs gets replaced
 const LOADED = fs.statSync(SELF).mtimeMs
 const ENGINE = path.dirname(SELF)
-// the projects folder: $VIDEO_EDITOR_DIR, else the folder Claude Code runs in (the parent, when run inside a video)
+// the projects folder: $VIDEO_EDITOR_DIR, else the folder the agent runs in (the parent, when run inside a video)
 const HOME = (() => {
   if (process.env.VIDEO_EDITOR_DIR) return path.resolve(process.env.VIDEO_EDITOR_DIR)
   for (let d = process.cwd(); d !== path.dirname(d); d = path.dirname(d)) if (fs.existsSync(path.join(d, 'source/project.json'))) return path.dirname(d)
@@ -61,7 +61,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.mp4': 'video/mp4',
   '.wav': 'audio/wav', '.wasm': 'application/wasm',
 }
-const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range; from: "transcript" when the comment was made on a selection of the transcript, "chat" when Claude noted a change the user asked in the conversation (already resolved). fix: {from, to}, a line of what the video shows that the user corrected in the transcript. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx, clips) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. Claude answers each comment in reply and sets resolved: true.'
+const REVIEW_ABOUT = 'Review studio feedback on ONE version of the video (video field). type: comment or cut. t0/t1: VIDEO seconds of that version; s0/s1: SOURCE seconds (absent without a source). words: what is said, or shown, in the range; from: "transcript" when the comment was made on a selection of the transcript, "chat" when the agent noted a change the user asked in the conversation (already resolved). fix: {from, to}, a line of what the video shows that the user corrected in the transcript. images: attached frames or pictures, with their size and ratio. visuals: what the comment is about in the picture, a part() of the scene ({kind, t0, t1, …data}, VIDEO seconds) or every part of a kind ({kind}). sounds: what the comment is about in the sound, a whole track (voice, music, fx, clips) or a cue of the scene ({kind, t, …data}, t in VIDEO seconds). format: the format it was made on. The agent answers each comment in reply and sets resolved: true.'
 
 // codecs WebCodecs can put in an MP4. The resolutions' bitrates are H.264's: the others need less for the same look.
 const CODECS = {
@@ -131,14 +131,20 @@ const ffmpegLog = argv => {
 }
 
 // .cache/progress.json: what is being done on the video, for the studio until the first version and while the next one
-// is made. The commands log their steps (with done/total when they count), Claude its own with `status`:
-// { updated, steps: [{ id, label, by: engine|claude, state: running|done|failed, t0, t1, done, total }] }, the last 60.
+// is made. The commands log their steps (with done/total when they count), the agent its own with `status`:
+// { updated, steps: [{ id, label, by: engine|agent, state: running|done|failed, t0, t1, done, total }] }, the last 60.
 // ponytail: read-modify-write without a lock, two commands writing at the same instant may lose a line
 const now = () => new Date().toISOString()
+// the log as written; a step of skill-video 1.49 and before says by: claude, read as the agent's
+function readProgress(dir) {
+  const log = readJson(path.join(dir, '.cache/progress.json'))
+  for (const x of log.steps ?? []) if (x.by === 'claude') x.by = 'agent'
+  return log
+}
 function logSteps(dir, change) {
   const file = path.join(dir, '.cache/progress.json')
   let steps = []
-  try { steps = readJson(file).steps } catch {}
+  try { steps = readProgress(dir).steps } catch {}
   change(steps)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   writeJson(file, { updated: now(), steps: steps.slice(-60) })
@@ -1163,11 +1169,11 @@ function deliver(dir, p, j, tl, edit, files, parts) {
 
 // every reviewable render is a new version, with its own feedback file (files/reviews/vN.json);
 // its timeline is kept so the studio maps that version's times back to the source.
-// Added last, once its files are written (its sound, Clip tab and preview, named after nextVersion). It ends Claude's
+// Added last, once its files are written (its sound, Clip tab and preview, named after nextVersion). It ends the agent's
 // step: the studio offers to reload once every step of the work that made it is over
 const nextVersion = p => (p.versions?.length ?? 0) + 1
 function addVersion(dir, p, version) {
-  logSteps(dir, endClaude)
+  logSteps(dir, endAgent)
   p.versions = [...(p.versions ?? []), { v: nextVersion(p), rendered: new Date().toISOString(), ...version }]
   writeJson(path.join(dir, 'source/project.json'), p)
 }
@@ -1181,15 +1187,15 @@ function keepPreview(dir, v, fmt, video) {
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${DRAFT.audio_kbps}k`, '-movflags', '+faststart', file])
 }
 
-// status "<what Claude does now>": a step of Claude's own (the brief, the direction, the scene, a review pass…), shown
+// status "<what the agent does now>": a step of the agent's own (the brief, the direction, the scene, a review pass…), shown
 // in the studio until the next one, or until a version is delivered (addVersion)
-const endClaude = steps => { for (const x of steps) if (x.by === 'claude' && x.state === 'running') Object.assign(x, { state: 'done', t1: now() }) }
+const endAgent = steps => { for (const x of steps) if (x.by === 'agent' && x.state === 'running') Object.assign(x, { state: 'done', t1: now() }) }
 function status(...words) {
   const dir = projectDir(), label = words.join(' ').trim()
   if (!label) die('usage: status "<what you are doing now>" -p <slug>')
   logSteps(dir, steps => {
-    endClaude(steps)
-    steps.push({ id: `${process.pid}-${Date.now()}`, label, by: 'claude', state: 'running', t0: now() })
+    endAgent(steps)
+    steps.push({ id: `${process.pid}-${Date.now()}`, label, by: 'agent', state: 'running', t0: now() })
   })
   console.log(`status: ${label}`)
 }
@@ -1324,7 +1330,7 @@ function saveReview(dir, n, comments) {
   if (!ver || !Array.isArray(comments)) return false
   const file = path.join(dir, `files/reviews/v${n}.json`), video = Object.values(ver.files)[0]
   const st = fs.statSync(path.join(dir, 'output', video))
-  // Claude answers in the file, and notes there what was asked in the conversation: a studio tab opened before that
+  // the agent answers in the file, and notes there what was asked in the conversation: a studio tab opened before that
   // (it has no reply, nor those notes) must not undo either
   // ponytail: a note from the conversation deleted in the studio comes back; a deleted list if that bites
   const before = fs.existsSync(file) ? readJson(file).comments : [], ids = new Set(comments.map(c => c.id))
@@ -1441,11 +1447,11 @@ async function handle(req, res, write = false) {
       packs: r.active.map(name => ({ name, description: all[name]?.description ?? null, origin: all[name]?.origin ?? null, file: all[name]?.file ?? null, body: all[name]?.body.trim() ?? null })),
     })
   }
-  // the progress log, the file Claude changed last (the work goes on between two logged steps), and when the project
+  // the progress log, the file the agent changed last (the work goes on between two logged steps), and when the project
   // started: the total time, even once the log has dropped its first steps
   if (sub === 'api/progress') {
     let log = { updated: null, steps: [] }
-    try { log = readJson(path.join(dir, '.cache/progress.json')) } catch {}
+    try { log = readProgress(dir) } catch {}
     log.started = readJson(path.join(dir, 'source/project.json')).created ?? null
     const touched = ['About.md', ...fs.readdirSync(path.join(dir, 'source'), { recursive: true }).map(x => `source/${x.replaceAll(path.sep, '/')}`)]
       .filter(x => !/__pycache__|^source\/(project|rules|style)\.json$|^source\/STYLE\.md$/.test(x))
@@ -1499,34 +1505,44 @@ function serve() {
     .listen(PORT, '127.0.0.1', () => console.log(`studio server on http://127.0.0.1:${PORT}/ for ${HOME}`))
 }
 
-// the Claude processes the server works for (each `studio` or `preview` adds its own): it quits once they have all
+// the agent processes the server works for (each `studio` or `preview` adds its own): it quits once they have all
 // quit. A server nobody registered with (started by hand, the tests) runs until stopped
 const owners = new Set()
 function watchOwner(pid) {
   if (!owners.size) setInterval(() => {
     for (const o of owners) try { process.kill(o, 0) } catch (e) { if (e.code === 'ESRCH') owners.delete(o) }
-    if (!owners.size) { console.log('every Claude this studio server worked for has quit: stopping'); process.exit(0) }
+    if (!owners.size) { console.log('every agent this studio server worked for has quit: stopping'); process.exit(0) }
   }, 2000)
   owners.add(pid)
 }
 
-// the Claude Code (or Claude app) this command runs under: the nearest ancestor named claude, null outside one
+// the agent this command runs under: the nearest ancestor named after one (Claude Code, Codex, OpenCode, Cursor,
+// Goose, Amp…) or a node/bun/python running one (Gemini CLI, Qwen Code, Copilot CLI…); null outside one
+// ponytail: known names only, another agent's server runs until stopped: add its name to AGENT
 // ponytail: null on Windows (no ps -o), its server runs until Windows logs off; Get-CimInstance Win32_Process if that bothers
-function claudePid() {
+const AGENT = /^(claude|codex|gemini|qwen|copilot|opencode|cursor-agent|goose|amp|crush|droid|kiro-cli|auggie)(-cli|-code)?$/i
+function agentPid() {
   try {
     const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { ...HIDE, encoding: 'utf8' }).trim().split('\n').map(l => {
       const [, pid, ppid, comm] = l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
       return [+pid, { ppid: +ppid, comm }]
     }))
-    for (let pid = process.ppid; pid > 1 && procs.has(pid); pid = procs.get(pid).ppid)
-      if (/^claude$/i.test(path.basename(procs.get(pid).comm))) return pid
+    for (let pid = process.ppid; pid > 1 && procs.has(pid); pid = procs.get(pid).ppid) {
+      const name = path.basename(procs.get(pid).comm).replace(/\.exe$/i, '')
+      if (AGENT.test(name)) return pid
+      // node/bun/python running an agent's script: a word of its path names it (…/@google/gemini-cli/dist/index.js)
+      if (/^(node|bun|deno|python3?)$/i.test(name)) {
+        const script = execFileSync('ps', ['-o', 'args=', '-p', `${pid}`], { ...HIDE, encoding: 'utf8' }).trim().split(/\s+/).slice(1).find(a => !a.startsWith('-')) ?? ''
+        if (script.split(/[/\\]/).some(w => AGENT.test(w.replace(/\.(m?js|py)$/i, '')))) return pid
+      }
+    }
   } catch {}
   return null
 }
 
-// the studio server, which stops once the Claude that asked for it has quit
+// the studio server, which stops once the agent that asked for it has quit
 async function ensureServer() {
-  const url = await findServer(), owner = claudePid()
+  const url = await findServer(), owner = agentPid()
   if (owner) await fetch(url + `__video-editor/owner?pid=${owner}`, { method: 'POST' }).catch(() => {})
   return url
 }
@@ -1790,7 +1806,7 @@ function doctor() {
   if (process.platform !== 'darwin' || process.arch !== 'arm64') console.log('note: Whisper transcribes on the CPU here (faster-whisper), slower than on Apple Silicon; a transcript generated by media-generator is faster')
   // the keys media-generator generates with (music, sounds, voices, transcripts, images, videos): the plugin's secrets
   const keys = Object.entries({ kie: 'KIE_API_KEY', openrouter: 'OPENROUTER_API_KEY', elevenlabs: 'ELEVENLABS_API_KEY' }).filter(([, v]) => process.env[v]).map(([k]) => k)
-  console.log(keys.length ? `generation: media-generator, keys ${keys.join(', ')}` : 'generation: no key (Whisper transcript, no voice-over, the kit makes the sound); media-generator\'s keys: /plugin configure skill-video@pabrisson')
+  console.log(keys.length ? `generation: media-generator, keys ${keys.join(', ')}` : 'generation: no key (Whisper transcript, no voice-over, the kit makes the sound); media-generator\'s keys: /plugin configure skill-video@pabrisson, or the KIE_API_KEY, OPENROUTER_API_KEY and ELEVENLABS_API_KEY environment variables')
   console.log(`projects: ${HOME}`)
   // in a git repository: nothing of what makes the videos ignored
   const ignored = spawnSync('git', ['-C', HOME, 'check-ignore', '--no-index', ...KEPT], { ...HIDE, encoding: 'utf8' })
@@ -1829,7 +1845,7 @@ function rules(sub, ...rest) {
     for (const x of rest) {
       const [k, ...v] = x.split('=')
       try { r.overrides[k] = JSON.parse(v.join('=')) } catch { r.overrides[k] = v.join('=') }
-      if (!PARAMS[k] && !(k in r.params)) console.log(`note: ${k} is neither a param of the engine nor of the pack: only Claude reads it`)
+      if (!PARAMS[k] && !(k in r.params)) console.log(`note: ${k} is neither a param of the engine nor of the pack: only the agent reads it`)
     }
     const errors = paramErrors(r.overrides)
     if (errors.length) die(`rules set: ${errors.join('; ')}`)

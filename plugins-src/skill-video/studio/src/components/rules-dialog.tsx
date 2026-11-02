@@ -34,7 +34,7 @@ const lines = (text: string) =>
     .replace(/\n[ \t]+/g, " ")
     .split(/\n+/)
 
-// The video's rule pack as Claude reads it, opened from its name in the header. Read on each opening: an edit of the
+// The video's rule pack as the agent reads it, opened from its name in the header. Read on each opening: an edit of the
 // pack or a `rules set` shows without a reload.
 export function RulesDialog({ names }: { names: string[] }) {
   const [rules, setRules] = useState<Rules | null>(null)

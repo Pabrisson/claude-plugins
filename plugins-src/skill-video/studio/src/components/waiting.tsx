@@ -14,9 +14,9 @@ export const span = (ms: number) => {
 const hour = (t: string | number) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
 
 // a line of the list: a step, or the same engine step done several times in a row (3 stills) with their summed time.
-// handled: it failed and the work went on after it (a check Claude then fixes), not the end of the story
+// handled: it failed and the work went on after it (a check the agent then fixes), not the end of the story
 type Line = { step: Step; count: number; ms: number; handled: boolean }
-// one of Claude's steps with the engine's under it; an engine step before any of Claude's (Project created) stands alone
+// one of the agent's steps with the engine's under it; an engine step before any of the agent's (Project created) stands alone
 type Group = { head: Line; subs: Line[] }
 
 function groupSteps(steps: Step[], now: number): Group[] {
@@ -24,7 +24,7 @@ function groupSteps(steps: Step[], now: number): Group[] {
   steps.forEach((s, i) => {
     const line = { step: s, count: 1, ms: (s.t1 ? Date.parse(s.t1) : now) - Date.parse(s.t0), handled: s.state === "failed" && i < steps.length - 1 }
     const g = groups.at(-1), prev = g?.subs.at(-1)
-    if (s.by === "claude" || !g || g.head.step.by === "engine") groups.push({ head: line, subs: [] })
+    if (s.by === "agent" || !g || g.head.step.by === "engine") groups.push({ head: line, subs: [] })
     else if (s.state === "done" && prev?.step.state === "done" && prev.step.label === s.label) Object.assign(prev, { count: prev.count + 1, ms: prev.ms + line.ms })
     else g.subs.push(line)
   })
@@ -40,7 +40,7 @@ function useNow() {
   }, [])
   return now
 }
-// the last news: a logged step, or a file Claude changed since. None for 30 minutes: the work stopped (the session
+// the last news: a logged step, or a file the agent changed since. None for 30 minutes: the work stopped (the session
 // ended, or it waits)
 const lastNews = (p: Progress | null) => Math.max(Date.parse(p?.updated ?? "") || 0, Date.parse(p?.touched?.mtime ?? "") || 0)
 const isLive = (last: number, now: number) => !!last && now - last < 30 * 60_000
@@ -49,20 +49,20 @@ export const busy = (p: Progress | null, from?: string | null, to?: string | nul
   isLive(lastNews(p), Date.now()) &&
   !!p?.steps.some((s) => s.state === "running" && (!from || Date.parse(s.t0) > Date.parse(from)) && (!to || Date.parse(s.t0) < Date.parse(to)))
 
-// the change since the version shown: from Claude's first step after it (the `status` that opens it), without the
-// engine's stray ones before it (a still, a check); with no step of Claude's, every step since that version
+// the change since the version shown: from the agent's first step after it (the `status` that opens it), without the
+// engine's stray ones before it (a still, a check); with no step of the agent's, every step since that version
 const change = (p: Progress | null, since: string) => {
   const all = p?.steps.filter((s) => Date.parse(s.t0) > Date.parse(since)) ?? []
-  return all.slice(Math.max(0, all.findIndex((s) => s.by === "claude")))
+  return all.slice(Math.max(0, all.findIndex((s) => s.by === "agent")))
 }
 // how long the change that made the next version took: from its first step to the end of the last one started before
-// that version's render (final, and Claude's step around it); null with no step logged
+// that version's render (final, and the agent's step around it); null with no step logged
 export const took = (p: Progress | null, since: string, to: string) => {
   const steps = change(p, since).filter((s) => Date.parse(s.t0) < Date.parse(to))
   return steps.length ? Math.max(...steps.map((s) => Date.parse(s.t1 ?? to))) - Date.parse(steps[0].t0) : null
 }
 
-// Nothing to review yet: what is being done on the video, newest last, with the total time. Claude's own steps (the
+// Nothing to review yet: what is being done on the video, newest last, with the total time. The agent's own steps (the
 // brief, the scene, a review pass…) lead, the engine's (transcription, renders with their progress) fold under them:
 // only the step being done stays open. The layout grows downwards, the title stays put. The page reloads by itself
 // when the first version lands.
@@ -71,7 +71,7 @@ export function Waiting({ progress }: { progress: Progress | null }) {
   const steps = progress?.steps ?? []
   const last = lastNews(progress)
   const live = isLive(last, now)
-  const current = live ? steps.findLast((s) => s.by === "claude" && s.state === "running") : undefined
+  const current = live ? steps.findLast((s) => s.by === "agent" && s.state === "running") : undefined
   // from the project's creation (an older project: the oldest step kept), to now or to the last news
   const start = Date.parse(progress?.started ?? "") || Date.parse(steps[0]?.t0 ?? "") || 0
   const groups = groupSteps(steps, now)
@@ -123,7 +123,7 @@ export function Working({ progress, since, next }: { progress: Progress | null; 
   if (!busy(progress, since)) return null
   // the renders under way: the engine's steps that count their chunks
   const renders = steps.filter((s) => s.by === "engine" && s.state === "running" && !!s.total)
-  // folded, the step under way: Claude's that runs (a review pass, not its stills), never one of the engine's under it
+  // folded, the step under way: the agent's that runs (a review pass, not its stills), never one of the engine's under it
   const groups = groupSteps(steps.filter((s) => !renders.includes(s)), now)
   const current = (groups.findLast((x) => x.head.step.state === "running") ?? groups.at(-1))?.head
   return (
@@ -163,7 +163,7 @@ export function Working({ progress, since, next }: { progress: Progress | null; 
   )
 }
 
-// Claude's steps with the engine's folded under them, the last one open. small: a notch smaller, in the feedback column
+// the agent's steps with the engine's folded under them, the last one open. small: a notch smaller, in the feedback column
 function Steps({ groups, live, small, className }: { groups: Group[]; live: boolean; small?: boolean; className?: string }) {
   return (
     <ol className={cn("flex w-full flex-col gap-0.5 text-left text-sm", className)}>
@@ -214,7 +214,7 @@ function Row({ line: { step: s, count, ms, handled }, live, fold, sub, small, wa
         ) : (
           <CircleDashedIcon className="size-4 shrink-0 text-muted-foreground" />
         )}
-        <span className={cn("min-w-0 flex-1 truncate", s.by === "claude" && "font-medium", !running && (s.by === "claude" ? "text-foreground/75" : "text-muted-foreground"))}>
+        <span className={cn("min-w-0 flex-1 truncate", s.by === "agent" && "font-medium", !running && (s.by === "agent" ? "text-foreground/75" : "text-muted-foreground"))}>
           {s.label}
           {count > 1 && <span className="text-muted-foreground"> ×{count}</span>}
         </span>
@@ -230,7 +230,7 @@ function Row({ line: { step: s, count, ms, handled }, live, fold, sub, small, wa
   )
 }
 
-// the failed checks Claude fixed after
+// the failed checks the agent fixed after
 function Warnings({ n }: { n: number }) {
   if (!n) return null
   return (

@@ -20,11 +20,11 @@ export type Version = {
   // older server
   preview?: { format: string; url: string } | null
 }
-// what is being done on the video (the project's .cache/progress.json): the engine's commands and Claude's own steps
+// what is being done on the video (the project's .cache/progress.json): the engine's commands and the agent's own steps
 export type Step = {
   id: string
   label: string
-  by: "engine" | "claude"
+  by: "engine" | "agent"
   state: "running" | "done" | "failed"
   t0: string
   t1?: string
@@ -32,7 +32,7 @@ export type Step = {
   done?: number
   total?: number
 }
-// touched: the file Claude changed last (About.md, source/…), the work going on between two logged steps
+// touched: the file the agent changed last (About.md, source/…), the work going on between two logged steps
 // started: when the project was created (null for an older one), the start of the total time
 export type Progress = { updated: string | null; steps: Step[]; touched: { file: string; mtime: string } | null; started?: string | null }
 export type Project = {
@@ -47,7 +47,7 @@ export type Project = {
   words: Word[] | null
   versions: Version[]
 }
-// the project's pack (api/rules), as Claude reads it: its text, and the params the engine follows with the project's
+// the project's pack (api/rules), as the agent reads it: its text, and the params the engine follows with the project's
 // overrides. body null: a pack no longer installed
 export type Pack = { name: string; description: string | null; origin: string | null; file: string | null; body: string | null }
 export type Rules = { params: Record<string, unknown>; overrides: Record<string, unknown>; packs: Pack[] }
@@ -88,7 +88,7 @@ export type Comment = {
   reply?: string
   created: string
   format?: string
-  // "transcript": made on a selection of the transcript; "chat": asked in the conversation with Claude, who wrote it
+  // "transcript": made on a selection of the transcript; "chat": asked in the conversation with the agent, who wrote it
   from?: "transcript" | "chat"
   // a line of what the video shows, corrected in the transcript
   fix?: { from: string; to: string }
@@ -221,7 +221,7 @@ export function markOf(all: Comment[], hit: (c: Comment) => boolean, show: (ids:
   }
 }
 
-// the text Claude receives: every open item with both clocks, the words and the id
+// the text the agent receives: every open item with both clocks, the words and the id
 export function buildPrompt(p: Project, ver: Version, all: Comment[]) {
   const open = all.filter((c) => !c.resolved)
   const video = ver.files[p.formats[0]] ?? Object.values(ver.files).find(Boolean)

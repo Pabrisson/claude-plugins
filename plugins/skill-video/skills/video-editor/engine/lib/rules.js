@@ -1,4 +1,4 @@
-// Rule packs: one Markdown file per way of editing (rules/<name>.md), frontmatter + instructions for Claude.
+// Rule packs: one Markdown file per way of editing (rules/<name>.md), frontmatter + instructions for the agent.
 import fs from 'node:fs'
 import path from 'node:path'
 import { chapters } from './deliver.js'
@@ -6,7 +6,7 @@ import { chapters } from './deliver.js'
 // engine defaults: a source is transcribed but kept whole, framed centered, no music
 export const DEFAULTS = { transcribe: true, face_framing: false, speed: 1, breaths: null, captions: false, music: false, sfx: false }
 
-// the params with a meaning: the engine's, and the numbers `check` measures. Any other key is Claude's alone
+// the params with a meaning: the engine's, and the numbers `check` measures. Any other key is the agent's alone
 const isObject = v => !!v && typeof v === 'object' && !Array.isArray(v)
 const bool = [v => typeof v === 'boolean', 'true or false']
 const secs = [v => typeof v === 'number' && v > 0, 'seconds above 0']
@@ -81,7 +81,7 @@ export function effective(rules, warn = msg => console.warn(`warning: ${msg}`)) 
 
 const r2 = x => Math.round(x * 100) / 100
 
-// The pack's numbers measured on the edit, before Claude looks at the stills: [[ok, message], …].
+// The pack's numbers measured on the edit, before the agent looks at the stills: [[ok, message], …].
 // duration, joins (the takes' joins), parts and screen lines in VIDEO seconds; cuts (edit.json) and words in SOURCE
 // seconds. A visual change is a join, or a part() or clip() starting or ending: what moves inside them is not seen.
 export function checkEdit(p, { duration, cuts, words, screen, joins, parts, scene, beats, fps }) {
