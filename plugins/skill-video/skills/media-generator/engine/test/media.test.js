@@ -6,6 +6,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { startFake } from './fake-api.js'
+import { OWN_MODELS } from '../providers/elevenlabs.js'
 
 // the CLI and the dashboard's server on a throwaway folder, against the fake OpenRouter and ElevenLabs
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'media-gen-'))
@@ -491,8 +492,9 @@ test('speech: a voice that only answers PCM is wrapped into an MP3 at its rate; 
 
 test('ElevenLabs straight, never by the router: its models first, a voice, its options, a dialogue; billed in its credits', async () => {
   const list = await cli('models', 'audio')
-  assert.match(list.out, /^elevenlabs:eleven_v4 {2}Eleven v4 {2}\[speech, dialogue, audio tags, options stability similarity_boost language_code apply_text_normalization\]$/m)
-  assert.match(list.out, /^elevenlabs:eleven_multilingual_v2 .*options stability similarity_boost style speed use_speaker_boost apply_text_normalization\]$/m)
+  const fx = 'filter_preset_id environment_id send_level distance background_noise_id pan'
+  assert.match(list.out, new RegExp(`^elevenlabs:eleven_v4 {2}Eleven v4 {2}\\[speech, dialogue, audio tags, options stability similarity_boost language_code apply_text_normalization ${fx}\\]$`, 'm'))
+  assert.match(list.out, new RegExp(`^elevenlabs:eleven_multilingual_v2 .*options stability similarity_boost style speed use_speaker_boost apply_text_normalization ${fx}\\]$`, 'm'))
   assert.doesNotMatch(list.out, /multilingual_sts/)
   // Voice's first model, a voice needed; priced a credit a character, half on Turbo
   assert.match((await cli('audio', '--prompt', 'Bonjour', '--estimate')).err, /pick a voice/)
@@ -500,12 +502,12 @@ test('ElevenLabs straight, never by the router: its models first, a voice, its o
   assert.deepEqual([est.provider, est.model, est.estimate.amount, est.estimate.unit], ['elevenlabs', 'eleven_v4', 14, 'credits'])
   assert.equal(JSON.parse((await cli('audio', '--model', 'eleven_v4_turbo', '--prompt', 'Bonjour à tous', '--voice', 'v1', '--estimate')).out).estimate.amount, 7)
   // its options checked: one the model lacks, a value out of range, a choice by its label
-  assert.match((await cli('audio', '--prompt', 'x', '--voice', 'v1', '--option', 'speed=1.1', '--estimate')).err, /Eleven v4 has no option speed \(its options: stability, similarity_boost, language_code, apply_text_normalization\)/)
+  assert.match((await cli('audio', '--prompt', 'x', '--voice', 'v1', '--option', 'speed=1.1', '--estimate')).err, /Eleven v4 has no option speed \(its options: stability, similarity_boost, language_code, apply_text_normalization, filter_preset_id/)
   assert.match((await cli('audio', '--model', 'eleven_multilingual_v2', '--prompt', 'x', '--voice', 'v1', '--option', 'speed=2', '--estimate')).err, /Speed \(speed\) is a number from 0.7 to 1.2/)
   assert.match((await cli('audio', '--model', 'eleven_flash_v2_5', '--prompt', 'x'.repeat(41), '--voice', 'v1', '--estimate')).err, /reads 40 characters at a time, this text has 41/)
   const r = await cli('audio', '--model', 'eleven_v3', '--prompt', '[whispers] Bonjour', '--voice', 'v1', '--option', 'stability=Robust', '--option', 'speed=0.9', '--option', 'language_code=fr', '--seed', '7', '--spend', '18')
   assert.equal(r.code, 0, r.err)
-  const tts = sent('/el/v1/text-to-speech/v1?output_format=mp3_44100_128')
+  const tts = sent('/el/v1/text-to-speech/v1/with-timestamps?output_format=mp3_44100_128')
   assert.deepEqual(tts.body, { model_id: 'eleven_v3', language_code: 'fr', seed: 7, text: '[whispers] Bonjour', voice_settings: { stability: 1, speed: 0.9 } })
   assert.equal(tts.auth, 'k-el')
   assert.deepEqual(ledger().at(-1) && [ledger().at(-1).provider, ledger().at(-1).actual, ledger().at(-1).actual_known, ledger().at(-1).unit], ['elevenlabs', 18, true, 'credits'])
@@ -513,24 +515,132 @@ test('ElevenLabs straight, never by the router: its models first, a voice, its o
   const cued = JSON.parse((await cli('audio', '--prompt', 'Bonjour', '--voice', 'v1', '--field', 'instructions=ASMR whisper', '--estimate')).out)
   assert.equal(cued.estimate.amount, '[whispers] Bonjour'.length)
   await cli('audio', '--prompt', 'Bonjour', '--voice', 'v1', '--field', 'instructions=ASMR whisper', '--spend', String(cued.estimate.amount))
-  assert.equal(sent('/el/v1/text-to-speech/v1?output_format=mp3_44100_128').body.text, '[whispers] Bonjour')
+  assert.equal(sent('/el/v1/text-to-speech/v1/with-timestamps?output_format=mp3_44100_128').body.text, '[whispers] Bonjour')
   // no option asked, no voice settings sent: the voice's own
   await cli('audio', '--prompt', 'Salut', '--voice', 'v1', '--spend', '5')
-  assert.equal(sent('/el/v1/text-to-speech/v1?output_format=mp3_44100_128').body.voice_settings, undefined)
+  assert.equal(sent('/el/v1/text-to-speech/v1/with-timestamps?output_format=mp3_44100_128').body.voice_settings, undefined)
   // a dialogue: its lines and voices, on v4 or v3 only, its settings apart
   assert.match((await cli('audio', '--model', 'eleven_flash_v2_5', '--line', 'v1: Salut', '--line', 'v2: Bonjour', '--estimate')).err, /speaks one voice: a dialogue goes to Eleven v4 or v3/)
   const d = await cli('audio', '--line', 'v1: [laughs] Salut !', '--line', 'v2: Bonjour.', '--option', 'stability=0.3', '--spend', '24')
   assert.equal(d.code, 0, d.err)
-  assert.deepEqual(sent('/el/v1/text-to-dialogue?output_format=mp3_44100_128').body, { model_id: 'eleven_v4', inputs: [{ text: '[laughs] Salut !', voice_id: 'v1' }, { text: 'Bonjour.', voice_id: 'v2' }], settings: { stability: 0.3 } })
+  assert.deepEqual(sent('/el/v1/text-to-dialogue/with-timestamps?output_format=mp3_44100_128').body, { model_id: 'eleven_v4', inputs: [{ text: '[laughs] Salut !', voice_id: 'v1' }, { text: 'Bonjour.', voice_id: 'v2' }], settings: { stability: 0.3 } })
   assert.equal(ledger().at(-1).actual, 24)
   // a style preset in a dialogue: its tags before each line
   await cli('audio', '--line', 'v1: Salut', '--line', 'v2: Bonjour', '--field', 'instructions=Villain', '--spend', '53')
-  assert.deepEqual(sent('/el/v1/text-to-dialogue?output_format=mp3_44100_128').body.inputs.map(i => i.text), ['[menacing] [amused] Salut', '[menacing] [amused] Bonjour'])
+  assert.deepEqual(sent('/el/v1/text-to-dialogue/with-timestamps?output_format=mp3_44100_128').body.inputs.map(i => i.text), ['[menacing] [amused] Salut', '[menacing] [amused] Bonjour'])
   // a voice of the Library goes whole, put on the account first: this fake plan cannot clone
   await cli('elements', 'add', 'Lea', at('voice.mp3'), '--type', 'voice')
   const lib = await cli('audio', '--prompt', 'Bonjour', '--voice', '@Lea', '--spend', '7')
   assert.match(lib.err, /instant voice cloning/)
   assert.equal(ledger().at(-1).actual, 0)
+})
+
+// a generation's folder, from the CLI's « → media/<id> » line
+const madeIn = r => at('media', r.out.match(/→ media\/(\S+)/)[1])
+const jobIn = r => JSON.parse(fs.readFileSync(path.join(madeIn(r), 'job.json'), 'utf8'))
+
+test('ElevenLabs voices: their captions beside the sound, their audio effects as asked; its other models listed beside them', async () => {
+  const list = await cli('models', 'audio')
+  assert.match(list.out, /^elevenlabs:eleven_text_to_sound_v2 {2}Eleven SFX v2 {2}\[sound, options duration_seconds loop prompt_influence\]$/m)
+  assert.match(list.out, /^elevenlabs:scribe_v2 {2}Scribe v2 {2}\[transcribe, options language_code diarize tag_audio_events no_verbatim\]$/m)
+  const r = await cli('audio', '--prompt', 'Bonjour à tous.', '--voice', 'v1', '--option', 'filter_preset_id=Phone', '--option', 'environment_id=hall', '--option', 'pan=-0.5', '--spend', '15')
+  assert.equal(r.code, 0, r.err)
+  assert.deepEqual(sent('/el/v1/text-to-speech/v1/with-timestamps?output_format=mp3_44100_128').body.audio_effects, { filter_preset_id: 'phone', environment_id: 'hall', pan: -0.5 })
+  assert.deepEqual(jobIn(r).outputs, ['out.mp3', 'captions.srt'])
+  assert.equal(fs.readFileSync(path.join(madeIn(r), 'captions.srt'), 'utf8'), '1\n00:00:00,000 --> 00:00:00,750\nBonjour à tous.\n')
+  // None leaves the effect out
+  await cli('audio', '--prompt', 'Salut', '--voice', 'v1', '--option', 'filter_preset_id=none', '--spend', '5')
+  assert.equal(sent('/el/v1/text-to-speech/v1/with-timestamps?output_format=mp3_44100_128').body.audio_effects, undefined)
+})
+
+test('sound effects straight from ElevenLabs, on either router: its length, loop and influence, 40 credits a second', async () => {
+  const est = JSON.parse((await cli('audio', '--tool', 'sound-effect', '--prompt', 'a door slams', '--option', 'duration_seconds=2', '--estimate')).out)
+  assert.deepEqual([est.provider, est.model, est.estimate.amount, est.estimate.known], ['elevenlabs', 'eleven_text_to_sound_v2', 80, true])
+  assert.equal(JSON.parse((await cli('audio', '--tool', 'sound-effect', '--prompt', 'a door slams', '--estimate')).out).estimate.amount, 200)
+  const r = await cli('audio', '--tool', 'sound-effect', '--prompt', 'rain on a window', '--field', 'style=Foley close-up', '--option', 'duration_seconds=0.5', '--option', 'loop=on', '--spend', '20')
+  assert.equal(r.code, 0, r.err)
+  assert.deepEqual(sent('/el/v1/sound-generation?output_format=mp3_44100_128').body, { text: 'rain on a window, realistic foley, close-miked, dry and detailed, no music', model_id: 'eleven_text_to_sound_v2', duration_seconds: 0.5, loop: true })
+  assert.deepEqual([jobIn(r).outputs, ledger().at(-1).actual, ledger().at(-1).actual_known], [['out.mp3'], 20, true])
+})
+
+test('Eleven Music: Describe\'s words and length, a sound as reference (uploaded, planned, conditioned), Write\'s sections as its plan', async () => {
+  const music = (...a) => cli('audio', '--tool', 'music', '--model', 'music_v2_5', ...a)
+  const est = JSON.parse((await music('--field', 'description=a calm lofi beat', '--estimate')).out)
+  assert.deepEqual([est.provider, est.estimate.amount, est.estimate.known], ['elevenlabs', 450, true])
+  const d = await music('--field', 'description=a calm lofi beat', '--field', 'vocals=instrumental', '--option', 'length=10', '--spend', '150')
+  assert.equal(d.code, 0, d.err)
+  assert.deepEqual(sent('/el/v1/music?output_format=mp3_44100_128').body, { model_id: 'music_v2_5', prompt: 'a calm lofi beat', music_length_ms: 10000, force_instrumental: true })
+  assert.deepEqual(jobIn(d).eleven, { song_id: 'song-1' })
+  // a sound as reference: its 2 s (an MP3's 2.04) uploaded and paid as a song of its length, the plan's first part
+  // conditioned on it
+  const ref = await music('--field', 'description=same vibe', '--in', `ref_audios=${at('voice.mp3')}`, '--option', 'length=10', '--option', 'condition_strength=high', '--spend', '181')
+  assert.equal(ref.code, 0, ref.err)
+  assert.match(sent('/el/v1/music/upload').form, /filename="voice\.mp3"/)
+  assert.deepEqual(sent('/el/v1/music/plan').body, { prompt: 'same vibe', model_id: 'music_v2_5', music_length_ms: 10000 })
+  const plan = sent('/el/v1/music?output_format=mp3_44100_128').body
+  assert.deepEqual([Object.keys(plan), plan.composition_plan.chunks[0].conditioning_ref, plan.composition_plan.chunks[0].condition_strength], [['model_id', 'composition_plan'], { song_id: 'up-1', range: { start_ms: 0, end_ms: 2040 } }, 'high'])
+  // Write: each [section] its lines, 4 s a line (10 s at least)
+  const lyrics = 'lyrics=[Verse]\nLa nuit tombe\nSur la ville\n[Chorus]\nOn danse'
+  assert.equal(JSON.parse((await music('--field', 'mode=write', '--field', 'style=french pop, piano', '--field', lyrics, '--estimate')).out).estimate.amount, 300)
+  const w = await music('--field', 'mode=write', '--field', 'style=french pop, piano', '--field', lyrics, '--spend', '300')
+  assert.equal(w.code, 0, w.err)
+  assert.deepEqual(sent('/el/v1/music?output_format=mp3_44100_128').body.composition_plan.chunks, [
+    { text: '[Verse]\nLa nuit tombe\nSur la ville', duration_ms: 10000, positive_styles: ['french pop', 'piano'], negative_styles: [] },
+    { text: '[Chorus]\nOn danse', duration_ms: 10000, positive_styles: ['french pop', 'piano'], negative_styles: [] }])
+  // what it cannot take
+  assert.match((await music('--field', 'description=x', '--in', `references=${at('a.png')}`, '--estimate')).err, /takes words and a sound: images and a video go to Suno on Kie/)
+  assert.match((await music('--field', 'mode=write', '--field', lyrics, '--estimate')).err, /plays its sections in a style/)
+})
+
+test('music for a video and stems of any song: sent as forms, a ZIP\'s files kept by their names, priced after', async () => {
+  const est = JSON.parse((await cli('audio', '--tool', 'music-video', '--in', `video=${at('talk.mp4')}`, '--estimate')).out)
+  assert.deepEqual([est.model, est.estimate.amount, est.estimate.known], ['eleven_video_to_music', 45, false])
+  const r = await cli('audio', '--tool', 'music-video', '--in', `video=${at('talk.mp4')}`, '--field', 'description=tense', '--field', 'style=cinematic, strings', '--option', 'separate_tracks=on', '--accept-unknown')
+  assert.equal(r.code, 0, r.err)
+  const f = sent('/el/v1/music/video-to-music?output_format=mp3_44100_128').form
+  for (const x of [/name="description"\r\n\r\ntense\r\n/, /name="tags"\r\n\r\ncinematic\r\n[\s\S]*name="tags"\r\n\r\nstrings\r\n/, /name="separate_tracks"\r\n\r\ntrue/, /filename="talk\.mp4"/]) assert.match(f, x)
+  assert.deepEqual(jobIn(r).outputs, ['music.mp3', 'sfx.mp3'])
+  const stems = (...a) => cli('audio', '--tool', 'stems', '--model', 'eleven_stem_separation', '--in', `clip=${at('voice.mp3')}`, ...a)
+  const s = await stems('--field', 'split=split_stem', '--accept-unknown')
+  assert.equal(s.code, 0, s.err)
+  assert.match(sent('/el/v1/music/stem-separation?output_format=mp3_44100_128').form, /name="stem_variation_id"\r\n\r\nsix_stems_v1/)
+  assert.deepEqual(jobIn(s).outputs, ['vocals.mp3', 'drums.mp3', 'bass.mp3', 'guitar.mp3', 'piano.mp3', 'other.mp3'])
+  assert.match((await stems('--field', 'split=split_stem_advanced', '--estimate')).err, /one instrument taken out is Suno's/)
+})
+
+test('a voice designed or remixed: 3 previews, one kept as a voice of the account and of the Library, then remixed by its id', async () => {
+  assert.match((await cli('audio', '--tool', 'design-voice', '--field', 'description=a calm voice', '--field', 'text=too short', '--estimate')).err, /100 to 1,000 characters/)
+  const r = await cli('audio', '--tool', 'design-voice', '--field', 'description=a warm low female voice, French', '--option', 'loudness=0.2', '--accept-unknown')
+  assert.equal(r.code, 0, r.err)
+  assert.deepEqual(sent('/el/v1/text-to-voice/design?output_format=mp3_44100_128').body, { voice_description: 'a warm low female voice, French', model_id: 'eleven_ttv_v3', auto_generate_text: true, loudness: 0.2 })
+  const job = jobIn(r)
+  assert.deepEqual([job.outputs, job.voices.map(v => v.generated_voice_id)], [['voice-1.mp3', 'voice-2.mp3', 'voice-3.mp3'], ['gen-1', 'gen-2', 'gen-3']])
+  const k = await cli('elements', 'keep', 'Claire', '--from', job.id, '--take', '2')
+  assert.equal(k.code, 0, k.err)
+  assert.deepEqual(sent('/el/v1/text-to-voice').body, { voice_name: 'Claire', voice_description: 'a warm low female voice, French', generated_voice_id: 'gen-2' })
+  const el = JSON.parse((await cli('elements', 'show', 'Claire')).out)
+  assert.deepEqual([el.type, el.voice_id, el.files.length, el.files[0].endsWith('-voice-2.mp3')], ['voice', 'v-gen-2', 1, true])
+  assert.match((await cli('elements', 'keep', 'Claire', '--from', job.id)).err, /in the Library already/)
+  const m = await cli('audio', '--tool', 'remix-voice', '--voice', '@Claire', '--field', 'description=older, slower', '--accept-unknown')
+  assert.equal(m.code, 0, m.err)
+  assert.deepEqual(sent('/el/v1/text-to-voice/v-gen-2/remix?output_format=mp3_44100_128').body, { voice_description: 'older, slower', auto_generate_text: true })
+})
+
+test('transcribe: a clip\'s words as text and captions, each speaker\'s turn; its text given, those words timed', async () => {
+  const est = JSON.parse((await cli('audio', '--tool', 'transcribe', '--in', `clip=${at('talk.mp4')}`, '--estimate')).out)
+  assert.deepEqual([est.model, est.estimate.amount, est.estimate.known], ['scribe_v2', 17, true])
+  const r = await cli('audio', '--tool', 'transcribe', '--in', `clip=${at('talk.mp4')}`, '--field', 'keyterms=Kie.ai, Lucie', '--option', 'diarize=on', '--spend', '17')
+  assert.equal(r.code, 0, r.err)
+  const f = sent('/el/v1/speech-to-text').form
+  // a video sends its sound alone
+  for (const x of [/name="model_id"\r\n\r\nscribe_v2/, /name="keyterms"\r\n\r\nKie\.ai\r\n[\s\S]*name="keyterms"\r\n\r\nLucie/, /name="diarize"\r\n\r\ntrue/, /filename="sound-\w+\.mp3"/]) assert.match(f, x)
+  assert.deepEqual(jobIn(r).outputs, ['transcript.txt', 'captions.srt', 'words.json'])
+  assert.equal(fs.readFileSync(path.join(madeIn(r), 'transcript.txt'), 'utf8'), 'Speaker 1: Hello there.\n\nSpeaker 2: How are you?\n')
+  assert.equal(fs.readFileSync(path.join(madeIn(r), 'captions.srt'), 'utf8'), '1\n00:00:00,000 --> 00:00:00,800\nHello there.\n\n2\n00:00:01,600 --> 00:00:02,400\nHow are you?\n')
+  const a = await cli('audio', '--tool', 'transcribe', '--in', `clip=${at('voice.mp3')}`, '--field', 'text=Hello world.', '--accept-unknown')
+  assert.equal(a.code, 0, a.err)
+  assert.match(sent('/el/v1/forced-alignment').form, /name="text"\r\n\r\nHello world\./)
+  assert.equal(fs.readFileSync(path.join(madeIn(a), 'captions.srt'), 'utf8'), '1\n00:00:00,000 --> 00:00:00,900\nHello world.\n')
 })
 
 test('change voice: through video.mjs and ElevenLabs, in credits; their dollars once a paid plan is set', async () => {
@@ -989,9 +1099,9 @@ test('the tools\' models: each in the shipped list, able to run its tool', () =>
   for (const [kind, router] of [['image', 'image'], ['video', 'video'], ['audio', 'speech']]) {
     for (const t of JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'tools', `${kind}.json`), 'utf8'))) {
       const needs = t.inputs.filter(i => !i.optional && i.kind !== 'matte')
-      // ElevenLabs' own (eleven_…) are reached straight: its live test checks them against its API. One list serves both
-      // routers: a model Kie alone has (Kling 4.0) is checked by Kie's test
-      for (const id of [...(t.models ?? []), ...(t.also ?? [])].filter(x => !/^eleven_/.test(x))) {
+      // ElevenLabs' own (eleven_…, its music and Scribe) are reached straight: its live test checks them against its API.
+      // One list serves both routers: a model Kie alone has (Kling 4.0) is checked by Kie's test
+      for (const id of [...(t.models ?? []), ...(t.also ?? [])].filter(x => !/^eleven_/.test(x) && !OWN_MODELS.has(x))) {
         const m = list[router].find(x => x.id === id), at = `${kind}/${t.id}: ${id}`
         assert.ok(m || kie[router].some(x => x.id === id), `${at} is in neither list`)
         if (!m) continue

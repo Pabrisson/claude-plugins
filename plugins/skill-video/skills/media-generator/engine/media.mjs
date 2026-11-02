@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // media-generator CLI and the dashboard's server. Images, videos, voices, music and sounds through the model routers of
-// providers/, ElevenLabs' voices straight from it, voice changes and dubbing through ElevenLabs by video-editor's engine.
+// providers/; ElevenLabs straight (its voices with their captions, sound effects, music, music for a video, stems, voice
+// design and remix, transcripts), its voice changes and dubbing by video-editor's engine.
 // Everything lives in the folder Claude Code
 // runs in ($MEDIA_GENERATOR_DIR overrides it): media/ (one folder per generation), elements/ (the @ references),
 // styles/ (the Library's styles), ledger.jsonl (what was spent), settings.json (thresholds, caps, defaults), .cache/
@@ -15,6 +16,7 @@ import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import zlib from 'node:zlib'
+import { srt } from './lib/captions.js'
 import { appendLedger, money, needsYes, PLANS, readLedger, spentThisMonth } from './lib/cost.js'
 import { DIALOGUE_MAX, DIALOGUE_VOICES, fromSnapshot } from './providers/elevenlabs.js'
 import { DIRECT, PROVIDERS, routerOf } from './providers/index.js'
@@ -49,7 +51,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' }, option: { type: 'string', multiple: true }, line: { type: 'string', multiple: true }, shot: { type: 'string', multiple: true }, say: { type: 'string', multiple: true }, 'from-draft': { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' }, for: { type: 'string' },
-    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, language: { type: 'string' }, verify: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' },
+    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, language: { type: 'string' }, verify: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' }, take: { type: 'string' },
   },
 })
 
@@ -207,13 +209,15 @@ const toolModels = tool => {
 }
 
 // the active router's models of a kind (or another router's: Settings › Development), their ids prefixed with the router: its list kept by hand, plus the new models
-// of its catalog (checked once a day). Speech: ElevenLabs' own models first, straight from it (its key), and then none of
-// a router's ElevenLabs voices (without its key, the router's stay)
+// of its catalog (checked once a day). Audio: ElevenLabs' own models first, straight from it: its voices (its key), and
+// then none of a router's ElevenLabs voices (without its key, the router's stay); its sounds, music, voice design and
+// transcripts, listed whatever the key
 async function models(kind, name = active()) {
   const own = (await PROVIDERS[name].models(routerKind(kind))).map(m => ({ ...m, id: `${name}:${m.model}`, provider: name }))
   if (kind !== 'audio') return own
   const direct = (await DIRECT.elevenlabs.models('speech').catch(() => [])).map(m => ({ ...m, id: `elevenlabs:${m.model}`, provider: 'elevenlabs' }))
-  return [...direct, ...own.filter(m => !(direct.length && m.role === 'speech' && m.model.startsWith('elevenlabs/')))]
+  const speaks = direct.some(m => m.role === 'speech')
+  return [...direct, ...own.filter(m => !(speaks && m.role === 'speech' && m.model.startsWith('elevenlabs/')))]
 }
 // a model of another router (a remix, a default set before a switch) runs on the active one when it has it
 async function modelOf(kind, id) {
@@ -368,6 +372,21 @@ function voiceToEleven(name) {
   if (!id) throw userError('ElevenLabs gave no voice id')
   const f = at('elements', name, 'element.json')
   writeJson(f, { ...(fs.existsSync(f) ? readJson(f) : {}), voice_id: id })
+  return element(name)
+}
+
+// a voice designed or remixed by ElevenLabs (Design a voice, Remix a voice), one of its previews, kept: made a voice of
+// the account (free, no clone) and of the Library, its preview its clip
+async function keepVoice(id, file, name) {
+  const job = fs.existsSync(path.join(mediaDir(id ?? '-'), 'job.json')) ? readJob(id) : null, v = job?.voices?.find(x => x.file === file)
+  if (!v) throw userError(`${file} is not a voice of ${id}: a result of Design a voice or Remix a voice (voice-1.mp3 to voice-3.mp3)`)
+  if (!NAME.test(name ?? '')) throw userError('a voice\'s name is letters, digits, - and _')
+  if (element(name)) throw userError(`@${name} is in the Library already: another name`)
+  const words = String(job.spec.fields?.description ?? '').trim()
+  const { voice_id } = await DIRECT.elevenlabs.keepVoice({ name, description: words || name, generated_voice_id: v.generated_voice_id })
+  saveElement(name, { type: 'voice', words, files: [path.join(mediaDir(id), file)], workspace: job.workspaces?.[0] })
+  const f = at('elements', name, 'element.json')
+  writeJson(f, { ...readJson(f), voice_id })
   return element(name)
 }
 
@@ -679,7 +698,7 @@ function routerRequest(kind, tool, spec, m, prompt, refsFromMentions) {
     prompt &&= `${cue} ${prompt}`
     p.dialogue &&= p.dialogue.map(l => (String(l.text ?? '').trim() ? { ...l, text: `${cue} ${l.text}` } : l))
   }
-  if (m.provider === 'elevenlabs') return elevenRequest(m, prompt, p, !!spec.probe)
+  if (m.provider === 'elevenlabs') return m.role === 'speech' ? elevenRequest(m, prompt, p, !!spec.probe) : elevenAudio(spec, m, p, !!spec.probe)
   // the model's own settings (its Options), checked; sent only when some are asked
   const options = optionValues(m, p.options), own = Object.keys(options).length ? { options } : {}
   if (kind === 'image') {
@@ -868,7 +887,7 @@ function audioRequest(tool, spec, m, options) {
   const suno = () => {
     if (!clip) return probing ? { task_id: 'probe', audio_id: 'probe', duration: 120 } : null
     const s = sunoOf(clip, action === 'persona')
-    if (!s && !probing) throw userError(`${tool.label} works on a song Suno made here (a Music result, an extend, a cover…): ${path.basename(clip)} is not one`)
+    if (!s && !probing) throw userError(`${tool.label} works on a song Suno made here (a Music result, an extend, a cover…): ${path.basename(clip)} is not one${action === 'stems' ? '; ElevenLabs splits any song (--model eleven_stem_separation)' : ''}`)
     return s ?? { task_id: 'probe', audio_id: 'probe' }
   }
   const limit = (k, n) => { if (words(k).length > n) throw userError(`${k} is ${n} characters at most, this one has ${words(k).length}`) }
@@ -1114,6 +1133,94 @@ function elevenRequest(m, prompt, p, probing) {
   if (!p.voice && !probing) throw userError('pick a voice (--voice <voice_id>: media.mjs voices lists them; or --voice @<a voice of the Library>)')
   if (m.params.max_chars && prompt.length > m.params.max_chars) throw userError(`${m.name} reads ${m.params.max_chars} characters at a time, this text has ${prompt.length}: split it`)
   return { send: { model: m.model, text: prompt, voice: p.voice && elevenVoice(p.voice), options, seed }, estimate: { text: prompt.length } }
+}
+
+// a sound cut once to what ElevenLabs takes of it (a music reference: 30 s), or a video's sound alone (a transcript, an
+// alignment), as an MP3 in the cache
+function soundPart(file, seconds) {
+  const s = probe(file)
+  if (!s.width && !(seconds && s.duration > seconds)) return file
+  if (!s.audio) throw userError(`${path.basename(file)} has no sound`)
+  const out = at('.cache', `sound-${createHash('sha1').update(JSON.stringify([file, fs.statSync(file).mtimeMs, seconds])).digest('hex').slice(0, 12)}.mp3`)
+  if (!fs.existsSync(out)) (fs.mkdirSync(path.dirname(out), { recursive: true }), ffmpeg(['-i', file, '-vn', ...(seconds ? ['-t', String(seconds)] : []), '-b:a', '192k', out]))
+  return out
+}
+
+// Write's lyrics as Eleven Music's plan: a [Name] line opens a section, the lines under it its words (30 at most, 200
+// characters each), the style on each; the length asked shared by their lines, else 4 s a line (10 s at least, 2 min at
+// most a section), an instrumental 30 s. v1 takes sections, v2 and v2.5 chunks
+// ponytail: 4 s a sung line is a guess; the free plan endpoint (/v1/music/plan) paces them better, but rewrites the words
+function musicPlan(model, lyrics, style, sung, length) {
+  const styles = style.split(',').map(s => s.trim()).filter(Boolean), sections = []
+  for (const line of (sung ? lyrics : '').split('\n').map(l => l.trim()).filter(Boolean)) {
+    const head = /^\[(.+)\]$/.exec(line)
+    if (head || !sections.length) sections.push({ name: head ? head[1].slice(0, 100) : 'Verse', lines: [] })
+    if (!head) sections.at(-1).lines.push(line.slice(0, 200))
+  }
+  if (!sections.length) sections.push({ name: sung ? 'Verse' : 'Instrumental', lines: [] })
+  const long = sections.find(s => s.lines.length > 30)
+  if (long) throw userError(`[${long.name}] has ${long.lines.length} lines, a section takes 30: open another one ([Verse 2]…)`)
+  if (length > 120 * sections.length) throw userError(`a section lasts 2 min at most: ${length} s takes ${Math.ceil(length / 120)} sections ([Verse], [Chorus]…)`)
+  const weight = s => Math.max(s.lines.length, 2), sum = sections.reduce((n, s) => n + weight(s), 0), own = s => (s.lines.length ? Math.max(10, s.lines.length * 4) : 30)
+  const ms = sections.map(s => Math.round(Math.min(120, Math.max(3, length ? (length * weight(s)) / sum : own(s))) * 1000))
+  const avoid = sung ? [] : ['vocals', 'singing']
+  const plan = model === 'music_v1'
+    ? { positive_global_styles: [...styles, ...(sung ? [] : ['instrumental'])], negative_global_styles: avoid, sections: sections.map((s, i) => ({ section_name: s.name, positive_local_styles: [], negative_local_styles: [], duration_ms: ms[i], lines: s.lines })) }
+    : { chunks: sections.map((s, i) => ({ text: [`[${s.name}]`, ...s.lines].join('\n'), duration_ms: ms[i], positive_styles: [...styles, ...(sung ? [] : ['instrumental'])], negative_styles: avoid })) }
+  return { plan, seconds: ms.reduce((a, b) => a + b, 0) / 1000 }
+}
+
+// ElevenLabs beyond speech: a sound effect, music (Describe's words, Write's sections as its plan, a sound as
+// reference), music for a video, a song's stems, a voice designed or remixed, a transcript or a text's words timed
+function elevenAudio(spec, m, p, probing) {
+  const options = optionValues(m, p.options), f = spec.fields ?? {}, files = k => spec.inputs?.[k] ?? [], words = k => String(f[k] ?? '').trim()
+  const go = (action, send, estimate = {}) => ({ send: { model: m.model, action, options, ...send }, estimate })
+  if (m.role === 'sound') {
+    const said = String(spec.prompt ?? '').trim(), text = said && [said, words('style')].filter(Boolean).join(', ')
+    if (!text && !probing) throw userError('say what it sounds like (--prompt "…")')
+    return go('sound', { text }, { seconds: options.duration_seconds || 0 })
+  }
+  if (m.role === 'music') {
+    const describe = (f.mode ?? 'describe') !== 'write', sung = (f.vocals ?? 'sung') !== 'instrumental'
+    if (files('references').length || files('ref_videos').length) throw userError(`${m.name} takes words and a sound: images and a video go to Suno on Kie`)
+    if (words('singer')) throw userError(`${m.name} sings in no singer of the Library: Suno on Kie does`)
+    if (describe) {
+      const prompt = [words('description'), words('style')].filter(Boolean).join('. '), ref = files('ref_audios')[0], length = options.length ?? 30
+      if (!prompt && !probing) throw userError('describe the music (--field description="…")')
+      if (ref && m.model === 'music_v1') throw userError('a sound as reference goes to Eleven Music v2 or v2.5 (--model music_v2_5)')
+      if (length && length < 3) throw userError('Eleven Music makes 3 s at least (--option length=3 to 600, 0: its own)')
+      const reference = ref && !probing ? { file: soundPart(ref, 30), seconds: Math.min(30, probe(ref).duration) } : undefined
+      return go('compose', { prompt: prompt || undefined, length: length || undefined, instrumental: !sung, reference }, { seconds: length, reference: ref ? Math.min(30, probe(ref).duration) : 0 })
+    }
+    if (!words('style') && !probing) throw userError(`${m.name} plays its sections in a style: say it (--field style="…")`)
+    const { plan, seconds } = musicPlan(m.model, words('lyrics'), words('style'), sung, +f.length || options.length || 0)
+    return go('compose', { plan }, { seconds })
+  }
+  if (m.role === 'video-music') {
+    const video = files('video')[0], s = video && probe(video)
+    if (s && s.duration > 600) throw userError(`${m.name} takes a video of 10 min at most, this one lasts ${Math.round(s.duration)} s: cut it`)
+    if (video && fs.statSync(video).size > 200e6) throw userError(`${m.name} takes 200 MB at most: export the video lighter`)
+    const tags = words('style').split(',').map(x => x.trim()).filter(Boolean).slice(0, 10)
+    return go('video_music', { video, description: words('description') || undefined, tags }, { seconds: s?.duration ?? 0 })
+  }
+  if (m.role === 'stems') {
+    const split = f.split ?? 'separate_vocal'
+    if (split === 'split_stem_advanced') throw userError(`one instrument taken out is Suno's (on Kie): ${m.name} gives the voice and the music, or 6 tracks`)
+    return go('stems', { file: files('clip')[0], variation: split === 'split_stem' ? 'six_stems_v1' : 'two_stems_v1' })
+  }
+  if (m.role === 'design' || m.role === 'remix') {
+    const text = words('text'), ref = files('reference')[0]
+    if (!words('description') && !probing) throw userError(m.role === 'design' ? 'describe the voice (--field description="…")' : 'say what changes (--field description="older, a British accent")')
+    if (text && (text.length < 100 || text.length > 1000)) throw userError(`what it says is 100 to 1,000 characters, this has ${text.length}: or none, and it writes its own`)
+    if (ref && m.model !== 'eleven_ttv_v3') throw userError('a reference clip goes to Voice Design v3 (--model eleven_ttv_v3)')
+    if (m.role === 'design') return go('design', { description: words('description'), text: text || undefined, reference: ref })
+    if (!p.voice && !probing) throw userError('pick the voice to remix (--voice <voice_id>: media.mjs voices lists them; or --voice @<a voice of the Library>)')
+    return go('remix', { voice: p.voice && elevenVoice(p.voice), description: words('description'), text: text || undefined })
+  }
+  // a transcript, or the words given timed (forced alignment): a video sends its sound alone
+  const clip = files('clip')[0], text = words('text')
+  const keyterms = words('keyterms').split(',').map(x => x.trim()).filter(k => k && k.length < 50 && k.split(/\s+/).length <= 5)
+  return go(text ? 'align' : 'transcribe', { file: clip && !probing ? soundPart(clip) : clip, text: text || undefined, keyterms }, { seconds: clip ? probe(clip).duration : 0, align: !!text })
 }
 
 // ElevenLabs' estimate from video.mjs (the one place its rates live): credits
@@ -1498,8 +1605,15 @@ async function runAudio(dir, job, request, provider) {
     if (!asked) Object.assign(job, { actual: 0, actual_known: true })
     return
   }
+  // a voice of the Library to remix, not on the ElevenLabs account yet: it goes there first (its paid plans)
+  if (job.provider === 'elevenlabs' && String(request.voice ?? '').startsWith('@')) {
+    progress(job, `putting ${request.voice} on ElevenLabs…`)
+    request = { ...request, voice: voiceToEleven(request.voice.slice(1)).voice_id }
+  }
   progress(job, `${job.label.toLowerCase()} with ${job.name}…`)
   const r = await provider.audio(request, { progress: m => progress(job, m) })
+  // what the job keeps for what follows (ElevenLabs: a designed voice's ids, a song's id)
+  if (r.keep) Object.assign(job, r.keep)
   const names = new Map()
   job.outputs = []
   for (const f of r.files) {
@@ -1623,6 +1737,8 @@ async function runRouter(dir, job, request) {
       fs.rmSync(path.join(dir, `out-raw.${r.format}`))
     }
     job.outputs = ['out.mp3']
+    // its words' times (ElevenLabs): its captions beside
+    if (r.words?.length) (fs.writeFileSync(path.join(dir, 'captions.srt'), srt(r.words)), job.outputs.push('captions.srt'))
     if (r.generation) progress(job, 'reading its cost…')
     const cost = r.cost ?? (r.generation ? await provider.generationCost(r.generation) : null)
     if (cost != null) Object.assign(job, { actual: cost, actual_known: true })
@@ -2025,7 +2141,7 @@ function setup(sub, ...rest) {
 // --type, --words, --colors "#hex,#hex" and --font (a brand), --from <generation> (its results) and --drop <file>
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 async function elements(sub, name, ...files) {
-  const usage = `usage: elements [add|set <name> [<files…>] [--type ${TYPES.join('|')}] [--words "…"] [--colors "#hex,#hex"] [--font "…"] [--voice @<voice>] [--from <generation>] [--drop <file>] [--workspace <slug>|none] | suno <name> [--start <s> --end <s> --language <code> | --verify <recording>] | show <name> | remove <name> | elevenlabs <name>]`
+  const usage = `usage: elements [add|set <name> [<files…>] [--type ${TYPES.join('|')}] [--words "…"] [--colors "#hex,#hex"] [--font "…"] [--voice @<voice>] [--from <generation>] [--drop <file>] [--workspace <slug>|none] | suno <name> [--start <s> --end <s> --language <code> | --verify <recording>] | keep <name> --from <generation> [--take 1|2|3] | show <name> | remove <name> | elevenlabs <name>]`
   try {
     if (sub === 'add' || sub === 'set') {
       if (sub === 'set' && !element(name)) throw userError(`no Element @${name}: elements add ${name} <files…>`)
@@ -2034,6 +2150,10 @@ async function elements(sub, name, ...files) {
     } else if (sub === 'suno') {
       const r = await sunoVoice(name, { start: opt.start, end: opt.end, language: opt.language, verify: opt.verify })
       return console.log(r.phrase ? `sing or say this in the same voice, record it, then: elements suno ${name} --verify <recording>\n${r.phrase}` : `@${name} is a Suno singer: Music's Singer field takes it (--field singer=@${name})`)
+    } else if (sub === 'keep') {
+      // a preview of Design a voice or Remix a voice kept as a voice of the account and of the Library
+      if (!opt.from?.length) die(usage)
+      await keepVoice(String(opt.from[0]).split(/[\\/]/).filter(Boolean).pop(), `voice-${num(opt.take) ?? 1}.mp3`, name)
     } else if (sub === 'show') {
       const el = element(name)
       if (!el) throw userError(`no Element @${name}`)
@@ -2132,7 +2252,7 @@ function doctor() {
   console.log(process.env.OPENROUTER_MANAGEMENT_KEY ? 'openrouter management key: set (the account\'s balance)' : 'openrouter management key: not set (the key\'s own limit only)')
   console.log(process.env.KIE_API_KEY ? 'kie: key set' : 'kie: no key (the default router: with OpenRouter\'s key alone, switch the router in Settings › Router)')
   console.log(`active router: ${PROVIDERS[active()].label}${PROVIDERS[active()].key() ? '' : ', without its key: nothing can be generated'}`)
-  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Voice and dialogues straight from ElevenLabs, change voice, translate)' : 'elevenlabs: no key, no voice change or translation (the routers\' ElevenLabs voices stay)')
+  console.log(process.env.ELEVENLABS_API_KEY ? 'elevenlabs: key set (Voice and dialogues straight from ElevenLabs, change voice, translate, sound effects, music, voice design, transcripts)' : 'elevenlabs: no key, no voice change or translation (the routers\' ElevenLabs voices stay)')
   const s = settings()
   console.log(`limits: ${['openrouter', 'kie', 'elevenlabs'].map(p => `${p} threshold ${s[p].threshold ?? 'none'}, cap ${s[p].cap ?? 'none'}`).join(' · ')}`)
   console.log(`folder: ${HOME}`)
@@ -2372,6 +2492,11 @@ async function handle(req, res) {
     })
     const r = videoMjs(['voice-clone', name, ...files])
     return r.status === 0 ? reply(res, 200, { ok: true, out: r.stdout.trim() }) : reply(res, 400, { error: (r.stderr || r.stdout).trim().replace(/^error: /, '') })
+  }
+  // a preview of Design a voice or Remix a voice kept: a voice of the account and of the Library
+  if (p === '/api/keep-voice' && post) {
+    const { id, file, name } = await readBody(req)
+    try { return reply(res, 200, await keepVoice(id, file, name)) } catch (e) { return reply(res, 400, { error: e.message }) }
   }
   // the Library's Elements: made or changed from the page (a path inside the folder: an upload, a result), removed, a
   // voice put on the ElevenLabs account

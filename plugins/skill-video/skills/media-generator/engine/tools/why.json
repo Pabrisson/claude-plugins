@@ -46,6 +46,13 @@
     "google/lyria-3-pro-preview": "Google's music model, full songs in 48 kHz, its lyrics as text",
     "suno/sounds": "Sounds and loops with their tempo and key",
     "suno/stems": "Suno's own split of the songs it made",
-    "suno/extras": "Suno's own tools for the songs it made"
+    "suno/extras": "Suno's own tools for the songs it made",
+    "music_v2_5": "ElevenLabs' music, cleared for commercial use; Write's sections played as written, a sound as reference",
+    "eleven_text_to_sound_v2": "ElevenLabs' sound effects: a length to the half second, seamless loops",
+    "eleven_video_to_music": "ElevenLabs' music made to a video's cuts and mood, its effects too",
+    "eleven_stem_separation": "ElevenLabs' split of any song: voice and music, or 6 tracks",
+    "eleven_ttv_v3": "ElevenLabs' newest voice design, from words and a clip to start from",
+    "eleven_voice_remix": "ElevenLabs' remix of a voice in words",
+    "scribe_v2": "ElevenLabs' transcription, 90+ languages, who speaks, sound events"
   }
 }

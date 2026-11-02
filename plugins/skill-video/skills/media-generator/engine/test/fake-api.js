@@ -5,6 +5,24 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
+import zlib from 'node:zlib'
+
+// a ZIP of files, each deflated (ElevenLabs' stems)
+export function zip(files) {
+  const parts = [], central = []
+  let off = 0
+  for (const [name, data] of Object.entries(files)) {
+    const n = Buffer.from(name), d = zlib.deflateRawSync(data), h = Buffer.alloc(30), c = Buffer.alloc(46)
+    h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(8, 8); h.writeUInt32LE(zlib.crc32(data), 14); h.writeUInt32LE(d.length, 18); h.writeUInt32LE(data.length, 22); h.writeUInt16LE(n.length, 26)
+    c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(8, 10); c.writeUInt32LE(zlib.crc32(data), 16); c.writeUInt32LE(d.length, 20); c.writeUInt32LE(data.length, 24); c.writeUInt16LE(n.length, 28); c.writeUInt32LE(off, 42)
+    parts.push(h, n, d)
+    central.push(c, n)
+    off += 30 + n.length + d.length
+  }
+  const cd = Buffer.concat(central), e = Buffer.alloc(22), count = Object.keys(files).length
+  e.writeUInt32LE(0x06054b50, 0); e.writeUInt16LE(count, 8); e.writeUInt16LE(count, 10); e.writeUInt32LE(cd.length, 12); e.writeUInt32LE(off, 16)
+  return Buffer.concat([...parts, cd, e])
+}
 
 export async function startFake(dir) {
   const make = (name, ...argv) => { const f = path.join(dir, name); execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv, f]); return fs.readFileSync(f) }
@@ -37,7 +55,9 @@ setInterval(() => {}, 1e6)
     for await (const c of req) chunks.push(c)
     const raw = Buffer.concat(chunks), body = /json/.test(req.headers['content-type'] ?? '') ? JSON.parse(raw.toString() || '{}') : null
     const u = new URL(req.url, 'http://x'), p = u.pathname
-    calls.push({ method: req.method, path: p + u.search, body, auth: req.headers.authorization ?? req.headers['xi-api-key'] ?? null, size: raw.length })
+    // a form's fields and files as text, to read them back
+    const form = /multipart/.test(req.headers['content-type'] ?? '') ? raw.toString('latin1') : null
+    calls.push({ method: req.method, path: p + u.search, body, form, auth: req.headers.authorization ?? req.headers['xi-api-key'] ?? null, size: raw.length })
     const json = (v, code = 200, headers = {}) => { res.writeHead(code, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(v)) }
     const bytes = (b, type, headers = {}) => { res.writeHead(200, { 'content-type': type, ...headers }); res.end(b) }
     // OpenRouter's catalog, as its routes answered on 2026-10-31: a model the list has (fake/img, fake/vid, fake/tts) and
@@ -150,10 +170,30 @@ setInterval(() => {}, 1e6)
         m('eleven_multilingual_v2', 'Eleven Multilingual v2', 1, { can_use_style: true, can_use_speaker_boost: true }), m('eleven_flash_v2_5', 'Eleven Flash v2.5', 0.5, { maximum_text_length_per_request: 40 }),
         { model_id: 'eleven_multilingual_sts_v2', name: 'Eleven Multilingual v2 (speech to speech)', can_do_text_to_speech: false }])
     }
-    if (p.startsWith('/el/v1/text-to-speech/') || p === '/el/v1/text-to-dialogue') {
-      const chars = body.text?.length ?? body.inputs.reduce((n, l) => n + l.text.length, 0)
-      return bytes(mp3, 'audio/mpeg', { 'character-cost': String(Math.ceil(chars * (body.model_id === 'eleven_v4_turbo' ? 0.5 : 1))) })
+    // timed: the sound in base64 and each character's times, 50 ms each
+    if (p.startsWith('/el/v1/text-to-speech/') || p.startsWith('/el/v1/text-to-dialogue')) {
+      const text = body.text ?? body.inputs.map(l => l.text).join(' '), cost = { 'character-cost': String(Math.ceil((body.text?.length ?? body.inputs.reduce((n, l) => n + l.text.length, 0)) * (body.model_id === 'eleven_v4_turbo' ? 0.5 : 1))) }
+      if (!p.includes('/with-timestamps')) return bytes(mp3, 'audio/mpeg', cost)
+      const ch = [...text]
+      return json({ audio_base64: mp3.toString('base64'), alignment: { characters: ch, character_start_times_seconds: ch.map((_, i) => i * 0.05), character_end_times_seconds: ch.map((_, i) => (i + 1) * 0.05) } }, 200, cost)
     }
+    // ElevenLabs beyond speech, in the shapes of its reference of 2026-11-02: its effects, a sound, music (its plan, an
+    // upload, a video's music, stems as a ZIP), a voice designed or remixed (3 previews) and kept, a transcript, an alignment
+    if (p === '/el/v1/audio-effects/catalog') return json({ filter_presets: [{ filter_preset_id: 'phone', name: 'Phone', description: 'a call' }], environments: [{ environment_id: 'hall', name: 'Hall', description: null }], background_noises: [{ background_noise_id: 'cafe', name: 'Café', description: null }] })
+    if (p === '/el/v1/sound-generation') return bytes(mp3, 'audio/mpeg', { 'character-cost': String(body.duration_seconds ? Math.ceil(body.duration_seconds * 40) : 200) })
+    if (p === '/el/v1/music/plan') return json({ chunks: [{ text: '[Intro]', duration_ms: 10000, positive_styles: ['lofi'], negative_styles: [] }, { text: '[Outro]', duration_ms: 5000, positive_styles: ['lofi'], negative_styles: [] }] })
+    if (p === '/el/v1/music/upload') return json({ song_id: 'up-1' })
+    if (p === '/el/v1/music') return bytes(mp3, 'audio/mpeg', { 'song-id': 'song-1' })
+    if (p === '/el/v1/music/video-to-music') return /name="separate_tracks"\r\n\r\ntrue/.test(form) ? bytes(zip({ 'music.mp3': mp3, 'sfx.mp3': mp3 }), 'application/zip') : bytes(mp3, 'audio/mpeg')
+    if (p === '/el/v1/music/stem-separation') return bytes(zip(/six_stems_v1/.test(form) ? Object.fromEntries(['vocals', 'drums', 'bass', 'guitar', 'piano', 'other'].map(n => [`stems/${n}.mp3`, mp3])) : { 'vocals.mp3': mp3, 'instrumental.mp3': mp3 }), 'application/zip')
+    if (p === '/el/v1/text-to-voice/design' || /^\/el\/v1\/text-to-voice\/[\w-]+\/remix$/.test(p))
+      return json({ previews: [1, 2, 3].map(n => ({ audio_base_64: mp3.toString('base64'), generated_voice_id: `gen-${n}`, media_type: 'audio/mpeg', duration_secs: 1, language: 'en' })), text: 'A preview of the voice.' })
+    if (p === '/el/v1/text-to-voice') return json({ voice_id: `v-${body.generated_voice_id}`, name: body.voice_name })
+    if (p === '/el/v1/speech-to-text') {
+      const w = (text, start, end, who) => [{ text, start, end, type: 'word', speaker_id: who }, { text: ' ', start: end, end, type: 'spacing', speaker_id: who }]
+      return json({ language_code: 'en', text: 'Hello there. How are you?', words: [...w('Hello', 0, 0.4, 'speaker_0'), ...w('there.', 0.45, 0.8, 'speaker_0'), ...w('How', 1.6, 1.8, 'speaker_1'), ...w('are', 1.85, 2, 'speaker_1'), ...w('you?', 2.05, 2.4, 'speaker_1')].slice(0, -1) })
+    }
+    if (p === '/el/v1/forced-alignment') return json({ words: [{ text: 'Hello', start: 0, end: 0.4, loss: 0.1 }, { text: 'world.', start: 0.5, end: 0.9, loss: 0.1 }], characters: [], loss: 0.1 })
     if (p === '/el/v2/voices') return json({ voices: [{ voice_id: 'v1', name: 'Arthur', category: 'premade', labels: { gender: 'male' }, verified_languages: [{ language: 'en' }] }], has_more: false })
     // Kie.ai (under /kie, its upload under /kieup, its docs under /kiedocs, its files under /kiefiles), as it answered on
     // 2026-10-31: HTTP 200 with its own code in the body; the 21st new task in 10 s is a 429 (kie.window)

@@ -15,7 +15,7 @@ export const resOf = (w: number, h: number) => {
 }
 // a sound's type, by the tool that made it (tools/audio.json's groups): a voice, a sound effect, an imported file, else
 // music (Suno's too); and a file's format, by its extension
-const VOICE_TOOLS = ["voice", "change-voice", "translate", "create-singer", "isolate-voice"]
+const VOICE_TOOLS = ["voice", "change-voice", "translate", "create-singer", "isolate-voice", "design-voice", "remix-voice", "transcribe"]
 export const SOUND_TYPES = ["voice", "music", "sound", "import"] as const
 export const SOUND_NAMES: Record<string, string> = { voice: "Voice", music: "Music", sound: "Sound effect", import: "Imported" }
 export const soundOf = (tool: string) => (tool === "sound-effect" ? "sound" : tool === "import" ? "import" : VOICE_TOOLS.includes(tool) ? "voice" : "music")

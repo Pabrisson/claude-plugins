@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos, voices, music and sound effects with AI models through a model router (Kie.ai by default, or OpenRouter) and ElevenLabs, every cost shown and approved first. Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles cited with @name, workspaces with a timeline, and a local dashboard. Use it whenever the user wants an image, a video clip, a voice, a song or a sound made or transformed by AI (create, animate, restyle, upscale, face or object swap, inpaint, camera moves, talking avatar, lip sync, voice-over, voice change, dubbing, music, stems, sound effects), for example "génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "redessine-la en style anime", "crée le personnage Lulu avec ces photos", "crée la voix du narrateur", "voix off", "traduis cette vidéo en anglais", "crée une musique", "un bruitage de pluie", "ouvre le générateur", "crée un workspace", "combien j'ai dépensé", or when they paste a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
+description: Generates and edits images, videos, voices, music and sound effects with AI models through a model router (Kie.ai by default, or OpenRouter) and ElevenLabs, every cost shown and approved first. Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles cited with @name, workspaces with a timeline, and a local dashboard. Use it whenever the user wants an image, a video clip, a voice, a song or a sound made or transformed by AI (create, animate, restyle, upscale, face or object swap, inpaint, camera moves, talking avatar, lip sync, voice-over, voice change, voice design, dubbing, transcripts, music, stems, sound effects), for example "génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "redessine-la en style anime", "crée le personnage Lulu avec ces photos", "crée la voix du narrateur", "voix off", "traduis cette vidéo en anglais", "crée une musique", "un bruitage de pluie", "ouvre le générateur", "transcris cette vidéo", "combien j'ai dépensé", or when they paste a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Claude").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/media.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -10,8 +10,9 @@ allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/media.mjs" *), Bash(node ${
 You generate and edit images, videos and voices for the user with AI models. The models sit behind a router,
 one active at a time: Kie.ai by default, or OpenRouter (each one key for many labs; Kie.ai is the one active until the
 user picks another in Settings › Router, or `media.mjs setup set router.active=kie|openrouter` when they ask).
-ElevenLabs is never reached through a router while its key is set: its voices (Voice, dialogues), the voice change and
-dubbing go straight to its API, with its own key and credits, whichever router is active. Suno's models come by Kie,
+ElevenLabs is never reached through a router while its key is set: its voices (Voice, dialogues, with their captions),
+the voice change, dubbing, its sound effects, Eleven Music, music for a video, stems, voice design and remix and
+transcripts go straight to its API, with its own key and credits, whichever router is active. Suno's models come by Kie,
 Lyria's by OpenRouter. Every generation costs money,
 so the user always sees the price first and says yes. A local dashboard does the same with clicks.
 
@@ -40,8 +41,8 @@ Run `media.mjs doctor` once per conversation.
   (a key from openrouter.ai/keys), then restart the session. `tools`, `models` and the dashboard still work.
 - `active router: …, without its key`: the router picked in Settings has no key. Same as above for that router (a
   Kie key from kie.ai/api-key), or switch back to the other one if the user prefers.
-- `elevenlabs: no key`: no voice change and no translation; Voice takes the router's ElevenLabs voices. Everything else
-  works.
+- `elevenlabs: no key`: no voice change, translation, voice design or transcript, nor ElevenLabs' sound effects and
+  music; Voice takes the router's ElevenLabs voices. Everything else works.
 - `missing cloudflared`: a video or a voice cannot reach OpenRouter (video edits, upscale, talking avatar). Give
   the command `doctor` prints (no account needed). Everything else works, and Kie needs none (it takes the files by its
   own upload).
@@ -72,7 +73,7 @@ read the one the request touches before its step 1 (once per conversation is eno
 | A video edit (Inpaint, Object swap, Face swap, Clean up, Custom edit, Restyle, Relight, Recolor), a tool done on this machine (Reframe, FPS boost, SDR to HDR, Depth map, Remove background), Lip sync, Speech to video | `references/video-tools.md` |
 | A model's own setting or editor: `--option`, shots, middle frames, reference videos or sounds, a voice in a video, spoken lines (`--say`), who speaks, a draft | `references/model-options.md` |
 | An Element, a style of the user's own, `@name`, a References sheet, a pasted "Ask Claude", a workspace | `references/library.md` |
-| Any `audio`: speech, a dialogue, Change voice, Translate, music, a song, a sound effect, Isolate voice, a singer | `references/audio.md` |
+| Any `audio`: speech, a dialogue, Change voice, Translate, music, a song, music for a video, a sound effect, stems, Isolate voice, a singer, a voice designed or remixed, a transcript | `references/audio.md` |
 | A new tool or a new preset style in the engine | `references/tools-format.md` |
 
 ## A generation

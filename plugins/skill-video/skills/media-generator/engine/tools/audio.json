@@ -47,8 +47,18 @@
       { "key": "singer", "label": "Singer", "type": "singer", "optional": true, "when": { "vocals": "sung" } }
     ],
     "template": "",
-    "models": ["google/lyria-3-pro-preview"], "also": ["google/lyria-3-clip-preview"],
-    "kie": { "models": ["suno/v6"], "also": ["suno/v6-mini", "suno/v6-wild"] }
+    "models": ["google/lyria-3-pro-preview", "music_v2_5"], "also": ["google/lyria-3-clip-preview", "music_v2", "music_v1"],
+    "kie": { "models": ["suno/v6", "music_v2_5"], "also": ["suno/v6-mini", "suno/v6-wild", "music_v2", "music_v1"] }
+  },
+  {
+    "id": "music-video", "label": "Music for a video", "group": "Music", "mode": "edit", "icon": "video",
+    "description": "Music made for a video, to its cuts and its mood, its sound effects too if asked, apart or mixed. ElevenLabs, whichever router.",
+    "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
+    "fields": [
+      { "key": "description", "label": "Description", "type": "lines", "placeholder": "tense at first, then bright and hopeful", "optional": true },
+      { "key": "style", "label": "Style", "type": "style", "options": "music-styles", "for": "music", "optional": true }
+    ],
+    "template": "", "models": ["eleven_video_to_music"]
   },
   {
     "id": "create-singer", "label": "Singer", "group": "Voice", "mode": "create", "icon": "mic-vocal", "action": "singer_song",
@@ -64,9 +74,10 @@
   },
   {
     "id": "sound-effect", "label": "Sound effect", "group": "Sound", "mode": "create", "icon": "volume-2", "action": "sounds",
-    "description": "A sound, an ambience or a loop from words, in a sound style; its loop, tempo and key in the model's options.",
+    "description": "A sound, an ambience or a loop from words, in a sound style; in the model's options, Suno's loop, tempo and key, or ElevenLabs' length, loop and prompt influence.",
     "inputs": [], "fields": [{ "key": "style", "label": "Style", "type": "style", "options": "sound-styles", "for": "sound" }], "template": "{prompt}",
-    "routers": ["kie"], "models": [], "kie": { "models": ["suno/sounds"] }
+    "models": ["eleven_text_to_sound_v2"], "also": ["eleven_text_to_sound_v3"],
+    "kie": { "models": ["suno/sounds", "eleven_text_to_sound_v2"], "also": ["eleven_text_to_sound_v3"] }
   },
   {
     "id": "extend-music", "label": "Extend music", "group": "Music", "mode": "edit", "icon": "arrow-right-to-line", "action": "extend",
@@ -144,13 +155,13 @@
   },
   {
     "id": "stems", "label": "Stems", "group": "Music", "mode": "edit", "icon": "layers", "action": "stems",
-    "description": "A Suno song split in tracks: the voice and the music, up to 12 instruments, or one instrument taken out.",
-    "inputs": [{ "key": "clip", "kind": "audio", "label": "Suno song" }],
+    "description": "A song split in tracks: the voice and the music, every instrument (Suno: up to 12 of the songs it made; ElevenLabs: 6 of any song), or one instrument taken out (Suno).",
+    "inputs": [{ "key": "clip", "kind": "audio", "label": "Song" }],
     "fields": [
-      { "key": "split", "label": "Split", "type": "choice", "options": [{ "value": "separate_vocal", "label": "Voice + music", "icon": "split" }, { "value": "split_stem", "label": "Up to 12", "icon": "layers" }, { "value": "split_stem_advanced", "label": "One instrument", "icon": "guitar" }], "default": "separate_vocal" },
+      { "key": "split", "label": "Split", "type": "choice", "options": [{ "value": "separate_vocal", "label": "Voice + music", "icon": "split" }, { "value": "split_stem", "label": "Every instrument", "icon": "layers" }, { "value": "split_stem_advanced", "label": "One instrument", "icon": "guitar" }], "default": "separate_vocal" },
       { "key": "instrument", "label": "Instrument", "type": "select", "options": "stems", "default": "Lead Vocal", "when": { "split": "split_stem_advanced" } }
     ],
-    "template": "", "routers": ["kie"], "models": [], "kie": { "models": ["suno/stems"] }
+    "template": "", "models": ["eleven_stem_separation"], "kie": { "models": ["suno/stems", "eleven_stem_separation"] }
   },
   {
     "id": "isolate-voice", "label": "Isolate voice", "group": "Voice", "mode": "edit", "icon": "audio-waveform",
@@ -158,6 +169,36 @@
     "inputs": [{ "key": "clip", "kind": "media", "label": "Clip (audio or video)" }],
     "fields": [], "template": "",
     "provider": "elevenlabs"
+  },
+  {
+    "id": "design-voice", "label": "Design a voice", "group": "Voice", "mode": "create", "icon": "wand-sparkles",
+    "description": "A new voice from its description (and a clip of a voice to start from, on v3): 3 previews; « Keep this voice » makes one a voice of the Library, for every voice tool. ElevenLabs, whichever router.",
+    "inputs": [{ "key": "reference", "kind": "audio", "label": "Voice to start from", "optional": true }],
+    "fields": [
+      { "key": "description", "label": "The voice", "type": "lines", "placeholder": "a warm, low female voice, French, late thirties, calm and close to the microphone" },
+      { "key": "text", "label": "What it says", "type": "lines", "placeholder": "100 to 1,000 characters, or none: it writes its own", "optional": true }
+    ],
+    "template": "", "models": ["eleven_ttv_v3"], "also": ["eleven_multilingual_ttv_v2"]
+  },
+  {
+    "id": "remix-voice", "label": "Remix a voice", "group": "Voice", "mode": "edit", "icon": "blend",
+    "description": "A voice of the account or of the Library changed in words (its age, accent, tone, pace): 3 previews, one kept as a new voice of the Library. ElevenLabs, whichever router.",
+    "inputs": [],
+    "fields": [
+      { "key": "description", "label": "What changes", "type": "lines", "placeholder": "older, with a British accent, slower" },
+      { "key": "text", "label": "What it says", "type": "lines", "placeholder": "100 to 1,000 characters, or none: it writes its own", "optional": true }
+    ],
+    "template": "", "models": ["eleven_voice_remix"]
+  },
+  {
+    "id": "transcribe", "label": "Transcribe", "group": "Voice", "mode": "edit", "icon": "captions",
+    "description": "The words of a clip as text and captions (SRT), who speaks if asked; given its text, its words timed exactly instead. ElevenLabs' Scribe v2, whichever router.",
+    "inputs": [{ "key": "clip", "kind": "media", "label": "Clip (audio or video)" }],
+    "fields": [
+      { "key": "text", "label": "Its text", "type": "lines", "placeholder": "optional: the words said, to time them exactly", "optional": true },
+      { "key": "keyterms", "label": "Words to get right", "type": "text", "placeholder": "names, brands: Lucie, Kie.ai", "optional": true }
+    ],
+    "template": "", "models": ["scribe_v2"]
   },
   {
     "id": "wav", "label": "WAV", "group": "Suno", "mode": "edit", "icon": "file-audio", "action": "wav", "hidden": true,

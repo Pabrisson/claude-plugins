@@ -7,6 +7,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { startFake } from './fake-api.js'
 import { CATALOG_PRICES, estimateKie, made, readSpec } from '../providers/kie.js'
+import { OWN_MODELS } from '../providers/elevenlabs.js'
 import { retry429, retryAfter, windowed } from '../lib/limit.js'
 
 // Kie as the active router, on a throwaway folder, against the fake Kie (its API, upload, docs and files)
@@ -333,8 +334,10 @@ test('the shipped Kie list is normalized, and every tool that generates runs on 
   const tools = kind => JSON.parse(fs.readFileSync(path.join(dir, 'tools', `${kind}.json`), 'utf8'))
   for (const [kind, router] of [['image', 'image'], ['video', 'video'], ['audio', 'speech']]) {
     for (const t of tools(kind).filter(t => t.models)) {
-      // ElevenLabs' own (eleven_…) are reached straight, whichever router
-      const own = t.kie, ids = [...(own?.models ?? t.models), ...(own?.also ?? t.also ?? [])].filter(id => !/^eleven_/.test(id)), on = ids.map(id => list[router].find(x => x.id === id))
+      // ElevenLabs' own (eleven_…, its music and Scribe) are reached straight, whichever router: a tool of its alone
+      // (Design a voice, Transcribe…) has none on Kie
+      const own = t.kie, all = [...(own?.models ?? t.models), ...(own?.also ?? t.also ?? [])], ids = all.filter(id => !/^eleven_/.test(id) && !OWN_MODELS.has(id)), on = ids.map(id => list[router].find(x => x.id === id))
+      if (!ids.length && all.length) continue
       // a list of Kie's own names each model it has; one inherited from OpenRouter at least one
       if (own) on.forEach((m, i) => assert.ok(m, `${kind}/${t.id}: ${ids[i]} is not on Kie`))
       assert.ok(on.some(Boolean), `${kind}/${t.id} has no model on Kie`)

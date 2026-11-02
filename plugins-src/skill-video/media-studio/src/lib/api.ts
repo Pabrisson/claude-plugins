@@ -221,6 +221,8 @@ export type Job = {
   suno?: { task_id: string | null; tracks: { file: string; voice?: string; audio_id: string | null; title: string; tags: string; lyrics: string; duration: number | null }[] | null; data?: unknown } | null
   // the Library's singer it made
   element?: string
+  // ElevenLabs' voices designed or remixed: each preview's file and the id that keeps it
+  voices?: { file: string; generated_voice_id: string }[]
 }
 // where a result goes on a timeline once done: into the cut at `at` (a Bridge shot, a voice at the playhead), or by
 // the clip it replaces: in its place at its length (a take), at the result's length (whole), in place of the stretch
@@ -407,6 +409,8 @@ export const api = {
   voices: () => call<Voice[] | { voices: Voice[] }>("/api/voices"),
   clone: (name: string, paths: string[]) =>
     post<{ ok: true }>("/api/voice-clone", { name, paths }),
+  // a preview of Design a voice or Remix a voice kept: a voice of the ElevenLabs account and of the Library
+  keepVoice: (id: string, file: string, name: string) => post<Element>("/api/keep-voice", { id, file, name }),
   // Suno's help with the words (Kie, priced): lyrics from a theme (its versions), a style written out richer
   assist: (what: "lyrics", text: string, confirm = false) => post<{ texts: { title: string; text: string }[]; cost: number | null }>("/api/assist", { what, text, confirm }),
   // where a sound sings the most (Make a singer's 10 to 30 s), and recordings cleaned by the Voice Isolator (jobs of the

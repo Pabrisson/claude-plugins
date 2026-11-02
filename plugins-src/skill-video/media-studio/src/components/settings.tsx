@@ -41,7 +41,7 @@ const PLAN_ICON: Record<string, LucideIcon> = { none: CircleOffIcon, free: GiftI
 const PROVIDERS = [
   { id: "kie", name: "Kie.ai", unit: "usd", what: "Images, videos and voices, its credits counted" },
   { id: "openrouter", name: "OpenRouter", unit: "usd", what: "Images, videos and voices" },
-  { id: "elevenlabs", name: "ElevenLabs", unit: "credits", what: "Voices straight from it, Change voice and Translate" },
+  { id: "elevenlabs", name: "ElevenLabs", unit: "credits", what: "Voices straight from it, Change voice, Translate, sound effects, music, voice design and transcripts" },
 ] as const
 // the routers, one active at a time (Kie by default): what each is, and its rate limit (OpenRouter's docs; Kie's docs and a probe,
 // 2026-10-31)
@@ -261,7 +261,7 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
     { set: state.keys.kie, provider: "kie", name: "Kie.ai key", about: "Every image, video and voice model while Kie.ai is the router, and its credits left." },
     { set: state.keys.openrouter, provider: "openrouter", name: "OpenRouter key", about: "Every image, video and voice model while OpenRouter is the router. Without it, prices show and nothing can be generated." },
     { set: state.keys.management, provider: "openrouter", name: "OpenRouter management key", about: "Optional: the account's whole balance in the header, not only this key's." },
-    { set: state.keys.elevenlabs, provider: "elevenlabs", name: "ElevenLabs key", about: "Voice straight from ElevenLabs (Eleven v4…), Change voice and Translate, and the credits left. Without it, the router's ElevenLabs voices." },
+    { set: state.keys.elevenlabs, provider: "elevenlabs", name: "ElevenLabs key", about: "Voice straight from ElevenLabs (Eleven v4…), Change voice, Translate, its sound effects, music, voice design and transcripts, and the credits left. Without it, the router's ElevenLabs voices." },
   ]
   // developer mode: on a server started on fake APIs, it brings the header's Fake API switch (turned on with it)
   const fakes = !!state.fake?.bases?.length

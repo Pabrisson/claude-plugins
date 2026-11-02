@@ -149,8 +149,16 @@ function Body({
     )
   }
   const failed = job.status === "failed"
+  // a voice ElevenLabs designed or remixed (Design a voice, Remix a voice): kept under a name, free
+  const designed = job.voices?.some((v) => v.file === name)
+  const [keeping, setKeeping] = useState<string | null>(null)
+  const keep = (as: string) =>
+    api.keepVoice(job.id, name, as).then(
+      (el) => (toast.success(`@${el.name} is in the Library`, { description: "A voice of your ElevenLabs account too: Voice, Change voice and the others take it." }), setKeeping(null)),
+      (e) => toast.error(plain(e.message))
+    )
   // the tracks Kie turns into WAV (a song's takes, a Stems' tracks): All in WAV, priced by the engine
-  const wavs = failed ? [] : (job.tool === "stems" ? job.outputs.filter((o) => mediaKind(o) === "audio") : (job.suno?.tracks ?? []).map((t) => t.file)).map((o) => outputPath(home, job, o))
+  const wavs = failed ? [] : (job.tool === "stems" && job.provider === "kie" ? job.outputs.filter((o) => mediaKind(o) === "audio") : (job.suno?.tracks ?? []).map((t) => t.file)).map((o) => outputPath(home, job, o))
   const wavKey = wavs.join("|")
   const [wavPrice, setWavPrice] = useState<string | null>(null)
   useEffect(() => {
@@ -189,7 +197,8 @@ function Body({
     ...(failed || !take ? [] : [...EXTRAS.map((x) => ({ ...x, run: () => runExtra(extraSpec(x.tool, file!), x.label) })), { label: "Make a singer", icon: UserRoundPlusIcon, hint: "Its voice and style in the Library, for Music", run: openSinger }]),
     ...(wavs.length < 2 ? [] : [{ label: "All in WAV", icon: FileAudioIcon, hint: `${wavs.length} tracks${wavPrice ? ` · ${wavPrice}` : ""}`, run: () => (runExtra(extraSpec("wav", wavs), "All in WAV"), onClose()) }]),
     ...(failed || !voiceOnly ? [] : [{ label: "Make a singer", icon: UserRoundPlusIcon, hint: "This voice in the Library, for Music's Singer", run: openSinger }]),
-    ...(failed || job.tool !== "stems" || k !== "audio" ? [] : [{ label: "MIDI", icon: PianoIcon, hint: "This stem's notes", run: () => runExtra(extraSpec("midi", file!), "MIDI") }, { label: "WAV", icon: FileAudioIcon, hint: "This stem as a WAV file", run: () => runExtra(extraSpec("wav", file!), "WAV") }]),
+    ...(failed || !designed ? [] : [{ label: "Keep this voice", icon: UserRoundPlusIcon, hint: "In the Library and on your ElevenLabs account, free", run: () => setKeeping("") }]),
+    ...(failed || job.tool !== "stems" || job.provider !== "kie" || k !== "audio" ? [] : [{ label: "MIDI", icon: PianoIcon, hint: "This stem's notes", run: () => runExtra(extraSpec("midi", file!), "MIDI") }, { label: "WAV", icon: FileAudioIcon, hint: "This stem as a WAV file", run: () => runExtra(extraSpec("wav", file!), "WAV") }]),
   ]
   const ext = file?.split(".").pop()?.toUpperCase()
   const stats = [
@@ -520,6 +529,24 @@ function Body({
                   </Button>
                 </div>
               </div>
+            )}
+          </DialogContent>
+        </Dialog>
+        <Dialog open={keeping != null} onOpenChange={(o) => !o && setKeeping(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogTitle>Keep this voice</DialogTitle>
+            <DialogDescription>ElevenLabs keeps {name.replace(/\.mp3$/, "")} as a voice of your account, and the Library as a voice: Voice, Change voice, Remix a voice and the voices of your characters take it. Free.</DialogDescription>
+            {keeping != null && (
+              <form className="flex flex-col gap-3" onSubmit={(e) => (e.preventDefault(), keeping && keep(keeping))}>
+                <div>
+                  <Label>Name</Label>
+                  <Input autoFocus value={keeping} placeholder="Claire" onChange={(e) => setKeeping(e.target.value.replace(/[^\w-]/g, ""))} />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setKeeping(null)}>Cancel</Button>
+                  <Button type="submit" disabled={!keeping}>Keep it</Button>
+                </div>
+              </form>
             )}
           </DialogContent>
         </Dialog>

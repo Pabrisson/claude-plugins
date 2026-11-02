@@ -167,7 +167,8 @@ export function Composer({
   const model = models.find((m) => m.id === modelId)
   // ElevenLabs straight: a voice of the account or of the Library, whole (no clips; « How it sounds » only on v4 and
   // v3, a preset sent as its audio tags), or a dialogue's lines on v4 and v3
-  const direct = model?.provider === "elevenlabs"
+  // (its other models, sounds, music, voice design, transcripts, need its key and no voice of their own)
+  const elevenModel = model?.provider === "elevenlabs", direct = elevenModel && model?.role === "speech"
   // Voice before its models arrive: nothing that depends on them (no clips, no « How it sounds » shown a moment)
   const waiting = tool.id === "voice" && !model
   const mp = model?.params
@@ -319,12 +320,16 @@ export function Composer({
         ? "Pick the languages"
       : tool.id === "change-voice" && !value.params.voice
         ? "Pick the new voice"
+      : tool.id === "remix-voice" && !value.params.voice
+        ? "Pick the voice"
+      : (tool.id === "design-voice" || tool.id === "remix-voice") && !value.fields.description?.trim()
+        ? tool.id === "design-voice" ? "Describe the voice" : "Say what changes"
       : tool.id === "create-singer" && !value.fields.voice?.trim()
         ? "Describe the voice"
       : tool.id === "music"
         ? (value.fields.mode ?? "describe") === "describe"
           ? !value.fields.description?.trim() && !["references", "ref_videos", "ref_audios"].some((k) => value.inputs[k]?.length) ? "Describe the song" : null
-          : !value.fields.title?.trim() ? "Give it a title" : !value.fields.style?.trim() && !value.fields.lyrics?.trim() ? "Give its style or lyrics" : null
+          : !value.fields.title?.trim() && !elevenModel ? "Give it a title" : !value.fields.style?.trim() && !value.fields.lyrics?.trim() ? "Give its style or lyrics" : null
         : null
   const [est, setEst] = useState<{ answer?: EstimateAnswer; error?: string }>({})
   const specKey = JSON.stringify(spec)
@@ -452,7 +457,7 @@ export function Composer({
   const label = keyframe ? "Apply to the shot" : tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? tool.label : "Generate"
   const a = blocker ? undefined : est.answer
   const price = a ? priceLabel(a) : blocker && probe.key === probeKey ? probe.label : null
-  const ready = !busy && !!a && (eleven || direct ? state.keys.elevenlabs : local || state.keys[state.router])
+  const ready = !busy && !!a && (eleven || elevenModel ? state.keys.elevenlabs : local || state.keys[state.router])
 
   // a file pasted or dropped anywhere on the composer goes to the first input that takes it
   async function take(files: File[]) {
@@ -614,6 +619,9 @@ export function Composer({
 
         {tool.id === "change-voice" && (
           <VoicePicker enabled={state.keys.elevenlabs} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
+        )}
+        {tool.id === "remix-voice" && (
+          <VoicePicker enabled={state.keys.elevenlabs} label="Voice to remix" placeholder="Pick the voice" value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
         )}
         {tool.id === "voice" && !noClone && (
           <LibraryVoices
@@ -858,6 +866,16 @@ export function Composer({
             Keeps the delivery: pauses, emotion and rhythm stay, only the timbre changes. Up to 5 min goes in one call; a longer clip is sent in pieces.
           </p>
         )}
+        {(tool.id === "design-voice" || tool.id === "remix-voice") && (
+          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
+            Three previews come back: open the one you like and « Keep this voice » makes it a voice of your ElevenLabs account and of the Library, for Voice, Change voice and the others. Keeping it is free.
+          </p>
+        )}
+        {tool.id === "transcribe" && (
+          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
+            The text, its captions (SRT) and each word's time. Given its text, the words are not guessed: they are timed exactly as written.
+          </p>
+        )}
         {tool.id === "isolate-voice" && (
           <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
             The voice alone: music, noise and room taken out. A video comes back with only its voice, a sound as an MP3. ElevenLabs' Voice Isolator, whichever router.
@@ -868,10 +886,10 @@ export function Composer({
             No lip-sync: the voices are dubbed in their own timbre, the lips keep the original language. Subtitles come with each language.
           </p>
         )}
-        {(eleven || direct) && !state.keys.elevenlabs && (
+        {(eleven || elevenModel) && !state.keys.elevenlabs && (
           <p className="rounded-lg border p-3 text-xs text-destructive">No ElevenLabs key: set it with /plugin configure skill-video@pabrisson, then restart Claude Code.</p>
         )}
-        {!eleven && !direct && !local && !state.keys[state.router] && (
+        {!eleven && !elevenModel && !local && !state.keys[state.router] && (
           <p className="rounded-lg border p-3 text-xs text-destructive">No {ROUTER_NAME[state.router]} key: prices show, nothing can be generated. Set it with /plugin configure skill-video@pabrisson, or pick the other router in Settings.</p>
         )}
       </div>
