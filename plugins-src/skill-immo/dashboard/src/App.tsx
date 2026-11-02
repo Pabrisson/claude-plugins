@@ -34,6 +34,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { TypeIcon } from "@/components/type-icon"
 import { api, EXPLORE, EXPLORE_SLUG, slugOfUrl, type Point, type Profile, type SearchData, type SearchSummary, type State } from "@/lib/api"
 import { date, TYPE_PLURAL } from "@/lib/format"
+import type { Floor } from "@/lib/rank"
 import { emptySearch, SearchProvider, useSearch, useTabState } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -130,6 +131,8 @@ function Workspace() {
   const [view, setTab] = useTabState(`immo:${slug}:view`, "listings"), [showMap, setShowMap] = useState("list")
   // the types the listings' map and cards show (a choice from two types on)
   const [shownTypes, setShownTypes] = useState<string[]>(types), typeFilter = { shown: shownTypes, set: setShownTypes }
+  // the floor of the flats they show, the same on both
+  const [floor, setFloor] = useState<Floor>("all"), floorFilter = { floor, set: setFloor }
   // another tab: the listing a dossier pointed at (« Voir ») is let go, so it is lit in the view it was sent to only
   const setView = (v: string) => { spotListing(null); setTab(v) }
   // « Comparer » only once a listing still in the search is chosen; emptied while open, back to the listings
@@ -155,13 +158,13 @@ function Workspace() {
                   <ToggleGroupItem value="list"><ListIcon />Liste</ToggleGroupItem>
                   <ToggleGroupItem value="map"><MapIcon />Carte</ToggleGroupItem>
                 </ToggleGroup>
-                {showMap === "map" ? <MapView className="relative mt-3 min-h-0 flex-1 mb-16" typeFilter={typeFilter} /> : <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-20"><ListingList shownTypes={shownTypes} /></div>}
+                {showMap === "map" ? <MapView className="relative mt-3 min-h-0 flex-1 mb-16" typeFilter={typeFilter} floorFilter={floorFilter} /> : <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-20"><ListingList shownTypes={shownTypes} floor={floor} /></div>}
               </div>
             ) : (
               // the map under both columns, a bit see-through: the layers on its left, the listings on its right (darker)
               <div className="relative h-full">
-                <MapView className="absolute inset-0" right={440} typeFilter={typeFilter} />
-                <div className="absolute inset-y-0 right-0 z-10 w-[440px] overflow-y-auto border-l bg-background/60 p-3 backdrop-blur-md"><ListingList shownTypes={shownTypes} /></div>
+                <MapView className="absolute inset-0" right={440} typeFilter={typeFilter} floorFilter={floorFilter} />
+                <div className="absolute inset-y-0 right-0 z-10 w-[440px] overflow-y-auto border-l bg-background/60 p-3 backdrop-blur-md"><ListingList shownTypes={shownTypes} floor={floor} /></div>
               </div>
             )}
           </TabsContent>

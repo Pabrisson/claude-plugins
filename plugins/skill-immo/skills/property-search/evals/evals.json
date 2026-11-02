@@ -244,6 +244,22 @@
         "Writes an alert with `event: permit`, a commune place (69383) and the condition `permit_kind is demolish`",
         "Uses no Stream Estate saved search and spends no credit"
       ]
+    },
+    {
+      "id": 17,
+      "prompt": "Cherche une maison à Caluire-et-Cuire, toute la commune, 600 000 € max, sans Stream Estate.",
+      "expected_output": "The zone previewed before anything else: `search --preview` with the commune zone, its PNG read and given as a link, the user asked whether the zone suits; the search runs only after their yes.",
+      "files": [],
+      "env": {
+        "STREAM_ESTATE_API_KEY": ""
+      },
+      "expectations": [
+        "Runs `immo.mjs search \"Caluire-et-Cuire\" --zone commune --types house --preview` (with the criteria) before any `search` without `--preview`",
+        "Reads the PNG the preview prints and gives the user its path",
+        "Asks with AskUserQuestion whether the zone suits, naming it and its km², « Oui, lancer la recherche » first",
+        "Runs `search` without `--preview`, with the same arguments, only after the user agreed",
+        "Talks to the user in French"
+      ]
     }
   ]
 }

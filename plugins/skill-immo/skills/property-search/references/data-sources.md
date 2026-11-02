@@ -10,6 +10,7 @@ engine keeps each answer in the searches folder's `.cache/` for the time given (
 |---|---|---|
 | Geocoding | Géoplateforme `https://data.geopf.fr/geocodage/search?q=&type=housenumber\|street\|municipality&limit=` | 30 d |
 | Autocomplete | `https://data.geopf.fr/geocodage/completion?text=&type=StreetAddress,PositionOfInterest` | none |
+| Zone preview's basemap | Plan IGN, Géoplateforme WMS `https://data.geopf.fr/wms-r/wms?REQUEST=GetMap&LAYERS=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&CRS=EPSG:3857&BBOX=&WIDTH=1000&HEIGHT=700&FORMAT=image/png` (`.cache/plan/`) | 30 d |
 | Real sales | geo-DVF `https://files.data.gouv.fr/geo-dvf/latest/csv/<year>/communes/<dep>/<insee>.csv` | 30 d (recent years), 180 d (older) |
 | DPE of an address | ADEME data-fair `https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines` | 30 d |
 | DPE classes of a zone | The same dataset, `values_agg?field=type_batiment;etiquette_dpe` with `geo_distance` or `code_insee_ban_eq` | 30 d |

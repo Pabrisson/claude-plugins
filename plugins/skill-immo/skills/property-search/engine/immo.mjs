@@ -23,6 +23,7 @@ import { addressQuery, fromInput, fromStreamEstate, merge, normUrl } from './lib
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
 import { openData, pool } from './lib/opendata.js'
+import { preview } from './lib/preview.js'
 import { members, NoCredits, se, testApi } from './lib/stream.js'
 
 const SELF = fileURLToPath(import.meta.url)
@@ -78,7 +79,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     mode: { type: 'string' }, zone: { type: 'string' }, radius: { type: 'string' }, type: { type: 'string' }, types: { type: 'string' }, criteria: { type: 'string' }, max: { type: 'string' },
     kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' }, from: { type: 'string' }, channel: { type: 'string' }, date: { type: 'string' }, sent: { type: 'boolean' },
     url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' },
-    open: { type: 'boolean' },
+    open: { type: 'boolean' }, preview: { type: 'boolean' },
   },
 })
 
@@ -584,7 +585,7 @@ async function cadastre(query) {
 async function search(query) {
   let dir = opt.project ? searchDir() : null, s = dir ? readJson(path.join(dir, 'search.json')) : null
   if (!s) {
-    if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris|drawn] [--radius m] [--criteria "k=v …"]')
+    if (!query) die('usage: search "<address, street or neighborhood>" [--zone radius|commune|iris|drawn] [--radius m] [--criteria "k=v …"] [--preview]')
     const [f] = await od.geocode(query, { type: opt.type, limit: 1 })
     if (!f) die(`no place found for "${query}": try geocode "${query}" and a more precise query`)
     // « explorer » is the dashboard's page without a search (/explorer/)
@@ -603,6 +604,15 @@ async function search(query) {
   s.mode = opt.mode ?? s.mode ?? (hasKey() ? 'stream-estate' : 'classic')
   if (opt.types) s.types = parseTypes(opt.types)
   if (opt.criteria) parseCriteria(opt.criteria, s.criteria)
+  // --preview: the zone's picture for the user to agree on, nothing else made (a zone drawn on the map was seen there)
+  if (opt.preview) {
+    if (opt.zone === 'drawn') die('a zone drawn on the dashboard map needs no preview: the user drew it')
+    const zone = !s.zone || opt.zone || opt.radius ? await makeZone(s, dir) : s.zone, file = path.join(CACHE, 'previews', `${s.slug}.png`)
+    const { km2, error } = await preview(zone, s.point, file, CACHE)
+    if (error) console.log(`Plan IGN: ${error}, the zone drawn on a blank page`)
+    console.log(`preview ${s.slug}: ${zone.label} (${s.label}), ${km2.toFixed(2)} km²\n${file}\nShow it to the user and ask whether the zone suits; once they agree, the same search without --preview`)
+    return
+  }
   if (!s.zone || opt.zone || opt.radius) s.zone = await makeZone(s, dir)
   writeJson(path.join(dir, 'search.json'), s)
   writeGitignore()

@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { api, type Listing, type PropertyType, type Status } from "@/lib/api"
 import { eur, SALE_STATUS, titleOf, TYPE_PLURAL } from "@/lib/format"
-import { isNew, shelved, SORTS, useRanked, type Sort } from "@/lib/rank"
+import { FLOORS, floorOk, isNew, shelved, SORTS, useRanked, type Floor, type Sort } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -28,10 +28,10 @@ const COLUMNS: { status: Status; label: string }[] = [
 // touch). "Écarté" stays folded until opened, so the columns that matter keep the room.
 export function KanbanTab() {
   const { slug, data, types, lastVisit, reload, select, spot } = useSearch()
-  const [type, setType] = useState<"all" | PropertyType>("all"), [onlyMatching, setOnlyMatching] = useState(false), [onlyNew, setOnlyNew] = useState(false)
+  const [type, setType] = useState<"all" | PropertyType>("all"), [floor, setFloor] = useState<Floor>("all"), [onlyMatching, setOnlyMatching] = useState(false), [onlyNew, setOnlyNew] = useState(false)
   const [sort, setSort] = useState<Sort>("score"), [dropOpen, setDropOpen] = useState(false), [over, setOver] = useState<string | null>(null)
   // an expired listing stays on the board only once the user has given it a status
-  const shown = data.listings.filter(l => l.id === spot || (!shelved(l) && (type === "all" || typeOf(l) === type)
+  const shown = data.listings.filter(l => l.id === spot || (!shelved(l) && (type === "all" || typeOf(l) === type) && floorOk(l, floor)
     && (!onlyMatching || matches(l, data.search.criteria, types)) && (!onlyNew || isNew(l, lastVisit))))
   // the card the dossier sent here (« Voir »): « Écarté » unfolds for it, then it comes in view
   const [seen, setSeen] = useState<string | null>(null)
@@ -54,6 +54,12 @@ export function KanbanTab() {
           <Select value={type} onValueChange={v => setType(v as typeof type)}>
             <SelectTrigger size="sm" aria-label="Type de bien"><SelectValue /></SelectTrigger>
             <SelectContent><SelectGroup><SelectItem value="all">Tous les types</SelectItem>{types.map(t => <SelectItem key={t} value={t}><TypeIcon type={t} />{TYPE_PLURAL[t]}</SelectItem>)}</SelectGroup></SelectContent>
+          </Select>
+        )}
+        {types.includes("flat") && (
+          <Select value={floor} onValueChange={v => setFloor(v as Floor)}>
+            <SelectTrigger size="sm" aria-label="Étage des appartements"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectGroup>{Object.entries(FLOORS).map(([k, f]) => <SelectItem key={k} value={k}><f.icon />{f.label}</SelectItem>)}</SelectGroup></SelectContent>
           </Select>
         )}
         <div className="flex items-center gap-2"><Switch id="k-crit" checked={onlyMatching} onCheckedChange={setOnlyMatching} /><Label htmlFor="k-crit">Dans mes critères</Label></div>

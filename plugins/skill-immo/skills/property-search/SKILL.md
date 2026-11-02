@@ -144,7 +144,8 @@ The profile also holds `notary_old` (0.075), `notary_new` (0.025), `insurance_ra
 
 The dashboard's « Nouvelle recherche » starts nothing itself: it copies a prompt `nouvelle recherche : <place>` with
 the lines `- zone`, `- types`, `- annonces` (the mode) and `- critères` (their engine form in parentheses). It answers
-steps 1 to 3 (the place comes from the address autocomplete): run `search` with them and ask nothing it gives.
+steps 1 to 3 (the place comes from the address autocomplete): preview the zone (step 4), then run `search` with them
+and ask nothing it gives.
 
 1. **Place**: if the place is ambiguous (a street name in several towns, "Croix-Rousse"), run `immo.mjs geocode "<q>"`
    and ask which one.
@@ -167,18 +168,25 @@ steps 1 to 3 (the place comes from the address autocomplete): run `search` with 
    (m² of land), `dpe_max`, `elevator` and `outdoor`. Each applies to the types that have it: rooms, DPE and outdoor to
    homes, floor and elevator to flats, land to houses and plots; a parking takes only the budget. Do not ask for
    criteria the user did not mention.
-4. **Search**: `immo.mjs search "<q>" --mode … --types … [--zone …] [--radius …] [--criteria …]`. This is free. It
+4. **Zone preview**: first `immo.mjs search "<q>" … --preview`, with the step 5 arguments. It is free, creates no
+   search and prints the zone, its km² and a PNG of it on the Plan IGN. Read that PNG (it shows the image) to check it is
+   the place asked for. Give the user its path as a link, then ask « La zone convient ? » in one AskUserQuestion call,
+   naming the zone and its km²: « Oui, lancer la recherche » first, then « Agrandir », « Réduire », « Autre zone
+   (commune, IRIS…) ». A change makes a new preview; only a yes goes on to step 5. Changing an existing search's zone
+   (`--zone`, `--radius`) is previewed the same way (`search -p <slug> … --preview`), except `--zone drawn`: the user
+   drew it.
+5. **Search**: `immo.mjs search "<q>" --mode … --types … [--zone …] [--radius …] [--criteria …]`. This is free. It
    prints, per type, the sold unit price of the zone, the street and the commune (€/m², €/m² of land for a plot, € a
    lot for a parking), the rent, the property tax rate, the homes authorised, the neighborhood, and in Stream Estate
    mode the count and the estimate.
-5. **Listings**:
+6. **Listings**:
    - Stream Estate mode: the credits rule above, then `immo.mjs fetch -p <slug> --spend N [--max N]`. The API has no
      filter on the floor, the elevator or an outdoor space: with those criteria, `search` says the count includes
      listings they rule out, and you pay for them too. Then offer `immo.mjs market -p <slug>` (the zone's asking price
      per m², month by month; unknown cost).
    - OpenData mode: the assisted mode.
-6. **Dashboard**: `immo.mjs dashboard -p <slug> --open`. Give the user its URL.
-7. **Summary**: say in a few lines how many listings there are, the zone's sold €/m², the two or three listings
+7. **Dashboard**: `immo.mjs dashboard -p <slug> --open`. Give the user its URL.
+8. **Summary**: say in a few lines how many listings there are, the zone's sold €/m², the two or three listings
    that stand out and why (below the market, a recent drop, a long time online), and what is missing (no profile, no
    DVF in Alsace-Moselle…).
 
@@ -240,8 +248,8 @@ Do every item in order:
   nothing. In `show`, a listing outside them has
   `matches: false`, and one whose value is unknown (a missing DPE) still matches.
 - `[élargir]`: widen the search as it says, free: `search -p <slug>` with `--zone iris|commune`, `--zone radius --radius
-  <m>`, `--criteria "budget_max=…"` (an empty value drops a criterion: `elevator=`) or `--types flat,house,parking`. A
-  prompt holds one zone at most. Several `[élargir]` items make one `search` call. Two need no engine change:
+  <m>` (a new zone previewed first, step 4), `--criteria "budget_max=…"` (an empty value drops a criterion:
+  `elevator=`) or `--types flat,house,parking`. A prompt holds one zone at most. Several `[élargir]` items make one `search` call. Two need no engine change:
   - « inclure le neuf »: look for new-build programmes and off-plan sales (VEFA) of the zone too, the assisted way;
   - « chercher aussi chez les notaires et les agences du quartier »: WebSearch the notaries' listings
     (immobilier.notaires.fr) and the local agencies' sites, then one listing page at a time, as in the assisted mode.

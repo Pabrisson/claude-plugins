@@ -1,5 +1,6 @@
 import { score } from "@engine/decide.js"
-import { badge, daysOnline, unitPrice } from "@engine/market.js"
+import { badge, daysOnline, typeOf, unitPrice } from "@engine/market.js"
+import { ArrowUpFromLineIcon, Building2Icon, DoorOpenIcon } from "lucide-react"
 import { useMemo } from "react"
 
 import type { Listing } from "@/lib/api"
@@ -11,6 +12,12 @@ export const shelved = (l: Listing) => l.status === "EXPIRED" && !l.my_status
 
 // what is new since the user's last visit: a listing first seen, or a change logged, after it
 export const isNew = (l: Listing, since: string | null) => !!since && (l.first_seen > since || (l.changes ?? []).some(c => c.date > since && c.kind !== "new"))
+
+// the floor filter of the map, the list and the board, on flats only (the other types pass): « Rez-de-chaussée » keeps
+// the ground floors, « Étages » the others, and a flat whose floor is unknown shows with neither
+export const FLOORS = { all: { label: "Tous les étages", icon: Building2Icon }, ground: { label: "Rez-de-chaussée", icon: DoorOpenIcon }, upper: { label: "Étages", icon: ArrowUpFromLineIcon } } as const
+export type Floor = keyof typeof FLOORS
+export const floorOk = (l: Listing, f: Floor) => f === "all" || typeOf(l) !== "flat" || (l.floor != null && (l.floor === 0) === (f === "ground"))
 
 export const SORTS = { score: "Score", gap: "Écart au marché", price: "Prix", recent: "Plus récents", days: "Plus longtemps en ligne" } as const
 export type Sort = keyof typeof SORTS

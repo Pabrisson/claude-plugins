@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { band, bbox, center } from '../lib/geo.js'
+import { decodePng, encodePng, frame, SIZE } from '../lib/preview.js'
 import { ENGINE, fakeStreamEstate, property, searchesFolder } from './helpers.js'
 
 const api = await fakeStreamEstate()
@@ -311,6 +312,31 @@ test("a street's zone follows its line in the BD TOPO; a zone drawn on the map r
   assert.match(r.err, /zone-draft.json: a ring has 3 corners or more/)
   r = await run(home, ['search', '-p', 'paul-bert', '--radius', '300'])
   assert.deepEqual(read(dir, 'search.json').zone, along)
+})
+
+test('search --preview: the zone pictured for the user to agree on, nothing else made', async () => {
+  const { home, dir } = searchesFolder()
+  const line = read(path.dirname(new URL('./fixtures/bdtopo-69383_5245.json', import.meta.url).pathname), 'bdtopo-69383_5245.json').features.map(f => f.geometry.coordinates)
+  fs.mkdirSync(path.join(home, '.cache/bdtopo'))
+  fs.writeFileSync(path.join(home, '.cache/bdtopo/69383_5245.json'), JSON.stringify(line))
+  // the Plan IGN of its frame, kept beforehand: a grey page
+  const along = { geometry: band(line, 300) }, plan = path.join(home, '.cache/plan', `${frame(along).join(',')}-${SIZE.join('x')}.png`)
+  fs.mkdirSync(path.dirname(plan))
+  fs.writeFileSync(plan, encodePng({ width: SIZE[0], height: SIZE[1], rgb: Buffer.alloc(SIZE[0] * SIZE[1] * 3, 230) }))
+  const before = fs.readFileSync(path.join(dir, 'search.json'), 'utf8'), calls = api.seen.length
+  const r = await run(home, ['search', '-p', 'paul-bert', '--radius', '300', '--preview'])
+  assert.equal(r.status, 0, r.err)
+  assert.match(r.out, /^preview paul-bert: 300 m de part et d'autre de la Rue Paul Bert \(Rue Paul Bert 69003 Lyon\), \d+\.\d\d km²\n.*paul-bert\.png\n/)
+  assert.ok(!/Plan IGN/.test(r.out), 'the basemap kept')
+  const img = decodePng(fs.readFileSync(path.join(home, '.cache/previews/paul-bert.png')))
+  assert.ok(img.rgb.includes(Buffer.from([37, 99, 235])), 'the zone drawn')
+  assert.equal(fs.readFileSync(path.join(dir, 'search.json'), 'utf8'), before, 'the search unchanged')
+  assert.ok(!fs.existsSync(path.join(dir, 'area.json')), 'no open data fetched')
+  assert.equal(api.seen.length, calls, 'no Stream Estate call')
+  // a zone drawn on the dashboard map was seen there
+  const drawn = await run(home, ['search', '-p', 'paul-bert', '--zone', 'drawn', '--preview'])
+  assert.equal(drawn.status, 1)
+  assert.match(drawn.err, /needs no preview/)
 })
 
 test("cadastre: a parcel by its IDU, its designation for an offer, its urban plan and sales; none at IGN, an error", async () => {

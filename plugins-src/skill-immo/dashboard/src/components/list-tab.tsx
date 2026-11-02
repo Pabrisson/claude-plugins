@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Listing, PropertyType } from "@/lib/api"
 import { eur, num, pct, SALE_STATUS, STATUS_LABEL, titleOf, TYPE_PLURAL } from "@/lib/format"
-import { isNew, shelved } from "@/lib/rank"
+import { FLOORS, floorOk, isNew, shelved, type Floor } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -31,6 +31,7 @@ const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string |
   { key: "ppm2", label: "Prix unitaire", right: true, wide: true, sort: r => unitPrice(r.l), cell: r => num(unitPrice(r.l)) },
   { key: "gap", label: "Écart", right: true, sort: r => r.gap, cell: r => <GapCell l={r.l} /> },
   { key: "rooms", label: "Pièces", right: true, wide: true, sort: r => r.l.rooms, cell: r => r.l.rooms ?? "—" },
+  { key: "floor", label: "Étage", right: true, wide: true, sort: r => (typeOf(r.l) === "flat" ? r.l.floor : null), cell: r => (typeOf(r.l) !== "flat" || r.l.floor == null ? "—" : r.l.floor === 0 ? "RDC" : r.l.floor === 1 ? "1er" : `${r.l.floor}ᵉ`) },
   { key: "dpe", label: "DPE", wide: true, sort: r => r.l.dpe?.energy ?? null, cell: r => (isHome(typeOf(r.l)) ? <Dpe value={r.l.dpe?.energy} /> : "—") },
   { key: "score", label: "Score", right: true, sort: r => r.score, cell: r => (r.score == null ? "—" : <span className="font-semibold tabular-nums">{r.score}</span>) },
   { key: "mine", label: "Mon statut", sort: r => (r.l.my_status ? Object.keys(STATUS_LABEL).indexOf(r.l.my_status) : -1), cell: r => (r.l.my_status ? <StatusBadge status={r.l.my_status} /> : <span className="text-muted-foreground">À trier</span>) },
@@ -60,7 +61,7 @@ const NOT_DROPPED = Object.keys(MINE).filter(k => k !== "dropped")
 // Every listing of the search in one table: filters above, a sort on each column, a row opens the dossier
 export function ListTab() {
   const { data, types, lastVisit, marketFor, aidsFor, select, spot } = useSearch()
-  const [q, setQ] = useState(""), [type, setType] = useState<"all" | PropertyType>("all"), [mine, setMine] = useState<string[]>(NOT_DROPPED), [status, setStatus] = useState("all")
+  const [q, setQ] = useState(""), [type, setType] = useState<"all" | PropertyType>("all"), [floor, setFloor] = useState<Floor>("all"), [mine, setMine] = useState<string[]>(NOT_DROPPED), [status, setStatus] = useState("all")
   const [onlyMatching, setOnlyMatching] = useState(false), [onlyNew, setOnlyNew] = useState(false), [onlyFavorites, setOnlyFavorites] = useState(false), [hideExpired, setHideExpired] = useState(true)
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: "score", dir: -1 })
   const rows = useMemo(() => data.listings.map(l => ({
@@ -70,7 +71,7 @@ export function ListTab() {
   const needle = q.trim().toLowerCase()
   const shown = rows
     .filter(({ l }) => l.id === spot || (!needle || [titleOf(l), l.location.address, l.location.city, ...l.urls.map(u => u.source)].some(x => x?.toLowerCase().includes(needle)))
-      && (type === "all" || typeOf(l) === type) && mine.includes(l.my_status ?? "none")
+      && (type === "all" || typeOf(l) === type) && floorOk(l, floor) && mine.includes(l.my_status ?? "none")
       && (status === "all" || (status === "online" ? l.status === "AVAILABLE" : l.status === status))
       && (!onlyMatching || matches(l, data.search.criteria, types)) && (!onlyNew || isNew(l, lastVisit)) && (!onlyFavorites || !!l.favorite)
       && (!hideExpired || status === "EXPIRED" || !shelved(l)))
@@ -94,6 +95,12 @@ export function ListTab() {
           <Select value={type} onValueChange={v => setType(v as typeof type)}>
             <SelectTrigger size="sm" aria-label="Type de bien"><SelectValue /></SelectTrigger>
             <SelectContent><SelectGroup><SelectItem value="all">Tous les types</SelectItem>{types.map(t => <SelectItem key={t} value={t}><TypeIcon type={t} />{TYPE_PLURAL[t]}</SelectItem>)}</SelectGroup></SelectContent>
+          </Select>
+        )}
+        {types.includes("flat") && (
+          <Select value={floor} onValueChange={v => setFloor(v as Floor)}>
+            <SelectTrigger size="sm" aria-label="Étage des appartements"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectGroup>{Object.entries(FLOORS).map(([k, f]) => <SelectItem key={k} value={k}><f.icon />{f.label}</SelectItem>)}</SelectGroup></SelectContent>
           </Select>
         )}
         <DropdownMenu>

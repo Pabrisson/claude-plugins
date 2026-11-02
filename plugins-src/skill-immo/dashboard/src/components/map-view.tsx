@@ -22,7 +22,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, EXPLORE, type AuditRow, type DpeRow, type Hit, type IrisOdds, type Listing, type Odds, type OddsPlace, type PermitKind, type PermitRow, type Poi, type Point, type PropertyType } from "@/lib/api"
 import { auditAsk, date, dpeAsk, eur, keur, LEVEL_LABEL, m2, month, num, pct, PERMIT_LABEL, permitLabel, permitWhat, perUnit, POI_LABEL, share, STATUS_LABEL, titleCase, TYPE_LABEL } from "@/lib/format"
-import { shelved } from "@/lib/rank"
+import { FLOORS, floorOk, shelved, type Floor } from "@/lib/rank"
 import { rememberAt, startOf, useSearch } from "@/lib/store"
 import { useIsMobile } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
@@ -264,7 +264,8 @@ function showLayers(m: MapLibre, layers: string[]) {
 // `right`: the width of what covers the map on its right (the listings' column), which its camera and controls keep clear of.
 // With `odds`, the odds tab's map: the IRIS colored by their odds, the recent DPE of the box shown, the listings neutral.
 // `typeFilter`: the types shown, the tab's (the listings' column follows it, the odds tab's estimations too).
-export function MapView({ className, right = 0, odds, typeFilter }: { className?: string; right?: number; odds?: OddsMap; typeFilter: { shown: string[]; set: (v: string[]) => void } }) {
+// `floorFilter`: the floor of the flats shown, shared with the cards (the listings' map only)
+export function MapView({ className, right = 0, odds, typeFilter, floorFilter }: { className?: string; right?: number; odds?: OddsMap; typeFilter: { shown: string[]; set: (v: string[]) => void }; floorFilter?: FloorFilter }) {
   const { slug, data, types, marketOf, selected, select, feedback, addFeedback, removeFeedback, spot } = useSearch()
   // the listing the map shows larger and goes to: the dossier's, or the one it sent here (« Voir »), where the map opens
   const pointed = selected ?? spot, spotAt = useRef<[number, number] | null>(null)
@@ -280,7 +281,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
   const [auditDays, setAuditDays] = useState("365"), [permitDays, setPermitDays] = useState("365")
   // a computer's map keeps the layers' column clear (a phone's floats, folded)
   const left = mobile ? 0 : PANEL
-  const [scope, setScope] = useState("all"), { shown: shownTypes, set: setShownTypes } = typeFilter
+  const [scope, setScope] = useState("all"), { shown: shownTypes, set: setShownTypes } = typeFilter, floor = floorFilter?.floor ?? "all"
   // the legend's keys the user clicked off: a price level, a status (« Écarté »…), their listings off the map
   const [hidden, setHidden] = useState<string[]>([])
   const flip = (k: string) => setHidden(h => (h.includes(k) ? h.filter(x => x !== k) : [...h, k]))
@@ -327,7 +328,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
         type: "Feature" as const, geometry: { type: "Point" as const, coordinates: p.point },
         properties: { level: levelOf(p.ppm2, marketOf(t).ref?.ppm2) ?? "at", tip: `<b>Vendu ${eur(p.price)}</b><br>${TYPE_LABEL[t]}${p.area ? ` · ${p.area} m²` : ""} · ${perUnit(p.ppm2, t)}${gapTip(p.ppm2, marketOf(t).ref?.ppm2)}<br>${titleCase(p.address)} · ${month(p.date)}` },
       })))),
-      listings: fc(data.listings.filter(l => l.location.point && !shelved(l) && on(typeOf(l)) && (scope === "all" || matches(l, data.search.criteria, types))).flatMap(l => {
+      listings: fc(data.listings.filter(l => l.location.point && !shelved(l) && on(typeOf(l)) && floorOk(l, floor) && (scope === "all" || matches(l, data.search.criteria, types))).flatMap(l => {
         const t = typeOf(l) as PropertyType, level = odds ? "at" : (levelOf(unitPrice(l), marketOf(t).ref?.ppm2) ?? "at")
         if (hidden.includes(level) || (l.my_status && hidden.includes(l.my_status))) return []
         return {
@@ -349,7 +350,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
       isochrones: fc((data.area.isochrones ?? []).filter(i => i.geometry && layers.includes(`place:${i.place}`) && i.profile === "pedestrian").map(i => ({ type: "Feature", geometry: i.geometry as Geometry, properties: { place: places.indexOf(i.place), minutes: i.minutes } }))),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, hidden, dpe, odds?.data, odds?.metric, recent, drawn, addresses])
+  }, [data, types, marketOf, cats, layers, pois, places, scope, shownTypes, floor, hidden, dpe, odds?.data, odds?.metric, recent, drawn, addresses])
 
   // the map, made again when the theme changes (its style is not the same)
   useEffect(() => {
@@ -550,7 +551,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
           </div>
         </div>
       )}
-      {!(editing && mobile) && <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales }}
+      {!(editing && mobile) && <LayersPanel docked={!mobile} {...{ cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, floorFilter, hidden, flip, pois, places, sales }}
         dpe={{ days: dpeDays, setDays: setDpeDays, scope: dpeScope, setScope: setDpeScope, count: dpe.count, open: dpe.open }}
         sources={{ audits: recent.audits, permits: recent.permits, inPeriod: recent.inPeriod, kinds, setKinds, auditDays, setAuditDays, permitDays, setPermitDays }}
         odds={odds && { metric, setMetric: odds.setMetric, proba: { on: proba, set: odds.proba.set, count: addresses?.length ?? 0 }, listings: sources.listings.features.length, iris: odds.data?.iris?.length ?? 0, onPlace: h => map.current?.flyTo({ center: [h.x, h.y], zoom: zoomOf(h), duration: 1200 }) }}
@@ -561,6 +562,7 @@ export function MapView({ className, right = 0, odds, typeFilter }: { className?
 
 // the panel's toggles, smaller than the page's
 export const CHIP = "h-7 px-2 text-xs"
+type FloorFilter = { floor: Floor; set: (f: Floor) => void }
 // the periods of the recent DPE, audits and permits, in days
 const PERIODS = [["90", "3 mois"], ["180", "6 mois"], ["365", "12 mois"]]
 
@@ -664,10 +666,10 @@ export function PlaceSearch({ onPlace }: { onPlace: (h: Hit) => void }) {
 // color and its count. On the odds map: a search to move it, the IRIS's figure, the recent DPE, the search's listings,
 // the zone. On a computer a column docked on the left, its whole height, always open (the listings' column on the
 // right); on a phone it floats, folded until tapped.
-function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, hidden, flip, pois, places, sales, dpe, sources, odds, edit }: {
+function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope, shownTypes, setShownTypes, floorFilter, hidden, flip, pois, places, sales, dpe, sources, odds, edit }: {
   docked: boolean; cats: string[]; setCats: (v: string[]) => void; layers: string[]; setLayers: (v: string[]) => void; scope: string; setScope: (v: string) => void
   hidden: string[]; flip: (k: string) => void
-  shownTypes: string[]; setShownTypes: (v: string[]) => void; pois: Poi[]; places: string[]; sales: number
+  shownTypes: string[]; setShownTypes: (v: string[]) => void; floorFilter?: FloorFilter; pois: Poi[]; places: string[]; sales: number
   dpe: { days: string; setDays: (v: string) => void; scope: string; setScope: (v: string) => void; count: number; open: number }
   sources: {
     audits: AuditRow[]; permits: PermitRow[]; inPeriod: PermitRow[]; kinds: PermitKind[]; setKinds: (v: PermitKind[]) => void
@@ -817,6 +819,11 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
                   <ToggleGroupItem className={CHIP} value="criteria">Dans mes critères</ToggleGroupItem>
                 </ToggleGroup>
                 {types.length > 1 && chips(types)}
+                {floorFilter && types.includes("flat") && (
+                  <ToggleGroup type="single" size="sm" variant="outline" value={floorFilter.floor} onValueChange={v => v && floorFilter.set(v as Floor)} className="flex-wrap justify-start" aria-label="Étage des appartements">
+                    {Object.entries(FLOORS).map(([k, f]) => <ToggleGroupItem className={CHIP} key={k} value={k}><f.icon className="size-3.5" />{f.label}</ToggleGroupItem>)}
+                  </ToggleGroup>
+                )}
               </Group>
               {zone}
               <Group title="Marché">
