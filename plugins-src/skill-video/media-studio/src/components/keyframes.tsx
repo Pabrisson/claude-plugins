@@ -160,7 +160,10 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
     if (to === "add") {
       const v = s[from]
       if (isEnd(from)) s[from] = undefined
-      else (s.splice(from, 1), t.splice(from - 1, 1))
+      else {
+        s.splice(from, 1)
+        t.splice(from - 1, 1)
+      }
       s.splice(s.length - 1, 0, v)
       t.push(undefined)
     } else if (!isEnd(from) && !isEnd(to)) {
@@ -188,7 +191,10 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
   const remove = (at: number) => {
     const s = [...seq], t = [...times]
     if (isEnd(at)) s[at] = undefined
-    else (s.splice(at, 1), t.splice(at - 1, 1))
+    else {
+      s.splice(at, 1)
+      t.splice(at - 1, 1)
+    }
     save(s, t)
   }
   async function dropFiles(at: number | "add", files: File[]) {

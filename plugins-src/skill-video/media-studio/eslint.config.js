@@ -20,6 +20,8 @@ export default defineConfig([
     },
     rules: {
       'react-refresh/only-export-components': 'off',
+      // a key left out by destructuring (const { options: _, ...rest }) is meant
+      '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
     },
   },
 ])

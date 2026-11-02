@@ -1,6 +1,6 @@
 ---
 name: video-editor
-description: Claude as a video editor for any genre. Edits footage (one or several rushes, local files or URLs, plus B-roll) into a short, a long YouTube video, an interview or podcast clip, a tutorial, a montage on music (travel, vlog, event), a brand film…, or creates a motion-design video from scratch when there is no footage. Renders every chosen format (9:16, 16:9, 1:1, 4:5) in every chosen resolution (4K, 2K, 1080p, 720p) locally and fast, with captions, synthesized music and sound effects, a local review studio and a style that learns. Use it whenever the user wants to edit, cut, assemble or make a video of any kind ("monte cette vidéo", "monte mes rushes", "fais-moi un short", "crée une vidéo", "montage", "motion design", "video editing"), or gives video files or links to work on. Also use it when they paste "apply this feedback" from the studio, or ask for variations, the video style setup or editing rule packs.
+description: Claude as a video editor for any genre. Edits footage (one or several rushes, local files or URLs, plus B-roll) into a short, a long YouTube video, an interview or podcast clip, a tutorial, a montage on music (travel, vlog, event), a brand film…, or creates a motion-design video from scratch when there is no footage. Renders every chosen format (9:16, 16:9, 1:1, 4:5) in every chosen resolution (4K, 2K, 1080p, 720p) locally and fast, with captions, music and sound effects synthesized or generated (with media-generator, as are voice-overs, transcripts and clips), a local review studio and a style that learns. Use it whenever the user wants to edit, cut, assemble or make a video of any kind ("monte cette vidéo", "monte mes rushes", "fais-moi un short", "crée une vidéo", "montage", "motion design", "video editing"), or gives video files or links to work on. Also use it when they paste "apply this feedback" from the studio, or ask for variations, the video style setup or editing rule packs.
 argument-hint: "[setup | <video files or URLs…> [content sources…] [studio] | apply this feedback … | variations <element> | preview | rules …]"
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/video.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/video.mjs *)
 ---
@@ -33,10 +33,8 @@ Run `video.mjs doctor` once per conversation.
 - If it reports a missing tool, show the user its install command and stop. Never install anything yourself
   without saying so.
 - If it says there is no style yet, run **setup** first, then come back to the request.
-- Its `elevenlabs` line says whether the ElevenLabs key is set. Only then do the starting questions have their
-  ElevenLabs call (step 2, `references/new-video.md`). A video made before, with no `source/elevenlabs.json`, gets
-  that call too, first, before anything else of the request (feedback, variations…); save the answers with
-  `elevenlabs set` (step 3).
+- Its `generation` line says whether media-generator has a key. Only then do the starting questions have their
+  Génération call (step 2, `references/new-video.md`), and can a medium be generated (« Generating a medium »).
 
 Some installs happen on their own, and the user should hear about them:
 - The first transcription downloads the Whisper model (about 1.5 GB).
@@ -147,8 +145,8 @@ format only** (the first one). Give it the whole frame: the other formats come i
 frames at once leads to small, safe layouts.
 - Anchor every moment on the speech with `at(source seconds)`, so cuts never break the sync.
 - With music, lay its grid first: `video.mjs beats <bpm> -p <slug>` for the tempo you will compose on, or
-  `video.mjs beats <track> [--at <video s>]` for a track the user gives. When `source/elevenlabs.json` turns the music
-  on, make the track with ElevenLabs now, before the scene, and measure it the same way (sound-format.md, « With ElevenLabs »). `files/beats.md`
+  `video.mjs beats <track> [--at <video s>]` for a track the user gives. When the starting questions chose a generated
+  music, make it now, before the scene (sound-format.md, « Generated sounds »), and measure it the same way. `files/beats.md`
   lists each bar's beats in VIDEO seconds: put the cuts and the big moments on them. `check` measures the cuts with
   the `on_beat` param.
 - Show the source with `camera()` and play the clips with `clip(id, start)`: each one brings its sound, at its
@@ -177,12 +175,12 @@ asks for music or sound, write `source/sound.py`. A video without speech always 
 - Compose the score on the Direction's tempo and beats.
 - Place the common effects with `play()`: they come from the projects folder's library. Run
   `video.mjs stills -p <slug>` (it saves the cues), then `video.mjs sounds -p <slug>`, and make only the kinds of the
-  catalog it says are missing: with ElevenLabs when `source/elevenlabs.json` turns `sfx` on, else with the kit
-  (`sfx <kind>… --local`).
+  catalog it says are missing: generated when the starting questions chose it (« Generating a medium », then
+  `sfx <kind> --from <file>`), else with the kit (`sfx <kind>… --local`).
 - Design the sounds of your own, as many as the video needs (sound-format.md, « Sounds of your own »): the library is a
   base, not a limit.
-- What `source/elevenlabs.json` turns on (`music`, `sfx`), ElevenLabs makes, and `sound.py` places it
-  (sound-format.md, « With ElevenLabs »). The rest, and what the key may not make, the kit makes as before.
+- What is generated (the music, effects), `sound.py` places (sound-format.md, « Generated sounds »). The rest, and
+  what a generation could not make, the kit makes.
 - The clips play their own sound by themselves: set each one's `volume` in `edit.json`.
 
 The voice needs nothing: the engine levels the rushes, cuts the rumble, denoises lightly and compresses it.
@@ -267,15 +265,15 @@ Start with `video.mjs status "Feedback v<n>: <count> changes" -p <slug>`: while 
 shows its steps above the feedback. Then read `references/review-format.md` and every image the prompt attaches, and
 follow its « Applying it »: each id gets its change, then `resolved` and `reply` in the feedback file.
 
-Before a change that goes through ElevenLabs (the voice-over's text, the music or an effect made again, a transcript
-again with Scribe v2), give the user its estimated credits and what the account has left with `video.mjs credits`, then go on.
+A change that needs a generation (the voice-over's text, the music or an effect made again, a new clip, a transcript
+again) gets its estimate and the user's yes first (« Generating a medium »), then go on.
 
 An effect of the library is every video's: made again (`sfx <kind> --force`), it changes all the videos of the folder
 at their next mix. When the comment is about this video only, make it with `--here`.
 
 When a comment changes what the voice-over says (not how a word is spelled, which `fix` corrects), edit
-`source/voice.txt`, run `voice` then `prepare` again, and move the scene's `at()` and `edit.json`'s cuts onto the new
-times of `files/words.md`.
+`source/voice.txt`, generate the voice again, run `voice <its file>` then `prepare` again, and move the scene's `at()`
+and `edit.json`'s cuts onto the new times of `files/words.md`.
 
 Then render it at once, without asking: `video.mjs render -p <slug>` with the project's `--blur`, then
 `video.mjs final -p <slug>`, which delivers every format and resolution again. A change in `sound.py` or in a clip's
@@ -311,6 +309,26 @@ the playhead. R reloads it after you edit the scene.
 
 Read `references/rules-format.md` and follow its « The rules mode ». One pack per video, or none.
 
+## Generating a medium
+
+Whatever a model makes or changes for the video (a music, sound effects, a voice-over, a transcript, images, clips, a
+rush made ready before the edit, anything else it offers) is made by media-generator, the plugin's other skill.
+Load it with the Skill tool (`skill-video:media-generator`) the first time, then follow its « A generation »: its
+tools (`media.mjs tools <kind> --search "<the need, in English>"`), its models and its estimates. Never pick a tool
+from memory: its list grows. Three rules:
+- **`--out <folder>`** on each command: the result lands there, in no workspace and with no dashboard. By default the
+  video's own folder: `<slug>/assets/sound/` for a sound, `<slug>/assets/clips/` for a clip, `<slug>/assets/` for an
+  image, a voice or a transcript; any other folder the user names. Then the engine takes it in: a voice-over with
+  `video.mjs voice <file>`, a transcript with `prepare --words <its words.json>`, an effect with
+  `sfx <kind> --from <file>`, a clip in `edit.json`'s `media`, a music with `beats <file>` and sound.py's `load()`.
+- **Only what the video needs.** Offer a generation only for a medium the video needs and the rushes or the user's
+  files do not provide, the local way (Whisper, the kit) always offered first: never for its own sake.
+- **The estimates.** The generations known at the start are estimated in the starting questions
+  (`references/new-video.md`): the user's yes there covers each one up to its estimate, so run it with
+  `--spend <its estimate>` when its step comes. Any other, new or dearer (a clip the Direction adds, a music made
+  again or longer), gets its estimate (`--estimate`) and the user's yes (AskUserQuestion, as media-generator's step 3)
+  as soon as it comes up, before it runs. Write each yes in About.md's « Génération » section.
+
 ## Learning
 
 When the user states a lasting preference ("always", "never", "I don't like this kind of…", a variation they
@@ -335,20 +353,10 @@ gives its current lines.
 - **When a command fails, read its message.** A scene error comes back with its stack, and the page warns about a
   `<canvas>` placed by layout or a tween placed before 0.
 - **Everything stays on the machine.** The studio server listens on 127.0.0.1 only. Do not upload the user's
-  footage anywhere. The only exception is ElevenLabs, for what the user turned on in `source/elevenlabs.json`:
-  Scribe v2 gets the source's sound, the voice-over the text of `source/voice.txt`, the music and the effects their
-  prompts; `voice-change`, `dub` and `isolate` the file they are given.
+  footage anywhere. The only exception is what the user said yes to generate: media-generator sends its prompt and
+  the files it is given to its router or ElevenLabs (its SKILL.md, « What leaves the machine »).
 - **Git.** `init` writes the projects folder's `.gitignore` when it has none: git keeps the rushes, the clips, the
   music and the effects (`.sound/`, `assets/`), and leaves out only what the engine makes again (`.cache/`, `output/`,
   `stills/`, `frames/`, `assets/source.wav`, `assets/mix.wav`) and manual backups (`.backup/`). `doctor` warns when a `.gitignore` would leave out one of them.
 - **One studio per projects folder.** `studio` reuses this folder's server, or starts one on the first free port from
   41187: other folders' studios keep running side by side. Give the user the URL it prints.
-- **Voice change, dubbing and voice isolation, on any file.** `voice-change <file> --voice <voice_id>` keeps the
-  delivery in another voice, `voice-clone <name> <recordings…>` makes a voice from the user's recordings, `dub <file>
-  --to <lang>,…` dubs into other languages in the speakers' voices, with subtitles and no lip-sync, and `isolate <file>`
-  keeps the voice alone (music, noise and room out; a video comes back with it). They work outside a project
-  (media-generator uses them), always through ElevenLabs: about 1,000 credits a minute for a voice change or an
-  isolation, 3,000 a
-  minute per language to dub (13,500 with `--model dubbing_v2`). Without `--spend <credits>` they stop with exit
-  code 2 and the estimate: give it to the user (`credits` adds what the account has left), then run again with
-  `--spend`. A video in another language than the style's can be dubbed first, then edited as a rush.

@@ -4136,6 +4136,7 @@
       "options": [
         {
           "key": "vocal_gender",
+          "when": { "mode": "write" },
           "label": "Voice",
           "type": "choice",
           "values": [
@@ -4153,7 +4154,7 @@
             }
           ],
           "default": "",
-          "hint": "raises the odds, not a promise; Write only"
+          "hint": "raises the odds, not a promise"
         },
         {
           "key": "negative_tags",
@@ -4163,36 +4164,40 @@
         },
         {
           "key": "style_weight",
+          "when": { "mode": "write" },
           "label": "Style weight",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how closely it keeps to the style; Write only"
+          "hint": "how closely it keeps to the style"
         },
         {
           "key": "weirdness_constraint",
+          "when": { "mode": "write" },
           "label": "Weirdness",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how far it strays from the expected; Write only"
+          "hint": "how far it strays from the expected"
         },
         {
           "key": "audio_weight",
+          "when": { "mode": "write" },
           "label": "Audio weight",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how much a given audio counts; with vocals, Write only"
+          "hint": "how much a given audio counts; with vocals"
         },
         {
           "key": "variety",
+          "when": { "mode": "write" },
           "label": "Variety",
           "type": "choice",
           "values": [
@@ -4218,7 +4223,7 @@
             }
           ],
           "default": 1,
-          "hint": "how different the two takes are; Write only"
+          "hint": "how different the two takes are"
         }
       ],
       "skip": {
@@ -4291,6 +4296,7 @@
       "options": [
         {
           "key": "vocal_gender",
+          "when": { "mode": "write" },
           "label": "Voice",
           "type": "choice",
           "values": [
@@ -4308,7 +4314,7 @@
             }
           ],
           "default": "",
-          "hint": "raises the odds, not a promise; Write only"
+          "hint": "raises the odds, not a promise"
         },
         {
           "key": "negative_tags",
@@ -4318,36 +4324,40 @@
         },
         {
           "key": "style_weight",
+          "when": { "mode": "write" },
           "label": "Style weight",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how closely it keeps to the style; Write only"
+          "hint": "how closely it keeps to the style"
         },
         {
           "key": "weirdness_constraint",
+          "when": { "mode": "write" },
           "label": "Weirdness",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how far it strays from the expected; Write only"
+          "hint": "how far it strays from the expected"
         },
         {
           "key": "audio_weight",
+          "when": { "mode": "write" },
           "label": "Audio weight",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how much a given audio counts; with vocals, Write only"
+          "hint": "how much a given audio counts; with vocals"
         },
         {
           "key": "variety",
+          "when": { "mode": "write" },
           "label": "Variety",
           "type": "choice",
           "values": [
@@ -4373,7 +4383,7 @@
             }
           ],
           "default": 1,
-          "hint": "how different the two takes are; Write only"
+          "hint": "how different the two takes are"
         }
       ],
       "skip": {
@@ -4446,6 +4456,7 @@
       "options": [
         {
           "key": "vocal_gender",
+          "when": { "mode": "write" },
           "label": "Voice",
           "type": "choice",
           "values": [
@@ -4463,7 +4474,7 @@
             }
           ],
           "default": "",
-          "hint": "raises the odds, not a promise; Write only"
+          "hint": "raises the odds, not a promise"
         },
         {
           "key": "negative_tags",
@@ -4473,36 +4484,40 @@
         },
         {
           "key": "style_weight",
+          "when": { "mode": "write" },
           "label": "Style weight",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how closely it keeps to the style; Write only"
+          "hint": "how closely it keeps to the style"
         },
         {
           "key": "weirdness_constraint",
+          "when": { "mode": "write" },
           "label": "Weirdness",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how far it strays from the expected; Write only"
+          "hint": "how far it strays from the expected"
         },
         {
           "key": "audio_weight",
+          "when": { "mode": "write" },
           "label": "Audio weight",
           "type": "slider",
           "min": 0,
           "max": 1,
           "step": 0.05,
           "default": 0.5,
-          "hint": "how much a given audio counts; with vocals, Write only"
+          "hint": "how much a given audio counts; with vocals"
         },
         {
           "key": "variety",
+          "when": { "mode": "write" },
           "label": "Variety",
           "type": "choice",
           "values": [
@@ -4528,7 +4543,7 @@
             }
           ],
           "default": 1,
-          "hint": "how different the two takes are; Write only"
+          "hint": "how different the two takes are"
         }
       ],
       "skip": {

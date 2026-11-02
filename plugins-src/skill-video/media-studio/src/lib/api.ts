@@ -172,6 +172,8 @@ export type ModelOption = {
   values?: OptionValue[]
   default?: string | number | boolean | null
   hint?: string
+  // only while the tool's fields have these values (Eleven Music's Length in Describe)
+  when?: Record<string, string>
 }
 // a dialogue's line: its voice (an ElevenLabs id or @name of the Library, a Gemini voice) and its words
 export type Line = { voice: string; text: string }

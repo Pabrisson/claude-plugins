@@ -60,7 +60,7 @@ and local: no estimate, no yes.
 
 A workspace is a project: its media, its Elements and a timeline. « Default workspace » is there from the start.
 **Every new generation joins the current workspace**, yours and the dashboard's (`--workspace <slug>` on `image`,
-`video` or `audio` puts one in another); so does a new Element (`elements add … --workspace <slug>|none` for another
+`video` or `audio` puts one in another, `--out <folder>` in none); so does a new Element (`elements add … --workspace <slug>|none` for another
 or none). The dashboard's header switches it.
 
 - `media.mjs workspaces` lists them (`*` the current one); `workspaces new <name>` makes one and makes it current;

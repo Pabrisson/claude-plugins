@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 // the CLI on a throwaway projects folder, as the skill drives it
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'video-skill-'))
 const engine = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'video.mjs')
-// (never ElevenLabs: the session's key is left out)
+// (media-generator's ElevenLabs key left out)
 const cli = (...argv) => execFileSync(process.execPath, [engine, ...argv], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 const read = rel => fs.readFileSync(path.join(home, rel), 'utf8')
 test.after(() => fs.rmSync(home, { recursive: true, force: true }))
@@ -399,6 +399,10 @@ test('beats lays the grid of a tempo or measures a track; fix corrects a spoken 
   ffmpeg('-f', 'lavfi', '-i', "aevalsrc='if(lt(mod(t-0.25\\,0.5)\\,0.02)\\,sin(2*PI*3000*t)\\,0)':s=48000:d=10", 'clicks.mp3')
   cli('beats', path.join(home, 'clicks.mp3'), '-p', 'beat')
   assert.ok(Math.abs(JSON.parse(read('beat/files/beats.json')).bpm - 120) < 1)
+  // a path from where the command runs too (media-generator's --out gives one), and a missing file said so
+  execFileSync(process.execPath, [engine, 'beats', 'clicks.mp3', '-p', 'beat'], { cwd: home, env: { ...process.env, VIDEO_EDITOR_DIR: home }, stdio: 'pipe' })
+  assert.match(JSON.parse(read('beat/files/beats.json')).from, /\.\.\/.*clicks\.mp3$/)
+  assert.throws(() => cli('beats', 'nope.mp3', '-p', 'beat'), /no such file: nope\.mp3/)
   cli('thumbnail', '-p', 'beat')
   assert.match(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path.join(home, 'beat/output/beat-thumbnail.jpg')], { encoding: 'utf8' }), /^1280,720/)
   fs.writeFileSync(path.join(home, 'face/assets/words.json'), JSON.stringify([{ w: 'Sécur', t0: 1, t1: 1.3 }, { w: 'sus.', t0: 1.3, t1: 1.5 }, { w: 'Merci', t0: 2, t1: 2.4 }]))
@@ -432,97 +436,51 @@ test('the progress log: the commands and Claude log their steps, a command that 
   assert.throws(() => cli('status', '-p', 'wait'), /usage: status/)
 })
 
-test('ElevenLabs (faked): only what elevenlabs.json turns on; a voice-over becomes the source, timed by the voice and never transcribed; Scribe v2 transcribes with the vocabulary; music is made once, a refused effect says so; credits estimates', { timeout: 120000 }, () => {
-  const mock = path.join(home, 'eleven.mjs'), calls = path.join(home, 'eleven.log'), text = 'Bonjour à tous, voici Secursus.'
+test('made by media-generator: a voice-over file becomes the source, a transcript replaces Whisper, an effect joins the library; no ElevenLabs left here', { timeout: 120000 }, () => {
+  const tts = path.join(home, 'tts.mp3'), transcript = path.join(home, 'words.json')
   ffmpeg('-f', 'lavfi', '-i', 'sine=f=220:d=3', 'tts.mp3')
   ffmpeg('-f', 'lavfi', '-i', 'testsrc2=s=320x240:r=25:d=3', '-f', 'lavfi', '-i', 'sine=f=300:d=3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest', 'talk.mp4')
-  fs.writeFileSync(mock, `import fs from 'node:fs'
-    globalThis.fetch = async (url, init = {}) => {
-      const u = String(url), form = init.body instanceof FormData ? Object.fromEntries([...new Set(init.body.keys())].map(k => [k, init.body.getAll(k).map(String)])) : init.body
-      fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ u, key: init.headers['xi-api-key'], form }) + '\\n')
-      const chars = [...${JSON.stringify(text)}], at = chars.map((_, i) => i * 0.09)
-      if (u.endsWith('/v1/music')) return new Response(fs.readFileSync(${JSON.stringify(path.join(home, 'tts.mp3'))}), { headers: { 'content-type': 'audio/mpeg' } })
-      if (u.endsWith('/v1/user/subscription')) return Response.json({ character_count: 1000, character_limit: 10000, next_character_count_reset_unix: 1794787200 })
-      if (u.endsWith('/v1/sound-generation') && JSON.parse(init.body).text === 'Soft whoosh') return Response.json({ detail: { message: 'The API key you used is missing the permission sound_generation to execute this operation.' } }, { status: 401 })
-      if (u.endsWith('/v1/sound-generation')) return new Response(fs.readFileSync(${JSON.stringify(path.join(home, 'tts.mp3'))}), { headers: { 'content-type': 'audio/mpeg' } })
-      return Response.json(u.includes('/text-to-speech/') ? { audio_base64: fs.readFileSync(${JSON.stringify(path.join(home, 'tts.mp3'))}).toString('base64'),
-          alignment: { characters: chars, character_start_times_seconds: at, character_end_times_seconds: at.map(t => t + 0.08) } }
-        : { words: [{ text: 'Bonjour', type: 'word', start: 0.2, end: 0.6 }, { text: ' ', type: 'spacing', start: 0.6, end: 0.7 }, { text: '(rires)', type: 'audio_event', start: 0.7, end: 1 }, { text: 'Secursus.', type: 'word', start: 1, end: 1.6 }] })
-    }`)
-  const eleven = (...argv) => execFileSync(process.execPath, ['--import', mock, engine, ...argv], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: 'k-test' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-  const log = () => read('eleven.log').trim().split('\n').map(l => JSON.parse(l))
+  // media-generator's transcript, in ElevenLabs' shape: its words, not its spacings nor its sound events
+  fs.writeFileSync(transcript, JSON.stringify({ text: 'Bonjour (rires) Secursus.', words: [{ text: 'Bonjour', type: 'word', start: 0.2, end: 0.6 }, { text: ' ', type: 'spacing', start: 0.6, end: 0.7 },
+    { text: '(rires)', type: 'audio_event', start: 0.7, end: 1 }, { text: 'Secursus.', type: 'word', start: 1, end: 1.6 }] }))
 
   cli('init', 'both', '--formats', '9:16', '--renders', '720p', '--rules', 'none', '--source', path.join(home, 'talk.mp4'))
-  assert.throws(() => cli('elevenlabs', 'set', 'voice=v1', '-p', 'both'), /voice-over becomes the source/)
+  assert.throws(() => cli('voice', tts, '-p', 'both'), /a voice-over is for a video without one/)
   cli('init', 'vo', '--formats', '9:16', '--renders', '720p', '--rules', 'none')
-  // nothing goes to ElevenLabs before the user chose, nor what they turned off
-  assert.match(cli('elevenlabs', '-p', 'vo'), /not chosen for this video yet/)
-  assert.throws(() => eleven('voice', '-p', 'vo'), /not chosen for this video yet/)
-  assert.throws(() => cli('elevenlabs', 'set', 'music=yes', '-p', 'vo'), /music is true or false/)
-  assert.throws(() => cli('elevenlabs', 'set', 'look=true', '-p', 'vo'), /look is not one of transcript, voice, music, sfx/)
-  assert.match(cli('elevenlabs', 'set', 'voice=v1', 'sfx=true', '-p', 'vo'), /transcript off · voice v1 · music off · sfx on/)
-  assert.deepEqual(JSON.parse(read('vo/source/elevenlabs.json')), { transcript: false, voice: 'v1', music: false, sfx: true })
-  assert.ok(!/elevenlabs|voice/.test(read('vo/source/style.json') + read('vo/source/project.json')))
-  assert.throws(() => eleven('music', 'Warm pads', '--length', '3', '-p', 'vo'), /music by ElevenLabs is off for this video/)
-  assert.ok(!fs.existsSync(calls))
-  assert.throws(() => eleven('voice', '-p', 'vo'), /source\/voice\.txt/)
-  fs.writeFileSync(path.join(home, 'vo/source/voice.txt'), text + '\n')
-  assert.match(eleven('voice', '-p', 'vo'), /voice-over: 5 words/)
-  const [tts] = log(), p = JSON.parse(read('vo/source/project.json'))
-  assert.match(tts.u, /\/v1\/text-to-speech\/v1\/with-timestamps$/)
-  assert.equal(tts.key, 'k-test')
-  assert.deepEqual(JSON.parse(tts.form), { text, model_id: 'eleven_v4', language_code: 'fr' })
-  assert.deepEqual([p.source.voice, p.source.width, p.source.height, p.source.audio], [true, 1080, 1920, true])
+  assert.throws(() => cli('voice', '-p', 'vo'), /usage: voice <the voice-over's sound file>/)
+  assert.match(cli('voice', tts, '-p', 'vo'), /voice-over: assets\/voice-over\.mp3, 3[.\d]* s\. Next: prepare/)
+  const p = JSON.parse(read('vo/source/project.json'))
+  assert.deepEqual([p.source.voice, p.source.from, p.source.width, p.source.height, p.source.audio], [true, 'voice-over (tts.mp3)', 1080, 1920, true])
   assert.ok(Math.abs(p.source.duration - 3) < 0.1, `${p.source.duration}`)
-  const words = read('vo/assets/words.json')
-  assert.deepEqual(JSON.parse(words).map(w => w.w), ['Bonjour', 'à', 'tous,', 'voici', 'Secursus.'])
-  // prepare (even --force) keeps the voice's words: no transcription, no face to frame on a black picture
+  // prepare transcribes it like any source, here with media-generator's words; no face to frame on a black picture
   cli('rules', 'set', 'face_framing=true', '-p', 'vo')
-  cli('prepare', '--force', '-p', 'vo')
-  assert.equal(read('vo/assets/words.json'), words)
+  assert.match(cli('prepare', '--words', transcript, '-p', 'vo'), /transcript: 2 words/)
+  const words = read('vo/assets/words.json')
+  assert.deepEqual(JSON.parse(words), [{ w: 'Bonjour', t0: 0.2, t1: 0.6 }, { w: 'Secursus.', t0: 1, t1: 1.6 }])
   assert.ok(!fs.existsSync(path.join(home, 'vo/assets/frames.json')))
+  cli('prepare', '-p', 'vo')
+  assert.equal(read('vo/assets/words.json'), words, 'kept by the next prepare')
+  assert.throws(() => cli('prepare', '--words', path.join(home, 'none.json'), '-p', 'vo'), /no such file/)
   cli('rough', '-p', 'vo')
   assert.ok(fs.existsSync(path.join(home, 'vo/output/vo-rough.mp4')))
-  assert.ok(fs.existsSync(path.join(home, 'vo/files/versions/v1-9x16.mp4')))
+  // a new take: its words go, prepare transcribes it again
+  cli('voice', tts, '-p', 'vo')
+  assert.ok(!fs.existsSync(path.join(home, 'vo/assets/words.json')))
+  assert.deepEqual(fs.readdirSync(path.join(home, 'vo/assets')).filter(x => x.startsWith('voice-over')), ['voice-over.mp3'])
 
-  cli('init', 'sc', '--formats', '16:9', '--renders', '720p', '--rules', 'none', '--source', path.join(home, 'talk.mp4'))
-  cli('elevenlabs', 'set', 'transcript=true', '-p', 'sc')
-  cli('style', 'set', 'creator.vocabulary=["Secursus","a name far too long to be a keyterm of Scribe v2 at all"]', '-p', 'sc')
-  assert.match(eleven('prepare', '-p', 'sc'), /Scribe v2, keyterms: Secursus[\s\S]*transcript: 2 words/)
-  const stt = log().at(-1)
-  assert.match(stt.u, /\/v1\/speech-to-text$/)
-  assert.deepEqual(stt.form.model_id, ['scribe_v2'])
-  assert.deepEqual(stt.form.keyterms, ['Secursus'])
-  assert.deepEqual(JSON.parse(read('sc/assets/words.json')), [{ w: 'Bonjour', t0: 0.2, t1: 0.6 }, { w: 'Secursus.', t0: 1, t1: 1.6 }])
-  // the music and the effects: a file for sound.py's load(), never made again without --force; a refusal is the key's
-  cli('elevenlabs', 'set', 'music=true', '-p', 'vo')
-  assert.match(eleven('music', 'Warm pads, 120 bpm', '--length', '3', '-p', 'vo'), /music: assets\/sound\/music\.mp3 \(3[.\d]* s\)/)
-  assert.deepEqual(JSON.parse(log().at(-1).form), { prompt: 'Warm pads, 120 bpm', music_length_ms: 3000, force_instrumental: true, model_id: 'music_v2_5' })
-  assert.throws(() => eleven('music', 'Warm pads', '--length', '3', '-p', 'vo'), /music\.mp3 exists: --force/)
-  assert.throws(() => eleven('music', 'Warm pads', '-p', 'vo'), /--length <3 to 600 s>/)
-  assert.throws(() => eleven('sfx', 'whoosh', 'Soft whoosh', '--length', '0.8', '-p', 'vo'), /401 .*missing the permission sound_generation/)
-  assert.ok(!fs.existsSync(path.join(home, '.sound/whoosh.mp3')))
-  // an effect goes to the projects folder's library, from the catalog's prompt at its length, made once
-  assert.match(eleven('sfx', 'counter', '-p', 'vo'), /sfx: \.sound\/tick\.mp3 \(3[.\d]* s\), for every video of the folder/)
-  assert.deepEqual(JSON.parse(log().at(-1).form), { text: JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'sfx.json'), 'utf8')).tick.prompt, duration_seconds: 0.5 })
-  assert.throws(() => eleven('sfx', 'tick', '-p', 'vo'), /\.sound\/tick\.mp3 exists: --force makes tick again \(it costs credits\), --here makes one for this video only/)
-  assert.throws(() => eleven('sfx', 'tick', '-p', 'sc'), /sfx by ElevenLabs is off for this video/)
-  // a sound of the project's own: any name, with its description, 1 s unless said
-  assert.throws(() => eleven('sfx', 'radar', '-p', 'vo'), /radar is a sound of the project's own: describe it/)
-  assert.match(eleven('sfx', 'radar', 'A deep sonar ping, long echo', '-p', 'vo'), /sfx: \.sound\/radar\.mp3/)
-  assert.deepEqual(JSON.parse(log().at(-1).form), { text: 'A deep sonar ping, long echo', duration_seconds: 1 })
-  // the estimate before spending: 330 credits a minute of transcript (+20 % with keyterms), 1 a character, 900 a minute
-  // of music, 40 a second of effect (200 when ElevenLabs picks the length)
-  assert.match(cli('credits', 'transcript=60', 'voice=900', 'music=60', 'sfx=1,0.5,auto', '-p', 'sc'),
-    /transcript \(Scribe v2, 60 s, keyterms \+20 %\): 81 credits\nvoice-over \(900 characters\): 900 credits\nmusic \(60 s\): 900 credits\nsound effects \(1 s, 0\.5 s, auto\): 65 credits\ntotal: about 1946 credits/)
-  assert.throws(() => cli('credits', 'sfx=40'), /0\.5 to 30/)
-  // then what the account has left (user_read), alone without an estimate; nothing without a key
-  assert.match(eleven('credits', 'music=600'), /music \(600 s\): 9000 credits\ntotal: about 9000 credits .*\naccount: 9000 credits left of 10000, renewed on 2026-11-16\n$/)
-  assert.match(eleven('credits', 'music=601'), /account: 9000 credits left of 10000, renewed on 2026-11-16: not enough for this estimate/)
-  assert.equal(eleven('credits'), 'account: 9000 credits left of 10000, renewed on 2026-11-16\n')
-  assert.equal(cli('credits'), '')
-  // without a key, the engine says so instead of calling
-  assert.throws(() => execFileSync(process.execPath, [engine, 'voices'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, stdio: 'pipe' }), /no ElevenLabs key/)
+  // an effect generated elsewhere joins the library under its kind (an alias names it), replaced only with --force
+  assert.throws(() => cli('sfx', 'tick', '--from', path.join(home, 'none.mp3')), /no such file/)
+  assert.match(cli('sfx', 'counter', '--from', tts), /sfx: \.sound\/tick\.mp3 \(3[.\d]* s\), for every video of the folder/)
+  assert.throws(() => cli('sfx', 'tick', '--from', tts), /\.sound\/tick\.mp3 exists: --force makes tick again, --here makes one for this video only/)
+  assert.match(cli('sfx', 'radar', '--from', tts, '--here', '-p', 'vo'), /sfx: vo\/assets\/sound\/radar\.mp3 \(3[.\d]* s\), for this video only/)
+  assert.throws(() => cli('sfx', 'tick'), /usage: sfx/)
+  assert.throws(() => cli('sfx', 'tick', '--local', '--from', tts), /usage: sfx/)
+
+  // ElevenLabs is media-generator's: none of its commands here; doctor says which keys media-generator has
+  for (const c of ['elevenlabs', 'credits', 'music', 'voices', 'voice-change', 'voice-clone', 'dub', 'isolate']) assert.throws(() => cli(c), /usage: video\.mjs </)
+  const doctor = keys => execFileSync(process.execPath, [engine, 'doctor'], { env: { ...process.env, VIDEO_EDITOR_DIR: home, KIE_API_KEY: '', OPENROUTER_API_KEY: '', ELEVENLABS_API_KEY: '', ...keys }, encoding: 'utf8' })
+  assert.match(doctor({}), /^generation: no key \(Whisper transcript, no voice-over, the kit makes the sound\)/m)
+  assert.match(doctor({ KIE_API_KEY: 'k', ELEVENLABS_API_KEY: 'k' }), /^generation: media-generator, keys kie, elevenlabs$/m)
 })
 
 test('the sound library: sfx makes kinds of the catalog and sounds of the project\'s own into .sound/ (--local: three takes, never twice without --force), --here for one video; sounds lists them, then where the sound of each cue comes from', { timeout: 120000 }, () => {
@@ -547,8 +505,8 @@ test('the sound library: sfx makes kinds of the catalog and sounds of the projec
   assert.match(log, /^tapestop ×1 \(its own\): placed by sound\.py$/m)
   assert.match(log, /^sonar_ping ×1 \(its own\): \.sound\/sonar_ping\.wav \(3 takes\)$/m)
   assert.match(log, /^zap ×1 \(its own\): missing$/m)
-  assert.match(log, /^missing: blip\. The kit: video\.mjs sfx blip --local$/m)
-  assert.match(log, /^to make, sounds of its own: zap\. Design each in sound\.py, or as `def <name>\(rng\)` in \.sound\/sfx\.py then video\.mjs sfx <name> --local/m)
+  assert.match(log, /^missing: blip \(0\.5 s\)\. The kit: video\.mjs sfx blip --local; or generated \(media-generator, its estimate and the user's yes first\), then video\.mjs sfx <kind> --from <file>$/m)
+  assert.match(log, /^to make, sounds of its own: zap\. Design each in sound\.py, or as `def <name>\(rng\)` in \.sound\/sfx\.py then video\.mjs sfx <name> --local .*, or generated then video\.mjs sfx <name> --from <file>$/m)
   assert.match(cli('sounds'), /the project's own sounds: .*sonar_ping/)
   assert.match(cli('doctor'), /sound library: \d+ of the catalog's 18 effects and \d+ of its own in .*\.sound \(video\.mjs sounds\)/)
 })

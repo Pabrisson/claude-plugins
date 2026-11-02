@@ -1,6 +1,6 @@
 # The sound: `source/sound.py`
 
-Contents: The kit · The effects: the library · With ElevenLabs · Composing for the picture · Checking (you cannot listen, so measure) · A skeleton
+Contents: The kit · The effects: the library · Generated sounds · Composing for the picture · Checking (you cannot listen, so measure) · A skeleton
 
 You compose the music of each video in code, the way the scene is written, and you give it its effects: the
 projects folder's library has the common ones ready, and you design the others, as many as the video needs.
@@ -106,13 +106,13 @@ little in pitch and level, and the takes alternate, so 30 pops never sound like 
 the kinds its cues use and where each sound comes from (the video, the library, `sound.py`, or missing), then how to
 make the missing ones. For a kind of the catalog:
 - with the kit (no credit): `video.mjs sfx <kind>… --local` synthesizes three takes of each into `.sound/`;
-- with ElevenLabs, when `source/elevenlabs.json` turns `sfx` on: `video.mjs sfx <kind> -p <slug>`, one kind per call, from
-  the catalog's prompt at the catalog's length (give your own prompt as a second argument when the brand calls for
-  it: describe the sound, not the picture).
+- generated, when the starting questions chose it: one kind at a time with media-generator (SKILL.md, « Generating a
+  medium »), described with the catalog's words for it (`prompt` in `${CLAUDE_SKILL_DIR}/engine/sfx.json`, or your
+  own when the brand calls for it: the sound, not the picture) at the length `sounds` gives, then
+  `video.mjs sfx <kind> --from <file>`.
 
-`--here` makes the sound for this video only (`assets/sound/`), when it must differ from the project's. A sound that is
-there is made again only with `--force`: an ElevenLabs one costs credits again, so make again only the one a comment
-is about.
+`--here` puts the sound in this video only (`assets/sound/`), when it must differ from the project's. A sound that is
+there is replaced only with `--force`: a generated one costs again, so make again only the one a comment is about.
 
 **Sounds of your own.** The library takes care of the common events; what makes this video's sound is yours to
 design: its signature, a sound that plays in the key of the music, one that follows the data (a counter that climbs, a
@@ -123,8 +123,8 @@ chart that fills), a moment no kind of the catalog says. Make as many as the vid
   stereo array (`from audio import *`; `import sfx` gives the kit's designs, `sfx.whoosh`…), then
   `video.mjs sfx <name> --local`. The cues of that name then play it. A `def` named after a kind of the catalog
   replaces the kit's design of it for the project.
-- **With ElevenLabs**, when `sfx` is on: `video.mjs sfx <name> "<the sound>" [--length <s>] -p <slug>` (1 s unless
-  said).
+- **Generated**, when the effects are: made with media-generator from its description, then
+  `video.mjs sfx <name> --from <file>`.
 
 A sound baked into the library goes through the finish: the kind's band, its stereo width and a short tail for a kind
 of the catalog, the design's own band and length for a sound of your own, and its peak at -1 dBFS.
@@ -140,32 +140,35 @@ first designs; the kit's designs follow it, follow it in yours):
   above 6 kHz.
 - **Grain.** Micro-transients and a level that is never smooth; a sharp peak (crest 15 to 28 dB).
 
-## With ElevenLabs
+## Generated sounds
 
-When the video's `source/elevenlabs.json` turns on `music` or `sfx` (the user's choice at its start), ElevenLabs
-makes them and `sound.py` places them: the kit only shapes them (fades, filters, pan) and makes the rest. The
-commands refuse what the file leaves off.
-- **The music**: `video.mjs music "<prompt>" --length <video s> -p <slug>` writes an instrumental track to
-  `assets/sound/music.mp3`. Write the prompt as the score you would compose: the mood of the style's notes, the
-  Direction's tempo (« 120 bpm »), the instruments, and the arrangement on the story with its times (« sparse intro,
-  builds from 4 s, a break at 9.5 s, full on the reveal at 10 s, resolves on a final chord at 15 s »). Never name an
-  artist. Make it the video's length, then `video.mjs beats assets/sound/music.mp3 -p <slug>` measures its grid for
-  the scene's cuts. When the video's length changes, make it again rather than cutting it off.
-- **The effects**: the ones the library lacks for this video's cues (`video.mjs sounds -p <slug>` lists them),
-  `video.mjs sfx <kind> -p <slug>` each. They go to the library, so the next videos of the folder play them too, and
-  `play()` places them.
-- **Each file is made once.** Making it again takes `--force` and costs credits again: change only the one a comment
-  is about.
-- **Refused**: when a command answers that the key may not (a missing permission, the plan, the credits), the kit
-  makes that part, as without ElevenLabs (`sfx <kind> --local` for an effect), with no new attempt. Tell the user in
-  the summary.
+When the starting questions chose a generated music or generated effects, media-generator makes them (SKILL.md,
+« Generating a medium », with `--out <slug>/assets/sound`) and `sound.py` places them: the kit only shapes them (fades,
+filters, pan) and makes the rest.
+- **The music**: write its prompt as the score you would compose: the mood of the style's notes, the Direction's tempo
+  (« 120 bpm »), the instruments, and the arrangement on the story with its times (« sparse intro, builds from 4 s, a
+  break at 9.5 s, full on the reveal at 10 s, resolves on a final chord at 15 s »). Never name an artist. Instrumental,
+  unless the user wants a song. Ask for the video's length: the tool's help (`media.mjs tools audio --search
+  "<the need, in English>"`) says which field or option sets the length and in which mode, and a setting that does not
+  go with the others is refused before anything is spent. Check the length of what comes back (ffprobe). Then
+  `video.mjs beats <its file> -p <slug>` measures its grid for the scene's cuts. When the video's length changes, make
+  it again (its estimate and the user's yes) rather than cutting it off.
+- **The effects**: the ones the library lacks for this video's cues (`video.mjs sounds -p <slug>` lists them with their
+  length), each made then `video.mjs sfx <kind> --from <file>`. They go to the library, so the next videos of the folder
+  play them too, and `play()` places them. **Measure each one before taking it in**: its peak (ffmpeg's
+  `volumedetect`) and its energy under 80 Hz. A short generated effect can come out near silent (a peak under
+  -40 dBFS) or as a rumble: make it again with a fuller description (« isolated, studio quality, close-miked, no
+  background noise », its estimate and the user's yes), or let the kit make that kind.
+- **Each file is made once.** Making it again costs again: change only the one a comment is about.
+- **Refused or failed** (the key, the plan, the credits): the kit makes that part, as without generation
+  (`sfx <kind> --local` for an effect), with no new attempt. Tell the user in the summary.
 
 ```python
 from audio import *
 
 def sound(v):
     music, fx = bus(v.n), bus(v.n)
-    place(music, 0, load('assets/sound/music.mp3'))
+    place(music, 0, load('assets/sound/20261102-101500-music-3f2a-out-1.mp3'))   # the generated music
     music[:, -SR // 2:] *= np.linspace(1, 0, SR // 2)        # no click if it runs past the end
     for c in v.cues: play(fx, c)
     return music, fx

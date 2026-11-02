@@ -118,9 +118,14 @@ const COMMON_LANGS = ["en", "fr", "es", "de", "it", "pt", "ja", "zh"]
 // the tool a space's mode opens on: Custom's in image and video, Voice in audio and the first of its edits
 const firstOf = (kind: Kind, mode: "create" | "edit", tools: Tool[]) =>
   kind !== "audio" ? (mode === "create" ? "free" : "free-edit") : mode === "create" ? "voice" : (tools.find((t) => t.mode === "edit" && !t.hidden)?.id ?? "voice")
-// a field or an input shown while the tool's other fields have these values (Music's lyrics in Write, when sung)
+// a field, an input or a model option shown while the tool's other fields have these values (Music's lyrics in Write,
+// when sung); a key the tool has no field for holds nothing back (Suno's options on Extend), as the engine does
 const shownWhen = (tool: Tool, fields: Record<string, string>) => (when?: Record<string, string>) =>
-  !when || Object.entries(when).every(([k, v]) => (fields[k] ?? String(tool.fields.find((f) => f.key === k)?.default ?? "")) === v)
+  !when ||
+  Object.entries(when).every(([k, v]) => {
+    const f = tool.fields.find((x) => x.key === k)
+    return !f || (fields[k] ?? String(f.default ?? "")) === v
+  })
 
 // where the result goes, as the composer says it (back: Extend going back in time, before its clip)
 function placeText(p: Place, kind: Kind, back: boolean) {
@@ -261,11 +266,24 @@ export function Composer({
 
   // a keyframe and its time go only with Aleph 2 and the video they were made from
   // (a model's own inputs and editors go only with a model that has them)
-  const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe" && (!["mid_frames", "speaker_masks", "ref_videos", "ref_audios", "ref_voices"].includes(k) || [...modelInputs, ...refInputs].some((i) => i.key === k) || (k === "mid_frames" && strip))))
+  const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe" && shown(tool.inputs.find((i) => i.key === k)?.when) && (!["mid_frames", "speaker_masks", "ref_videos", "ref_audios", "ref_voices"].includes(k) || [...modelInputs, ...refInputs].some((i) => i.key === k) || (k === "mid_frames" && strip))))
   const ownParams = Object.fromEntries(Object.entries(value.params).filter(([k]) => k !== "keyframe_video" && (k !== "frame" || lipFrame) && (k !== "dialogue" || !!dialogue) && (k !== "shots" || !!shots)
     && (k !== "mid_times" || !!mp?.mid_frames?.timed) && (k !== "draft_of" || !!draftOf) && (k !== "lines" || speaks) && (k !== "voice_names" || refInputs.some((i) => i.key === "ref_voices"))))
-  // ElevenLabs sings in no singer of the Library, takes no Suno split: what was picked for Suno stays here, not sent
-  const sentFields = elevenModel ? Object.fromEntries(Object.entries(value.fields).filter(([k]) => !tool.fields.some((f) => f.key === k && (f.type === "singer" || f.suno)))) : value.fields
+  // a model's options only in the mode they go with (Eleven Music's Length in Describe): the others hidden, not sent
+  const shownModel = useMemo(
+    () => (model?.params.options?.some((o) => o.when) ? { ...model, params: { ...model.params, options: model.params.options.filter((o) => shown(o.when)) } } : model),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [model, value.fields]
+  )
+  const hiddenOptions = (model?.params.options ?? []).filter((o) => !shown(o.when)).map((o) => o.key)
+  if (hiddenOptions.length && ownParams.options) ownParams.options = Object.fromEntries(Object.entries(ownParams.options as Record<string, unknown>).filter(([k]) => !hiddenOptions.includes(k)))
+  // a field of another mode stays here, not sent; ElevenLabs sings in no singer of the Library, takes no Suno split
+  const sentFields = Object.fromEntries(
+    Object.entries(value.fields).filter(([k]) => {
+      const f = tool.fields.find((x) => x.key === k)
+      return !f || (shown(f.when) && !(elevenModel && (f.type === "singer" || f.suno)))
+    })
+  )
   const spec: Spec = useMemo(
     () => ({
       kind,
@@ -807,13 +825,13 @@ export function Composer({
           />
         )}
 
-        {model && (
+        {model && shownModel && (
           <ModelBlock
             kind={kind}
             why={tool.why ?? {}}
             recommended={recommended}
             others={others}
-            model={model}
+            model={shownModel}
             params={value.params}
             onModel={(id) => {
               // a model's options are its own

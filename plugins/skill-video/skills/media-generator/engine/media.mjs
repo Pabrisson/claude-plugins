@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // media-generator CLI and the dashboard's server. Images, videos, voices, music and sounds through the model routers of
 // providers/; ElevenLabs straight (its voices with their captions, sound effects, music, music for a video, stems, voice
-// design and remix, transcripts), its voice changes and dubbing by video-editor's engine.
+// design and remix, transcripts), its voice changes, dubbing and voice isolation by eleven.mjs.
 // Everything lives in the folder Claude Code
 // runs in ($MEDIA_GENERATOR_DIR overrides it): media/ (one folder per generation), elements/ (the @ references),
 // styles/ (the Library's styles), ledger.jsonl (what was spent), settings.json (thresholds, caps, defaults), .cache/
@@ -28,7 +28,8 @@ const LOADED = fs.statSync(SELF).mtimeMs
 const HOME = path.resolve(process.env.MEDIA_GENERATOR_DIR ?? process.cwd())
 const PORT = +(process.env.MEDIA_GENERATOR_PORT ?? 41287)
 const STUDIO = path.join(ENGINE, 'studio/dist')
-const VIDEO = path.join(ENGINE, '../../video-editor/engine/video.mjs')
+// ElevenLabs on a file (voice change, dubbing, isolation, clones), its voices and its balance
+const ELEVEN_CLI = path.join(ENGINE, 'eleven.mjs')
 const KINDS = ['image', 'video', 'audio']
 // a tool's install command on this OS (macOS, Linux, Windows), the same as video-editor's doctor gives
 const byOs = (mac, linux, win) => ({ darwin: mac, win32: win })[process.platform] ?? linux
@@ -51,7 +52,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     quality: { type: 'string' }, sound: { type: 'string' }, seed: { type: 'string' }, voice: { type: 'string' }, option: { type: 'string', multiple: true }, line: { type: 'string', multiple: true }, shot: { type: 'string', multiple: true }, say: { type: 'string', multiple: true }, 'from-draft': { type: 'string' },
     spend: { type: 'string' }, 'accept-unknown': { type: 'boolean' }, force: { type: 'boolean' }, estimate: { type: 'boolean' },
     search: { type: 'string' }, json: { type: 'boolean' }, open: { type: 'boolean' }, space: { type: 'string' }, words: { type: 'string' }, for: { type: 'string' },
-    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, language: { type: 'string' }, verify: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' }, take: { type: 'string' },
+    type: { type: 'string' }, colors: { type: 'string' }, font: { type: 'string' }, workspace: { type: 'string' }, frame: { type: 'string' }, 'keyframe-model': { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, language: { type: 'string' }, verify: { type: 'string' }, from: { type: 'string', multiple: true }, drop: { type: 'string', multiple: true }, refresh: { type: 'boolean' }, take: { type: 'string' }, out: { type: 'string' },
   },
 })
 
@@ -156,12 +157,12 @@ const per1000 = () => PLANS[settings().elevenlabs.plan] || null
 // git keeps what the user made and cannot make again (media, elements, styles, workspaces, the ledger, the settings),
 // not the cache
 const IGNORE = '# media-generator: the cache is remade, the media, elements, styles, workspaces, ledger and settings stay\n.cache/\n.trash/\n'
-function ensureHome() {
+function ensureHome(withWorkspace = true) {
   for (const d of ['media', 'elements', '.cache']) fs.mkdirSync(at(d), { recursive: true })
   const gi = at('.gitignore'), now = fs.existsSync(gi) ? fs.readFileSync(gi, 'utf8') : ''
   if (!now.includes('# media-generator')) fs.writeFileSync(gi, now + (now && !now.endsWith('\n') ? '\n' : '') + (now ? '\n' : '') + IGNORE)
-  // the Default workspace is there from the start, empty
-  if (!fs.existsSync(wsFile('default'))) writeJson(wsFile('default'), { name: 'Default workspace', created: new Date().toISOString(), elements: [], timeline: TIMELINE })
+  // the Default workspace is there from the start, empty; not for a generation sent to a folder (--out)
+  if (withWorkspace && !fs.existsSync(wsFile('default'))) writeJson(wsFile('default'), { name: 'Default workspace', created: new Date().toISOString(), elements: [], timeline: TIMELINE })
 }
 
 const TOOLS = Object.fromEntries(KINDS.map(k => [k, JSON.parse(fs.readFileSync(path.join(ENGINE, `tools/${k}.json`), 'utf8'))]))
@@ -366,7 +367,7 @@ function saveElement(name, { type, words, colors, font, voice, files = [], from 
 function voiceToEleven(name) {
   const v = element(name)
   if (v?.type !== 'voice') throw userError(`@${name} is not a voice of the Library`)
-  const r = videoMjs(['voice-clone', name, ...v.files])
+  const r = elevenMjs(['voice-clone', name, ...v.files])
   if (r.status !== 0) throw userError((r.stderr || r.stdout).trim().split('\n').pop().replace(/^error: /, ''))
   const id = r.stdout.match(/voice: (\S+)/)?.[1]
   if (!id) throw userError('ElevenLabs gave no voice id')
@@ -1193,7 +1194,7 @@ function elevenAudio(spec, m, p, probing) {
       return go('compose', { prompt: prompt || undefined, length: length || undefined, instrumental: !sung, reference }, { seconds: length, reference: ref ? Math.min(30, probe(ref).duration) : 0 })
     }
     if (!words('style') && !probing) throw userError(`${m.name} plays its sections in a style: say it (--field style="…")`)
-    const { plan, seconds } = musicPlan(m.model, words('lyrics'), words('style'), sung, +f.length || options.length || 0)
+    const { plan, seconds } = musicPlan(m.model, words('lyrics'), words('style'), sung, +f.length || 0)
     return go('compose', { plan }, { seconds })
   }
   if (m.role === 'video-music') {
@@ -1225,7 +1226,7 @@ function elevenAudio(spec, m, p, probing) {
   return go(text ? 'align' : 'transcribe', { file: clip && !probing ? soundPart(clip) : clip, text: text || undefined, keyterms }, { seconds: clip ? probe(clip).duration : 0, align: !!text })
 }
 
-// ElevenLabs' estimate from video.mjs (the one place its rates live): credits
+// ElevenLabs' estimate from eleven.mjs (the one place these rates live): credits
 function elevenArgs(tool, spec) {
   const clip = spec.inputs?.clip?.[0]
   if (!clip) throw userError(`${tool.label} needs a clip (--in clip=<file>)`)
@@ -1246,17 +1247,31 @@ function elevenArgs(tool, spec) {
   if (!to.length) throw userError('say which languages to dub into (--field to=en,es)')
   return ['dub', clip, '--to', to.join(','), '--model', spec.fields?.quality ?? 'dubbing_v1']
 }
-function videoMjs(argv) {
-  if (!fs.existsSync(VIDEO)) throw userError(`video-editor's engine is missing (${VIDEO})`)
-  const r = spawnSync(process.execPath, [VIDEO, ...argv], { ...HIDE, encoding: 'utf8', cwd: fs.existsSync(HOME) ? HOME : undefined, maxBuffer: 64e6, env: process.env })
+function elevenMjs(argv) {
+  const r = spawnSync(process.execPath, [ELEVEN_CLI, ...argv], { ...HIDE, encoding: 'utf8', cwd: fs.existsSync(HOME) ? HOME : undefined, maxBuffer: 64e6, env: process.env })
   if (r.error) throw r.error
   return r
 }
 function elevenEstimate(argv) {
-  const r = videoMjs([...argv, '--estimate'])
+  const r = elevenMjs([...argv, '--estimate'])
   if (r.status !== 0) throw userError((r.stderr || r.stdout).trim().replace(/^error: /, ''))
   const j = JSON.parse(r.stdout.trim().split('\n').pop())
   return { amount: j.credits, unit: 'credits', known: true, detail: j.detail }
+}
+
+// a field's, an input's or a model option's `when` ({ mode: 'write' }): it goes with the tool's fields at these values
+// (their defaults when unset, a label as its value); a key the tool has no field for holds nothing back (Suno's
+// options on Extend)
+const applies = (tool, fields, when) => !when || Object.entries(when).every(([k, v]) => {
+  const f = tool.fields.find(x => x.key === k)
+  return !f || String(optionValue(f, fields?.[k] ?? f.default ?? '')) === v
+})
+// what was asked that does not go with the rest (Music's Length in Describe, Eleven Music v1's section lengths in
+// Describe): left out of the request; from the command line (strict), refused before anything is spent
+function offWhen(spec, tool, list, asked, flag) {
+  const off = list.filter(x => asked?.[x.key] != null && asked[x.key] !== '' && (!Array.isArray(asked[x.key]) || asked[x.key].length) && !applies(tool, spec.fields, x.when))
+  if (off.length && spec.strict) throw userError(off.map(x => `${flag} ${x.key} (${x.label}) only goes with ${Object.entries(x.when).map(([k, v]) => `--field ${k}=${v}`).join(' ')}`).join('; ') + ': set that, or leave it out')
+  return off.length ? Object.fromEntries(Object.entries(asked).filter(([k]) => !off.some(x => x.key === k))) : asked
 }
 
 // everything about a generation before it runs: the prompt, the model, the request, its estimate
@@ -1274,6 +1289,7 @@ async function plan(spec) {
     const [f, i] = [tool.fields.find(x => tool.one_of.includes(x.key)), tool.inputs.find(x => tool.one_of.includes(x.key))]
     throw userError(`${tool.label}: ${f.type === 'element' ? `pick an element of the Library (--field ${f.key}=@<name>, several: "@a, @b")` : `describe it (--field ${f.key}="…")`} or add ${i.label.toLowerCase()} (--in ${i.key}=<file>)`)
   }
+  spec = { ...spec, fields: offWhen(spec, tool, tool.fields, spec.fields, '--field'), inputs: offWhen(spec, tool, tool.inputs, spec.inputs, '--in') }
   // a field the tool cannot go without (Object swap's element)
   for (const f of tool.fields) if (f.required && !probing && !kf && !String(spec.fields?.[f.key] ?? f.default ?? '').trim())
     throw userError(`${tool.label} needs ${f.label.toLowerCase()} (${f.type === 'element' ? `--field ${f.key}=@<element>, media.mjs elements` : `--field ${f.key}=…`})`)
@@ -1322,6 +1338,7 @@ async function plan(spec) {
   }
   // a keyframe goes to Aleph 2 only (its passthrough keyframes); a tool whose images Aleph cannot take needs one there
   if (kf && m.model !== ALEPH) throw userError(`a keyframe goes to Aleph 2 (--model ${ALEPH}), not ${m.name}`)
+  if (spec.params?.options) spec = { ...spec, params: { ...spec.params, options: offWhen(spec, tool, m.params.options ?? [], spec.params.options, '--option') } }
   // Kling's named elements (on Kie): a cited @Element goes whole, its name kept in the prompt, not as reference images
   // (and in its shots, each rewritten the same)
   const shotTexts = (spec.params?.shots ?? []).map(x => String(x.prompt ?? ''))
@@ -1493,15 +1510,15 @@ function total(list) {
 }
 
 async function create(spec, gateOpts) {
-  ensureHome()
-  // the workspace it joins: the one asked for, else the current one
+  ensureHome(!spec.out)
+  // the workspace it joins: the one asked for, else the current one; none when it goes to a folder (--out)
   if (spec.workspace && !workspace(spec.workspace)) throw userError(`no workspace ${spec.workspace} (media.mjs workspaces)`)
-  const ws = spec.workspace ?? currentWorkspace()
+  const ws = spec.out ? null : spec.workspace ?? currentWorkspace()
   const list = await plans(spec)
   gate(total(list), gateOpts)
   let first = null
   return list.map(({ spec: one, p, after }, k) => {
-    const { batch, ...kept } = one
+    const { batch, out, strict, ...kept } = one
     const id = newId(p.tool.id), dir = mediaDir(id)
     first ??= id
     fs.mkdirSync(dir, { recursive: true })
@@ -1513,9 +1530,9 @@ async function create(spec, gateOpts) {
       return name
     })
     const job = { id, kind: kept.kind, tool: p.tool.id, label: p.tool.label, provider: p.provider, model: p.model, name: p.name ?? p.model, prompt: p.prompt, spec: { ...kept, inputs },
-      estimate: p.estimate, actual: null, status: 'queued', by: gateOpts.by, created: new Date().toISOString(), outputs: [], workspaces: [ws], ...(after ? { after: first } : {}) }
+      estimate: p.estimate, actual: null, status: 'queued', by: gateOpts.by, created: new Date().toISOString(), outputs: [], workspaces: ws ? [ws] : [], ...(out ? { out } : {}), ...(after ? { after: first } : {}) }
     saveJob(job)
-    // what run needs and the folder does not keep: the request (data: URLs) and video.mjs's arguments; a batch's
+    // what run needs and the folder does not keep: the request (data: URLs) and eleven.mjs's arguments; a batch's
     // seed goes up by one a job, or its takes would all be the same. A sheet after the first is planned when it runs
     const send = p.request?.send && typeof p.request.send.seed === 'number' ? { ...p.request.send, seed: p.request.send.seed + k } : p.request?.send
     writeJson(at('.cache', 'requests', `${id}.json`), { request: after ? null : send ?? null, argv: p.argv ?? null })
@@ -1546,9 +1563,22 @@ async function run(id) {
       ...(job.estimate.unit === 'credits' && per1000() ? { usd: +((job.actual * per1000()) / 1000).toFixed(4) } : {}) })
   }
   delete job.pid
+  if (job.status === 'done' && job.out) job.delivered = deliver(job)
   saveJob(job)
   fs.rmSync(reqFile, { force: true })
   return job
+}
+
+// --out: the outputs in a folder of the user's too, named after the job (a hard link, a copy across disks); the job
+// stays in media/ for the ledger, a resumed run and the dashboard
+function deliver(job) {
+  fs.mkdirSync(job.out, { recursive: true })
+  return job.outputs.map(f => {
+    const from = path.join(mediaDir(job.id), f), dest = path.join(job.out, `${job.id}-${f.replace(/[\\/]/g, '-')}`)
+    fs.rmSync(dest, { force: true })
+    try { fs.linkSync(from, dest) } catch { fs.copyFileSync(from, dest) }
+    return dest
+  })
 }
 
 // a sheet after the first of its set: it waits for the first one's image, takes it as the sheet to match (kept in its
@@ -1875,7 +1905,7 @@ function runReframe(dir, job) {
   job.outputs = ['out.mp4']
 }
 
-// voice change and dubbing: video.mjs does the work and says what it spent
+// voice change and dubbing: eleven.mjs does the work and says what it spent
 function runEleven(dir, job, argv) {
   // a Library voice not on the account yet: cloned there first (ElevenLabs' paid plans), its id kept with it
   const v = argv.indexOf('--voice')
@@ -1886,7 +1916,7 @@ function runEleven(dir, job, argv) {
   progress(job, { dub: 'dubbing with ElevenLabs…', isolate: 'isolating the voice with ElevenLabs…' }[argv[0]] ?? 'changing the voice with ElevenLabs…')
   // a sound comes back as an MP3 (a video's sound as the video, its voice alone)
   const clip = path.join(dir, job.spec.inputs.clip[0]), out = argv[0] === 'dub' ? dir : path.join(dir, `out${kindOfFile(clip) === 'audio' ? '.mp3' : path.extname(clip)}`)
-  const r = videoMjs([argv[0], clip, ...argv.slice(2), '--out', out, '--spend', String(job.estimate.amount)])
+  const r = elevenMjs([argv[0], clip, ...argv.slice(2), '--out', out, '--spend', String(job.estimate.amount)])
   if (!process.env.MEDIA_GENERATOR_QUIET) process.stdout.write(r.stdout)
   if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim().split('\n').pop().replace(/^error: /, ''))
   const spent = r.stdout.match(/spent: (\d+) credits/)
@@ -1924,7 +1954,7 @@ function specFromArgs(kind) {
     sound: opt.sound === undefined ? undefined : opt.sound !== 'off', seed: num(opt.seed), voice: opt.voice, options, dialogue, shots, lines,
     mid_times: mid_times.length ? mid_times : undefined, voice_names: voice_names.length ? voice_names : undefined, draft_of: opt['from-draft'],
     frame: num(opt.frame), keyframe_model: opt['keyframe-model'] })
-  return { kind, tool: opt.tool ?? (kind === 'audio' ? 'voice' : 'free'), model: opt.model, prompt: opt.prompt ?? args.join(' '), raw: opt.raw, fields, inputs, params, batch: num(opt.batch), workspace: opt.workspace }
+  return { kind, tool: opt.tool ?? (kind === 'audio' ? 'voice' : 'free'), model: opt.model, prompt: opt.prompt ?? args.join(' '), raw: opt.raw, fields, inputs, params, batch: num(opt.batch), workspace: opt.workspace, out: opt.out && path.resolve(opt.out), strict: true }
 }
 
 // image | video | audio: plan, ask (exit 2 without --spend), then run to the end
@@ -1940,7 +1970,7 @@ async function generate(kind) {
     // a batch's jobs run side by side
     const all = await Promise.all(jobs.map(j => run(j.id)))
     for (const done of all.filter(j => j.status === 'done')) {
-      console.log(`done: ${done.outputs.map(f => path.join(mediaDir(done.id), f)).join(', ')}`)
+      console.log(`done: ${(done.delivered ?? done.outputs.map(f => path.join(mediaDir(done.id), f))).join(', ')}`)
       console.log(done.provider === 'local' ? 'cost: free (done here)' : `cost: ${money(done.actual, done.estimate.unit, per1000())}${done.actual_known ? '' : ' (estimated)'}`)
     }
     const failed = all.filter(j => j.status === 'failed')
@@ -1989,10 +2019,21 @@ function fieldHelp(f, seen, where) {
   return `--field ${f.key}=${list || `<${f.type}>`}`
 }
 
+// --search: the words as written; when they match nothing, each word by its stem (its first 6 letters), the tools
+// that have the most of them first (« transcription » finds Transcribe, « voice-over » Voice)
+function searched(list) {
+  if (!opt.search) return list
+  const q = opt.search.toLowerCase(), text = t => `${t.id} ${t.label} ${t.group} ${t.description}`.toLowerCase()
+  const exact = list.filter(t => text(t).includes(q))
+  if (exact.length) return exact
+  const stems = q.split(/[^\p{L}\d]+/u).filter(w => w.length > 2).map(w => w.slice(0, 6))
+  return list.map(t => [t, stems.filter(x => text(t).includes(x)).length]).filter(([, n]) => n).sort((a, b) => b[1] - a[1]).map(([t]) => t)
+}
+
 function cmdTools(kind) {
   const seen = new Map()
   for (const k of kind ? [kind] : KINDS) {
-    const list = TOOLS[k].filter(t => !opt.search || `${t.id} ${t.label} ${t.group} ${t.description}`.toLowerCase().includes(opt.search.toLowerCase()))
+    const list = searched(TOOLS[k])
     if (opt.json) { console.log(JSON.stringify(list)); continue }
     for (const t of list) {
       const ins = t.inputs.map(i => `--in ${i.key}=<${i.kind}>${i.optional ? '?' : ''}`).join(' '), fields = t.fields.map(f => fieldHelp(f, seen, `${k} ${t.id}`)).join(' ')
@@ -2088,8 +2129,8 @@ async function sunoVoice(name, { start, end, language, verify } = {}) {
 async function balances() {
   const out = {}
   for (const [name, p] of Object.entries(PROVIDERS)) out[name] = p.key() ? await p.balance().catch(e => ({ error: e.message })) : { error: 'no key' }
-  if (process.env.ELEVENLABS_API_KEY && fs.existsSync(VIDEO)) {
-    const r = videoMjs(['credits', '--json'])
+  if (process.env.ELEVENLABS_API_KEY) {
+    const r = elevenMjs(['credits', '--json'])
     out.elevenlabs = r.status === 0 ? JSON.parse(r.stdout.trim().split('\n').pop()) : { error: (r.stderr || r.stdout).trim() }
   } else out.elevenlabs = { error: 'no key' }
   return out
@@ -2480,7 +2521,7 @@ async function handle(req, res) {
     return reply(res, 200, s)
   }
   if (p === '/api/voices') {
-    const r = videoMjs(['voices', '--json'])
+    const r = elevenMjs(['voices', '--json'])
     return r.status === 0 ? reply(res, 200, JSON.parse(r.stdout.trim().split('\n').pop())) : reply(res, 400, { error: (r.stderr || r.stdout).trim().replace(/^error: /, '') })
   }
   if (p === '/api/voice-clone' && post) {
@@ -2492,7 +2533,7 @@ async function handle(req, res) {
       ffmpeg(['-i', f, '-b:a', '192k', mp3])
       return mp3
     })
-    const r = videoMjs(['voice-clone', name, ...files])
+    const r = elevenMjs(['voice-clone', name, ...files])
     return r.status === 0 ? reply(res, 200, { ok: true, out: r.stdout.trim() }) : reply(res, 400, { error: (r.stderr || r.stdout).trim().replace(/^error: /, '') })
   }
   // a preview of Design a voice or Remix a voice kept: a voice of the account and of the Library
@@ -2666,11 +2707,11 @@ const commands = {
   run: async () => { const j = await run(args[0]); console.log(`${j.status}: ${j.outputs.join(', ') || j.error}`) },
   // Suno's help with the words: lyrics from a theme, a style written out richer (priced: --estimate, then --spend)
   lyrics: () => cliAssist('lyrics'), boost: () => cliAssist('boost'),
-  // ElevenLabs' voices of the account, and a clone of a voice from recordings: video-editor's engine does it
+  // ElevenLabs' voices of the account, and a clone of a voice from recordings: eleven.mjs does it
   voices: () => relay(['voices', ...args, ...(opt.json ? ['--json'] : [])]), 'voice-clone': () => relay(['voice-clone', ...args]),
 }
 function relay(argv) {
-  const r = videoMjs(argv)
+  const r = elevenMjs(argv)
   process.stdout.write(r.stdout)
   process.stderr.write(r.stderr)
   process.exit(r.status ?? 1)

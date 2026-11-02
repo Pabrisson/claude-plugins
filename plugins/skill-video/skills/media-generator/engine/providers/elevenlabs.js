@@ -1,6 +1,6 @@
 // ElevenLabs, straight to its API (never through a router), billed in its credits. $ELEVENLABS_API_KEY (the plugin's
-// secret); $ELEVENLABS_BASE for the tests' fake server. Its voice changer, dubbing and clones stay with video-editor's
-// engine. What it makes here:
+// secret); $ELEVENLABS_BASE for the tests' fake server. Its voice changer, dubbing, voice isolation and clones are
+// eleven.mjs's. What it makes here:
 // - speech: its speech models as GET /v1/models lists them, one voice (text to speech) or several (text to dialogue,
 //   Eleven v4 and v3), a character each, half on the models it halves (character_cost_multiplier); each voice with its
 //   words' times (captions) and the audio effects of its catalog (a filter, a room, a background)
@@ -100,10 +100,12 @@ const SFX = [
 ]
 // Content Credentials: an MP3 signed as made by AI
 const C2PA = yes('sign_with_c2pa', 'Content Credentials', 'the MP3 signed with C2PA as made by AI')
+// each option only in the mode it goes with (when): Write takes its own Length field and its sections, a sound as
+// reference is Describe's
 const MUSIC = v1 => [
-  { key: 'length', label: 'Length (s)', type: 'number', min: 0, max: 600, step: 5, default: 30, hint: 'Describe\'s length, 0: its own (priced after); Write takes its Length field' },
-  ...(v1 ? [yes('respect_sections_durations', 'Section lengths kept', 'Write: each section as long as planned; off, the model may adjust them', true)]
-    : [{ key: 'condition_strength', label: 'Sound reference', type: 'choice', values: ['low', 'medium', 'high', 'xhigh'].map(v => ({ value: v, label: v === 'xhigh' ? 'Very high' : v[0].toUpperCase() + v.slice(1) })), default: 'medium', hint: 'with a sound given: how closely it keeps to it' }]),
+  { key: 'length', label: 'Length (s)', type: 'number', min: 0, max: 600, step: 5, default: 30, hint: '0: its own (priced after)', when: { mode: 'describe' } },
+  ...(v1 ? [{ ...yes('respect_sections_durations', 'Section lengths kept', 'each section as long as planned; off, the model may adjust them', true), when: { mode: 'write' } }]
+    : [{ key: 'condition_strength', label: 'Sound reference', type: 'choice', values: ['low', 'medium', 'high', 'xhigh'].map(v => ({ value: v, label: v === 'xhigh' ? 'Very high' : v[0].toUpperCase() + v.slice(1) })), default: 'medium', hint: 'with a sound given: how closely it keeps to it', when: { mode: 'describe' } }]),
   C2PA,
 ]
 const MORE = [

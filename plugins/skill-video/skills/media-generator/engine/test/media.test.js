@@ -20,7 +20,7 @@ fs.writeFileSync(catalogFile, JSON.stringify({ at: new Date().toISOString(), ima
 const env = { ...process.env, MEDIA_GENERATOR_DIR: home, MEDIA_GENERATOR_MODELS: path.join(path.dirname(engine), 'test', 'models.json'), MEDIA_GENERATOR_CATALOG: catalogFile, OPENROUTER_BASE: `${fake.base}/api/v1`, OPENROUTER_API_KEY: 'k-test', OPENROUTER_MANAGEMENT_KEY: 'k-mgmt',
   // no Kie key: OpenRouter's models only
   KIE_API_KEY: '',
-  ELEVENLABS_BASE: `${fake.base}/el`, ELEVENLABS_API_KEY: 'k-el', MEDIA_GENERATOR_POLL: '20', VIDEO_EDITOR_POLL: '20',
+  ELEVENLABS_BASE: `${fake.base}/el`, ELEVENLABS_API_KEY: 'k-el', MEDIA_GENERATOR_POLL: '20',
   // the fake cloudflared first, and the fake public DNS
   PATH: `${fake.bin}${path.delimiter}${process.env.PATH}`, MEDIA_GENERATOR_DOH: `${fake.base}/dns-query` }
 // asynchronous: the fake server answers in this very process
@@ -50,6 +50,9 @@ test('the catalogs: tools from the engine, models from its own list in one shape
   const t = await cli('tools', 'video', '--search', 'dolly')
   assert.match(t.out, /video dolly-zoom-in \(create, Camera\)/)
   assert.match(t.out, /--field speed=slow\|steady\|fast/)
+  // words that match nothing as written: by their stems, the best match first
+  assert.match((await cli('tools', 'audio', '--search', 'transcription')).out, /^audio transcribe /)
+  assert.match((await cli('tools', 'audio', '--search', 'background music')).out, /^audio music /)
   const m = await cli('models', 'video')
   assert.match(m.out, /openrouter:fake\/vid {2}Fake: Video {2}\[5–10 s, 720p\/1080p, first_frame\+last_frame, audio, 3 refs, options negative_prompt cfg_scale\]/)
   assert.ok(!fake.calls.some(c => c.path.includes('models')), 'no catalog request')
@@ -566,6 +569,36 @@ test('sound effects straight from ElevenLabs, on either router: its length, loop
   assert.deepEqual([jobIn(r).outputs, ledger().at(-1).actual, ledger().at(-1).actual_known], [['out.mp3'], 5, true])
 })
 
+test('the command line refuses a field, an input or an option of another mode before anything is spent; a label stands for its value', async () => {
+  const music = (...a) => cli('audio', '--tool', 'music', ...a, '--estimate')
+  const no = await music('--model', 'music_v2_5', '--field', 'description=warm pads', '--field', 'length=10')
+  assert.equal(no.code, 1)
+  assert.match(no.err, /--field length \(Length \(0: its own\)\) only goes with --field mode=write: set that, or leave it out/)
+  assert.match((await music('--model', 'music_v1', '--field', 'description=x', '--option', 'respect_sections_durations=on')).err, /--option respect_sections_durations \(Section lengths kept\) only goes with --field mode=write/)
+  assert.match((await music('--model', 'music_v2_5', '--field', 'mode=write', '--field', 'style=pop', '--option', 'length=30')).err, /--option length \(Length \(s\)\) only goes with --field mode=describe/)
+  assert.match((await music('--model', 'music_v2_5', '--field', 'mode=write', '--field', 'style=pop', '--in', `ref_audios=${at('voice.mp3')}`)).err, /--in ref_audios \(Sound\) only goes with --field mode=describe/)
+  assert.match((await music('--model', 'music_v2_5', '--field', 'description=x', '--field', 'vocals=Instrumental', '--field', 'singer=@Zoe')).err, /--field singer \(Singer\) only goes with --field vocals=sung/)
+  // Write by its label, its own Length: 20 s at 15 credits
+  assert.equal(JSON.parse((await music('--model', 'music_v2_5', '--field', 'mode=Write', '--field', 'style=pop', '--field', 'length=20')).out).estimate.amount, 300)
+  assert.ok(!fake.calls.some(c => c.path.startsWith('/el/v1/music')), 'nothing sent')
+})
+
+test('--out: the result in a folder of the user\'s, in no workspace; the job and its cost kept in media/ and the ledger', async () => {
+  const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'media-out-')), dest = path.join(fresh, 'my-video', 'assets', 'sound')
+  try {
+    const r = await cliWith({ ...env, MEDIA_GENERATOR_DIR: fresh }, 'audio', '--tool', 'sound-effect', '--model', 'eleven_text_to_sound_v2', '--prompt', 'a door slams', '--option', 'duration_seconds=0.5', '--spend', '5', '--out', dest)
+    assert.equal(r.code, 0, r.err)
+    const [id] = fs.readdirSync(path.join(fresh, 'media')), job = JSON.parse(fs.readFileSync(path.join(fresh, 'media', id, 'job.json'), 'utf8'))
+    assert.deepEqual(fs.readdirSync(dest), [`${id}-out.mp3`])
+    assert.ok(r.out.includes(`done: ${path.join(dest, `${id}-out.mp3`)}`), r.out)
+    assert.deepEqual([job.workspaces, job.out, job.spec.out], [[], dest, undefined])
+    assert.ok(!fs.existsSync(path.join(fresh, 'workspaces')), 'no workspace made')
+    assert.equal(fs.statSync(path.join(dest, `${id}-out.mp3`)).ino, fs.statSync(path.join(fresh, 'media', id, 'out.mp3')).ino, 'a hard link, not a copy')
+    const spent = fs.readFileSync(path.join(fresh, 'ledger.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    assert.deepEqual(spent.map(l => [l.id, l.actual]), [[id, 5]])
+  } finally { fs.rmSync(fresh, { recursive: true, force: true }) }
+})
+
 test('Eleven Music: Describe\'s words and length, a sound as reference (uploaded, planned, conditioned), Write\'s sections as its plan', async () => {
   const music = (...a) => cli('audio', '--tool', 'music', '--model', 'music_v2_5', ...a)
   const est = JSON.parse((await music('--field', 'description=a calm lofi beat', '--estimate')).out)
@@ -658,7 +691,7 @@ test('transcribe: a clip\'s words as text and captions, each speaker\'s turn; it
   assert.equal(fs.readFileSync(path.join(madeIn(a), 'captions.srt'), 'utf8'), '1\n00:00:00,000 --> 00:00:00,900\nHello world.\n')
 })
 
-test('change voice: through video.mjs and ElevenLabs, in credits; their dollars once a paid plan is set', async () => {
+test('change voice: through eleven.mjs and ElevenLabs, in credits; their dollars once a paid plan is set', async () => {
   const no = await cli('audio', '--tool', 'change-voice', '--in', `clip=${at('talk.mp4')}`, '--voice', 'v1')
   assert.equal(no.code, 2)
   assert.match(no.err, /: 50 credits \(voice change/)
@@ -707,13 +740,17 @@ test('refusals said in ElevenLabs\' words: a key without dubbing_write, a plan w
 
 test('a song on OpenRouter (Lyria): one prompt from what is written, images beside, the audio streamed back, its words kept', async () => {
   assert.match((await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'description=x', '--in', `ref_audios=${at('voice.mp3')}`, '--estimate')).err, /takes images only/)
-  const r = await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'mode=write', '--field', 'title=Night', '--field', 'style=synthwave, 100 BPM', '--field', 'lyrics=[Verse] road', '--option', 'temperature=1.2', '--in', `references=${at('a.png')}`, '--spend', '0.04')
+  const r = await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'mode=write', '--field', 'title=Night', '--field', 'style=synthwave, 100 BPM', '--field', 'lyrics=[Verse] road', '--option', 'temperature=1.2', '--spend', '0.04')
   assert.equal(r.code, 0, r.err)
   const body = sent('/api/v1/chat/completions').body
-  assert.deepEqual([body.modalities, body.stream, body.temperature, body.messages[0].content[0].text, body.messages[0].content[1].type], [['text', 'audio'], true, 1.2, 'Title: Night\nStyle: synthwave, 100 BPM\nLyrics:\n[Verse] road', 'image_url'])
+  assert.deepEqual([body.modalities, body.stream, body.temperature, body.messages[0].content[0].text, body.messages[0].content.length], [['text', 'audio'], true, 1.2, 'Title: Night\nStyle: synthwave, 100 BPM\nLyrics:\n[Verse] road', 1])
   const id = media().find(d => d.includes('-music-'))
   assert.deepEqual(JSON.parse(fs.readFileSync(at('media', id, 'job.json'), 'utf8')).outputs, ['out.mp3', 'lyrics.txt'])
   assert.ok(probe(at('media', id, 'out.mp3')).streams.some(s => s.codec_type === 'audio'))
+  // images go beside Describe's words (Write takes none, as in the dashboard)
+  const d = await cli('audio', '--tool', 'music', '--model', 'fake/lyria', '--field', 'description=a night drive', '--in', `references=${at('a.png')}`, '--spend', '0.04')
+  assert.equal(d.code, 0, d.err)
+  assert.equal(sent('/api/v1/chat/completions').body.messages[0].content[1].type, 'image_url')
 })
 
 test('draft: Claude\'s prompt for the composer, nothing generated; credits: balances and this month', async () => {
@@ -817,6 +854,10 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   // the tool list's price of a voice, before its text: per character, not an error
   const voice = await post('/api/estimate', { kind: 'audio', tool: 'voice', model: 'openrouter:fake/tts', prompt: '', fields: {}, inputs: {}, params: {}, probe: true })
   assert.deepEqual([voice.code, voice.body.estimate?.known, voice.body.estimate?.detail], [200, false, 'per character of its text'])
+  // what the composer kept from the other mode is left out, never refused: Write's Length in Describe, Describe's in Write
+  const music = (fields, options) => post('/api/estimate', { kind: 'audio', tool: 'music', model: 'music_v2_5', prompt: '', fields, inputs: {}, params: { options } })
+  assert.deepEqual((await music({ description: 'warm pads', length: '60' }, { length: 10 })).body.estimate.amount, 150)
+  assert.deepEqual((await music({ mode: 'write', style: 'pop', length: '20' }, { length: 90 })).body.estimate.amount, 300)
   await post('/api/settings', { openrouter: { threshold: 0.05 } })
   const ask = await post('/api/generate', spec)
   assert.deepEqual([ask.code, ask.body.needs, ask.body.shown], [409, 'threshold', '$0.08'])

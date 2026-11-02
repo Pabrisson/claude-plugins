@@ -183,7 +183,10 @@ upscaling a video, the dashboard (`media.mjs studio --open`).
 ## Elements, styles and workspaces
 
 The Library (Elements, styles of the user's own) and the workspaces: `references/library.md`. Making or changing an
-Element or a style is free and local: no estimate, no yes. Every new generation joins the current workspace.
+Element or a style is free and local: no estimate, no yes. Every new generation joins the current workspace, unless it
+goes to a folder: `--out <folder>` on `image`, `video` or `audio` puts its files there too, named `<job id>-<file>` (a
+hard link, no space taken twice), in no workspace and with no dashboard; the job stays in `media/` and its cost in the
+ledger. Use it when the user names a folder for the result, or when the video-editor skill asks for a medium for a video.
 
 ## A pasted "Copy prompt"
 

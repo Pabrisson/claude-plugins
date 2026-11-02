@@ -6,10 +6,10 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-// voice-change, voice-clone and dub on any file, against a faked ElevenLabs (its fetch replaced): what each sends,
+// eleven.mjs: voice-change, voice-clone and dub on any file, against a faked ElevenLabs (its fetch replaced): what each sends,
 // the user's yes before a credit, the pieces of a long sound, what comes back on the video
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'video-voice-'))
-const engine = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'video.mjs')
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'media-eleven-'))
+const engine = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'eleven.mjs')
 const at = rel => path.join(home, rel)
 const ffmpeg = (...argv) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...argv], { cwd: home })
 const streams = f => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type:format=duration', '-of', 'json', f], { encoding: 'utf8' }))
@@ -38,7 +38,7 @@ fs.writeFileSync(mock, `import fs from 'node:fs'
     if (u.endsWith('.vtt')) return new Response('WEBVTT\\n\\n00:00.000 --> 00:01.000\\nHello\\n')
     return Response.json({ detail: { message: 'unexpected ' + u } }, { status: 404 })
   }`)
-const cli = (...argv) => spawnSync(process.execPath, ['--import', mock, engine, ...argv], { cwd: home, env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: 'k-test', VIDEO_EDITOR_POLL: '1' }, encoding: 'utf8' })
+const cli = (...argv) => spawnSync(process.execPath, ['--import', mock, engine, ...argv], { cwd: home, env: { ...process.env, ELEVENLABS_API_KEY: 'k-test', MEDIA_GENERATOR_POLL: '1' }, encoding: 'utf8' })
 const log = () => (fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').map(l => JSON.parse(l)) : [])
 
 ffmpeg('-f', 'lavfi', '-i', 'sine=f=220:d=3', 'voice.mp3')
@@ -108,11 +108,4 @@ test('dub: one project, a language target each, every language back on the video
     assert.match(fs.readFileSync(at(`dubs/dub-${lang}.vtt`), 'utf8'), /WEBVTT/)
   }
   assert.match(r.stdout, /spent: 320 credits/)
-})
-
-test('credits estimates the voice changer and dubbing at their rates', () => {
-  const r = spawnSync(process.execPath, [engine, 'credits', 'sts=60', 'dub=60x2', 'dub_v2=30'], { cwd: home, env: { ...process.env, VIDEO_EDITOR_DIR: home, ELEVENLABS_API_KEY: '' }, encoding: 'utf8' })
-  assert.match(r.stdout, /voice change \(60 s\): 1000 credits/)
-  assert.match(r.stdout, /dubbing v1 \(60 s × 2 languages\): 6000 credits/)
-  assert.match(r.stdout, /dubbing v2 \(30 s × 1 language\): 6750 credits/)
 })

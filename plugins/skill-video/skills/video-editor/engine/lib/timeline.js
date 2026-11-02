@@ -107,19 +107,6 @@ export function keepSegments(silences, words, breaths, duration) {
   return segs
 }
 
-// The words of a voice ElevenLabs read, from its timing of each character: `{ w, t0, t1 }` in seconds of the voice.
-// A no-break space (12 000) keeps a word whole
-export function alignedWords({ characters, character_start_times_seconds: t0, character_end_times_seconds: t1 }) {
-  const words = []
-  let cur = null
-  characters.forEach((c, i) => {
-    if (/[^\S\u00a0\u202f]/.test(c)) cur = null
-    else if (cur) Object.assign(cur, { w: cur.w + c, t1: ms(t1[i]) })
-    else words.push((cur = { w: c, t0: ms(t0[i]), t1: ms(t1[i]) }))
-  })
-  return words
-}
-
 // The source's still stretches [[a, b], …] as they play once cut: the seconds kept of each (video) and the words
 // left over them, for the ones kept `min` s or more.
 export function stillStretches(freezes, tl, words, min) {

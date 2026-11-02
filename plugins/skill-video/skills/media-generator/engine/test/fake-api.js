@@ -1,4 +1,4 @@
-// A fake OpenRouter (under /api/v1), ElevenLabs (under /el, for video-editor's tests' kind) and Kie for the tests (their models: test/models.json): generations that answer
+// A fake OpenRouter (under /api/v1), ElevenLabs (under /el) and Kie for the tests (their models: test/models.json): generations that answer
 // files made by ffmpeg, the errors that matter, in the shapes the real APIs answered on 2026-10-29. Every request is
 // kept in calls
 import { execFileSync } from 'node:child_process'

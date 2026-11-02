@@ -38,7 +38,7 @@ const EL_VOICES = fs.existsSync(path.join(dir, 'voices.json')) ? JSON.parse(fs.r
   : Object.values(read('providers/voices.json').voices).map(v => ({ voice_id: v.preview_url?.match(/\/voices\/([^/]+)\//)?.[1], name: v.name, category: 'premade', labels: v.labels,
     verified_languages: Object.keys(v.previews ?? {}).map(language => ({ language })) })).filter(v => v.voice_id)
 let used = 1000
-// an MP3 at 192 kb/s (what video.mjs sends) billed 1,000 credits a minute
+// an MP3 at 192 kb/s (what eleven.mjs sends) billed 1,000 credits a minute
 const perMinute = bytes => Math.max(1, Math.ceil((bytes * 8) / 192e3 / 60 * 1000))
 // Suno's stems, by the split asked (2026-10-31: separate_vocal 2, split_stem 12, its files named <id>_<Group>.mp3)
 const STEMS = { separate_vocal: ['Vocals', 'Instrumental'], split_stem: ['Vocals', 'Backing Vocals', 'Drums', 'Bass', 'Guitar', 'Keyboard', 'Percussion', 'Strings', 'Synth', 'FX', 'Brass', 'Woodwinds'] }
@@ -147,7 +147,7 @@ http.createServer(async (req, res) => {
       : /\.mp3$/.test(n) ? bytes(song, 'audio/mpeg') : bytes(png, 'image/png')
   }
 
-  // ---- ElevenLabs, straight (media-generator's voices) and through video-editor's engine (voice change, dubbing,
+  // ---- ElevenLabs, straight (media-generator's voices) and through eleven.mjs (voice change, dubbing,
   // isolation, clones): the account's count moves with each spend, as the real one does
   if (p === '/el/v1/models') return json(EL_MODELS)
   if (p.startsWith('/el/v1/text-to-speech/') || p.startsWith('/el/v1/text-to-dialogue')) {
