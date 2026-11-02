@@ -241,7 +241,8 @@ export type Settings = {
   openrouter: Limits
   kie: Limits
   elevenlabs: Limits & { plan: string | null }
-  defaults: Record<Kind, string | null>
+  // a kind's default model (image), a use's (image:edit), a tool's (image/upscale): the most precise one wins
+  defaults: Record<string, string | null>
   // the dashboard's developer mode: Settings › Development, and the header's Fake API switch on a server started on fakes
   developer: { on: boolean }
   workspace: { current: string }
@@ -467,6 +468,9 @@ export const mediaKind = (file: string) =>
       : /\.(mp3|wav|m4a|flac|ogg)$/i.test(file)
         ? "audio"
         : "other"
+// a text file (a transcript, captions, timed lyrics, a MIDI's notes), and a result whose first file is one: a Text asset
+export const isText = (file: string) => /\.(txt|srt|vtt|json|lrc|md)$/i.test(file)
+export const textJob = (j: Job) => !!j.outputs[0] && isText(j.outputs[0])
 
 // an option's value, its words and its group
 export const opt = (o: Option) => (typeof o === "string" ? { value: o, label: o } : { ...o, label: o.label ?? o.value })
@@ -479,6 +483,30 @@ export function shown(f: Field, v: string) {
 export const sentence = (s: string) => (!s || /^f\//.test(s) ? s : s[0].toUpperCase() + s.slice(1))
 
 // the tools done on this machine, free and without a model (media.mjs's LOCAL)
+// the uses a default model is set for (Settings › Default models), a tool's use, and the keys of its defaults, the most
+// precise first (media.mjs useOf and defaultKeys)
+export const USES: Record<Kind, { id: string; label: string; about: string }[]> = {
+  image: [
+    { id: "create", label: "Create", about: "Custom, References, Camera, Product shot" },
+    { id: "edit", label: "Edit", about: "Restyle, relight, retouch, upscale, swaps, new angle" },
+  ],
+  video: [
+    { id: "create", label: "Create", about: "From words, frames, camera moves, effects" },
+    { id: "avatar", label: "Talking avatar", about: "Talking avatar, Speech to video" },
+    { id: "edit", label: "Edit", about: "Edits of a clip: restyle, swaps, upscale, lip sync" },
+  ],
+  audio: [
+    { id: "voice", label: "Voice", about: "Voice, voice design, voice tools" },
+    { id: "music", label: "Music", about: "Music and its edits" },
+    { id: "sound", label: "Sound effect", about: "Sound effects" },
+  ],
+}
+export const toolUse = (kind: Kind, t: Tool) =>
+  kind === "image" ? t.mode : kind === "video" ? (t.mode === "edit" ? "edit" : t.group === "Characters" ? "avatar" : "create") : t.group === "Music" ? "music" : t.group === "Sound" ? "sound" : "voice"
+export const defaultKeys = (kind: Kind, t: Tool) => [`${kind}/${t.id}`, `${kind}:${toolUse(kind, t)}`, kind]
+// a model id without its router (kie:google/x → google/x): a default set on one router runs on the other when it has it
+export const bareModel = (id: string) => id.replace(/^(kie|openrouter|elevenlabs):/, "")
+
 export const isLocal = (tool: Tool) => ["reframe", "fps", "hdr", "depth", "matte"].includes(tool.local ?? "")
 
 // the user writes the whole prompt (Custom, speech): its template is their words, a style at most after them

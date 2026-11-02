@@ -258,6 +258,24 @@ test('the monthly cap and the threshold: none by default; a cap stops even a --s
   assert.match((await cli('setup', 'set', 'openrouter.cap=lots')).err, /is a number, or none/)
 })
 
+test('default models: a tool\'s own, then its use\'s, then its kind\'s, each only where it fits; --model first; tools says it', async () => {
+  const picked = async (...argv) => JSON.stringify(JSON.parse((await cli('image', '--prompt', 'a fox', '--estimate', ...argv)).out.trim()).model)
+  assert.match((await cli('setup', 'set', 'defaults.image:music=fake/img')).err, /defaults\.<kind>:<use> \(image: create, edit/)
+  assert.match((await cli('setup', 'set', 'defaults.image/nope=fake/img')).err, /defaults\.<kind>\/<tool>/)
+  // a video model fits no image tool: the next one down is taken
+  await cli('setup', 'set', 'defaults.image=openrouter:fake/broke', 'defaults.image:create=openrouter:fake/noprice', 'defaults.image/free=openrouter:fake/vid')
+  assert.match(await picked(), /fake\/noprice/)
+  await cli('setup', 'set', 'defaults.image/free=openrouter:fake/img')
+  assert.match(await picked(), /fake\/img/)
+  assert.match(await picked('--model', 'fake/broke'), /fake\/broke/)
+  assert.match((await cli('tools', 'image', '--search', 'custom')).out, /default: fake\/img \(the user's setting/)
+  await cli('setup', 'set', 'defaults.image/free=none', 'defaults.image:create=none')
+  assert.match(await picked(), /fake\/broke/)
+  await cli('setup', 'set', 'defaults.image=none')
+  const s = JSON.parse(fs.readFileSync(at('settings.json'), 'utf8'))
+  assert.deepEqual(s.defaults, { image: null, video: null, audio: null })
+})
+
 test('a video: a job submitted with its frames and settings (the ratio of its image), polled, downloaded; the cost the router reports', async () => {
   const r = await cli('video', '--tool', 'dolly-zoom-in', '--model', 'fake/vid', '--in', `first_frame=${at('a.png')}`, '--field', 'subject=the dancer', '--duration', '10', '--sound', 'off', '--spend', '1')
   assert.equal(r.code, 0, r.err)
@@ -868,6 +886,11 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.deepEqual([job.status, job.by, job.outputs], ['done', 'dashboard', ['out-1.png', 'out-2.png']])
   assert.equal((await fetch(`${url}/files?path=${encodeURIComponent(at('media', job.id, 'out-1.png'))}`)).headers.get('content-type'), 'image/png')
   assert.equal((await fetch(`${url}/files?path=${encodeURIComponent('/etc/hosts')}`)).status, 404)
+  // a range past a small file's end stops at its end (a text tile's first 2 KB), one past it is refused
+  const png = `${url}/files?path=${encodeURIComponent(at('media', job.id, 'out-1.png'))}`, size = fs.statSync(at('media', job.id, 'out-1.png')).size
+  const part = await fetch(png, { headers: { Range: `bytes=0-${size + 5000}` } })
+  assert.deepEqual([part.status, part.headers.get('content-range'), (await part.arrayBuffer()).byteLength], [206, `bytes 0-${size - 1}/${size}`, size])
+  assert.equal((await fetch(png, { headers: { Range: `bytes=${size + 10}-` } })).status, 416)
   // the presets' samples, shipped with the engine, and nothing beside them
   const sample = await fetch(`${url}/previews/sound-styles/horror.m4a`)
   assert.deepEqual([sample.status, sample.headers.get('content-type')], [200, 'audio/mp4'])

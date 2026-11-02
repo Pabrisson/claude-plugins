@@ -199,6 +199,33 @@ const routerKind = kind => (kind === 'audio' ? 'speech' : kind)
 
 // the router that generates, one at a time
 const active = () => (PROVIDERS[settings().router.active] ? settings().router.active : 'kie')
+// the default models (Settings › Default models), the most precise one first: a tool's own (`image/upscale`), its use's
+// (`image:edit`), its kind's (`image`), each kept only where its model fits the tool
+const USES = { image: ['create', 'edit'], video: ['create', 'avatar', 'edit'], audio: ['voice', 'music', 'sound'] }
+const useOf = (kind, t) => (kind === 'image' ? t.mode : kind === 'video' ? (t.mode === 'edit' ? 'edit' : t.group === 'Characters' ? 'avatar' : 'create') : ({ Music: 'music', Sound: 'sound' })[t.group] ?? 'voice')
+const defaultKeys = (kind, t) => [`${kind}/${t.id}`, `${kind}:${useOf(kind, t)}`, kind]
+const isDefaultKey = k => {
+  const m = String(k).match(/^(image|video|audio)(?:([:/])([a-z0-9-]+))?$/)
+  return !!m && (!m[2] || (m[2] === ':' ? USES[m[1]].includes(m[3]) : TOOLS[m[1]].some(t => t.id === m[3])))
+}
+// the models a tool runs on, the dashboard's modelsFor (composer.tsx) written again: its recommended ones, the ones it
+// also names, then the others of its kind that can do it
+function fitting(tool, kind, all) {
+  if (LOCAL[tool.local] || tool.provider === 'elevenlabs') return []
+  const { models: ms, also: al } = toolModels(tool), listed = ids => (ids ?? []).map(id => all.find(m => m.model === id)).filter(Boolean)
+  const rec = listed(ms), also = listed(al)
+  if (kind === 'video' && (tool.mode === 'edit' ? tool.id !== 'extend' : rec.length > 0 && rec.every(m => m.role !== 'generate'))) return [...rec, ...also]
+  if (kind === 'audio' && tool.id !== 'voice') return [...rec, ...also]
+  const p = tool.params ?? {}, can = m => (!p.background || (m.params.background ?? []).includes(String(p.background))) && (!p.resolution || (m.params.resolution ?? []).includes(String(p.resolution)))
+  const ok = m => (kind === 'video' ? m.role === 'generate' && (tool.id !== 'extend' || (m.params.frames?.length ?? 0) > 0) : kind === 'image' ? (tool.mode === 'create' ? m.role !== 'edit' : m.role !== 'create') && can(m) : m.role === 'speech')
+  return [...rec, ...also, ...all.filter(m => ok(m) && !rec.includes(m) && !also.includes(m))]
+}
+// the user's default model for a tool, as the dashboard picks it: the first set whose model the tool takes
+function defaultFor(kind, tool, all) {
+  const d = settings().defaults, ok = fitting(tool, kind, all)
+  return defaultKeys(kind, tool).map(k => d[k]).find(id => id && ok.some(m => m.model === routerOf(id).model)) ?? null
+}
+
 // a tool's models on the active router: its own list for that router when it has one (tools/*.json "kie"), else its
 // list, the models the router lacks left out by models(); each recommended one with why (the tool's own reason, else
 // tools/why.json's)
@@ -1322,9 +1349,10 @@ async function plan(spec) {
   if (!prompt && !probing && tool.template && !['upscale'].includes(tool.id) && !spec.params?.dialogue?.length && !spec.params?.shots?.length && !spec.params?.draft_of) throw userError('write a prompt (--prompt "…"), or fill the tool\'s fields (--field key=value)')
   // the user's words are optional beside a tool's own prompt, the whole prompt of Custom and Custom edit
   if (CUSTOM.includes(tool.id) && !spec.raw && !String(spec.prompt ?? '').trim() && !probing && !spec.params?.shots?.length && !spec.params?.draft_of) throw userError('write a prompt (--prompt "…"): Custom has no prompt of its own')
-  // the model asked, else the tool's first one this router has, else the default (when this router has it)
+  // the model asked, else the user's default for this tool (its own, its use's, its kind's) when it fits, else the
+  // tool's first one this router has
   const all = await models(spec.kind), has = x => x && all.some(y => y.model === routerOf(x).model)
-  const id = spec.model ?? toolModels(tool).models?.find(has) ?? [settings().defaults[spec.kind]].find(has)
+  const id = spec.model ?? defaultFor(spec.kind, tool, all) ?? toolModels(tool).models?.find(has)
   if (!id && toolModels(tool).models?.length) throw userError(`${tool.label} has no model on ${PROVIDERS[active()].label}: pick one (--model, media.mjs models ${spec.kind}), or switch the router in Settings`)
   const m = id ? await modelOf(spec.kind, id) : all.find(x => x.role !== 'edit' && x.role !== 'upscale' && x.role !== 'avatar')
   if (lines.length && !m.params.audio) throw userError(`${m.name} makes no sound: its lines need a model with sound`)
@@ -2030,19 +2058,22 @@ function searched(list) {
   return list.map(t => [t, stems.filter(x => text(t).includes(x)).length]).filter(([, n]) => n).sort((a, b) => b[1] - a[1]).map(([t]) => t)
 }
 
-function cmdTools(kind) {
-  const seen = new Map()
+async function cmdTools(kind) {
+  const seen = new Map(), set = Object.values(settings().defaults).some(Boolean)
   for (const k of kind ? [kind] : KINDS) {
     const list = searched(TOOLS[k])
     if (opt.json) { console.log(JSON.stringify(list)); continue }
+    // the user's default models, read only when one is set (the models may need the catalog)
+    const all = set ? await models(k).catch(() => []) : []
     for (const t of list) {
+      const def = set && defaultFor(k, t, all)
       const ins = t.inputs.map(i => `--in ${i.key}=<${i.kind}>${i.optional ? '?' : ''}`).join(' '), fields = t.fields.map(f => fieldHelp(f, seen, `${k} ${t.id}`)).join(' ')
       const { models: ms, also, why } = toolModels(t)
       // the same recommended models as a tool above: named once, pointed at after
       let rec = ms && ms.map(m => `${m}${why[m] ? ` (${why[m]})` : ''}`).join(', ')
       if (rec && seen.has(rec)) rec = `the same as ${seen.get(rec)}`
       else if (rec) seen.set(rec, `${k} ${t.id}`)
-      console.log(`${k} ${t.id} (${t.mode}, ${t.group}${t.routers ? `, ${t.routers.map(r => PROVIDERS[r].label).join(' or ')} only` : ''}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${rec ? `\n    models: ${rec}` : ''}${also ? `\n    also: ${also.join(', ')}` : ''}`)
+      console.log(`${k} ${t.id} (${t.mode}, ${t.group}${t.routers ? `, ${t.routers.map(r => PROVIDERS[r].label).join(' or ')} only` : ''}): ${t.description}${ins ? `\n    ${ins}` : ''}${fields ? `\n    ${fields}` : ''}${def ? `\n    default: ${routerOf(def).model} (the user's setting, used without --model)` : ''}${rec ? `\n    models: ${rec}` : ''}${also ? `\n    also: ${also.join(', ')}` : ''}`)
     }
   }
 }
@@ -2166,6 +2197,13 @@ function setup(sub, ...rest) {
     for (const kv of rest) {
       const [k, v] = [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)], [sec, key] = k.split('.')
       if (sec === 'workspace') die('setup set: the workspace changes with media.mjs workspaces use <slug>')
+      // a default model: a kind's, a use's (defaults.image:edit) or a tool's (defaults.image/upscale); none removes it
+      if (sec === 'defaults' && isDefaultKey(key)) {
+        if (v === 'none' || v === '') key in SETTINGS.defaults ? (s.defaults[key] = null) : delete s.defaults[key]
+        else s.defaults[key] = v
+        continue
+      }
+      if (sec === 'defaults') die(`setup set: ${k} is defaults.<kind>, defaults.<kind>:<use> (${Object.entries(USES).map(([a, l]) => `${a}: ${l.join(', ')}`).join('; ')}) or defaults.<kind>/<tool>`)
       if (!SETTINGS[sec] || !(key in SETTINGS[sec])) die(`setup set: ${k} is not one of ${Object.entries(SETTINGS).flatMap(([a, o]) => Object.keys(o).map(b => `${a}.${b}`)).join(', ')}`)
       s[sec][key] = sec === 'router' ? (PROVIDERS[v] ? v : die(`setup set: router.active is one of ${Object.keys(PROVIDERS).join(', ')}`))
         : v === 'none' || v === '' ? null : sec === 'developer' ? (v === 'on' || v === 'off' ? v === 'on' : die('setup set: developer.on is on, off or none'))
@@ -2175,7 +2213,7 @@ function setup(sub, ...rest) {
     }
     ensureHome()
     writeJson(at('settings.json'), s)
-  } else if (sub) die('usage: setup [vision | set router.active=<openrouter|kie> openrouter.threshold=<usd> openrouter.cap=<usd> kie.threshold=<usd> kie.cap=<usd> elevenlabs.threshold=<credits> elevenlabs.cap=<credits> elevenlabs.plan=<${Object.keys(PLANS).join('|')}> defaults.video=<model> developer.on=<on|off>…]')
+  } else if (sub) die('usage: setup [vision | set router.active=<openrouter|kie> openrouter.threshold=<usd> openrouter.cap=<usd> kie.threshold=<usd> kie.cap=<usd> elevenlabs.threshold=<credits> elevenlabs.cap=<credits> elevenlabs.plan=<${Object.keys(PLANS).join('|')}> defaults.video=<model> defaults.image:edit=<model> defaults.image/upscale=<model> developer.on=<on|off>…]')
   for (const [sec, o] of Object.entries(s)) console.log(`${sec}: ${Object.entries(o).map(([k, v]) => `${k} ${v ?? 'not set'}`).join(' · ')}`)
 }
 
@@ -2314,7 +2352,9 @@ const inside = (root, file) => { const f = path.resolve(file); return f === root
 function sendFile(req, res, file) {
   const size = fs.statSync(file).size, range = req.headers.range?.match(/bytes=(\d*)-(\d*)/)
   if (range) {
-    const start = +range[1] || 0, end = range[2] ? +range[2] : size - 1
+    // a range past the end of the file stops at its end (a text tile asks its first 2 KB of a smaller file)
+    const start = +range[1] || 0, end = Math.min(range[2] ? +range[2] : size - 1, size - 1)
+    if (start > end) return res.writeHead(416, { 'content-range': `bytes */${size}` }).end()
     res.writeHead(206, { 'content-type': mimeOf(file), 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'content-length': end - start + 1 })
     return fs.createReadStream(file, { start, end }).pipe(res)
   }
@@ -2508,7 +2548,9 @@ async function handle(req, res) {
   }
   if (p === '/api/settings' && post) {
     const body = await readBody(req), s = settings(), was = s.developer.on
-    for (const sec of Object.keys(SETTINGS).filter(x => x !== 'workspace')) for (const k of Object.keys(SETTINGS[sec])) if (body[sec] && k in body[sec]) {
+    // the default models sent are set, an empty one removed (a kind's kept as unset), the others left as they are
+    for (const [k, v] of Object.entries(body.defaults ?? {})) if (isDefaultKey(k)) v ? (s.defaults[k] = String(v)) : k in SETTINGS.defaults ? (s.defaults[k] = null) : delete s.defaults[k]
+    for (const sec of Object.keys(SETTINGS).filter(x => x !== 'workspace' && x !== 'defaults')) for (const k of Object.keys(SETTINGS[sec])) if (body[sec] && k in body[sec]) {
       const v = body[sec][k]
       s[sec][k] = sec === 'router' ? (PROVIDERS[v] ? v : s[sec][k]) : v === null || v === '' ? null : sec === 'developer' ? !!v : sec === 'defaults' ? String(v) : k === 'plan' ? (v in PLANS ? v : s[sec][k]) : Number.isFinite(+v) && +v >= 0 ? +v : s[sec][k]
     }

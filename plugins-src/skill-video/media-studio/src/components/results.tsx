@@ -1,4 +1,4 @@
-import { useContext, useRef, useState } from "react"
+import { useContext, useEffect, useRef, useState } from "react"
 import { ArrowRightToLineIcon, AudioLinesIcon, AudioWaveformIcon, BookmarkPlusIcon, Disc3Icon, FastForwardIcon, FolderKanbanIcon, LayersIcon, ListVideoIcon, LoaderCircleIcon, MaximizeIcon, MessageCircleIcon, PauseIcon, PlayIcon, RefreshCwIcon, ScissorsIcon, SparklesIcon, StarIcon, Trash2Icon, TriangleAlertIcon, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, coverOf, elapsed, fileUrl, inputPath, mediaKind, money, outputPath, plain, type Job } from "@/lib/api"
+import { textPreview } from "@/lib/text"
 import { Viewer } from "@/components/viewer"
 import { Workspaces } from "@/components/inputs"
 
@@ -103,7 +104,7 @@ const parseRatio = (r: unknown) => {
 }
 function ratioOf(job: Job, file: string | null) {
   const k = file ? mediaKind(file) : job.kind
-  return (file && MEASURED.get(file)) || parseRatio(job.params?.aspect_ratio) || (k === "audio" ? 2.4 : k === "image" ? 1 : 16 / 9)
+  return (file && MEASURED.get(file)) || parseRatio(job.params?.aspect_ratio) || (k === "audio" ? 2.4 : k === "image" ? 1 : k === "other" ? 1.6 : 16 / 9)
 }
 
 // the results' row height: tiles keep their ratio and share each row's width, growing at most by a third
@@ -165,6 +166,35 @@ function AudioFace({ job, file }: { job: Job; file: string }) {
         {playing ? <PauseIcon className="size-4" /> : <PlayIcon className="size-4 translate-x-px" />}
       </button>
     </>
+  )
+}
+
+// a text file's first words, read once a session (its first 2 KB only)
+const TEXTS = new Map<string, string>()
+
+// a text result: its first lines, cut at six so a long text never stretches the tile, and its format
+function TextFace({ file }: { file: string }) {
+  const [text, setText] = useState(() => TEXTS.get(file) ?? "")
+  useEffect(() => {
+    if (TEXTS.has(file)) return
+    let live = true
+    fetch(fileUrl(file), { headers: { Range: "bytes=0-2047" } })
+      .then((r) => r.text())
+      .then((t) => {
+        TEXTS.set(file, textPreview(file, t.replace(/\uFFFD+$/, "")))
+        if (live) setText(TEXTS.get(file)!)
+      }, () => {})
+    return () => {
+      live = false
+    }
+  }, [file])
+  const ext = file.split(".").pop()!.toUpperCase()
+  return (
+    <div className="pointer-events-none relative size-full bg-linear-to-br from-muted to-muted/40 px-4 pt-9 pb-4">
+      <p className={cn("line-clamp-6 text-[13px] leading-snug whitespace-pre-line text-foreground/85", ext === "JSON" ? "font-mono text-xs break-all" : "break-words")}>{text}</p>
+      <div className="absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-muted to-transparent" />
+      <span className="absolute right-2.5 bottom-2.5 rounded-md bg-foreground/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-foreground/70">{ext}</span>
+    </div>
   )
 }
 
@@ -236,6 +266,8 @@ function Tile({
             onLoadedMetadata={(e) => measure(e.currentTarget.videoWidth, e.currentTarget.videoHeight)}
             className="size-full object-cover"
           />
+        ) : k === "other" ? (
+          <TextFace file={file!} />
         ) : null}
         <button type="button" onClick={onOpen} aria-label={`Open ${job.label}`} className="absolute inset-0 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/70 focus-visible:ring-inset" />
         {k === "audio" && !failed && <AudioFace job={job} file={file!} />}

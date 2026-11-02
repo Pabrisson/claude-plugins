@@ -438,7 +438,7 @@ function Dashboard() {
       ) : page === "credits" ? (
         <Credits state={state} balances={balances} onBridge={bridge} />
       ) : (
-        <SettingsPage state={state} models={models} engine={engine} onSaved={refresh} onModels={() => (setModels({}), api.tools().then(setTools, () => {}), refresh())} />
+        <SettingsPage state={state} models={models} tools={tools} engine={engine} onSaved={refresh} onModels={() => (setModels({}), api.tools().then(setTools, () => {}), refresh())} />
       )}
       <DropToLibrary onAdded={refresh} />
     </div>

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job, type Line, type Shot, type Spec } from "@/lib/api"
+import { jsonParts } from "@/lib/text"
 import { Label } from "@/components/chips"
 import { Thumb, Workspaces } from "@/components/inputs"
 import { ModelLogo } from "@/components/model-logo"
@@ -95,6 +96,11 @@ export function Viewer({
       )}
     </Dialog>
   )
+}
+
+const JSON_COLORS: Record<string, string> = { key: "text-sky-300", string: "text-emerald-300", number: "text-amber-300", boolean: "text-violet-300", null: "text-rose-300" }
+function JsonView({ text }: { text: string }) {
+  return <>{jsonParts(text).map((p, i) => (p.kind ? <span key={i} className={JSON_COLORS[p.kind]}>{p.text}</span> : p.text))}</>
 }
 
 function Body({
@@ -254,7 +260,9 @@ function Body({
               className="max-h-full max-w-full rounded-lg bg-[repeating-conic-gradient(#222_0_25%,#2c2c2c_0_50%)] bg-size-[24px_24px]"
             />
           ) : k === "other" ? (
-            <pre className="max-h-full w-full max-w-2xl overflow-auto rounded-lg bg-white/5 p-5 text-sm leading-relaxed whitespace-pre-wrap text-white/85">{text ?? "…"}</pre>
+            <pre className={cn("max-h-full w-full max-w-2xl overflow-auto rounded-lg bg-white/5 p-5 text-sm leading-relaxed whitespace-pre-wrap text-white/85", /\.json$/i.test(file!) && "font-mono text-[13px]")}>
+              {text == null ? "…" : /\.json$/i.test(file!) ? <JsonView text={text} /> : text}
+            </pre>
           ) : k === "audio" ? (
             <div className="flex w-full max-w-lg flex-col items-center gap-6">
               {cover ? <img src={fileUrl(outputPath(home, job, cover))} alt="" className="size-56 rounded-xl object-cover shadow-lg" /> : <AudioLinesIcon className="size-16 text-aud" aria-hidden />}
@@ -302,6 +310,16 @@ function Body({
               </DialogDescription>
               <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 {when(job.created)}
+                <button
+                  type="button"
+                  title="Copy this media's ID"
+                  aria-label={`Copy the ID ${job.id}`}
+                  onClick={() => navigator.clipboard.writeText(job.id).then(() => toast.success("ID copied", { description: job.id }))}
+                  className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-foreground/80 transition-colors outline-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <span className="truncate">{job.id}</span>
+                  <CopyIcon className="size-3 shrink-0" aria-hidden />
+                </button>
                 {job.by === "claude" && <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">by Claude</span>}
               </p>
             </div>

@@ -117,10 +117,13 @@ is the user's own prompt; the others fill a prompt template from their fields. C
 
 ### 2. The model
 
-The tool's first recommended model on the active router, unless the user names one or it cannot do the job; `media.mjs
+The user's default for the tool when they set one (`default:` in `media.mjs tools`: the tool's own, else its use's,
+else its kind's, from Settings › Default models or `setup set defaults.image/upscale=…`, `defaults.image:edit=…`,
+`defaults.image=…`; the engine takes it without `--model`, as the dashboard does), else the tool's first recommended
+model on the active router, unless the user names one or it cannot do the job; `media.mjs
 tools <kind> --search <tool>` gives each recommended model with why (ranked on Artificial Analysis' leaderboards,
 October 2026: GPT Image 2.5 Sunburst first for images, MiniMax H3 first for new videos, Wan 3.0, Seedance 2.5, Kling
-4.0 after it). Say why when you pick one the user did not. Each
+4.0 after it). Say why when you pick one the user did not. Never set a default unless the user asks. Each
 router has its own list (`providers/openrouter-models.json`, `providers/kie-models.json`), each model with what it
 takes there: the same model may do more on one (Seedance 2.5 on Kie edits a video and goes to 1080p, through
 OpenRouter it does neither; Kling 3.0 is 720p on OpenRouter, up to 4K on Kie). A model named in a remix or a

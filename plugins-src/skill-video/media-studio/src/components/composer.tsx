@@ -16,8 +16,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Slider } from "@/components/ui/slider"
 import {
   api,
+  bareModel,
   cited,
   currentOf,
+  defaultKeys,
   fill,
   imageInputs,
   isLocal,
@@ -164,11 +166,13 @@ export function Composer({
   const set = (patch: Partial<Compose>) => onChange({ ...value, ...patch })
   const eleven = tool.provider === "elevenlabs", local = isLocal(tool), shown = shownWhen(tool, value.fields)
 
-  // the model: the user's pick, else the folder's default when it fits, else the tool's first
+  // the model: the user's pick, else their default for this tool when it fits (its own, its use's, its kind's: Settings ›
+  // Default models, the engine's order too), else the tool's first
   const { recommended, others } = useMemo(() => modelsFor(tool, kind, models), [tool, kind, models])
   const fitting = [...recommended, ...others]
-  const def = state.settings.defaults[kind]
-  const modelId = eleven || local ? undefined : (value.model && fitting.some((m) => m.id === value.model) ? value.model : def && fitting.some((m) => m.id === def) ? def : fitting[0]?.id)
+  const defaults = state.settings.defaults
+  const def = defaultKeys(kind, tool).map((k) => defaults[k]).flatMap((id) => (id ? fitting.filter((m) => m.model === bareModel(id)) : []))[0]
+  const modelId = eleven || local ? undefined : (value.model && fitting.some((m) => m.id === value.model) ? value.model : (def?.id ?? fitting[0]?.id))
   const model = models.find((m) => m.id === modelId)
   // ElevenLabs straight: a voice of the account or of the Library, whole (no clips; « How it sounds » only on v4 and
   // v3, a preset sent as its audio tags), or a dialogue's lines on v4 and v3

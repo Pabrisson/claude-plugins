@@ -16,6 +16,7 @@ import {
   TrendingUpIcon,
   TriangleAlertIcon,
   WalletIcon,
+  XIcon,
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -28,7 +29,8 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { api, money, plain, ROUTER_NAME, type Kind, type Model, type Router, type Settings, type State } from "@/lib/api"
+import { api, money, plain, ROUTER_NAME, USES, toolUse, type Kind, type Model, type Router, type Settings, type State, type Tool } from "@/lib/api"
+import { modelsFor } from "@/components/composer"
 import { Chips, ProviderIcon } from "@/components/chips"
 import { capsOf, ModelPicker, NewBadge, shortName } from "@/components/model-picker"
 import { ModelLogo } from "@/components/model-logo"
@@ -143,7 +145,7 @@ function Row({ title, icon, about, htmlFor, end, children }: { title: string; ic
   )
 }
 
-export function SettingsPage({ state, models, engine, onSaved, onModels }: { state: State; models: Partial<Record<Kind, Model[]>>; engine: string; onSaved: () => void; onModels: () => void }) {
+export function SettingsPage({ state, models, tools, engine, onSaved, onModels }: { state: State; models: Partial<Record<Kind, Model[]>>; tools: Record<Kind, Tool[]> | null; engine: string; onSaved: () => void; onModels: () => void }) {
   const saved = state.settings
   const [plan, setPlan] = useState(saved.elevenlabs.plan)
   const [router, setRouter] = useState<Router>(saved.router.active)
@@ -268,10 +270,22 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
   ]
   // developer mode: on a server started on fake APIs, it brings the header's Fake API switch (turned on with it)
   const fakes = !!state.fake?.bases?.length
+  // a use's models: the ones its tools recommend first, then the others they take
+  const modelsOfUse = (k: Kind, use: string) => {
+    const fits = (tools?.[k] ?? []).filter((t) => !t.hidden && toolUse(k, t) === use).map((t) => modelsFor(t, k, models[k] ?? []))
+    const recommended = [...new Set(fits.flatMap((f) => f.recommended))]
+    return { recommended, others: [...new Set(fits.flatMap((f) => f.others))].filter((m) => !recommended.includes(m)) }
+  }
+  // the tools' own defaults, in the order of the kinds then of the tools
+  const own = KINDS.flatMap((kind) =>
+    Object.entries(defaults)
+      .filter(([key, id]) => id && key.startsWith(`${kind}/`))
+      .map(([key, id]) => ({ key, kind, id, tool: tools?.[kind]?.find((t) => t.id === key.slice(kind.length + 1)) }))
+  )
   const nav = [
     { id: "spending", icon: WalletIcon, title: "Spending", status: noLimits ? "No limit set" : "Limits set", warn: noLimits },
     { id: "plan", icon: WalletIcon, title: "ElevenLabs plan", status: plan ? cap(plan) : "Not set", warn: false },
-    { id: "models", icon: LayersIcon, title: "Default models", status: KINDS.some((k) => defaults[k]) ? `${KINDS.filter((k) => defaults[k]).length} of 3 set` : "The tools' choice", warn: false },
+    { id: "models", icon: LayersIcon, title: "Default models", status: Object.values(defaults).some(Boolean) ? `${Object.values(defaults).filter(Boolean).length} set` : "The tools' choice", warn: false },
     { id: "keys", icon: KeyRoundIcon, title: "API keys", status: `${keys.filter((k) => k.set).length} of ${keys.length} set`, warn: !state.keys[saved.router.active] },
     { id: "router", icon: RouterIcon, title: "Router", status: `${name} active${state.catalog.at ? ` · list ${ago(state.catalog.at)}` : ""}`, warn: !state.keys[router] },
     { id: "dev", icon: CodeIcon, title: "Development", status: !developer ? "Off" : fakes ? `On · ${state.fake.on ? "fake APIs" : "real APIs"}` : "On", warn: false },
@@ -382,20 +396,51 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
             </Row>
           </Section>
 
-          <Section id="models" icon={LayersIcon} title="Default models" about="Used when a tool recommends no model, and by Claude when you name none.">
+          <Section id="models" icon={LayersIcon} title="Default models" about="The most precise one wins: a tool's own, then its use, then its kind. Each applies only to the tools its model fits, else the tool's first recommended model. Claude follows them too.">
             {KINDS.map((k) => (
-              <Row key={k} title={cap(k)} about={k === "audio" ? "Speech: the voice reading your text." : k === "video" ? "Generation from words or images." : "Generation and edits."}>
-                <ModelPicker
-                  kind={k}
-                  recommended={[]}
-                  others={(models[k] ?? []).filter((m) => k !== "video" || m.role === "generate")}
-                  value={defaults[k]}
-                  onChange={(id) => setDefaults({ ...defaults, [k]: id })}
-                  none="The tool's choice"
-                  label={`Default ${k} model`}
-                />
-              </Row>
+              <Fragment key={k}>
+                <Row title={cap(k)} about={`Every ${k} tool.`}>
+                  <ModelPicker
+                    kind={k}
+                    recommended={[]}
+                    others={(models[k] ?? []).filter((m) => k !== "video" || m.role === "generate")}
+                    value={defaults[k] ?? null}
+                    onChange={(id) => setDefaults({ ...defaults, [k]: id })}
+                    none="The tool's choice"
+                    label={`Default ${k} model`}
+                  />
+                </Row>
+                {USES[k].map((u) => {
+                  const key = `${k}:${u.id}`, { recommended, others } = modelsOfUse(k, u.id)
+                  return (
+                    <Row key={key} title={`${cap(k)} · ${u.label}`} about={u.about}>
+                      <ModelPicker kind={k} recommended={recommended} others={others} value={defaults[key] ?? null} onChange={(id) => setDefaults({ ...defaults, [key]: id })} none="Not set" label={`Default ${k} ${u.label.toLowerCase()} model`} />
+                    </Row>
+                  )
+                })}
+              </Fragment>
             ))}
+            {own.length ? (
+              own.map(({ key, kind, tool, id }) => {
+                const fit = tool ? modelsFor(tool, kind, models[kind] ?? []) : { recommended: [], others: [] }
+                return (
+                  <Row key={key} title={`${cap(kind)} · ${tool?.label ?? key.split("/")[1]}`} about="This tool's own default.">
+                    <div className="flex items-center gap-1.5">
+                      <div className="min-w-0 flex-1">
+                        <ModelPicker kind={kind} recommended={fit.recommended} others={fit.others} value={id} onChange={(v) => setDefaults({ ...defaults, [key]: v })} none="Not set" label={`${tool?.label ?? key} default model`} />
+                      </div>
+                      <Button variant="ghost" size="icon-sm" aria-label={`Remove ${tool?.label ?? key}'s default`} title="Remove" onClick={() => setDefaults({ ...defaults, [key]: null })}>
+                        <XIcon />
+                      </Button>
+                    </div>
+                  </Row>
+                )
+              })
+            ) : (
+              <Row title="Tools" about="A tool's own default, the most precise one, is set by Claude when you ask.">
+                <span className="text-sm text-muted-foreground">None yet</span>
+              </Row>
+            )}
           </Section>
 
           <Section id="keys" icon={KeyRoundIcon} title="API keys" about="They stay in Claude Code, never in this folder.">

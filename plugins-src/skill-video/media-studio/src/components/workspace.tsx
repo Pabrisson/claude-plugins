@@ -17,7 +17,7 @@ import {
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { api, currentOf, inWorkspace, mediaKind, outputPath, per1000, plain, when, type Clip, type Job, type Kind, type State, type Timeline, type Tool, type Workspace } from "@/lib/api"
+import { api, currentOf, inWorkspace, mediaKind, textJob, outputPath, per1000, plain, when, type Clip, type Job, type Kind, type State, type Timeline, type Tool, type Workspace } from "@/lib/api"
 import { lay } from "@/lib/timeline"
 import { Chips, Label, valueIcon } from "@/components/chips"
 import { byMedium, FilterChips, LibraryList, Listen, Section, SortSelect, SoundCover, Thumb, useSort, Workspaces, type Pick } from "@/components/inputs"
@@ -172,7 +172,7 @@ export function WorkspacePage({
     window.addEventListener("hashchange", on)
     return () => window.removeEventListener("hashchange", on)
   }, [])
-  const [kind, setKind] = useState<"all" | Kind>("all")
+  const [picked, setKind] = useState<"all" | Kind | "text">("all")
   const [provider, setProvider] = useState("all")
   const [favorites, setFavorites] = useState(false)
   const [tool, setTool] = useState("")
@@ -184,9 +184,11 @@ export function WorkspacePage({
   const timeline = timelines.get(ws.slug) ?? ws.timeline
   const q = query.trim().toLowerCase()
   const mine = all ? state.media : state.media.filter((j) => inWorkspace(j, ws.slug))
+  // Text (transcripts, timed lyrics, notes) only when the list holds one; such a result is not Audio
+  const texts = mine.some(textJob), kind = picked === "text" && !texts ? "all" : picked
   // the other filters first: the Tool list counts what they leave
   const pool = mine.filter(
-    (j) => (kind === "all" || j.kind === kind) && (provider === "all" || j.provider === provider) && (!favorites || j.favorite) && (!q || `${j.prompt} ${j.label} ${j.name} ${j.outputs.join(" ")}`.toLowerCase().includes(q))
+    (j) => (kind === "all" || (kind === "text" ? textJob(j) : j.kind === kind && !textJob(j))) && (provider === "all" || j.provider === provider) && (!favorites || j.favorite) && (!q || `${j.prompt} ${j.label} ${j.name} ${j.outputs.join(" ")}`.toLowerCase().includes(q))
   )
   const jobs = tool ? pool.filter((j) => toolKey(j) === tool) : pool
   const results = allResults(state)
@@ -274,7 +276,7 @@ export function WorkspacePage({
         <WorkspaceRows state={state} value={all ? "all" : ws.slug} onPick={pick} count={(slug) => state.media.filter((j) => slug === "all" || inWorkspace(j, slug)).length} unit="item" all manage onChanged={onChanged} />
         <div>
           <Label>Media</Label>
-          <Chips options={["all", ...KINDS] as const} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} icon={valueIcon} onChange={setKind} />
+          <Chips options={["all", ...KINDS, ...(texts ? (["text"] as const) : [])]} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} icon={valueIcon} onChange={setKind} />
         </div>
         <div>
           <Label>Tool</Label>
@@ -396,7 +398,7 @@ function Bin({ query, jobs, home, onAdd }: { query: string; jobs: Job[]; home: s
   const [sort, setSort] = useSort()
   const q = query.trim().toLowerCase()
   const pool = jobs
-    .filter((j) => j.status === "done" && (!q || `${j.prompt} ${j.label} ${j.name}`.toLowerCase().includes(q)))
+    .filter((j) => j.status === "done" && (!q || `${j.prompt} ${j.label} ${j.name} ${j.id}`.toLowerCase().includes(q)))
     .flatMap((j) => j.outputs.filter((o) => mediaKind(o) !== "other" && !/\.mov$/i.test(o)).map((o) => ({ job: j, path: outputPath(home, j, o) })))
   const items = sorted(pool.filter((i) => passes(i, filters)), sort)
   type Item = (typeof items)[number]

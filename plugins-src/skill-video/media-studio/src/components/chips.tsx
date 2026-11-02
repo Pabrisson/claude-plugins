@@ -227,7 +227,7 @@ export function ProviderIcon({ id, className }: { id: string; className?: string
   return PROVIDER_ICONS[id] ? createElement(PROVIDER_ICONS[id], { className, "aria-hidden": true }) : null
 }
 const NAMED: Record<string, LucideIcon> = {
-  all: LayoutGridIcon, favorites: StarIcon, image: ImageIcon, video: VideoIcon, audio: AudioLinesIcon, other: ShapesIcon,
+  all: LayoutGridIcon, favorites: StarIcon, image: ImageIcon, video: VideoIcon, audio: AudioLinesIcon, text: FileTextIcon, other: ShapesIcon,
   voice: MicIcon, music: MusicIcon, sound: Volume2Icon, import: FolderOpenIcon,
   ...PROVIDER_ICONS,
   "": WandSparklesIcon, auto: WandSparklesIcon, same: EqualIcon, on: ToggleRightIcon, true: ToggleRightIcon, off: ToggleLeftIcon, false: ToggleLeftIcon,
