@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react"
-import { ChevronDownIcon, CopyIcon, DownloadIcon, FolderKanbanIcon, FolderMinusIcon, ImagesIcon, ListVideoIcon, PlayIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { ChevronDownIcon, CopyIcon, DownloadIcon, FolderInputIcon, FolderKanbanIcon, FolderMinusIcon, ImagesIcon, ListVideoIcon, PlayIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -196,6 +196,18 @@ export function WorkspacePage({
     window.location.hash = "workspace"
     if (slug !== ws.slug) api.workspaces({ slug, use: true }).then(onChanged, (e) => toast.error(plain(e.message)))
   }
+  // a result moved: it joins the other workspace first, then leaves this one, so a failure leaves it in both, never in
+  // none; a clip of it already on this timeline stays there, like Remove from workspace
+  const moveTo = (job: Job, to: Workspace) =>
+    api
+      .workspaces({ slug: to.slug, add: [job.id] })
+      .then(() => api.workspaces({ slug: ws.slug, drop: [job.id] }))
+      .then(
+        () => toast.success(`Moved to ${to.name}`, timeline.clips.some((c) => c.job === job.id) ? { description: `It stays on ${ws.name}'s timeline.` } : undefined),
+        (e) => toast.error(plain(e.message))
+      )
+      .finally(onChanged)
+  const others = state.workspaces.filter((w) => w.slug !== ws.slug)
 
   const tabs = (
     <Chips options={TABS} value={tab} label={(t) => ({ assets: "Assets", timeline: "Timeline" })[t]} icon={(t) => (t === "assets" ? <ImagesIcon /> : <ListVideoIcon />)} onChange={(t) => t !== tab && (window.location.hash = t === "assets" ? "workspace" : "workspace/timeline")} className="grid grid-cols-2" />
@@ -301,7 +313,14 @@ export function WorkspacePage({
           home={state.home}
           per1000={per1000(state)}
           onBridge={onBridge}
-          extra={all ? [] : [{ label: "Remove from workspace", icon: FolderMinusIcon, run: (j) => api.workspaces({ slug: ws.slug, drop: [j.id] }).then(onChanged, (e) => toast.error(plain(e.message))) }]}
+          extra={
+            all
+              ? []
+              : [
+                  ...(others.length ? [{ label: "Move to workspace", icon: FolderInputIcon, menu: others.map((w) => ({ key: w.slug, label: w.name, run: (j: Job) => moveTo(j, w) })) }] : []),
+                  { label: "Remove from workspace", icon: FolderMinusIcon, run: (j: Job) => api.workspaces({ slug: ws.slug, drop: [j.id] }).then(onChanged, (e) => toast.error(plain(e.message))) },
+                ]
+          }
           empty={
             mine.length ? (
               <p className="text-sm text-muted-foreground">No media matches these filters.</p>

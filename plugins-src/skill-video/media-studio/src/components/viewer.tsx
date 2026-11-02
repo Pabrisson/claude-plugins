@@ -12,7 +12,7 @@ import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job, 
 import { Label } from "@/components/chips"
 import { Thumb, Workspaces } from "@/components/inputs"
 import { ModelLogo } from "@/components/model-logo"
-import { BRIDGES, costOf, DeleteDialog, REMIX, SEND, sendToEdit, SONG, type Bridge, FINAL, isDraft } from "@/components/results"
+import { BRIDGES, costOf, DeleteDialog, HINTS, REMIX, SEND, sendToEdit, SONG, type Bridge, FINAL, isDraft } from "@/components/results"
 import { CompareDialog } from "@/components/compare"
 
 // the settings a result was made with, in words
@@ -33,22 +33,6 @@ const optionText = (v: unknown) => (v === true ? "on" : v === false ? "off" : St
 const words = (k: string) => (k[0].toUpperCase() + k.slice(1)).replaceAll("_", " ")
 // an input's role, as the tools name them
 const ROLES: Record<string, string> = { sketch: "Painted", matte: "Mask (kept here)", first_frame: "First frame", last_frame: "Last frame", voice_clips: "Voice", sheet: "Sheet" }
-// what each next step does, under its name
-const HINTS: Record<string, string> = {
-  Remix: "Same settings, open in the composer",
-  Animate: "Make it a video",
-  "Make an element": "Keep it in the Library",
-  "Make a voice": "Keep it in the Library",
-  Extend: "Continue the shot",
-  Upscale: "Sharper and larger",
-  "Talking avatar": "A face speaks it",
-  "Speech to video": "An image speaks or sings it",
-  "Extend music": "It goes on, in its style",
-  Cover: "The same melody, another style",
-  Stems: "Its voice and instruments apart",
-  "Send to edit": "A rush in video-editor",
-  "Add to timeline": "After the last shot of the current workspace",
-}
 // who made it: the router, ElevenLabs straight or this machine
 const MADE_BY: Record<string, string> = { kie: "Kie.ai", openrouter: "OpenRouter", local: "This machine", elevenlabs: "ElevenLabs" }
 // a Suno song's extras (Kie), each a small job of its own: its WAV, its words with their times, a music video, a stem's

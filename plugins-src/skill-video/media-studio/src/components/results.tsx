@@ -1,11 +1,13 @@
 import { useContext, useRef, useState } from "react"
-import { ArrowRightToLineIcon, AudioLinesIcon, AudioWaveformIcon, BookmarkPlusIcon, Disc3Icon, FastForwardIcon, LayersIcon, ListVideoIcon, LoaderCircleIcon, MaximizeIcon, MessageCircleIcon, PauseIcon, PlayIcon, RefreshCwIcon, ScissorsIcon, SparklesIcon, StarIcon, Trash2Icon, TriangleAlertIcon, type LucideIcon } from "lucide-react"
+import { ArrowRightToLineIcon, AudioLinesIcon, AudioWaveformIcon, BookmarkPlusIcon, Disc3Icon, FastForwardIcon, FolderKanbanIcon, LayersIcon, ListVideoIcon, LoaderCircleIcon, MaximizeIcon, MessageCircleIcon, PauseIcon, PlayIcon, RefreshCwIcon, ScissorsIcon, SparklesIcon, StarIcon, Trash2Icon, TriangleAlertIcon, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, coverOf, elapsed, fileUrl, inputPath, mediaKind, money, outputPath, plain, type Job } from "@/lib/api"
 import { Viewer } from "@/components/viewer"
 import { Workspaces } from "@/components/inputs"
@@ -40,12 +42,43 @@ export const SONG: { b: Bridge; label: string; icon: LucideIcon; suno?: boolean 
   { b: "stems", label: "Stems", icon: LayersIcon, suno: true },
 ]
 // an action a page adds to its tiles (a workspace's « Remove from workspace »)
-export type Extra = { label: string; icon: LucideIcon; run: (job: Job) => void }
+// an action on a tile's hover bar: run at once, or a menu of choices to pick from first (Move to workspace)
+export type Extra = { label: string; icon: LucideIcon } & ({ run: (job: Job) => void } | { menu: { key: string; label: string; run: (job: Job) => void }[] })
 export const REMIX = { label: "Remix", icon: RefreshCwIcon }
 // a Seedance 2.5 draft (Kie): its final, made from it in 1080p within 7 days
 export const FINAL = { label: "Make the final", icon: SparklesIcon }
 export const isDraft = (j: Job) => j.status === "done" && j.provider === "kie" && (j.params?.options as Record<string, unknown> | undefined)?.draft === true && Date.now() - Date.parse(j.created) < 7 * 864e5
 export const SEND = { label: "Send to edit", icon: ScissorsIcon }
+// what each next step does, under its name (a tile's bubble, the viewer's list)
+export const HINTS: Record<string, string> = {
+  Remix: "Same settings, open in the composer",
+  Animate: "Make it a video",
+  "Make an element": "Keep it in the Library",
+  "Make a voice": "Keep it in the Library",
+  Extend: "Continue the shot",
+  Upscale: "Sharper and larger",
+  "Talking avatar": "A face speaks it",
+  "Speech to video": "An image speaks or sings it",
+  "Extend music": "It goes on, in its style",
+  Cover: "The same melody, another style",
+  Stems: "Its voice and instruments apart",
+  "Send to edit": "A rush in video-editor",
+  "Add to timeline": "After the last shot of the current workspace",
+}
+
+// a tile button's bubble: its name, and under it what it does when there is a hint; nothing in it to click, so it closes
+// as the pointer leaves (else a neighbor's bubble would stay over the next button)
+function Tip({ label, children }: { label: string; children: React.ReactElement }) {
+  return (
+    <Tooltip disableHoverableContent>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" className="flex-col items-start gap-0.5">
+        <span className="font-medium">{label}</span>
+        {HINTS[label] && <span className="text-background/70">{HINTS[label]}</span>}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 export const isRunning = (j: Job) => j.status === "queued" || j.status === "running"
 export const firstOutput = (home: string, job: Job) => (job.outputs[0] ? outputPath(home, job, job.outputs[0]) : null)
@@ -209,18 +242,45 @@ function Tile({
         {k === "video" && <PlayIcon className="pointer-events-none absolute bottom-2 left-2 size-4 text-white drop-shadow transition-opacity group-hover:opacity-0" aria-hidden />}
         {job.outputs.length > 1 && <span className="pointer-events-none absolute top-2 left-2 rounded-md bg-black/60 px-1.5 text-xs text-white">+{job.outputs.length - 1}</span>}
         {job.favorite && <StarIcon className="pointer-events-none absolute top-2 right-2 size-4 fill-current text-cost drop-shadow transition-opacity group-focus-within:opacity-0 group-hover:opacity-0" aria-label="Favorite" />}
-        <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-          <button type="button" aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"} title={job.favorite ? "Unfavorite" : "Favorite"} onClick={() => api.media(job.id, "favorite")} className={overlayButton}>
-            <StarIcon className={cn("size-4", job.favorite && "fill-current text-cost")} />
-          </button>
-          {extra.map((x) => (
-            <button key={x.label} type="button" aria-label={x.label} title={x.label} onClick={() => x.run(job)} className={overlayButton}>
-              <x.icon className="size-4" />
+        {/* stays shown while one of its menus is open (the menu sits outside the tile) */}
+        <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100">
+          <Tip label={job.favorite ? "Unfavorite" : "Favorite"}>
+            <button type="button" aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"} onClick={() => api.media(job.id, "favorite")} className={overlayButton}>
+              <StarIcon className={cn("size-4", job.favorite && "fill-current text-cost")} />
             </button>
-          ))}
-          <button type="button" aria-label="Delete" title="Delete" onClick={() => setConfirm(true)} className={overlayButton}>
-            <Trash2Icon className="size-4" />
-          </button>
+          </Tip>
+          {extra.map((x) =>
+            "menu" in x ? (
+              <DropdownMenu key={x.label}>
+                <Tip label={x.label}>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" aria-label={x.label} className={overlayButton}>
+                      <x.icon className="size-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                </Tip>
+                <DropdownMenuContent align="end" className="min-w-48">
+                  <DropdownMenuLabel>{x.label}</DropdownMenuLabel>
+                  {x.menu.map((m) => (
+                    <DropdownMenuItem key={m.key} onSelect={() => m.run(job)}>
+                      <FolderKanbanIcon /> {m.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Tip key={x.label} label={x.label}>
+                <button type="button" aria-label={x.label} onClick={() => x.run(job)} className={overlayButton}>
+                  <x.icon className="size-4" />
+                </button>
+              </Tip>
+            )
+          )}
+          <Tip label="Delete">
+            <button type="button" aria-label="Delete" onClick={() => setConfirm(true)} className={overlayButton}>
+              <Trash2Icon className="size-4" />
+            </button>
+          </Tip>
         </div>
         <div className="absolute bottom-2 left-2 flex gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
           {[
@@ -231,13 +291,17 @@ function Tile({
             ...(failed ? [] : [{ ...SEND, run: () => sendToEdit(file!) }]),
           ].map((a) =>
             a.label === TIMELINE.label && shot ? (
-              <button key={a.label} type="button" aria-label={`${shot} on the timeline: show it`} title={`${shot} on the timeline: show it`} onClick={() => onBridge("shot", job, file!)} className={cn(overlayButton, "w-auto min-w-7 px-1.5 text-xs font-semibold tabular-nums")}>
-                {shot}
-              </button>
+              <Tip key={a.label} label={`${shot} on the timeline: show it`}>
+                <button type="button" aria-label={`${shot} on the timeline: show it`} onClick={() => onBridge("shot", job, file!)} className={cn(overlayButton, "w-auto min-w-7 px-1.5 text-xs font-semibold tabular-nums")}>
+                  {shot}
+                </button>
+              </Tip>
             ) : (
-              <button key={a.label} type="button" aria-label={a.label} title={a.label} onClick={a.run} className={overlayButton}>
-                <a.icon className="size-4" />
-              </button>
+              <Tip key={a.label} label={a.label}>
+                <button type="button" aria-label={a.label} onClick={a.run} className={overlayButton}>
+                  <a.icon className="size-4" />
+                </button>
+              </Tip>
             )
           )}
         </div>
