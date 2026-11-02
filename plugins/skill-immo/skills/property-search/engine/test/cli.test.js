@@ -47,6 +47,45 @@ test('a fetch waits for the user: estimate, then --spend; the credits are logged
   assert.equal(api.seen.at(-1).key, 'test-key')
 })
 
+test('hundreds fetched: left out over windows of creation dates, so never counted nor paid again', async () => {
+  const { home, dir } = searchesFolder(), file = path.join(dir, 'search.json')
+  // a zone drawn on the map: its 60 corners leave the least room in the URL
+  const ring = Array.from({ length: 61 }, (_, i) => [4.8455 + 0.004 * Math.cos(i * Math.PI / 30), 45.756 + 0.003 * Math.sin(i * Math.PI / 30)])
+  fs.writeFileSync(file, JSON.stringify({ ...read(dir, 'search.json'), zone: { how: 'drawn', kind: 'polygon', geometry: { type: 'Polygon', coordinates: [ring] }, label: 'Zone dessinée sur la carte' } }))
+  // 300 fetched, an hour apart, two of them in the same second; the older half fetched before 1.19 (published_at only)
+  const hour = i => new Date(Date.parse('2026-10-31T12:00:00Z') - Math.max(0, i - 1) * 3600000).toISOString()
+  const props = Array.from({ length: 300 }, (_, i) => ({ ...property, uuid: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, createdAt: hour(i) }))
+  const known = props.map((p, i) => ({ id: p.uuid, se_id: p.uuid, source: 'stream-estate', urls: [], price: p.price, status: 'AVAILABLE', ...(i < 150 ? { se_created_at: p.createdAt } : {}), published_at: p.createdAt }))
+  fs.writeFileSync(path.join(dir, 'listings.json'), JSON.stringify(known))
+  // two new ones: just out, and one older than the oldest fetched
+  const fresh = [['1', '2026-11-01T08:00:00Z'], ['2', '2026-01-01T08:00:00Z']].map(([n, createdAt]) => ({ ...property, uuid: `ffffffff-0000-4000-8000-00000000000${n}`, createdAt, adverts: property.adverts.map(a => ({ ...a, url: `${a.url}/${n}` })) }))
+  api.state.properties = [...props, ...fresh]
+  try {
+    const at = api.seen.length
+    let r = await run(home, ['fetch', '-p', 'paul-bert', '--estimate'])
+    assert.equal(r.status, 0, r.err)
+    assert.equal(JSON.parse(r.out).what, 'fetch 2 of 2 listings')
+    const calls = api.seen.slice(at)
+    assert.ok(calls.some(x => x.query.get('fromDate')) && calls.some(x => x.query.get('toDate')), 'several windows')
+    assert.ok(calls.every(x => x.url.length < 9000), 'every URL under 9 kB')
+    r = await run(home, ['fetch', '-p', 'paul-bert', '--spend', '2'])
+    assert.equal(r.status, 0, r.err)
+    assert.match(r.out, /fetched 2 listings: 2 new/)
+    assert.deepEqual(read(dir, 'listings.json').slice(-2).map(l => [l.id, l.se_created_at]), fresh.map(p => [p.uuid, p.createdAt]))
+    // nothing new: nothing to fetch
+    r = await run(home, ['fetch', '-p', 'paul-bert', '--estimate'])
+    assert.match(r.out, /no new listing matches/)
+    assert.equal(read(dir, 'search.json').stream.total, 0)
+    // a fetched one dated wrong is out of its window: the free check refuses before any credit
+    fs.writeFileSync(path.join(dir, 'listings.json'), JSON.stringify(read(dir, 'listings.json').map(l => (l.id === props[200].uuid ? { ...l, published_at: '2026-10-31T11:00:00Z' } : l))))
+    const before = api.seen.length
+    r = await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])
+    assert.equal(r.status, 1)
+    assert.match(r.err, /1 of the 1 listings counted are already in the search/)
+    assert.ok(api.seen.slice(before).every(x => x.query.get('itemsPerPage') === '0'), 'no paid call')
+  } finally { delete api.state.properties }
+})
+
 test('refresh: what changed since the last one, a price drop logged', async () => {
   const { home, dir } = searchesFolder()
   await run(home, ['fetch', '-p', 'paul-bert', '--spend', '1'])

@@ -18,6 +18,7 @@ snake_case.
 | `source` | `stream-estate`, `websearch`, `pasted` or `manual` (typed by the user in the dashboard's form, which posts these same fields to `POST /api/s/<slug>/listings`) |
 | `property_type` | `flat`, `house`, `land`, `parking` or `premises` (Stream Estate's office and shop); absent means flat |
 | `se_id` | The Stream Estate id, or null |
+| `se_created_at` | When Stream Estate created the property (it never changes): the window of creation dates that leaves it out of the next counts and fetches; `published_at` stands in for it on a listing fetched before 1.19 |
 | `urls[]` | `{ url, source, published_at, expired_at, last_seen_at, favorites, urgent }` for each portal it is on (`source`: the portal, SL, LBC, Bienici…) |
 | `price`, `net_price`, `area`, `carrez`, `land_area`, `price_per_m2` | Asking price (€, fees as listed), net seller price, m², Carrez, land in m², €/m² (of land for a plot) |
 | `rooms`, `bedrooms`, `floor`, `floors`, `last_floor`, `ground_floor` | The flat |

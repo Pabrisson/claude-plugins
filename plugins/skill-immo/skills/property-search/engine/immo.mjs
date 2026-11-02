@@ -24,7 +24,7 @@ import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, refer
 import { irisOdds } from './lib/odds.js'
 import { openData, pool } from './lib/opendata.js'
 import { preview } from './lib/preview.js'
-import { members, NoCredits, se, testApi } from './lib/stream.js'
+import { members, NoCredits, queryString, se, testApi } from './lib/stream.js'
 
 const SELF = fileURLToPath(import.meta.url)
 // the code this process runs: a dashboard server started from an older immo.mjs gets replaced
@@ -181,20 +181,49 @@ const localOnly = s => ['floor_min', 'elevator', 'outdoor'].filter(k => s.criter
 const ONLINE_DAYS = 90
 const onlineSince = () => new Date(Date.now() - ONLINE_DAYS * 86400000).toISOString().slice(0, 10)
 
-// The search as GET /documents/properties queries: one per type, each with the criteria it takes (a parking has no
-// rooms), of what is online. `since`: what changed from that date, and what expired since (a second query per type);
-// `exclude`: the properties already fetched.
-// ponytail: 60 excluded ids at most (the URL's length); past that, a fetch may pay again for a known listing
-function seQueries(s, { since, exclude = [] } = {}) {
+// The search as GET /documents/properties queries: one per type and window, each with the criteria it takes (a parking
+// has no rooms), of what is online. `since`: what changed from that date, and what expired since (a second query per
+// type); `known`: the listings of the search, those already fetched left out (seWindows).
+function seQueries(s, { since, known = [], windows = seWindows(s, known) } = {}) {
   const c = s.criteria ?? {}, where = seWhere(s)
-  const query = t => ({
+  const query = (t, w) => ({
     ...seFilters(s, t), ...where,
     energyCategories: takes(t, 'dpe') && c.dpe_max ? [...LETTERS.slice(0, LETTERS.indexOf(c.dpe_max) + 1)] : undefined,
-    excludedProperties: exclude.length ? exclude.slice(-60) : undefined,
+    fromDate: w.from, toDate: w.to, excludedProperties: w.ids.length ? w.ids : undefined,
   })
-  return typesOf(s).flatMap(t => since
-    ? [{ ...query(t), expired: false, fromUpdatedAt: since }, { ...query(t), expired: true, fromExpiredAt: since }]
-    : [{ ...query(t), expired: false, fromUpdatedAt: onlineSince() }])
+  return typesOf(s).flatMap(t => windows.flatMap(w => since
+    ? [{ ...query(t, w), expired: false, fromUpdatedAt: since }, { ...query(t, w), expired: true, fromExpiredAt: since }]
+    : [{ ...query(t, w), expired: false, fromUpdatedAt: onlineSince() }]))
+}
+
+// A URL stays under this, its dates and paging included: the v1 refuses one of 10 kB, 9 kB passes
+const URL_MAX = 8500
+const utc = (t, s = 0) => `${new Date(Date.parse(t) + s * 1000).toISOString().slice(0, 19)}+00:00`
+const createdAt = l => l.se_created_at ?? l.published_at
+
+// The fetched listings, to leave out of the queries, in windows of their creation date (the v1's fromDate and toDate,
+// both included, to the second; checked live on 2026-11-02, as published_at matching it), newest first: each with as
+// many ids as its URL holds. A creation date never changes, so a listing stays in its window, and none comes back as
+// new. The newest window takes what comes after them, the oldest what came before; one, without dates, while they
+// fit in one URL.
+function seWindows(s, known) {
+  const fetched = known.filter(l => l.se_id), size = l => queryString({ excludedProperties: [l.se_id] }).length + 1
+  const room = URL_MAX - 300 - Math.max(...seQueries(s, { windows: [{ ids: [] }] }).map(q => queryString(q).length))
+  // ponytail: a listing without a date (none so far) goes in every window
+  const undated = fetched.filter(l => !createdAt(l)), base = undated.reduce((n, l) => n + size(l), 0), chunks = [[]]
+  let used = base
+  for (const l of fetched.filter(createdAt).toSorted((a, b) => Date.parse(createdAt(b)) - Date.parse(createdAt(a)))) {
+    const last = chunks.at(-1).at(-1)
+    // never within a second: the window after it would hold that second again
+    if (last && used + size(l) > room && Date.parse(createdAt(last)) > Date.parse(createdAt(l))) { chunks.push([]); used = base }
+    chunks.at(-1).push(l)
+    used += size(l)
+  }
+  return chunks.map((c, i) => ({
+    from: i < chunks.length - 1 ? utc(createdAt(c.at(-1))) : undefined,
+    to: i ? utc(createdAt(chunks[i - 1].at(-1)), -1) : undefined,
+    ids: [...undated, ...c].map(l => l.se_id),
+  }))
 }
 
 // how many properties the queries match (itemsPerPage 0: no item returned, so no credit; the API counts up to
@@ -631,7 +660,7 @@ async function search(query) {
   console.log(`neighborhood: ${Array.isArray(area.pois) ? area.pois.length : 0} places nearby, ${(area.isochrones?.length ?? 0)} travel areas${failed.length ? `; failed: ${failed.join(', ')}` : ''}`)
   for (const k of watched(s)) { const l = sourceLine(k, area[SOURCES[k].key], listingsOf(dir)); if (l) console.log(l) }
   if (streamOn(s)) {
-    const total = await withCredits(() => seCount(s.slug, seQueries(s, { exclude: listingsOf(dir).map(l => l.se_id).filter(Boolean) })))
+    const total = await withCredits(() => seCount(s.slug, seQueries(s, { known: listingsOf(dir) })))
     s.stream = { total, counted_at: now() }
     writeJson(path.join(dir, 'search.json'), s)
     const p = profile(), n = Math.min(total, p.max_fetch), local = localOnly(s)
@@ -705,9 +734,20 @@ const describe = changes => {
 async function fetchListings() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
   requireStream(s)
-  const known = listingsOf(dir).map(l => l.se_id).filter(Boolean), queries = seQueries(s, { exclude: known })
+  const windows = seWindows(s, listingsOf(dir)), queries = seQueries(s, { windows })
   const total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? profile().max_fetch))
-  if (!n) return console.log('Stream Estate: no new listing matches')
+  // the count kept, for « Suivi »'s bar
+  if (!n) return writeJson(path.join(dir, 'search.json'), { ...s, stream: { total, counted_at: now() } }), console.log('Stream Estate: no new listing matches')
+  // Several windows: a fetched listing out of its own would come back, paid again. Before any credit, the exact count
+  // (free) checks they hold them all: everything, less what each window's ids take off it.
+  // ponytail: refuses the whole fetch; placing the stray listing (a count per listing) if it ever shows up
+  if (windows.length > 1) {
+    const count = ids => withCredits(() => seCount(s.slug, seQueries(s, { windows: [{ ids }] })))
+    const all = await count([])
+    let exact = all
+    for (const w of windows) exact -= all - await count(w.ids)
+    if (exact !== total) die(`Stream Estate: ${total - exact} of the ${total} listings counted are already in the search (out of their creation date window): no fetch, so none is paid twice`)
+  }
   approve('GET /documents/properties', n, `fetch ${n} of ${total} listings`)
   const raw = await withCredits(() => seFetch(s.slug, queries, Math.min(n, +opt.spend || n)))
   const changes = saveMerged(dir, raw.map(fromStreamEstate))
@@ -1240,18 +1280,17 @@ async function watch(dir) {
   if (typesOf(s).some(isHome)) await Promise.all([od.communeDpe(s.insee, days), od.communeAudits(s.insee, days)]).catch(e => console.log(`watch ${s.slug} commune: ${e.message}`))
   // the API's counts are no news: « Suivi » shows them in its bar, to fetch; they grow the notification
   if (streamOn(s)) {
-    const known = listingsOf(dir).map(l => l.se_id).filter(Boolean), count = q => seCount(s.slug, q, { quiet: true })
-    const total = await count(seQueries(s, { exclude: known }))
+    const windows = seWindows(s, listingsOf(dir)), count = q => seCount(s.slug, q, { quiet: true })
+    const total = await count(seQueries(s, { windows }))
     // the latest count: the search's (search, fetch) or the watch's
     const last = [s.stream, feedOf(dir).stream].filter(Boolean).sort((a, b) => b.counted_at.localeCompare(a.counted_at))[0]
     if (total > (last?.total ?? 0)) api.added = total - (last?.total ?? 0)
     if (total !== last?.total) extra.stream = { total, counted_at: now() }
     // the fetched ones that changed on the portals since the last refresh (price, status, expiry, text): what the
     // refresh's queries match, less the same without them. Counted again from 0 after each refresh.
-    // ponytail: the last 60 fetched only (the URL's length), a search with more undercounts
     const since = s.last_refresh
-    if (since && known.length) {
-      const changed = await count(seQueries(s, { since })) - await count(seQueries(s, { since, exclude: known }))
+    if (since && windows.some(w => w.ids.length)) {
+      const changed = await count(seQueries(s, { since })) - await count(seQueries(s, { since, windows }))
       const was = feedOf(dir).changed, prev = was?.since === since ? was.total : 0
       if (changed > prev) api.changed = changed - prev
       if (changed !== prev || was?.since !== since) extra.changed = { since, total: changed, counted_at: now() }

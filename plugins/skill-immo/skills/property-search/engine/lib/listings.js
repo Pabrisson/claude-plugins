@@ -51,7 +51,7 @@ export function fromStreamEstate(d) {
   const fees = pick('feesPercentage'), paidBy = pick('feesResponsibility'), accuracy = Math.min(...ads.map(a => a.geoAccuracy ?? 9))
   const seen = new Set(), changes = ads.flatMap(a => a.events ?? []).filter(e => e.fieldName === 'price' && e.fieldNewValue != null)
   return {
-    id: d.uuid, se_id: d.uuid, source: 'stream-estate', property_type: type,
+    id: d.uuid, se_id: d.uuid, se_created_at: d.createdAt ?? null, source: 'stream-estate', property_type: type,
     urls: ads.map(a => ({ url: a.url ?? null, source: a.publisher?.name ?? null, published_at: a.createdAt ?? null, expired_at: a.expiredAt ?? null, last_seen_at: a.lastCrawledAt ?? null, favorites: null, urgent: false })),
     title: d.title ?? null, description: d.description ?? null,
     price, net_price: pick('priceExcludingFees'), area, carrez: null, land_area: land,

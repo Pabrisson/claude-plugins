@@ -13,7 +13,7 @@ the v2 is not used.
   `application/json` returns a bare array, with no total: the engine always asks for JSON-LD.
 - **Query strings**: lists as `propertyTypes[]=0&propertyTypes[]=1`, polygons as `geoShapes[0][3][0]=<lon>` and
   `geoShapes[0][3][1]=<lat>`. The brackets go raw. A URL of 10 kB is refused (9 kB passes): a zone's outline is cut to
-  60 vertices and the excluded ids to 60.
+  60 vertices, and the excluded ids are split over windows of creation dates (below), each URL under 8.5 kB.
 - **Errors**: 400, 401 (wrong key), 403, 404, 429 (slow down). Nothing is documented for an empty balance: the engine
   treats a 402 as one (assisted mode, exit 3).
 - **Pricing** (2026-10-28): billed by **item**, 0.01 € each pay as you go. Plans: Starter 99 €/month for 15,000 items,
@@ -44,7 +44,7 @@ engine's own), `GET`, `POST`, `PUT /searches` and `/webhook-tester` (the saved s
 The filters used: `transactionType=0` (sale), `propertyTypes[]` (apartment `0`, house `1`, building `2`, parking `3`,
 office `4`, land `5`, shop `6`), `budgetMin`/`budgetMax`, `surfaceMin`/`surfaceMax`, `roomMin`/`roomMax`,
 `landSurfaceMin`, `energyCategories[]`, `excludedProperties[]` (property uuids), `expired`, `fromUpdatedAt`,
-`fromExpiredAt`, `itemsPerPage` (30 at most), `page`, `order[updatedAt]=desc`. The zone is one of:
+`fromExpiredAt`, `fromDate`/`toDate` (the property's `createdAt`), `itemsPerPage` (30 at most), `page`, `order[updatedAt]=desc`. The zone is one of:
 - `lat`, `lon`, `radius` (km);
 - `includedInseeCodes[]` for a commune (an arrondissement's code works: `69383`);
 - `geoShapes`, a polygon's outer ring.
@@ -58,6 +58,12 @@ one query per type. A count is capped at 10,000.
   year, 3,364 for three; 677 were updated within 30 days, 1,299 within 90.
 - **Incremental refresh**: one query of what is online and updated since the last refresh (`fromUpdatedAt` takes a
   full ISO date), one of what expired since (`expired=true&fromExpiredAt=`).
+- **The fetched ones left out**: the property's `createdAt` never changes. `fromDate` and `toDate` take a full ISO
+  date, both included, to the second, and a listing's `published_at` matched its `createdAt` for all 75 of a search
+  (free counts, 2026-11-02). So the fetched ones are split into windows of creation dates, newest first, each with as
+  many `excludedProperties[]` as its URL holds: one query per window, none of them ever back as new, so never paid
+  twice. A fetch over several windows first checks, free, that they add up to the exact count (everything, less what
+  each window's ids take off it), else it refuses.
 - **Paging**: a page starts at a multiple of its size, so a fetch of 37 asks 30, then 5, then 2: never one more item
   than the user agreed to.
 
@@ -94,7 +100,7 @@ pushed them to a random ntfy.sh topic; since 1.8 the alerts are the dashboard's 
 free counts instead:
 - the listings of the zone not fetched yet: `expired=false`, `fromUpdatedAt` 90 days back, the fetched ones excluded;
 - the fetched ones that changed since the last refresh: the refresh's two queries (`fromUpdatedAt`, then
-  `expired=true&fromExpiredAt=`), less the same with the fetched ones excluded (60 at most, the URL's length).
+  `expired=true&fromExpiredAt=`), less the same with the fetched ones excluded (over their windows).
 
 Each is a count (`itemsPerPage=0`): no item, no credit. They say how many, not which: the refresh (paid per item) does,
 by hand (« Suivi »'s bar) or by the automatic fetch the user turns on in « Réglages », within its monthly credits.

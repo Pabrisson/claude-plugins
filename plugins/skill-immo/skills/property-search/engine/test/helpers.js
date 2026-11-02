@@ -66,12 +66,21 @@ export async function fakeStreamEstate(state = {}, port = 0) {
     req.on('data', c => (body += c))
     req.on('end', () => {
       const url = new URL(req.url, 'http://x'), q = url.searchParams, json = body ? JSON.parse(body) : null
-      seen.push({ method: req.method, path: url.pathname, query: q, body: json, key: req.headers['x-api-key'], accept: req.headers.accept })
+      seen.push({ method: req.method, path: url.pathname, query: q, body: json, key: req.headers['x-api-key'], accept: req.headers.accept, url: req.url })
       const send = (code, data) => { res.writeHead(code, { 'Content-Type': 'application/ld+json' }); res.end(data == null ? '' : JSON.stringify(data)) }
       if (state.broke) return send(402, { title: 'Payment Required' })
+      // the real one refuses a URL of 10 kB
+      if (req.url.length > 9216) return send(414, { title: 'URI Too Long' })
       if (req.method === 'GET' && url.pathname === '/documents/properties') {
-        const total = q.get('expired') === 'true' || q.getAll('excludedProperties[]').includes(property.uuid) ? 0 : state.total ?? 1
-        const size = +q.get('itemsPerPage'), from = (+(q.get('page') ?? 1) - 1) * size
+        const size = +q.get('itemsPerPage'), from = (+(q.get('page') ?? 1) - 1) * size, out = q.getAll('excludedProperties[]')
+        // state.properties: those it holds, each matched on its createdAt (fromDate, toDate, both included); else the
+        // fixture property, state.total times
+        if (state.properties) {
+          const t = k => q.get(k) && Date.parse(q.get(k)), after = t('fromDate'), before = t('toDate')
+          const hits = q.get('expired') === 'true' ? [] : state.properties.filter(p => !out.includes(p.uuid) && !(after && Date.parse(p.createdAt) < after) && !(before && Date.parse(p.createdAt) > before))
+          return send(200, { '@type': 'hydra:Collection', 'hydra:member': hits.slice(from, from + size), 'hydra:totalItems': hits.length })
+        }
+        const total = q.get('expired') === 'true' || out.includes(property.uuid) ? 0 : state.total ?? 1
         const member = Array.from({ length: Math.max(0, Math.min(size, total - from)) }, () => ({ ...property, price: state.price ?? property.price }))
         return send(200, { '@type': 'hydra:Collection', 'hydra:member': member, 'hydra:totalItems': total })
       }
