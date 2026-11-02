@@ -184,7 +184,7 @@ export type Criteria = Partial<Record<"budget_min" | "budget_max" | "area_min" |
 // (`outside`: found at an alert's place, outside the zone; « listings » and « changed » were the API's counts in 1.7);
 // a new energy audit or building permit of the zone or of an alert's place
 export type News = { date: string } & ({ kind: "dpe"; dpe: DpeRow; outside?: boolean } | { kind: "audit"; audit: AuditRow; outside?: boolean } | { kind: "permit"; permit: PermitRow; outside?: boolean } | { kind: "listings" | "changed"; count: number; added: number })
-export type Feed = { read_at: string | null; read?: string[]; stream: { total: number; counted_at: string } | null; changed?: { since: string; total: number; counted_at: string }; items: News[] }
+export type Feed = { read_at: string | null; read?: string[]; stream: { total: number; counted_at: string } | null; changed?: { since: string; total: number; refresh?: number; counted_at: string }; items: News[] }
 // the search's alerts (alerts.json, engine lib/alerts.js): the default ones turned off, the user's own
 export type AlertEvent = "dpe" | "audit" | "permit" | "new" | "price_drop" | "price_rise" | "status" | "expired"
 export type AlertField = "street" | "type" | "energy" | "area" | "price" | "price_per_m2" | "rooms" | "change_pct" | "favorite" | "my_status" | "criteria" | "building" | "permit_kind" | "homes"

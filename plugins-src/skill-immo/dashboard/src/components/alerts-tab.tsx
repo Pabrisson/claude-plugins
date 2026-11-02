@@ -25,10 +25,10 @@ import { cn } from "@/lib/utils"
 const DEFAULT_LOOK: Record<string, { name: string; text: string; kind: keyof typeof LOOK }> = {
   dpe: { name: "Nouveaux DPE sans annonce", text: "Un DPE récent de la zone, d'un bien de vos types et critères, qu'aucune annonce n'explique : peut-être un bien bientôt en vente.", kind: "dpe" },
   new: { name: "Nouvelles annonces", text: "Chaque annonce qui entre dans la recherche.", kind: "new" },
-  price_drop: { name: "Baisses de prix", text: "Une annonce suivie baisse son prix.", kind: "price_drop" },
-  price_rise: { name: "Hausses de prix", text: "Une annonce suivie monte son prix.", kind: "price_rise" },
-  status: { name: "Statuts", text: "Sous offre, vendue ou retirée.", kind: "status" },
-  expired: { name: "Annonces suivies expirées", text: "Une annonce à laquelle vous avez donné un statut n'est plus en ligne. Celles à trier disparaissent sans bruit de la carte et des cartes (la Liste les garde).", kind: "expired" },
+  price_drop: { name: "Baisses de prix", text: "Une annonce suivie baisse son prix (sauf les écartées).", kind: "price_drop" },
+  price_rise: { name: "Hausses de prix", text: "Une annonce suivie monte son prix (sauf les écartées).", kind: "price_rise" },
+  status: { name: "Statuts", text: "Sous offre, vendue ou retirée (sauf les écartées).", kind: "status" },
+  expired: { name: "Annonces suivies expirées", text: "Une annonce à laquelle vous avez donné un statut, sauf « Écarté », n'est plus en ligne. Celles à trier disparaissent sans bruit de la carte et des cartes (la Liste les garde).", kind: "expired" },
   audit: { name: "Nouveaux audits énergétiques", text: "Un audit énergétique récent de la zone : obligatoire pour vendre une maison ou un immeuble entier classé E, F ou G, souvent une vente proche.", kind: "audit" },
   permit: { name: "Nouveaux permis", text: "Un permis de construire, de démolir ou d'aménager autorisé dans la zone : un terrain, un programme neuf, des travaux à côté.", kind: "permit" },
 }

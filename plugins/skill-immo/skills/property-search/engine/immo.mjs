@@ -822,7 +822,11 @@ async function enrich() {
   console.log(`building data for ${await enrichAll(dir, s, ids)} of ${ids.length} listings`)
 }
 
+// the listings the user dropped (« Écarté »): out of the watch, the refresh, the link check and reread without --id
+const droppedOf = dir => listingsOf(dir).filter(l => l.my_status === 'dropped')
+
 // refresh -p <slug> [--spend n]: what changed since the last refresh — new listings, price drops, offers, expiries
+// (none of a listing dropped)
 async function refresh() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json')), before = Object.fromEntries(Object.keys(SOURCES).map(k => [k, numbersOf(dir, k)]))
   const { area } = await freeData(dir, s)
@@ -846,7 +850,7 @@ async function refresh() {
     console.log(`free data refreshed. ${streamOn(s) ? `No Stream Estate fetch yet: fetch -p ${s.slug}` : s.mode === 'classic' ? 'OpenData search' : 'Stream Estate is off'}${assistedCount ? `; ${assistedCount} assisted listings: check each with WebFetch (one page), then add --file to update price or status` : ''}`)
     return await dpe()
   }
-  const queries = seQueries(s, { since: s.last_refresh }), total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? profile().max_fetch))
+  const queries = seQueries(s, { since: s.last_refresh, known: droppedOf(dir) }), total = await withCredits(() => seCount(s.slug, queries)), n = Math.min(total, +(opt.max ?? profile().max_fetch))
   if (n) approve('GET /documents/properties', n, `refresh ${n} changed listings`)
   const raw = n ? await withCredits(() => seFetch(s.slug, queries, n)) : []
   const changes = saveMerged(dir, raw.map(d => fromStreamEstate(d)))
@@ -859,12 +863,13 @@ async function refresh() {
 }
 
 // reread -p <slug> [--id <id,…>] [--spend n]: Stream Estate listings read again one by one (1 credit each): their
-// photos, price and adverts as the portals show them now, so that those gone expire. Without --id, those still online.
+// photos, price and adverts as the portals show them now, so that those gone expire. Without --id, those still online
+// and not dropped.
 // One Stream Estate no longer holds (404) expires.
 async function reread() {
   const dir = searchDir(), s = readJson(path.join(dir, 'search.json'))
   requireStream(s)
-  const ls = listingsOf(dir), todo = (opt.id ? opt.id.split(',').map(id => ls.find(l => l.id === id) ?? die(`no listing ${id} in ${s.slug}`)) : ls.filter(l => l.status !== 'EXPIRED')).filter(l => l.se_id)
+  const ls = listingsOf(dir), todo = (opt.id ? opt.id.split(',').map(id => ls.find(l => l.id === id) ?? die(`no listing ${id} in ${s.slug}`)) : ls.filter(l => l.status !== 'EXPIRED' && l.my_status !== 'dropped')).filter(l => l.se_id)
   if (!todo.length) return console.log('reread: no Stream Estate listing to read again')
   approve('GET /documents/properties/{id}', todo.length, `reread ${todo.length} listings`)
   const raw = [], gone = []
@@ -879,13 +884,13 @@ async function reread() {
   for (const c of changes) console.log(`  ${c.id} ${c.kind}: ${c.from} → ${c.to}`)
 }
 
-// The pages of the listings still online, once a day (the watch): an advert whose page is gone (lib/listings.js
+// The pages of the listings still online and not dropped, once a day (the watch): an advert whose page is gone (lib/listings.js
 // linkGone) is marked so, and a listing all of whose adverts are gone expires (merge). The pages are read first, then
 // listings.json is read and written at once (the user may change a status meanwhile). Returns the changes, with their
 // listing, for the alerts. IMMO_LINKS=0 turns it off (the tests and the demo: their links are made up).
 async function checkLinks(dir) {
   if (process.env.IMMO_LINKS === '0') return []
-  const day = Date.now() - 20 * 3600000, urls = [...new Set(listingsOf(dir).filter(l => l.status !== 'EXPIRED')
+  const day = Date.now() - 20 * 3600000, urls = [...new Set(listingsOf(dir).filter(l => l.status !== 'EXPIRED' && l.my_status !== 'dropped')
     .flatMap(l => l.urls.filter(u => u.url && !deadAd(u, l.read_at ?? l.first_seen) && !(Date.parse(u.checked_at ?? 0) > day)).map(u => u.url)))]
   const found = new Map((await pool(urls, 4, async u => [u, await linkGone(u)])))
   const at = now(), ls = listingsOf(dir)
@@ -1327,14 +1332,15 @@ async function watch(dir) {
     const last = [s.stream, feedOf(dir).stream].filter(Boolean).sort((a, b) => b.counted_at.localeCompare(a.counted_at))[0]
     if (total > (last?.total ?? 0)) api.added = total - (last?.total ?? 0)
     if (total !== last?.total) extra.stream = { total, counted_at: now() }
-    // the fetched ones that changed on the portals since the last refresh (price, status, expiry, text): what the
-    // refresh's queries match, less the same without them. Counted again from 0 after each refresh.
+    // the fetched ones that changed on the portals since the last refresh (price, status, expiry, text), the dropped
+    // ones left out: what the refresh's queries match (`refresh`: what it would fetch, new ones too), less the same
+    // without the fetched ones. Counted again from 0 after each refresh.
     const since = s.last_refresh
     if (since && windows.some(w => w.ids.length)) {
-      const changed = await count(seQueries(s, { since })) - await count(seQueries(s, { since, windows }))
+      const all = await count(seQueries(s, { since, known: droppedOf(dir) })), changed = all - await count(seQueries(s, { since, windows }))
       const was = feedOf(dir).changed, prev = was?.since === since ? was.total : 0
       if (changed > prev) api.changed = changed - prev
-      if (changed !== prev || was?.since !== since) extra.changed = { since, total: changed, counted_at: now() }
+      if (changed !== prev || was?.since !== since || was.refresh !== all) extra.changed = { since, total: changed, refresh: all, counted_at: now() }
     }
   }
   addNews(dir, news, Object.keys(extra).length ? extra : undefined)

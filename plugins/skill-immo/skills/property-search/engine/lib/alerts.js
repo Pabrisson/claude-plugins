@@ -27,14 +27,16 @@ export const PERMITS = ['build', 'demolish', 'develop']
 const LISTING = ['new', 'price_drop', 'price_rise', 'status', 'expired'], HOME = ['dpe', 'audit', ...LISTING]
 
 // the default alerts: alerts.json keeps only the ids turned off (`off`), so a default added later is on
+// A listing the user dropped (« Écarté ») is out of the watch: none of its changes is news
+const kept = { field: 'my_status', op: 'not', value: 'dropped' }
 export const DEFAULTS = [
   { id: 'dpe', event: 'dpe', conditions: [{ field: 'criteria', op: 'is', value: true }] },
   { id: 'new', event: 'new', conditions: [] },
-  { id: 'price_drop', event: 'price_drop', conditions: [] },
-  { id: 'price_rise', event: 'price_rise', conditions: [] },
-  { id: 'status', event: 'status', conditions: [] },
-  // a listing gone that the user follows (a status of theirs): the others leave the map and the cards quietly
-  { id: 'expired', event: 'expired', conditions: [{ field: 'my_status', op: 'not', value: 'none' }] },
+  { id: 'price_drop', event: 'price_drop', conditions: [kept] },
+  { id: 'price_rise', event: 'price_rise', conditions: [kept] },
+  { id: 'status', event: 'status', conditions: [kept] },
+  // a listing gone that the user follows (a status of theirs, but « Écarté »): the others leave the map and the cards quietly
+  { id: 'expired', event: 'expired', conditions: [{ field: 'my_status', op: 'not', value: 'none' }, kept] },
   // every new energy audit and building permit of the zone (1.10)
   { id: 'audit', event: 'audit', conditions: [] },
   { id: 'permit', event: 'permit', conditions: [] },

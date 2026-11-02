@@ -18,7 +18,7 @@ A refresh only brings what Stream Estate changed: a listing that left the portal
 dashboard server's daily link check finds its pages gone (free; Leboncoin and SeLoger never answer it). To check some
 at once, or to get their full photo galleries (listings fetched before 1.20 have 1 to 5 photos),
 `immo.mjs reread -p <slug> [--id <id,…>]`: each listing read again, 1 credit each (the credits rule), those still online
-without `--id`; the ones gone expire. The dashboard's list offers it on the rows ticked (« Relire sur l'API »).
+and not dropped without `--id`; the ones gone expire. The dashboard's list offers it on the rows ticked (« Relire sur l'API »).
 
 Its DPE line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
 refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or
@@ -47,6 +47,11 @@ joining people to homes is not allowed.
 
 ## The dashboard server's watch
 
+A listing the user dropped (« Écarté ») is out of the follow-up: the watch, its counts and its link check skip it, a
+refresh leaves it out of its queries (it pays nothing for it), and no default alert takes its changes. It stays in the
+list (« Écartées »), the map and the board. Taken back (another status), only its later changes come: `reread --id` to
+read it again now.
+
 While the dashboard server runs (`dashboard` starts it, it stops once every agent it worked for has quit), it watches
 every search, free: at its start, then every 6 hours (« Réglages »: off, 30 min, 1 h, 6 h, 12 h, 24 h; the header
 counts down to the next one, and pauses or resumes it: a pause keeps the period). It reads the zone's new DPE that no listing matches, its new energy audits and building
@@ -54,7 +59,8 @@ permits, the same at the places of the user's alerts (outside the zone too), rel
 of the search's commune that the « Prospection » and « Cadastre » maps show (as fresh as the news; their other communes
 a week) and, in Stream Estate mode, counts (free,
 no item returned) the listings not
-fetched yet and the fetched ones that changed on the portals since the last refresh. The news go to
+fetched yet and the fetched ones that changed on the portals since the last refresh, with what « Actualiser » would
+fetch (its badge: those changed and the new ones, up to the most a fetch takes). The news go to
 `<slug>/feed.json`; those the search's alerts take get a desktop notification (« Réglages »: on or off, sound, quiet
 hours). The counts are no news: « Suivi » shows them in a bar with « Récupérer » and « Actualiser », through the
 credits dialog. In the dashboard, the bell counts what is not read and opens the latest, and « Suivi » lists the news
@@ -90,9 +96,9 @@ an address, a commune (ADEME and Sitadel, free).
 - `alerts.json` (`lib/alerts.js`): which news reach « Suivi », the bell, the desktop notifications and refresh's
   `alerts:` line. A news shows when one alert that is on takes it: its event, its place, and every condition holds.
   - `off[]`: the default alerts turned off, by id: `dpe` (its condition: `criteria` is true), `new`, `price_drop`,
-    `price_rise`, `status`, `expired` (its condition: `my_status` is not `none`: only a listing the user follows; one
-    still to sort leaves the map, the cards and the board quietly, the list keeps it), `audit`, `permit` (every new one
-    of the zone). Each is on until turned off.
+    `price_rise`, `status` (their condition: `my_status` is not `dropped`), `expired` (its conditions: `my_status` is
+    not `none` nor `dropped`: only a listing the user follows; one still to sort leaves the map, the cards and the board
+    quietly, the list keeps it), `audit`, `permit` (every new one of the zone). Each is on until turned off.
   - `custom[] { id (letters, digits, - and _), name, event, place, conditions[] { field, op, value }, enabled }`: the
     user's own, 50 at most, 10 conditions each. `event` is `dpe`, `audit`, `permit`, `new`, `price_drop`,
     `price_rise`, `status` or `expired`.

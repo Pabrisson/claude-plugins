@@ -36,7 +36,7 @@ test('the watch: a DPE at an alert outside the zone, the changed listings counte
   // the G one the alert had not seen; the C one fails its condition
   assert.deepEqual(s.feed.items.map(n => [n.dpe.number, n.outside]), [['NEW1', true]])
   assert.equal(s.unread, 1)
-  assert.deepEqual([s.feed.changed.since, s.feed.changed.total], ['2026-10-20T10:00:00.000Z', 1])
+  assert.deepEqual([s.feed.changed.since, s.feed.changed.total, s.feed.changed.refresh], ['2026-10-20T10:00:00.000Z', 1, 1])
   // the counts paid nothing; the automatic refresh paid its one item, marked as the watch's
   const log = JSON.parse(fs.readFileSync(usage, 'utf8'))
   assert.deepEqual(log.map(e => [e.route, e.credits, e.by]), [['GET /documents/properties', 0, 'auto'], ['GET /documents/properties', 0, 'auto'], ['GET /documents/properties', 1, 'auto']])

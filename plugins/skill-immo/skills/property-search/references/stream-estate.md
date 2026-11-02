@@ -113,7 +113,8 @@ pushed them to a random ntfy.sh topic; since 1.8 the alerts are the dashboard's 
 free counts instead:
 - the listings of the zone not fetched yet: `expired=false`, `fromUpdatedAt` 90 days back, the fetched ones excluded;
 - the fetched ones that changed since the last refresh: the refresh's two queries (`fromUpdatedAt`, then
-  `expired=true&fromExpiredAt=`), less the same with the fetched ones excluded (over their windows).
+  `expired=true&fromExpiredAt=`, the dropped ones excluded, as the refresh does), less the same with the fetched ones
+  excluded (over their windows).
 
 Each is a count (`itemsPerPage=0`): no item, no credit. They say how many, not which: the refresh (paid per item) does,
 by hand (« Suivi »'s bar) or by the automatic fetch the user turns on in « Réglages », within its monthly credits.

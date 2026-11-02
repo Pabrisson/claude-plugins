@@ -81,8 +81,8 @@ history stay.
     by the BAN; any search.
 - `feed.json`: `read_at` (all read up to then) and `read[]` (the keys of news read one by one: `<kind>-<date>-<listing
   id | DPE, audit or permit number>`), the news newest first (`items[]`, 500 at most), and the server's last counts of the API (`stream
-  { total, counted_at }`: listings not fetched yet; `changed { since, total, counted_at }`: fetched ones changed on the
-  portals since `last_refresh`, the last 60 fetched), shown in « Suivi »'s bar. A news is `{ date, kind, … }`:
+  { total, counted_at }`: listings not fetched yet; `changed { since, total, refresh, counted_at }`: fetched ones changed on the
+  portals since `last_refresh`, the dropped ones left out, and all that a refresh would fetch, new ones too), shown in « Suivi »'s bar. A news is `{ date, kind, … }`:
   - `dpe { … }`: a DPE of `dpe_recent` new since the last one, that no listing matches (any home type and criteria);
   - `dpe { … }, outside: true`: a new DPE at the place of one of the user's alerts, outside the zone;
   - `audit { … }`, `permit { … }`: a new energy audit or building permit of the zone (a row of `audit_recent`,

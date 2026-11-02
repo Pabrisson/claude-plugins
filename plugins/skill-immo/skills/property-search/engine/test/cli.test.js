@@ -60,6 +60,10 @@ test('reread: the listings online read again one by one, a credit each, logged; 
   try { r = await run(home, ['reread', '-p', 'paul-bert', '--spend', '1']) } finally { delete api.state.deleted }
   assert.match(r.out, /1 expired/)
   assert.equal(read(dir, 'listings.json')[0].status, 'EXPIRED')
+  // a dropped one is read again with --id only
+  fs.writeFileSync(path.join(dir, 'listings.json'), JSON.stringify(read(dir, 'listings.json').map(l => ({ ...l, status: 'AVAILABLE', my_status: 'dropped' }))))
+  assert.match((await run(home, ['reread', '-p', 'paul-bert'])).out, /no Stream Estate listing/)
+  fs.writeFileSync(path.join(dir, 'listings.json'), JSON.stringify(read(dir, 'listings.json').map(l => ({ ...l, status: 'EXPIRED' }))))
   // nothing left online: nothing to read, nothing paid
   assert.match((await run(home, ['reread', '-p', 'paul-bert'])).out, /no Stream Estate listing/)
 })
@@ -116,6 +120,15 @@ test('refresh: what changed since the last one, a price drop logged', async () =
   const [changed, gone] = api.seen.filter(x => x.query?.get('itemsPerPage') === '0').slice(-2).map(x => x.query)
   assert.ok(changed.get('fromUpdatedAt') && changed.get('expired') === 'false' && gone.get('fromExpiredAt') && gone.get('expired') === 'true')
   assert.deepEqual(read(dir, 'listings.json')[0].price_history.map(h => h.price), [280000, 265000])
+  // dropped (« Écarté »), it is left out of the refresh: nothing to pay, its price stays
+  fs.writeFileSync(path.join(dir, 'listings.json'), JSON.stringify(read(dir, 'listings.json').map(l => ({ ...l, my_status: 'dropped' }))))
+  api.state.price = 250000
+  const again = await run(home, ['refresh', '-p', 'paul-bert'])
+  delete api.state.price
+  assert.equal(again.status, 0, again.err)
+  assert.match(again.out, /refresh: 0 changed/)
+  assert.deepEqual(api.seen.findLast(x => x.query?.get('itemsPerPage') === '0').query.getAll('excludedProperties[]'), [property.uuid])
+  assert.equal(read(dir, 'listings.json')[0].price, 265000)
 })
 
 test('the recent DPE of the zone: kept in area.json, those without a listing, the new ones at the next refresh', async () => {

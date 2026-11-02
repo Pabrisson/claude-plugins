@@ -27,6 +27,8 @@ test('the default alerts: on, the DPE one keeps the search criteria, an expiry o
   // an expiry is news when the user follows the listing (a status of theirs), not when it waits to be sorted
   assert.deepEqual(firing(on, { ...drop({ my_status: 'to_visit' }), kind: 'expired' }, s).map(a => a.id), ['expired'])
   assert.deepEqual(firing(on, { ...drop(), kind: 'expired' }, s), [])
+  // a listing dropped (« Écarté ») is out of the watch: no price change, status nor expiry of it is news
+  for (const kind of ['price_drop', 'price_rise', 'status', 'expired']) assert.deepEqual(firing(on, { ...drop({ my_status: 'dropped' }), kind }, s), [], kind)
   assert.deepEqual(firing(alertsOf({ off: ['price_drop'] }), drop(), s), [])
   // every audit and permit of the zone, whatever the criteria (a whole building of 530 m²)
   assert.deepEqual(firing(on, audit(), s).map(a => a.id), ['audit'])
