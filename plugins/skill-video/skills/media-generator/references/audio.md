@@ -15,9 +15,11 @@ Audio has Create and Edit tools like images and videos. ElevenLabs is reached st
 dialogues, Change voice, Translate, its sound effects, Eleven Music, Music for a video, stems, Design and Remix a voice,
 Transcribe, in its credits), whichever router is active; without its key, the active router's ElevenLabs voices stand in
 (OpenRouter: Eleven v4, v4 Turbo, v3, Multilingual v2, Flash and Turbo v2.5; Kie: Eleven v3 Dialogue, Multilingual v2,
-Turbo v2.5), and none of the others. Suno's and Lyria's music and sounds come by the router. ElevenLabs lists no price
-for stems, voice design, music for a video and alignment: their estimate is unknown (the user's yes, then
-`--accept-unknown`), what it billed shows after.
+Turbo v2.5), and none of the others. Suno's and Lyria's music and sounds come by the router. ElevenLabs' free plan
+refuses in its API (nothing billed, its words shown) Eleven Music, Music for a video, its stems, Design and Remix a
+voice: a paid plan; voices, dialogues, sound effects and Transcribe run on it (tested 2026-11-02). Every ElevenLabs tool is
+priced before it runs (its credits), except a voice designed or remixed without its text (it writes its own: priced
+after, a credit a character; the user's yes, then `--accept-unknown`).
 
 - **Speech** (`audio --tool voice`): `--prompt` is the text read. ElevenLabs' models come first, straight from its API
   (Eleven v4 by default, then v4 Turbo, v3, v3 Conversational, Multilingual v2, Flash and Turbo v2.5); the active
@@ -78,17 +80,19 @@ for stems, voice design, music for a video and alignment: their estimate is unkn
     first 30 s uploaded and paid as a song of that length, `--option condition_strength=low|medium|high|xhigh`). No
     images, video nor singer (Suno's). Write: `--field style=…` (needed) and `--field lyrics="[Verse]\n…"`, each
     `[section]` played as written (30 lines, 2 min at most each), `--field length=` shared over them, else 4 s a line
-    (10 s at least a section, an instrumental 30 s). The song's id is kept with the job (`eleven.song_id`).
-- **Music for a video** (`audio --tool music-video --in video=<file>`, ElevenLabs, any router, priced after: about 15
-  credits a second of video): music to its cuts and mood, 10 min and 200 MB at most. `--field description="…"`, `--field
+    (10 s at least a section, an instrumental 30 s). `--seed` with a plan only (Write, a sound reference); v1:
+    `--option respect_sections_durations=off` lets it adjust them. `--option sign_with_c2pa=on` signs the MP3 as made
+    by AI (Content Credentials; Music for a video and stems too). The song's id is kept with the job (`eleven.song_id`).
+- **Music for a video** (`audio --tool video-music --in video=<file>`, ElevenLabs, any router, 15 credits a second of
+  video, Eleven Music's rate): music to its cuts and mood, 10 min and 200 MB at most. `--field description="…"`, `--field
   style="cinematic, strings"` (its tags, 10 at most), `--option add_sfx=on` (its sound effects too),
   `separate_tracks=on` (`music.mp3` and `sfx.mp3` apart), `use_audio_as_reference=on` (the video's own sound sets the
   genre, tempo and mood). The timeline's « Generate » on a video clip offers it.
 - **Sound effect** (Kie: Suno Sounds, $0.0125, the default there; ElevenLabs SFX v2, the default on OpenRouter, or SFX
   v3, limited access: any router): `--prompt "rain on a tin roof"`. Suno (500 characters): `--option
   version=V6|V6_MINI|V6_WILD`, `sound_loop=on`, `sound_tempo=1..300` (0: its own), `sound_key=Am`, `grab_lyrics=on`.
-  ElevenLabs (`--model eleven_text_to_sound_v2`): `--option duration_seconds=0.5..30` (40 credits a second; 0, its own
-  length: 200), `loop=on`, `prompt_influence=0..1` (0.3). Short effects come out quiet or off: listen, regenerate with
+  ElevenLabs (`--model eleven_text_to_sound_v2`): `--option duration_seconds=0.5..30` (10 credits a second; 0, its own
+  length: 50), `loop=on`, `prompt_influence=0..1` (0.3). Short effects come out quiet or off: listen, regenerate with
   « isolated, studio quality, close-miked, no background noise » after the words.
 - **Edit** (Kie): `--in clip=<a sound>`; a sound sent whole (not a Suno take) lasts 6 s at least. Extend music (a Suno take goes on by its id, any other sound sent whole;
   `--field from=60`, else its end; style, lyrics, vocals, singer), Cover (the melody in another style, other words or
@@ -97,27 +101,30 @@ for stems, voice design, music for a video and alignment: their estimate is unkn
   start=30 --field end=45`, 10 s at least, `--field change="…"`, its new words, a singer; $0.025); Stems (a Suno song: `--field
   split=separate_vocal` voice + music $0.05, `split_stem` up to 12 $0.25, `split_stem_advanced --field
   instrument="Lead Vocal"` one instrument: each take's instrument alone and the song without it, $0.10). Stems of any
-  song, not only Suno's: `--model eleven_stem_separation` (ElevenLabs, any router, priced after), `split=separate_vocal`
-  (voice + music) or `split_stem` (6: vocals, drums, bass, guitar, piano, other); no single instrument.
+  song, not only Suno's: `--model eleven_stem_separation` (ElevenLabs, any router), `split=separate_vocal` (voice +
+  music, 7.5 credits a second of song) or `split_stem` (6: vocals, drums, bass, guitar, piano, other, 15 a second), or
+  its own option `--option stem_variation_id=two_stems_v1|six_stems_v1` (the dashboard's Tracks); no single instrument.
 - **Isolate voice** (`audio --tool isolate-voice --in clip=<audio or video>`, always ElevenLabs straight, whichever
   router, 1,000 credits a minute): the voice alone, music, noise and room taken out; a video comes back with its voice
   alone, a sound as an MP3. Kie's Voice Isolator is discontinued.
 - **Design a voice** (`audio --tool design-voice --field description="a warm, low female voice, French, late
-  thirties, calm"`, ElevenLabs, any router, priced after): 3 previews, `voice-1.mp3` to `voice-3.mp3`. `--field
-  text="…"` (100 to 1,000 characters) is what they say, else it writes its own. Voice Design v3 by default
-  (`eleven_ttv_v3`, `--in reference=<a voice clip>` to start from, `--option prompt_strength=0..1`), or v2
-  (`eleven_multilingual_ttv_v2`); `--option loudness=-1..1`, `guidance_scale=0..10`, `should_enhance=on`. The one the
+  thirties, calm"`, ElevenLabs, any router): 3 previews, `preview-1.mp3` to `preview-3.mp3`. `--field text="…"` (100 to
+  1,000 characters) is what they say, a credit a character once for the 3; else it writes its own, priced after.
+  Voice Design v3 by default (`eleven_ttv_v3`, `--in reference=<a voice clip>` to start from, `--option
+  prompt_strength=0..1`), or v2
+  (`eleven_multilingual_ttv_v2`); `--option loudness=-1..1`, `guidance_scale=0..10`, `should_enhance=on`, `--seed`. The one the
   user likes is kept: `media.mjs elements keep <name> --from <generation> --take 2` (free: a voice of the ElevenLabs
   account, no clone, and of the Library with its id; the viewer's « Keep this voice »). Then Voice, Change voice and
   the others take `--voice @<name>`.
 - **Remix a voice** (`audio --tool remix-voice --voice <voice_id or @name> --field description="older, a British
-  accent"`, ElevenLabs, priced after): the same 3 previews of the voice changed, kept the same way. A voice of the
-  Library not on the account yet is put there first (a paid plan's clone); one kept from Design a voice is there.
-- **Transcribe** (`audio --tool transcribe --in clip=<audio or video>`, ElevenLabs' Scribe v2, any router, 330 credits
+  accent"`, ElevenLabs, priced as Design a voice): the same 3 previews of the voice changed, kept the same way. Only a
+  voice of the user's own (designed, kept, cloned): a premade one is refused. A voice of the Library not on the account
+  yet is put there first (a paid plan's clone); one kept from Design a voice is there.
+- **Transcribe** (`audio --tool transcribe --in clip=<audio or video>`, ElevenLabs' Scribe v2, any router, 67 credits
   a minute): `transcript.txt`, `captions.srt` and `words.json` (each word's time). `--option diarize=on` (each
-  speaker's turn: « Speaker 1: … »), `tag_audio_events=on` ((laughter)…), `no_verbatim=on` (no ums),
+  speaker's turn: « Speaker 1: … », `num_speakers=2` at most so many), `tag_audio_events=on` ((laughter)…), `no_verbatim=on` (no ums), `--seed`,
   `language_code=fr`; `--field keyterms="Lucie, Kie.ai"` (names to get right). With `--field text="<the words said>"`
-  its words are timed exactly instead (forced alignment, priced after): captions of a known script.
+  its words are timed exactly instead (forced alignment, a transcript's rate): captions of a known script.
 - **A Suno song's extras** (Kie, its viewer's actions; `--in clip=<a take>`): `--tool wav` ($0.002 a track; a stem of the
   Stems tool too; several `--in clip=` make one job, a WAV per track named after it: the viewer's « All in WAV »), `--tool
   lyrics-timings` (each sung word with its time: `lyrics.srt`, `lyrics.json`, $0.0025), `--tool music-video` (an MP4

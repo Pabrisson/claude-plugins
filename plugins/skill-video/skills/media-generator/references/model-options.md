@@ -16,7 +16,9 @@ them; the dashboard shows the same in its Options block and editors.
   `filler_words=on`, `pe_fast_mode=on`, `keep_original_sound=on`, `audio_setting=origin`, `personGeneration=allow_adult`,
   `enable_translation=off`, `loop=on` (Grok: its first frame ends it too), `reference_link_urls=<a public page>` or
   `reference_file_urls=<a PDF, Word, slides…>` (Wan 3.0: a video made from it). OpenRouter's go under its provider's
-  name by themselves. One the model lacks is refused with its list.
+  name by themselves. One the model lacks is refused with its list. A model Kie's catalog adds (`new, from the
+  catalog`) has the inputs of its docs page beyond the shared fields as its options (their names, values, ranges and
+  defaults as the page gives them); its files, masks and ids are left out (its `skip` says so).
 - **Shots** (Kling 3.0 and 3.0 Omni on Kie): `--shot "<seconds>: <words>"`, one a shot in order (1 to 12 s each, their
   sum a length the model makes, 15 s at most), with `--tool free`; `@names` work in them.
 - **Middle frames** (Kling 4.0: up to 8, in order, cited `@keyframe_1`…; Grok Imagine Video: up to 4, each at its time):

@@ -76,49 +76,76 @@ function optionsOf(m, catalog) {
     id !== 'eleven_multilingual_v2' && (m.languages?.length ?? 0) > 1 && { key: 'language_code', label: 'Language', type: 'select', values: m.languages.map(l => ({ value: l.language_id, label: l.name })), default: '', hint: 'read in this language; Auto follows the text' },
     { key: 'apply_text_normalization', label: 'Numbers and dates', type: 'choice', values: [{ value: 'auto', label: 'Auto' }, { value: 'on', label: 'Spelled out' }, { value: 'off', label: 'As written' }], default: 'auto' },
     ...effectOptions(catalog),
+    // one voice's continuity with the words around it (a dialogue takes none)
+    { key: 'previous_text', label: 'Said before', type: 'text', hint: 'one voice: the words just before, for its tone to follow on' },
+    { key: 'next_text', label: 'Said after', type: 'text', hint: 'one voice: the words just after' },
+    yes('apply_language_text_normalization', 'Language normalization', 'one voice: proper reading in some languages (Japanese), much slower'),
   ].filter(Boolean)
 }
+// what its API takes that is left out, and why (2026-11-02): text to speech's pronunciation_dictionary_locators (no
+// dictionary of the user's here), previous_request_ids and next_request_ids (requests stitched: one job is one request),
+// use_pvc_as_ivc (professional voices), output_format (MP3 at 128 kb/s on every plan), optimize_streaming_latency (no
+// stream); music's finetune_id (finetunes are made in its app), store_for_inpainting (no inpainting tool); voice design's
+// quality (no range published), stream_previews and its remixing sessions (one design is one request); Scribe's
+// diarization_threshold (no range published), use_multi_channel, additional_formats (the SRT is made here),
+// entity_detection, entity_redaction, transcript_edit, cloud_storage_url, webhook (a file in, its words out)
 
 // beyond speech: each model, what it makes (its role) and its own settings
 const LOUDNESS = slider('loudness', 'Loudness', -1, 1, 0.05, 0.5, '0 is about -24 LUFS')
 const STRENGTH = slider('prompt_strength', 'Words or reference', 0, 1, 0.05, 0.5, 'with a reference clip: 0 keeps to the clip, 1 to the words')
 const SFX = [
-  slider('duration_seconds', 'Length', 0, 30, 0.5, 0, '0: its own; set, 40 credits a second'),
+  slider('duration_seconds', 'Length', 0, 30, 0.5, 0, '0: its own (50 credits); set, 10 credits a second'),
   yes('loop', 'Loop', 'its end runs seamlessly into its start'),
   slider('prompt_influence', 'Prompt influence', 0, 1, 0.05, 0.3, 'higher follows the words more closely, lower varies more'),
 ]
+// Content Credentials: an MP3 signed as made by AI
+const C2PA = yes('sign_with_c2pa', 'Content Credentials', 'the MP3 signed with C2PA as made by AI')
 const MUSIC = v1 => [
   { key: 'length', label: 'Length (s)', type: 'number', min: 0, max: 600, step: 5, default: 30, hint: 'Describe\'s length, 0: its own (priced after); Write takes its Length field' },
-  ...(v1 ? [] : [{ key: 'condition_strength', label: 'Sound reference', type: 'choice', values: ['low', 'medium', 'high', 'xhigh'].map(v => ({ value: v, label: v === 'xhigh' ? 'Very high' : v[0].toUpperCase() + v.slice(1) })), default: 'medium', hint: 'with a sound given: how closely it keeps to it' }]),
+  ...(v1 ? [yes('respect_sections_durations', 'Section lengths kept', 'Write: each section as long as planned; off, the model may adjust them', true)]
+    : [{ key: 'condition_strength', label: 'Sound reference', type: 'choice', values: ['low', 'medium', 'high', 'xhigh'].map(v => ({ value: v, label: v === 'xhigh' ? 'Very high' : v[0].toUpperCase() + v.slice(1) })), default: 'medium', hint: 'with a sound given: how closely it keeps to it' }]),
+  C2PA,
 ]
 const MORE = [
   { model: 'eleven_text_to_sound_v2', name: 'Eleven SFX v2', role: 'sound', options: SFX },
   { model: 'eleven_text_to_sound_v3', name: 'Eleven SFX v3', role: 'sound', options: SFX, note: 'limited access: an account without it is told « Unknown model »' },
-  { model: 'music_v2_5', name: 'Eleven Music v2.5', role: 'music', options: MUSIC(false) },
-  { model: 'music_v2', name: 'Eleven Music v2', role: 'music', options: MUSIC(false) },
-  { model: 'music_v1', name: 'Eleven Music v1', role: 'music', options: MUSIC(true) },
+  // a seed only with a plan (Write, a sound reference)
+  { model: 'music_v2_5', name: 'Eleven Music v2.5', role: 'music', options: MUSIC(false), seed: true },
+  { model: 'music_v2', name: 'Eleven Music v2', role: 'music', options: MUSIC(false), seed: true },
+  { model: 'music_v1', name: 'Eleven Music v1', role: 'music', options: MUSIC(true), seed: true },
   { model: 'eleven_video_to_music', name: 'Eleven Video to Music', role: 'video-music', options: [
     yes('add_sfx', 'Sound effects', 'its cues taken from the picture'),
     yes('separate_tracks', 'Separate tracks', 'the music and the effects as two files'),
     yes('use_audio_as_reference', 'Follow its sound', 'the video\'s own sound sets the genre, the tempo and the mood'),
+    C2PA,
   ] },
-  { model: 'eleven_stem_separation', name: 'Eleven Stem Separation', role: 'stems', options: [] },
-  { model: 'eleven_ttv_v3', name: 'Eleven Voice Design v3', role: 'design', options: [LOUDNESS, slider('guidance_scale', 'Prompt adherence', 0, 10, 0.5, 5, 'higher keeps to the words, too high sounds artificial'), yes('should_enhance', 'Enhance the description', 'ElevenLabs writes it out richer'), STRENGTH] },
-  { model: 'eleven_multilingual_ttv_v2', name: 'Eleven Voice Design v2', role: 'design', options: [LOUDNESS, slider('guidance_scale', 'Prompt adherence', 0, 10, 0.5, 5, 'higher keeps to the words, too high sounds artificial'), yes('should_enhance', 'Enhance the description', 'ElevenLabs writes it out richer')] },
-  { model: 'eleven_voice_remix', name: 'Eleven Voice Remix', role: 'remix', options: [LOUDNESS, slider('guidance_scale', 'Prompt adherence', 0, 10, 0.5, 2, 'higher keeps to the words, too high sounds artificial'), STRENGTH] },
-  { model: 'scribe_v2', name: 'Scribe v2', role: 'transcribe', options: [
+  { model: 'eleven_stem_separation', name: 'Eleven Stem Separation', role: 'stems', options: [
+    { key: 'stem_variation_id', label: 'Tracks', type: 'choice', values: [{ value: 'two_stems_v1', label: 'Voice + music', icon: 'split' }, { value: 'six_stems_v1', label: '6 tracks', icon: 'layers' }], default: 'two_stems_v1', hint: '6: vocals, drums, bass, guitar, piano and the rest' },
+    C2PA,
+  ] },
+  { model: 'eleven_ttv_v3', name: 'Eleven Voice Design v3', role: 'design', seed: true, options: [LOUDNESS, slider('guidance_scale', 'Prompt adherence', 0, 10, 0.5, 5, 'higher keeps to the words, too high sounds artificial'), yes('should_enhance', 'Enhance the description', 'ElevenLabs writes it out richer'), STRENGTH] },
+  { model: 'eleven_multilingual_ttv_v2', name: 'Eleven Voice Design v2', role: 'design', seed: true, options: [LOUDNESS, slider('guidance_scale', 'Prompt adherence', 0, 10, 0.5, 5, 'higher keeps to the words, too high sounds artificial'), yes('should_enhance', 'Enhance the description', 'ElevenLabs writes it out richer')] },
+  { model: 'eleven_voice_remix', name: 'Eleven Voice Remix', role: 'remix', seed: true, options: [LOUDNESS, slider('guidance_scale', 'Prompt adherence', 0, 10, 0.5, 2, 'higher keeps to the words, too high sounds artificial'), STRENGTH] },
+  { model: 'scribe_v2', name: 'Scribe v2', role: 'transcribe', seed: true, options: [
     { key: 'language_code', label: 'Language', type: 'text', hint: 'its code (fr, en); empty: found by itself' },
     yes('diarize', 'Speakers', 'who speaks when, in the text and the captions'),
+    { key: 'num_speakers', label: 'How many speakers', type: 'number', min: 0, max: 32, step: 1, default: 0, hint: 'with Speakers: at most so many, 0: found by itself' },
     yes('tag_audio_events', 'Sound events', '(laughter), (applause) in the text'),
     yes('no_verbatim', 'Clean speech', 'no ums, false starts or noises'),
+    slider('temperature', 'Variety', 0, 2, 0.1, 0, 'higher reads it more freely; 0: its own'),
   ] },
 ]
 // its models beyond speech by their ids (music_v2_5, scribe_v2 are ElevenLabs' own too), for the tests of the tools' lists
 export const OWN_MODELS = new Set(MORE.map(m => m.model))
-// ponytail: ElevenLabs' public rates of 2026-10-26 (video-editor's): sound effects 40 credits a second, 200 at their
-// own length; music 15 a second; a transcript 330 a minute. No rate published for stems, voice design, the music of a
-// video nor the alignment: priced after, from what it says it billed
-const RATE = { sfx: 40, sfx_auto: 200, music: 15, transcript: 330 / 60 }
+// ponytail: ElevenLabs' rates of 2026-10-26 (video-editor's) and its docs of 2026-11-02, to update when they change:
+// sound effects 10 credits a second, 50 at their own length (billed so on 2026-11-02: 0.5 s 5, 2 s 20, its own 50;
+// the 40 and 200 of 2026-10-26 were dropped); music 15 a second (900 a minute), a sound reference
+// uploaded as much, the music of a video at that rate (no rate of its own published); stems half of it for voice +
+// music, all of it for 6 tracks (its blog: « 0.5× generation cost for 2 stems, 1× for 4 »); a transcript 67 a minute,
+// an alignment the same (« same rate as the Speech to Text API »), 67 a minute as billed on 2026-11-02 (3.5 s 4, 41 s
+// 46; the 330 of 2026-10-26 was 5 times too much); a voice designed or remixed a credit a character of
+// its text, once for its 3 previews
+const RATE = { sfx: 10, sfx_auto: 50, music: 15, transcript: 67 / 60 }
 
 // the list, straight from ElevenLabs (a free call): a new model shows by itself; read again once a day by a long-running
 // server. A key without models_read (a scoped one) gets the engine's copy of it, its languages named here
@@ -154,8 +181,10 @@ const audioEffects = o => {
 const only = (o, keys) => Object.fromEntries(keys.filter(k => o[k] != null && o[k] !== '').map(k => [k, o[k]]))
 // a voice's 3 previews (design, remix): their files, and the ids that keep one
 const previews = (j, r) => ({
-  files: j.previews.map((p, i) => ({ name: `voice-${i + 1}`, ext: 'mp3', data: Buffer.from(p.audio_base_64, 'base64') })),
-  keep: { voices: j.previews.map((p, i) => ({ file: `voice-${i + 1}.mp3`, generated_voice_id: p.generated_voice_id })) }, data: { text: j.text }, cost: billed(r),
+  files: j.previews.map((p, i) => ({ name: `preview-${i + 1}`, ext: 'mp3', data: Buffer.from(p.audio_base_64, 'base64') })),
+  keep: { voices: j.previews.map((p, i) => ({ file: `preview-${i + 1}.mp3`, generated_voice_id: p.generated_voice_id })) }, data: { text: j.text },
+  // what it billed, else a credit a character of the text they read (the one it wrote, too)
+  cost: billed(r) ?? (j.text ? j.text.length : null),
 })
 
 export default {
@@ -176,7 +205,7 @@ export default {
           max_chars: m.maximum_text_length_per_request ?? null, options: optionsOf(m, catalog) },
         pricing: { multiplier: (m.model_rates?.character_cost_multiplier ?? 1) * (m.model_rates?.cost_discount_multiplier ?? 1) },
       })),
-      ...MORE.map(m => ({ model: m.model, name: m.name, lab: 'ElevenLabs', kind, role: m.role, params: { options: m.options }, pricing: {}, ...(m.note ? { note: m.note } : {}) })),
+      ...MORE.map(m => ({ model: m.model, name: m.name, lab: 'ElevenLabs', kind, role: m.role, params: { options: m.options, ...(m.seed ? { seed: true } : {}) }, pricing: {}, ...(m.note ? { note: m.note } : {}) })),
     ]
   },
 
@@ -192,13 +221,22 @@ export default {
       ? { amount: Math.ceil(req.seconds * RATE.sfx), unit: 'credits', known: true, detail: `${secs(req.seconds)} × ${RATE.sfx} credits` }
       : { amount: RATE.sfx_auto, unit: 'credits', known: true, detail: 'its own length' }
     if (m.role === 'music') {
-      if (!req.seconds) return unknown(`${RATE.music} credits a second, its length its own`)
+      if (!req.seconds) return unknown(`per second, ${RATE.music} credits, its length its own`)
       const all = req.seconds + (req.reference ?? 0)
       return { amount: Math.ceil(all * RATE.music), unit: 'credits', known: true, detail: `${secs(req.seconds)}${req.reference ? ` + its ${secs(req.reference)} sound reference` : ''} × ${RATE.music} credits` }
     }
-    if (m.role === 'video-music') return { amount: req.seconds ? Math.ceil(req.seconds * RATE.music) : null, unit: 'credits', known: false, detail: `about Eleven Music's ${RATE.music} credits a second${req.seconds ? ` for ${secs(req.seconds)} of video` : ''}: ElevenLabs lists no rate of its own` }
-    if (m.role === 'transcribe' && !req.align) return { amount: Math.ceil((req.seconds ?? 0) * RATE.transcript), unit: 'credits', known: true, detail: `${secs(req.seconds ?? 0)} at 330 credits a minute` }
-    return unknown(`ElevenLabs lists no rate for ${{ stems: 'stems', design: 'a voice designed', remix: 'a voice remixed', transcribe: 'an alignment' }[m.role] ?? 'it'}: what it took shows after`)
+    if (m.role === 'video-music') return req.seconds
+      ? { amount: Math.ceil(req.seconds * RATE.music), unit: 'credits', known: true, detail: `${secs(req.seconds)} of video × ${RATE.music} credits, Eleven Music's rate` }
+      : unknown(`per second of video, ${RATE.music} credits`)
+    if (m.role === 'stems') {
+      const x = req.variation === 'six_stems_v1' ? 1 : 0.5
+      return req.seconds ? { amount: Math.ceil(req.seconds * RATE.music * x), unit: 'credits', known: true, detail: `${secs(req.seconds)} of song × ${RATE.music * x} credits (${x === 1 ? '6 tracks: a song\'s rate' : 'voice + music: half a song\'s rate'})` }
+        : unknown(`per second of song, ${RATE.music * x} credits`)
+    }
+    if (m.role === 'transcribe') return { amount: Math.ceil((req.seconds ?? 0) * RATE.transcript), unit: 'credits', known: true, detail: `${secs(req.seconds ?? 0)} at 67 credits a minute${req.align ? ', a transcript\'s rate' : ''}` }
+    // design, remix: its text, once for the 3 previews; one it writes itself is counted after
+    return req.chars ? { amount: req.chars, unit: 'credits', known: true, detail: `${req.chars} characters of its text, once for its 3 previews` }
+      : unknown('per character of the text it writes (100 to 1,000), once for its 3 previews')
   },
 
   // one voice, or a dialogue's lines (each its voice); the options as the API names them, its audio effects; the words'
@@ -209,9 +247,9 @@ export default {
     const r = dialogue?.length
       ? await post(`/v1/text-to-dialogue/with-timestamps?${MP3}`, { ...shared,
         inputs: dialogue.map(l => ({ text: l.text, voice_id: l.voice })), settings: { ...(stability != null ? { stability } : {}), ...(similarity_boost != null ? { similarity: similarity_boost } : {}) } })
-      : await post(`/v1/text-to-speech/${encodeURIComponent(voice)}/with-timestamps?${MP3}`, { ...shared, text, ...voiceSettings(options) })
+      : await post(`/v1/text-to-speech/${encodeURIComponent(voice)}/with-timestamps?${MP3}`, { ...shared, text, ...voiceSettings(options), ...only(options, ['previous_text', 'next_text', 'apply_language_text_normalization']) })
     const j = await r.json()
-    return { data: Buffer.from(j.audio_base64, 'base64'), format: 'mp3', cost: billed(r), words: wordsOf(j.alignment) }
+    return { data: Buffer.from(j.audio_base64, 'base64'), format: 'mp3', cost: billed(r), words: wordsOf(j.alignment, j.voice_segments) }
   },
 
   // beyond speech, by its action: its files (name, ext, data), what it billed, what the job keeps (a voice's ids)
@@ -237,21 +275,23 @@ export default {
         plan.chunks[0] = { ...plan.chunks[0], conditioning_ref: { song_id, range: { start_ms: 0, end_ms: Math.round(req.reference.seconds * 1000) } }, ...(o.condition_strength ? { condition_strength: o.condition_strength } : {}) }
       }
       progress('composing with Eleven Music…')
-      const r = await post(`/v1/music?${MP3}`, { model_id: req.model, ...(plan ? { composition_plan: plan } : { prompt: req.prompt, ...(req.length ? { music_length_ms: req.length * 1000 } : {}), ...(req.instrumental ? { force_instrumental: true } : {}) }) })
+      const r = await post(`/v1/music?${MP3}`, { model_id: req.model, ...only(o, ['sign_with_c2pa']),
+        ...(plan ? { composition_plan: plan, ...(req.seed != null ? { seed: req.seed } : {}), ...(req.model === 'music_v1' ? only(o, ['respect_sections_durations']) : {}) }
+          : { prompt: req.prompt, ...(req.length ? { music_length_ms: req.length * 1000 } : {}), ...(req.instrumental ? { force_instrumental: true } : {}) }) })
       const song = r.headers.get('song-id')
       return { ...(await one(r)), ...(song ? { keep: { eleven: { song_id: song } } } : {}) }
     }
     if (req.action === 'video_music')
-      return many(await form(`/v1/music/video-to-music?${MP3}`, { videos: { file: req.video }, description: req.description, tags: req.tags, ...only(o, ['add_sfx', 'separate_tracks', 'use_audio_as_reference']) }))
-    if (req.action === 'stems') return many(await form(`/v1/music/stem-separation?${MP3}`, { file: { file: req.file }, stem_variation_id: req.variation }))
+      return many(await form(`/v1/music/video-to-music?${MP3}`, { videos: { file: req.video }, description: req.description, tags: req.tags, ...only(o, ['add_sfx', 'separate_tracks', 'use_audio_as_reference', 'sign_with_c2pa']) }))
+    if (req.action === 'stems') return many(await form(`/v1/music/stem-separation?${MP3}`, { file: { file: req.file }, stem_variation_id: req.variation, ...only(o, ['sign_with_c2pa']) }))
     if (req.action === 'design') {
       const ref = req.reference ? { reference_audio_base64: fs.readFileSync(req.reference).toString('base64') } : {}
       const r = await post(`/v1/text-to-voice/design?${MP3}`, { voice_description: req.description, model_id: req.model, ...(req.text ? { text: req.text } : { auto_generate_text: true }), ...ref,
-        ...only(o, ['loudness', 'guidance_scale', 'should_enhance', ...(req.reference ? ['prompt_strength'] : [])]) })
+        ...only(o, ['loudness', 'guidance_scale', 'should_enhance', ...(req.reference ? ['prompt_strength'] : [])]), ...(req.seed != null ? { seed: req.seed } : {}) })
       return previews(await r.json(), r)
     }
     if (req.action === 'remix') {
-      const r = await post(`/v1/text-to-voice/${encodeURIComponent(req.voice)}/remix?${MP3}`, { voice_description: req.description, ...(req.text ? { text: req.text } : { auto_generate_text: true }), ...only(o, ['loudness', 'guidance_scale', 'prompt_strength']) })
+      const r = await post(`/v1/text-to-voice/${encodeURIComponent(req.voice)}/remix?${MP3}`, { voice_description: req.description, ...(req.text ? { text: req.text } : { auto_generate_text: true }), ...only(o, ['loudness', 'guidance_scale', 'prompt_strength']), ...(req.seed != null ? { seed: req.seed } : {}) })
       return previews(await r.json(), r)
     }
     // a transcript: its text (each speaker's turn on its line when asked), its captions and its words as Scribe gives them;
@@ -259,7 +299,7 @@ export default {
     const text = (name, data) => ({ name, ext: name === 'words' ? 'json' : name === 'captions' ? 'srt' : 'txt', data: Buffer.from(data) })
     if (req.action === 'transcribe') {
       const r = await form('/v1/speech-to-text', { model_id: req.model, file: { file: req.file }, timestamps_granularity: 'word', keyterms: req.keyterms, language_code: o.language_code,
-        diarize: !!o.diarize, tag_audio_events: !!o.tag_audio_events, ...(o.no_verbatim ? { no_verbatim: true } : {}) })
+        diarize: !!o.diarize, tag_audio_events: !!o.tag_audio_events, ...(o.no_verbatim ? { no_verbatim: true } : {}), ...(o.diarize && o.num_speakers ? { num_speakers: o.num_speakers } : {}), ...(o.temperature ? { temperature: o.temperature } : {}), seed: req.seed })
       const j = await r.json(), words = (j.words ?? []).filter(w => w.type === 'word').map(w => ({ text: w.text, start: w.start, end: w.end, speaker: w.speaker_id }))
       let said = j.text ?? ''
       if (o.diarize) {

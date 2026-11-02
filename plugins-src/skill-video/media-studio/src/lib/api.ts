@@ -30,6 +30,8 @@ export type Cam = { az: number; el: number; zoom: number }
 export type Field = {
   key: string
   label: string
+  // Suno's alone (Stems' split): not shown on an ElevenLabs model
+  suno?: boolean
   // lines: words on several lines (lyrics); singer: a voice of the Library made a Suno singer
   type: "choice" | "text" | "number" | "color" | "select" | "multi" | "light" | "margin" | "style" | "sheets" | "element" | "camera" | "recolors" | "lines" | "singer"
   options?: Option[]
@@ -159,7 +161,7 @@ export type Model = {
     audio_frames?: { fps: number; min: number; max: number; step: number } | null
   }
 }
-export type OptionValue = string | number | { value: string | number; label: string }
+export type OptionValue = string | number | { value: string | number; label: string; icon?: string }
 export type ModelOption = {
   key: string
   label: string
@@ -583,7 +585,7 @@ export function money(amount: number | null | undefined, unit: "usd" | "credits"
 // before its text), or ≈ its price
 export function priceLabel(a: EstimateAnswer) {
   if (a.provider === "local") return "free"
-  if (!a.estimate.known) return a.estimate.detail?.match(/^per \w+/)?.[0] ?? (a.provider === "elevenlabs" ? "per minute" : "unknown cost")
+  if (!a.estimate.known) return a.estimate.detail?.match(/^per \w+/)?.[0] ?? (/shows after/.test(a.estimate.detail ?? "") ? "priced after" : a.provider === "elevenlabs" ? "per minute" : "unknown cost")
   return `≈ ${a.shown}`
 }
 

@@ -6,7 +6,8 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { startFake } from './fake-api.js'
-import { CATALOG_PRICES, estimateKie, made, readSpec } from '../providers/kie.js'
+import { CATALOG_PRICES, estimateKie, fromSpec, made, readSpec } from '../providers/kie.js'
+import { resolveOptions } from '../lib/options.js'
 import { OWN_MODELS } from '../providers/elevenlabs.js'
 import { retry429, retryAfter, windowed } from '../lib/limit.js'
 
@@ -559,4 +560,24 @@ test('a Suno stem\'s files by what they are: an instrument alone and the song wi
   const one = { result: { resultUrls: ['a', 'b', 'c', 'd'].map(u), resultObject: { origin_data: [{ extract: o('a'), remove: o('b') }, { extract: o('c'), remove: o('d') }] } } }
   assert.deepEqual(made(one).files.map(f => f.name), ['Drum_Kit-1', 'without-Drum_Kit-1', 'Drum_Kit-2', 'without-Drum_Kit-2'])
   assert.deepEqual(made({ result: { resultUrls: ['https://x/r/id1_Backing%20Vocals.mp3', 'https://x/r/id2_Bass.mp3'] } }).files.map(f => f.name), ['id1_Backing_Vocals', 'id2_Bass'])
+})
+
+// a catalog model's other inputs as its options, by its docs' schema (2026-11-02): the registry's labels kept, a
+// choice of its values, a switch, a number in its own range, words; a file, a mask or an id skipped with why; a size of
+// ratios its ratio, an image beside an end frame its first frame
+test('a model of Kie\'s catalog: its other inputs as options, by their schema; files and ids left out, said', () => {
+  const props = { prompt: { type: 'string' }, image_url: { type: 'string' }, end_image_url: { type: 'string' }, image_size: { type: 'string', enum: ['1:1', '16:9', '9:16'] },
+    output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'jpeg' }, enable_safety_checker: { type: 'boolean', default: 'true' }, prompt_extend: { type: 'boolean', default: 'false' },
+    style: { type: 'string', enum: ['AUTO', 'REALISTIC'], default: 'AUTO' }, strength: { type: 'number', default: '0.8' }, steps: { type: 'integer', minimum: 1, maximum: 50, default: '30' },
+    negative_prompt: { type: 'string' }, mask_url: { type: 'string' }, task_id: { type: 'string' }, character_ids: { type: 'array' } }
+  const m = fromSpec('lab/i2v', { kind: 'video', models: ['lab/i2v'], required: ['prompt'], props, title: null })
+  assert.deepEqual([m.fields.first_frame, m.fields.last_frame, m.fields.images, m.fields.aspect_ratio, m.frames], ['image_url', 'end_image_url', undefined, 'image_size', ['first_frame', 'last_frame']])
+  assert.deepEqual(m.aspect_ratios, ['9:16', '1:1', '16:9'])
+  const o = Object.fromEntries(resolveOptions(m.options).map(x => [x.key, x]))
+  assert.deepEqual(Object.keys(o), ['output_format', 'prompt_extend', 'style', 'strength', 'steps', 'negative_prompt'])
+  assert.deepEqual([o.output_format.label, o.output_format.type, o.output_format.default], ['File format', 'choice', 'jpeg'])
+  assert.deepEqual([o.prompt_extend.type, o.prompt_extend.default, o.style.type, o.style.default], ['switch', false, 'select', 'AUTO'])
+  assert.deepEqual([o.strength.min, o.strength.default, o.steps.min, o.steps.max, o.steps.step, o.steps.default], [null, 0.8, 1, 50, 1, 30])
+  assert.deepEqual([o.negative_prompt.label, o.negative_prompt.type], ['Avoid', 'text'])
+  assert.deepEqual(Object.keys(m.skip), ['mask_url', 'task_id', 'character_ids'])
 })

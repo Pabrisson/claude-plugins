@@ -151,13 +151,15 @@ http.createServer(async (req, res) => {
   // isolation, clones): the account's count moves with each spend, as the real one does
   if (p === '/el/v1/models') return json(EL_MODELS)
   if (p.startsWith('/el/v1/text-to-speech/') || p.startsWith('/el/v1/text-to-dialogue')) {
-    const text = body?.text ?? (body?.inputs ?? []).map(l => l.text).join(' ')
+    const text = body?.text ?? (body?.inputs ?? []).map(l => l.text).join('')
     const m = EL_MODELS.find(x => x.model_id === body?.model_id), cost = Math.ceil(text.length * (m?.model_rates?.character_cost_multiplier ?? 1))
     used += cost
     if (!p.includes('/with-timestamps')) return bytes(voice, 'audio/mpeg', { 'character-cost': String(cost) })
     // each character's times spread over the voice's 5 s
     const ch = [...text], each = 5 / Math.max(ch.length, 1)
-    return json({ audio_base64: voice.toString('base64'), alignment: { characters: ch, character_start_times_seconds: ch.map((_, i) => i * each), character_end_times_seconds: ch.map((_, i) => (i + 1) * each) } }, 200, { 'character-cost': String(cost) })
+    let at = 0
+    const voice_segments = (body?.inputs ?? []).map((l, i) => ({ voice_id: l.voice_id, dialogue_input_index: i, character_start_index: at, character_end_index: (at += [...l.text].length) }))
+    return json({ audio_base64: voice.toString('base64'), alignment: { characters: ch, character_start_times_seconds: ch.map((_, i) => i * each), character_end_times_seconds: ch.map((_, i) => (i + 1) * each) }, voice_segments }, 200, { 'character-cost': String(cost) })
   }
   // beyond speech: its effects, a sound, music (its plan, an upload, a video's music, stems as a ZIP), a voice designed
   // or remixed (3 previews) and kept, a transcript, an alignment; each counted as its rate would (unknown ones: 100)
@@ -165,7 +167,7 @@ http.createServer(async (req, res) => {
   if (p === '/el/v1/audio-effects/catalog') return json({ filter_presets: [['phone', 'Phone'], ['old_radio', 'Old radio'], ['megaphone', 'Megaphone']].map(([filter_preset_id, name]) => ({ filter_preset_id, name, description: null })),
     environments: [['small_room', 'Small room'], ['hall', 'Hall'], ['cathedral', 'Cathedral']].map(([environment_id, name]) => ({ environment_id, name, description: null })),
     background_noises: [['cafe', 'Café'], ['keyboard', 'Keyboard'], ['rain', 'Rain']].map(([background_noise_id, name]) => ({ background_noise_id, name, description: null })) })
-  if (p === '/el/v1/sound-generation') { const c = body?.duration_seconds ? Math.ceil(body.duration_seconds * 40) : 200; used += c; return bytes(voice, 'audio/mpeg', { 'character-cost': String(c) }) }
+  if (p === '/el/v1/sound-generation') { const c = body?.duration_seconds ? Math.ceil(body.duration_seconds * 10) : 50; used += c; return bytes(voice, 'audio/mpeg', { 'character-cost': String(c) }) }
   if (p === '/el/v1/music/plan') return json({ chunks: [{ text: '[Intro]', duration_ms: 15000, positive_styles: ['fake'], negative_styles: [] }, { text: '[Outro]', duration_ms: 15000, positive_styles: ['fake'], negative_styles: [] }] })
   if (p === '/el/v1/music/upload') { used += 450; return json({ song_id: `up-${Date.now()}` }) }
   if (p === '/el/v1/music') { used += 450; return bytes(song, 'audio/mpeg', { 'song-id': `song-${Date.now()}` }) }

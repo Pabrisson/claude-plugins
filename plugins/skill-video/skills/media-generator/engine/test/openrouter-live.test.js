@@ -19,7 +19,8 @@ test('OpenRouter live: each listed model\'s settings sent or left out with a rea
     if (!api) continue
     const pass = api.allowed_passthrough_parameters ?? [], own = (m.options ?? []).map(keyOf)
     for (const k of own) assert.ok(pass.includes(k) && (OPTIONS[k] || typeof m.options.find(o => keyOf(o) === k) === 'object'), `${m.id}: option ${k} is not one it takes`)
-    assert.deepEqual(pass.filter(k => !own.includes(k) && !m.skip?.[k] && !SKIP[k]), [], `${m.id}: settings neither sent nor skipped`)
+    // its driving sound goes under its own name (Wan 2.7's audio)
+    assert.deepEqual(pass.filter(k => !own.includes(k) && k !== m.audio_param && !m.skip?.[k] && !SKIP[k]), [], `${m.id}: settings neither sent nor skipped`)
     if (pass.length) assert.equal(m.slug, (await get(`/models/${m.id}/endpoints`)).data.endpoints[0].tag, `${m.id}: its provider's slug`)
   }
   // an image's settings: the shared ones, its options, a format it has alone; the rest said

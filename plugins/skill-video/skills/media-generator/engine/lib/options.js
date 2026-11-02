@@ -44,6 +44,7 @@ export const OPTIONS = {
 // the reasons every model shares
 export const SKIP = {
   nsfw_checker: 'the provider\'s safety filter, left at its default',
+  enable_safety_checker: 'the provider\'s safety filter, left at its default',
   watermark: 'off: no watermark on a generation',
   aigc_watermark: 'off: no watermark on a generation',
   req_key: 'an internal key of the provider',

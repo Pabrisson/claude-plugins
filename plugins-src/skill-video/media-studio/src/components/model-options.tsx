@@ -6,12 +6,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { Chips, Label, valueIcon } from "@/components/chips"
+import { Chips, Label, ToolIcon, valueIcon } from "@/components/chips"
 import { upload } from "@/components/inputs"
 import type { Line, ModelOption, OptionValue, Shot } from "@/lib/api"
 
 const valueOf = (v: OptionValue) => (typeof v === "object" ? v.value : v)
 const labelOf = (v: OptionValue) => (typeof v === "object" ? v.label : String(v))
+// a value's own icon when its model names one (ElevenLabs' Tracks), else the one its value reads as
+const iconOf = (o: ModelOption, x: string | number) => {
+  const named = o.values?.find((y) => valueOf(y) === x)
+  return typeof named === "object" && named.icon ? <ToolIcon name={named.icon} /> : valueIcon(x)
+}
 
 // a model's own settings (its params.options), one control each; only a value moved off its default is kept, so the
 // model's own default goes when nothing is touched
@@ -51,7 +56,7 @@ export function ModelOptions({ options, value, onChange }: { options: ModelOptio
           return (
             <div key={o.key}>
               <Label hint={o.hint} stacked>{o.label}</Label>
-              <Chips options={(o.values ?? []).map(valueOf)} value={v as string | number} label={(x) => labelOf(o.values!.find((y) => valueOf(y) === x)!)} icon={valueIcon} onChange={(x) => put(o, x)} />
+              <Chips options={(o.values ?? []).map(valueOf)} value={v as string | number} label={(x) => labelOf(o.values!.find((y) => valueOf(y) === x)!)} icon={(x) => iconOf(o, x)} onChange={(x) => put(o, x)} />
             </div>
           )
         if (o.type === "select")

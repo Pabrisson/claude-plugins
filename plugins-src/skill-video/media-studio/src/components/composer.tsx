@@ -264,6 +264,8 @@ export function Composer({
   const ownInputs = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => k !== "keyframe" && (!["mid_frames", "speaker_masks", "ref_videos", "ref_audios", "ref_voices"].includes(k) || [...modelInputs, ...refInputs].some((i) => i.key === k) || (k === "mid_frames" && strip))))
   const ownParams = Object.fromEntries(Object.entries(value.params).filter(([k]) => k !== "keyframe_video" && (k !== "frame" || lipFrame) && (k !== "dialogue" || !!dialogue) && (k !== "shots" || !!shots)
     && (k !== "mid_times" || !!mp?.mid_frames?.timed) && (k !== "draft_of" || !!draftOf) && (k !== "lines" || speaks) && (k !== "voice_names" || refInputs.some((i) => i.key === "ref_voices"))))
+  // ElevenLabs sings in no singer of the Library, takes no Suno split: what was picked for Suno stays here, not sent
+  const sentFields = elevenModel ? Object.fromEntries(Object.entries(value.fields).filter(([k]) => !tool.fields.some((f) => f.key === k && (f.type === "singer" || f.suno)))) : value.fields
   const spec: Spec = useMemo(
     () => ({
       kind,
@@ -271,14 +273,14 @@ export function Composer({
       model: modelId,
       prompt: value.raw ? prompt : value.intent,
       ...(value.raw ? { raw: true } : {}),
-      fields: value.fields,
+      fields: sentFields,
       inputs: keyframe ? { ...ownInputs, keyframe: [keyframe] } : ownInputs,
       params: keyframe ? { ...ownParams, frame: value.params.frame } : ownParams,
       ...(value.batch && value.batch > 1 && !eleven && !local && !sheets ? { batch: value.batch } : {}),
       ...(value.place ? { place: value.place } : {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [kind, tool.id, modelId, value, eleven, local, prompt, sheets, keyframe, lipFrame]
+    [kind, tool.id, modelId, value, eleven, elevenModel, local, prompt, sheets, keyframe, lipFrame]
   )
 
   // the estimate, again after every change (debounced)
@@ -347,7 +349,7 @@ export function Composer({
 
   // until it can run, the button shows this tool's price on this model and settings, before the inputs and words
   // (not a voice's: it is priced by its text)
-  const probeSpec = (model?: string): Spec => ({ kind, tool: tool.id, model, prompt: "", fields: value.fields, inputs: {}, params: value.params, probe: true, ...(spec.batch ? { batch: spec.batch } : {}) })
+  const probeSpec = (model?: string): Spec => ({ kind, tool: tool.id, model, prompt: "", fields: sentFields, inputs: {}, params: value.params, probe: true, ...(spec.batch ? { batch: spec.batch } : {}) })
   const probeKey = JSON.stringify(probeSpec(modelId))
   const [probe, setProbe] = useState<{ key: string; label: string | null }>({ key: "", label: null })
   useEffect(() => {
@@ -545,7 +547,7 @@ export function Composer({
 
         {/* the fields, those of one section under its heading (selects as tiles, two a row); Expand's margins and
             Extend's direction and join have their own panels below */}
-        {sections(tool.fields.filter((f) => shown(f.when) && f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)) && !(((direct && !mp?.tags) || waiting) && f.key === "instructions"))).map(({ section, fields }, i) =>
+        {sections(tool.fields.filter((f) => shown(f.when) && f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)) && !(((direct && !mp?.tags) || waiting) && f.key === "instructions") && !(elevenModel && (f.type === "singer" || f.suno)))).map(({ section, fields }, i) =>
           section ? (
             <div key={section}>
               <Label>{section}</Label>

@@ -333,10 +333,17 @@ export function WorkspacePage({
                     <FolderKanbanIcon />
                   </EmptyMedia>
                   <EmptyTitle>Nothing in {ws.name} yet</EmptyTitle>
-                  <EmptyDescription>What you or Claude generate while it is the current workspace lands here, and the files dropped on the page. Results already made join it from the library.</EmptyDescription>
+                  <EmptyDescription>What you or Claude generate while it is the current workspace lands here, and the files dropped on the page. Results already made join it by Add to workspace, above.</EmptyDescription>
                 </EmptyHeader>
-                <EmptyContent className="flex-row justify-center">
-                  <AddFromLibrary ws={ws} results={results} onChanged={onChanged} />
+                {/* the three spaces to make its first media in, each in its space's color, with its icon */}
+                <EmptyContent className="max-w-none flex-row flex-wrap justify-center gap-2">
+                  {(["image", "video", "audio"] as const).map((k) => (
+                    <Button key={k} variant="outline" size="sm" asChild className={SPACE_BUTTON[k]}>
+                      <a href={`#${k}`}>
+                        {valueIcon(k)} Generate {k}
+                      </a>
+                    </Button>
+                  ))}
                 </EmptyContent>
               </Empty>
             )
@@ -347,13 +354,20 @@ export function WorkspacePage({
   )
 }
 
+// a space's button, tinted with its color (the classes written out: Tailwind finds them in the source)
+const SPACE_BUTTON = {
+  image: "border-img/40 bg-img/10 text-img hover:bg-img/20 hover:text-img dark:border-img/40 dark:bg-img/10 dark:hover:bg-img/20",
+  video: "border-vid/40 bg-vid/10 text-vid hover:bg-vid/20 hover:text-vid dark:border-vid/40 dark:bg-vid/10 dark:hover:bg-vid/20",
+  audio: "border-aud/40 bg-aud/10 text-aud hover:bg-aud/20 hover:text-aud dark:border-aud/40 dark:bg-aud/10 dark:hover:bg-aud/20",
+}
+
 // results of the whole library joining the workspace (or leaving it), several at once
 function AddFromLibrary({ ws, results, onChanged }: { ws: Workspace; results: Pick[]; onChanged: () => void }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm">
-          <PlusIcon data-icon="inline-start" /> Add from library
+          <PlusIcon data-icon="inline-start" /> Add to workspace
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col gap-0 p-0">

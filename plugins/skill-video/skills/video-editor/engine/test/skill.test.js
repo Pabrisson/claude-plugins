@@ -514,7 +514,7 @@ test('ElevenLabs (faked): only what elevenlabs.json turns on; a voice-over becom
   // the estimate before spending: 330 credits a minute of transcript (+20 % with keyterms), 1 a character, 900 a minute
   // of music, 40 a second of effect (200 when ElevenLabs picks the length)
   assert.match(cli('credits', 'transcript=60', 'voice=900', 'music=60', 'sfx=1,0.5,auto', '-p', 'sc'),
-    /transcript \(Scribe v2, 60 s, keyterms \+20 %\): 396 credits\nvoice-over \(900 characters\): 900 credits\nmusic \(60 s\): 900 credits\nsound effects \(1 s, 0\.5 s, auto\): 260 credits\ntotal: about 2456 credits/)
+    /transcript \(Scribe v2, 60 s, keyterms \+20 %\): 81 credits\nvoice-over \(900 characters\): 900 credits\nmusic \(60 s\): 900 credits\nsound effects \(1 s, 0\.5 s, auto\): 65 credits\ntotal: about 1946 credits/)
   assert.throws(() => cli('credits', 'sfx=40'), /0\.5 to 30/)
   // then what the account has left (user_read), alone without an estimate; nothing without a key
   assert.match(eleven('credits', 'music=600'), /music \(600 s\): 9000 credits\ntotal: about 9000 credits .*\naccount: 9000 credits left of 10000, renewed on 2026-11-16\n$/)

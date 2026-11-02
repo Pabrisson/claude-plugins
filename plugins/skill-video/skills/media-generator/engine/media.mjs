@@ -379,7 +379,7 @@ function voiceToEleven(name) {
 // the account (free, no clone) and of the Library, its preview its clip
 async function keepVoice(id, file, name) {
   const job = fs.existsSync(path.join(mediaDir(id ?? '-'), 'job.json')) ? readJob(id) : null, v = job?.voices?.find(x => x.file === file)
-  if (!v) throw userError(`${file} is not a voice of ${id}: a result of Design a voice or Remix a voice (voice-1.mp3 to voice-3.mp3)`)
+  if (!v) throw userError(`${file} is not a voice of ${id}: a result of Design a voice or Remix a voice (preview-1.mp3 to preview-3.mp3)`)
   if (!NAME.test(name ?? '')) throw userError('a voice\'s name is letters, digits, - and _')
   if (element(name)) throw userError(`@${name} is in the Library already: another name`)
   const words = String(job.spec.fields?.description ?? '').trim()
@@ -1174,7 +1174,7 @@ function musicPlan(model, lyrics, style, sung, length) {
 // reference), music for a video, a song's stems, a voice designed or remixed, a transcript or a text's words timed
 function elevenAudio(spec, m, p, probing) {
   const options = optionValues(m, p.options), f = spec.fields ?? {}, files = k => spec.inputs?.[k] ?? [], words = k => String(f[k] ?? '').trim()
-  const go = (action, send, estimate = {}) => ({ send: { model: m.model, action, options, ...send }, estimate })
+  const go = (action, send, estimate = {}) => ({ send: { model: m.model, action, options, ...(p.seed != null ? { seed: p.seed } : {}), ...send }, estimate })
   if (m.role === 'sound') {
     const said = String(spec.prompt ?? '').trim(), text = said && [said, words('style')].filter(Boolean).join(', ')
     if (!text && !probing) throw userError('say what it sounds like (--prompt "…")')
@@ -1183,7 +1183,7 @@ function elevenAudio(spec, m, p, probing) {
   if (m.role === 'music') {
     const describe = (f.mode ?? 'describe') !== 'write', sung = (f.vocals ?? 'sung') !== 'instrumental'
     if (files('references').length || files('ref_videos').length) throw userError(`${m.name} takes words and a sound: images and a video go to Suno on Kie`)
-    if (words('singer')) throw userError(`${m.name} sings in no singer of the Library: Suno on Kie does`)
+    if (words('singer') && !probing) throw userError(`${m.name} sings in no singer of the Library: Suno on Kie does`)
     if (describe) {
       const prompt = [words('description'), words('style')].filter(Boolean).join('. '), ref = files('ref_audios')[0], length = options.length ?? 30
       if (!prompt && !probing) throw userError('describe the music (--field description="…")')
@@ -1205,17 +1205,19 @@ function elevenAudio(spec, m, p, probing) {
   }
   if (m.role === 'stems') {
     const split = f.split ?? 'separate_vocal'
-    if (split === 'split_stem_advanced') throw userError(`one instrument taken out is Suno's (on Kie): ${m.name} gives the voice and the music, or 6 tracks`)
-    return go('stems', { file: files('clip')[0], variation: split === 'split_stem' ? 'six_stems_v1' : 'two_stems_v1' })
+    // its Tracks option, else Split as Suno's (the command line's --field split)
+    if (split === 'split_stem_advanced' && !options.stem_variation_id) throw userError(`one instrument taken out is Suno's (on Kie): ${m.name} gives the voice and the music, or 6 tracks (--option stem_variation_id=six_stems_v1)`)
+    const file = files('clip')[0], variation = options.stem_variation_id ?? (split === 'split_stem' ? 'six_stems_v1' : 'two_stems_v1')
+    return go('stems', { file, variation }, { seconds: file ? probe(file).duration : 0, variation })
   }
   if (m.role === 'design' || m.role === 'remix') {
     const text = words('text'), ref = files('reference')[0]
     if (!words('description') && !probing) throw userError(m.role === 'design' ? 'describe the voice (--field description="…")' : 'say what changes (--field description="older, a British accent")')
     if (text && (text.length < 100 || text.length > 1000)) throw userError(`what it says is 100 to 1,000 characters, this has ${text.length}: or none, and it writes its own`)
     if (ref && m.model !== 'eleven_ttv_v3') throw userError('a reference clip goes to Voice Design v3 (--model eleven_ttv_v3)')
-    if (m.role === 'design') return go('design', { description: words('description'), text: text || undefined, reference: ref })
+    if (m.role === 'design') return go('design', { description: words('description'), text: text || undefined, reference: ref }, { chars: text.length })
     if (!p.voice && !probing) throw userError('pick the voice to remix (--voice <voice_id>: media.mjs voices lists them; or --voice @<a voice of the Library>)')
-    return go('remix', { voice: p.voice && elevenVoice(p.voice), description: words('description'), text: text || undefined })
+    return go('remix', { voice: p.voice && elevenVoice(p.voice), description: words('description'), text: text || undefined }, { chars: text.length })
   }
   // a transcript, or the words given timed (forced alignment): a video sends its sound alone
   const clip = files('clip')[0], text = words('text')
@@ -1965,7 +1967,7 @@ async function cmdModels(kind = 'video') {
   }
   const added = list.filter(m => m.new).length, direct = list.filter(m => m.provider === 'elevenlabs').length
   if (direct) console.log(`${direct} ElevenLabs models, straight from ElevenLabs (its key, its credits${fromSnapshot ? '; the key lacks models_read: the engine\'s copy of its list' : ''}); options: --option key=value, a dialogue: --line "<voice>: <words>"`)
-  console.log(`${list.length - direct} ${kind} models on ${PROVIDERS[active()].label}, the active router (the engine's list, providers/${active()}-models.json${added ? `, plus ${added} new from its catalog: their references unknown, ${active() === 'kie' ? 'their price unknown' : 'priced as listed'}` : ''})`)
+  console.log(`${list.length - direct} ${kind} models on ${PROVIDERS[active()].label}, the active router (the engine's list, providers/${active()}-models.json${added ? `, plus ${added} new from its catalog: their references unknown, ${active() === 'kie' ? 'priced by providers/kie-catalog-prices.json' : 'priced as listed'}` : ''})`)
 }
 
 // how a field is given on the command line: an option's label (Auto for an empty one), several in order, words. A long
@@ -2153,7 +2155,7 @@ async function elements(sub, name, ...files) {
     } else if (sub === 'keep') {
       // a preview of Design a voice or Remix a voice kept as a voice of the account and of the Library
       if (!opt.from?.length) die(usage)
-      await keepVoice(String(opt.from[0]).split(/[\\/]/).filter(Boolean).pop(), `voice-${num(opt.take) ?? 1}.mp3`, name)
+      await keepVoice(String(opt.from[0]).split(/[\\/]/).filter(Boolean).pop(), `preview-${num(opt.take) ?? 1}.mp3`, name)
     } else if (sub === 'show') {
       const el = element(name)
       if (!el) throw userError(`no Element @${name}`)

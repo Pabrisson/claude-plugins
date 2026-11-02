@@ -627,7 +627,7 @@ export function NewElement({ draft, state, tools, engine, onClose, onSaved, onUs
     type === "singer"
       ? { label: "Singer", text: "Suno sings a short song in the voice you describe, then its voice is taken apart. Make a singer, on the voice you like, keeps it here. Or add your own singing above.", open: () => (onClose(), onUse("audio", "create-singer", { fields: { ...(name ? { name } : {}), ...(words ? { voice: words } : {}) } })) }
       : type === "voice"
-        ? { label: "Voice", text: "Voice speaks your words in a voice of its own (ElevenLabs, Gemini…). Make a voice, on its result, brings it back here.", open: () => (onClose(), onUse("audio", "voice", words ? { fields: { instructions: words } } : {})) }
+        ? { label: "Design a voice", text: "Design a voice makes a new voice from its description (ElevenLabs): 3 previews; Keep this voice, on the one you like, brings it back here, free.", open: () => (onClose(), onUse("audio", "design-voice", words ? { fields: { description: words } } : {})) }
         : tool && sheets
           ? { label: tool.label, text: `${tool.label} makes clean sheets from a photo or words. Make an element, on one of them, brings it back here.`, open: openTool }
           : null

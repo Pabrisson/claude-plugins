@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { retry429, windowed } from '../lib/limit.js'
-import { OPTIONS, palette, resolveOptions } from '../lib/options.js'
+import { OPTIONS, palette, resolveOptions, SKIP } from '../lib/options.js'
 import { voiceInfo } from '../lib/voices.js'
 
 const base = () => (process.env.KIE_BASE ?? 'https://api.kie.ai').replace(/\/$/, '')
@@ -131,7 +131,7 @@ export function readSpec(text) {
 // a catalog model in the hand list's shape, from its page: its known inputs named for the engine; null when one it
 // requires has no engine name (« not wired »)
 const KNOWN = { prompt: 'prompt', image_urls: 'images', input_urls: 'images', image_input: 'images', reference_image_urls: 'images', image_url: 'images', input_image: 'images', image: 'images',
-  first_frame_url: 'first_frame', last_frame_url: 'last_frame', video_url: 'video', video_urls: 'video', reference_video_urls: 'video', audio_url: 'audio', reference_audio_urls: 'audio',
+  first_frame_url: 'first_frame', last_frame_url: 'last_frame', end_image_url: 'last_frame', tail_image_url: 'last_frame', video_url: 'video', video_urls: 'video', reference_video_urls: 'video', audio_url: 'audio', reference_audio_urls: 'audio',
   resolution: 'resolution', aspect_ratio: 'aspect_ratio', duration: 'duration', generate_audio: 'sound', sound: 'sound', seed: 'seed', num_images: 'n', text: 'text', voice: 'voice', upscale_factor: 'factor', background: 'background' }
 const RES = ['360p', '480p', '540p', '720p', '768p', '1080p', '1K', '1.5K', '2K', '4K']
 const ratio = r => r.split(':').reduce((a, b) => a / b)
@@ -144,20 +144,48 @@ const shorten = (title, lab) => {
   }
   return title
 }
+// a catalog model's other inputs as its options, each by its docs' schema (no hand list says more): a choice of its
+// values (a select: no icon is known for them), a switch, a number in its range, words; one of the registry keeps its
+// label (Avoid, File format…). A file, a mask, an id or a list it takes stays out, said in its skip
+const human = k => k.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
+const NOT_AN_OPTION = /(_urls?|_ids?|_list|^task_id|mask|bbox|^index$|^audio$)/
+function catalogOptions(p, fields) {
+  const sent = new Set(Object.values(fields).map(f => f.replace(/\[\]$/, ''))), options = [], skip = {}
+  for (const [k, v] of Object.entries(p)) {
+    if (sent.has(k) || SKIP[k] || /^(required|properties|x-apidog.*)$/.test(k) || /^0[0-9A-Z]{25}$/.test(k)) continue
+    if (NOT_AN_OPTION.test(k) || v.type === 'array' || v.type === 'object') { skip[k] = 'a file, a mask, an id or a list: not sent for a model of the catalog'; continue }
+    const base = OPTIONS[k], hint = String(v.description ?? '').trim().slice(0, 120) || base?.hint
+    const def = v.type === 'boolean' ? String(v.default) === 'true' : ['number', 'integer'].includes(v.type) && v.default != null && v.default !== '' ? +v.default : v.default
+    const own = v.enum?.length
+      ? { type: base?.type === 'choice' ? 'choice' : 'select', values: v.enum, default: v.enum.includes(def) ? def : v.enum[0] }
+      : v.type === 'boolean' ? { type: 'switch', default: def }
+        // its own range or none (null: never the registry's slider range, another model's)
+        : ['number', 'integer'].includes(v.type) ? { type: 'number', min: v.minimum != null ? +v.minimum : null, max: v.maximum != null ? +v.maximum : null, step: v.type === 'integer' ? 1 : null, default: Number.isFinite(def) ? def : null }
+          : { type: 'text' }
+    options.push({ key: k, label: base?.label ?? human(k), ...(hint ? { hint } : {}), ...own })
+  }
+  return { options, skip }
+}
+
 export function fromSpec(name, spec) {
   const kind = { image: 'image', video: 'video', music: 'speech', audio: 'speech' }[spec.kind]
   if (!kind || spec.required.some(k => !KNOWN[k])) return null
   const p = spec.props, fields = {}, values = {}
   for (const [k, v] of Object.entries(p)) if (KNOWN[k] && !(KNOWN[k] === 'sound' && v.type !== 'boolean')) fields[KNOWN[k]] ??= v.type === 'array' ? `${k}[]` : k
+  // a video's one image beside its end frame (Hailuo 02's image_url and end_image_url) is its first frame
+  if (kind === 'video' && fields.last_frame && !fields.first_frame && fields.images && !fields.images.endsWith('[]')) (fields.first_frame = fields.images, delete fields.images)
+  // a size given as ratios (Qwen 3's image_size: 16:9…) is its ratio
+  if (!fields.aspect_ratio && p.image_size?.enum?.some(r => /^\d+:\d+$/.test(r))) fields.aspect_ratio = 'image_size'
   const res = (p.resolution?.enum ?? []).map(r => ({ r, norm: RES.find(x => x.toLowerCase() === r.toLowerCase()) })).filter(x => x.norm)
   for (const { r, norm } of res) if (r !== norm) (values.resolution ??= {})[norm] = r
   if (p.duration?.type === 'string') values.duration = 'string'
-  const ratios = (p.aspect_ratio?.enum ?? []).filter(r => /^\d+(\.\d+)?:\d+(\.\d+)?$/.test(r)).toSorted((a, b) => ratio(a) - ratio(b))
+  const ratios = (p[fields.aspect_ratio]?.enum ?? []).filter(r => /^\d+(\.\d+)?:\d+(\.\d+)?$/.test(r)).toSorted((a, b) => ratio(a) - ratio(b))
   const durations = (p.duration?.enum ?? []).map(Number).filter(Number.isInteger).toSorted((a, b) => a - b)
   const needs = k => spec.required.includes(Object.keys(p).find(x => KNOWN[x] === k))
   // « GPT Image-2 - Text to Image » under GPT Image: the lab, the name without it; a page of several models names each
   const lab = spec.lab ?? name.split('/')[0], titled = spec.title && spec.models.length === 1 ? shorten(spec.title, lab) : null
-  const m = { id: name, lab, name: titled ?? name.split('/').at(-1), kie: name, fields, values, price: [], new: true,
+  const { options, skip } = catalogOptions(p, fields)
+  const m = { id: name, lab, name: titled ?? name.split('/').at(-1), kie: name, fields, values, price: [], new: true, options, skip,
     resolutions: res.length ? res.map(x => x.norm).toSorted((a, b) => RES.indexOf(a) - RES.indexOf(b)) : null, aspect_ratios: ratios.length ? ratios : null, seed: !!p.seed }
   if (kind === 'image') return { ...m, role: !fields.images ? 'create' : needs('images') ? 'edit' : 'both', max_images: 1, references: fields.images ? +(p[Object.keys(p).find(x => KNOWN[x] === 'images')].maxItems ?? 1) : 0, quality: null, background: p.background?.enum.length ? p.background.enum : null }
   if (kind === 'video') return { ...m, role: needs('video') ? (/upscale/.test(name) ? 'upscale' : 'edit') : needs('audio') && needs('images') ? 'avatar' : 'generate',

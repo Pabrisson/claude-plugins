@@ -85,9 +85,9 @@ const typed = (s: Settings): Record<string, Limit> =>
 const listed = (m: Model) => `- ${m.model} (${m.name}; ${m.kind}, ${m.role}${capsOf(m).length ? `; ${capsOf(m).join(", ")}` : ""})`
 const wirePrompt = (added: Record<Router, Model[]>, engine: string) =>
   [
-    "Check every model of media-generator (skill-video) on both of its routers, Kie.ai and OpenRouter, and wire what each one can do. Generate nothing and spend nothing: read the docs and the free routes only, no generation without my yes.",
+    "Check every model of media-generator (skill-video) on both of its routers, Kie.ai and OpenRouter, and on ElevenLabs (reached straight), and wire what each one can do, every option it takes and what it costs. Generate nothing and spend nothing: read the docs, the price lists and the free routes only, no generation without my yes.",
     "",
-    `The engine: ${engine || "media-generator's engine folder"} (model lists: providers/kie-models.json for Kie.ai, providers/openrouter-models.json for OpenRouter; tools: tools/image.json, tools/video.json, tools/audio.json, each tool's models for Kie.ai under its "kie" key where they differ).`,
+    `The engine: ${engine || "media-generator's engine folder"} (model lists: providers/kie-models.json for Kie.ai, providers/openrouter-models.json for OpenRouter; ElevenLabs: providers/elevenlabs.js, its models beyond speech with their options and credit rates, its speech models read from its API, providers/elevenlabs-models.json their copy; tools: tools/image.json, tools/video.json, tools/audio.json, each tool's models for Kie.ai under its "kie" key where they differ).`,
     ...ROUTERS.flatMap((r) => [
       "",
       added[r.id].length
@@ -95,11 +95,14 @@ const wirePrompt = (added: Record<Router, Model[]>, engine: string) =>
         : `${ROUTER_NAME[r.id]}'s catalog adds no model its list lacks right now.`,
     ]),
     "",
-    "1. Read both routers' catalogs fresh (Kie.ai: its docs pages and its price list; OpenRouter: its image, video and speech catalogs and their endpoints).",
-    "2. On each router, check every model, its list's own and its catalog's new ones, against that router's API docs: resolutions, ratios, durations, first and last frame, middle frames (keyframes), reference images (how many), omni references (reference videos and sounds: how many, how long), sound, seed, what it edits (video edit, upscale, avatar, lip sync), shots, elements, Library voices, masks of who speaks, draft, its own options, its price.",
-    "3. Wire it, router by router: each catalog model into that router's list with every capability; a wrong or missing capability of a listed model fixed; each model named in the tools that fit it on that router (a tool's models or also, its \"kie\" lists for Kie.ai), so an edit, avatar or upscale model shows in its tools too. A capability the engine or the dashboard cannot send yet: add it, or list it.",
+    "1. Read the docs and prices fresh: Kie.ai, its docs pages and its price list; OpenRouter, its image, video and speech catalogs and each model's endpoints with their pricing; ElevenLabs, its API reference (elevenlabs.io/docs/llms.txt, each endpoint's page) and its pricing pages (elevenlabs.io/pricing, elevenlabs.io/pricing/api, its docs' cost notes), in credits.",
+    "2. Check every model, each list's own and the catalogs' new ones, against its docs, on three counts:",
+    "   - its capabilities: resolutions, ratios, durations, first and last frame, middle frames (keyframes), reference images (how many), omni references (reference videos and sounds: how many, how long), sound, seed, what it edits (video edit, upscale, avatar, lip sync), shots, elements, Library voices, masks of who speaks, draft;",
+    "   - its options: every parameter its API takes beyond the shared fields (prompt, frames, references, resolution, ratio, duration, sound, seed) is one of its options, under the model in the composer (the key its API names, its type, its values with an icon each when they show as chips, its default, its range, a hint), or is in its skip list with why; each option's values, default and range still what the docs say;",
+    "   - its price: every rule of it as its price list or endpoint gives it (per image, per second, per resolution, with or without a video or a sound, per character, per request…), the engine's estimate matching it for each setting that changes it; ElevenLabs' credit rates (RATE in providers/elevenlabs.js) and the date they were read. A price nowhere published stays unknown, and says so.",
+    "3. Wire it, router by router and on ElevenLabs: each catalog model into its list with every capability, option and price rule; a wrong or missing capability, option or price of a listed model fixed; each model named in the tools that fit it (a tool's models or also, its \"kie\" lists for Kie.ai), so an edit, avatar or upscale model shows in its tools too. Something the engine or the dashboard cannot send yet: add it, or list it.",
     "4. Run the engine tests and the dashboard's checks, rebuild the dashboard, bump the plugin's version, restart the dashboards that run.",
-    "5. Report by router, then by model: added, fixed, left as is and why.",
+    "5. Report by router (then ElevenLabs), then by model: capabilities, options and prices added, fixed, left as is and why.",
   ].join("\n")
 
 // a section of the page: its title and what it is for, then its rows
@@ -507,7 +510,7 @@ export function SettingsPage({ state, models, engine, onSaved, onModels }: { sta
               <Row
                 title="Check and wire every model"
                 end
-                about="Copies a prompt to paste in Claude Code: Claude reads the docs of every model of both routers, Kie.ai and OpenRouter (the ones their catalogs add first), checks what each one takes (reference images, omni references, video edits, avatars, shots, keyframes, elements, voices…), wires what is missing into each router's model list and the tools that fit, then runs the tests and rebuilds this dashboard. Nothing is generated, nothing is spent."
+                about="Copies a prompt to paste in Claude Code: Claude reads the docs and price lists of every model of both routers, Kie.ai and OpenRouter (the ones their catalogs add first), and of ElevenLabs, checks what each one takes (reference images, omni references, video edits, avatars, shots, keyframes, elements, voices…), every option of its API and every rule of its price, wires what is missing into the model lists, their options, their estimates and the tools that fit, then runs the tests and rebuilds this dashboard. Nothing is generated, nothing is spent."
               >
                 <Button
                   variant="outline"

@@ -1126,7 +1126,9 @@ function elevenlabs(sub, ...rest) {
 // left; with nothing, only what it has left
 // ponytail: rates of the pricing page and the docs on 2026-10-26, to update here when ElevenLabs changes them
 // ponytail: the voice changer and dubbing (v1 3,000, v2 13,500 a minute on paid plans) from the pricing page on 2026-10-29
-const CREDITS = { transcript: 330 / 60, keyterms: 1.2, voice: 1, music: 900 / 60, sfx: 40, sfx_auto: 200, sts: 1000 / 60, dub: 3000 / 60, dub_v2: 13500 / 60 }
+// sound effects: 10 a second, 50 at their own length; the transcript 67 a minute: as billed on 2026-11-02 (0.5 s 5, 2 s
+// 20, its own 50; Scribe 3.5 s 4, 41 s 46)
+const CREDITS = { transcript: 67 / 60, keyterms: 1.2, voice: 1, music: 900 / 60, sfx: 10, sfx_auto: 50, sts: 1000 / 60, dub: 3000 / 60, dub_v2: 13500 / 60 }
 async function credits(...items) {
   const want = Object.fromEntries(items.map(x => x.split('=')))
   const num = k => (want[k] === undefined ? 0 : +want[k] >= 0 ? +want[k] : die(`credits: ${k} is a number`))

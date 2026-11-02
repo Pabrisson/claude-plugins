@@ -170,17 +170,20 @@ setInterval(() => {}, 1e6)
         m('eleven_multilingual_v2', 'Eleven Multilingual v2', 1, { can_use_style: true, can_use_speaker_boost: true }), m('eleven_flash_v2_5', 'Eleven Flash v2.5', 0.5, { maximum_text_length_per_request: 40 }),
         { model_id: 'eleven_multilingual_sts_v2', name: 'Eleven Multilingual v2 (speech to speech)', can_do_text_to_speech: false }])
     }
-    // timed: the sound in base64 and each character's times, 50 ms each
+    // timed: the sound in base64 and each character's times, 50 ms each; a dialogue's lines one after the other with no
+    // space between them, each its segment (as the real one answered, 2026-11-02)
     if (p.startsWith('/el/v1/text-to-speech/') || p.startsWith('/el/v1/text-to-dialogue')) {
-      const text = body.text ?? body.inputs.map(l => l.text).join(' '), cost = { 'character-cost': String(Math.ceil((body.text?.length ?? body.inputs.reduce((n, l) => n + l.text.length, 0)) * (body.model_id === 'eleven_v4_turbo' ? 0.5 : 1))) }
+      const text = body.text ?? body.inputs.map(l => l.text).join(''), cost = { 'character-cost': String(Math.ceil((body.text?.length ?? body.inputs.reduce((n, l) => n + l.text.length, 0)) * (body.model_id === 'eleven_v4_turbo' ? 0.5 : 1))) }
       if (!p.includes('/with-timestamps')) return bytes(mp3, 'audio/mpeg', cost)
       const ch = [...text]
-      return json({ audio_base64: mp3.toString('base64'), alignment: { characters: ch, character_start_times_seconds: ch.map((_, i) => i * 0.05), character_end_times_seconds: ch.map((_, i) => (i + 1) * 0.05) } }, 200, cost)
+      let at = 0
+      const voice_segments = (body.inputs ?? []).map((l, i) => ({ voice_id: l.voice_id, dialogue_input_index: i, character_start_index: at, character_end_index: (at += [...l.text].length) }))
+      return json({ audio_base64: mp3.toString('base64'), alignment: { characters: ch, character_start_times_seconds: ch.map((_, i) => i * 0.05), character_end_times_seconds: ch.map((_, i) => (i + 1) * 0.05) }, voice_segments }, 200, cost)
     }
     // ElevenLabs beyond speech, in the shapes of its reference of 2026-11-02: its effects, a sound, music (its plan, an
     // upload, a video's music, stems as a ZIP), a voice designed or remixed (3 previews) and kept, a transcript, an alignment
     if (p === '/el/v1/audio-effects/catalog') return json({ filter_presets: [{ filter_preset_id: 'phone', name: 'Phone', description: 'a call' }], environments: [{ environment_id: 'hall', name: 'Hall', description: null }], background_noises: [{ background_noise_id: 'cafe', name: 'Café', description: null }] })
-    if (p === '/el/v1/sound-generation') return bytes(mp3, 'audio/mpeg', { 'character-cost': String(body.duration_seconds ? Math.ceil(body.duration_seconds * 40) : 200) })
+    if (p === '/el/v1/sound-generation') return bytes(mp3, 'audio/mpeg', { 'character-cost': String(body.duration_seconds ? Math.ceil(body.duration_seconds * 10) : 50) })
     if (p === '/el/v1/music/plan') return json({ chunks: [{ text: '[Intro]', duration_ms: 10000, positive_styles: ['lofi'], negative_styles: [] }, { text: '[Outro]', duration_ms: 5000, positive_styles: ['lofi'], negative_styles: [] }] })
     if (p === '/el/v1/music/upload') return json({ song_id: 'up-1' })
     if (p === '/el/v1/music') return bytes(mp3, 'audio/mpeg', { 'song-id': 'song-1' })

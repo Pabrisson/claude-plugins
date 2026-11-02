@@ -14,13 +14,16 @@ export function srt(words) {
   return cues.map((c, i) => `${i + 1}\n${time(c.words[0].start)} --> ${time(c.words.at(-1).end)}\n${c.words.map(x => x.text).join(' ')}\n`).join('\n')
 }
 
-// a voice's character timings (the timed text to speech) made into words; its audio tags ([whispers]) left out
-export function wordsOf(alignment) {
+// a voice's character timings (the timed text to speech) made into words; its audio tags ([whispers]) left out. A
+// dialogue's lines follow each other with no space between them (2026-11-02): its segments start a word, each its line
+export function wordsOf(alignment, segments = []) {
   const { characters: ch = [], character_start_times_seconds: a = [], character_end_times_seconds: b = [] } = alignment ?? {}, words = []
-  let w = null
+  const line = new Map(segments.map(s => [s.character_start_index, s.dialogue_input_index]))
+  let w = null, speaker
   ch.forEach((c, i) => {
+    if (line.has(i)) [w, speaker] = [null, line.get(i)]
     if (/\s/.test(c)) return (w = null)
-    if (!w) words.push((w = { text: '', start: a[i], end: b[i] }))
+    if (!w) words.push((w = { text: '', start: a[i], end: b[i], ...(speaker != null ? { speaker } : {}) }))
     w.text += c
     w.end = b[i]
   })

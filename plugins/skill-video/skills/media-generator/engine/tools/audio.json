@@ -51,7 +51,7 @@
     "kie": { "models": ["suno/v6", "music_v2_5"], "also": ["suno/v6-mini", "suno/v6-wild", "music_v2", "music_v1"] }
   },
   {
-    "id": "music-video", "label": "Music for a video", "group": "Music", "mode": "edit", "icon": "video",
+    "id": "video-music", "label": "Music for a video", "group": "Music", "mode": "edit", "icon": "video",
     "description": "Music made for a video, to its cuts and its mood, its sound effects too if asked, apart or mixed. ElevenLabs, whichever router.",
     "inputs": [{ "key": "video", "kind": "video", "label": "Video" }],
     "fields": [
@@ -158,8 +158,8 @@
     "description": "A song split in tracks: the voice and the music, every instrument (Suno: up to 12 of the songs it made; ElevenLabs: 6 of any song), or one instrument taken out (Suno).",
     "inputs": [{ "key": "clip", "kind": "audio", "label": "Song" }],
     "fields": [
-      { "key": "split", "label": "Split", "type": "choice", "options": [{ "value": "separate_vocal", "label": "Voice + music", "icon": "split" }, { "value": "split_stem", "label": "Every instrument", "icon": "layers" }, { "value": "split_stem_advanced", "label": "One instrument", "icon": "guitar" }], "default": "separate_vocal" },
-      { "key": "instrument", "label": "Instrument", "type": "select", "options": "stems", "default": "Lead Vocal", "when": { "split": "split_stem_advanced" } }
+      { "key": "split", "label": "Split", "type": "choice", "options": [{ "value": "separate_vocal", "label": "Voice + music", "icon": "split" }, { "value": "split_stem", "label": "Every instrument", "icon": "layers" }, { "value": "split_stem_advanced", "label": "One instrument", "icon": "guitar" }], "default": "separate_vocal", "suno": true },
+      { "key": "instrument", "label": "Instrument", "type": "select", "options": "stems", "default": "Lead Vocal", "when": { "split": "split_stem_advanced" }, "suno": true }
     ],
     "template": "", "models": ["eleven_stem_separation"], "kie": { "models": ["suno/stems", "eleven_stem_separation"] }
   },
@@ -172,7 +172,7 @@
   },
   {
     "id": "design-voice", "label": "Design a voice", "group": "Voice", "mode": "create", "icon": "wand-sparkles",
-    "description": "A new voice from its description (and a clip of a voice to start from, on v3): 3 previews; « Keep this voice » makes one a voice of the Library, for every voice tool. ElevenLabs, whichever router.",
+    "description": "A new voice from its description (and a clip of a voice to start from, on v3): 3 previews; « Keep this voice » makes one a voice of the Library, for every voice tool. ElevenLabs, a paid plan, whichever router.",
     "inputs": [{ "key": "reference", "kind": "audio", "label": "Voice to start from", "optional": true }],
     "fields": [
       { "key": "description", "label": "The voice", "type": "lines", "placeholder": "a warm, low female voice, French, late thirties, calm and close to the microphone" },
@@ -182,7 +182,7 @@
   },
   {
     "id": "remix-voice", "label": "Remix a voice", "group": "Voice", "mode": "edit", "icon": "blend",
-    "description": "A voice of the account or of the Library changed in words (its age, accent, tone, pace): 3 previews, one kept as a new voice of the Library. ElevenLabs, whichever router.",
+    "description": "A voice of your own (designed, kept or cloned; not a premade one) changed in words: its age, accent, tone, pace. 3 previews, one kept as a new voice of the Library. ElevenLabs, a paid plan, whichever router.",
     "inputs": [],
     "fields": [
       { "key": "description", "label": "What changes", "type": "lines", "placeholder": "older, with a British accent, slower" },
