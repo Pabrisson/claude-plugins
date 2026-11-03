@@ -1,11 +1,14 @@
+import { score } from "@engine/decide.js"
 import { median } from "@engine/dvf.js"
 import { asking, badge, daysOnline, dropped, typeOf, unitPrice } from "@engine/market.js"
-import { ArrowDownRightIcon, ArrowRightIcon, ArrowUpRightIcon, BarChart3Icon, BuildingIcon, CoinsIcon, EyeIcon, HouseIcon, KeyRoundIcon, LandmarkIcon, LeafIcon, MapPinnedIcon, ReceiptTextIcon, TrendingUpIcon, WalletIcon, type LucideIcon } from "lucide-react"
+import { ArrowDownRightIcon, ArrowRightIcon, ArrowUpRightIcon, BarChart3Icon, BuildingIcon, CoinsIcon, EyeIcon, HouseIcon, KeyRoundIcon, LandmarkIcon, LeafIcon, MapPinnedIcon, ReceiptTextIcon, TagsIcon, TrendingUpIcon, WalletIcon, type LucideIcon } from "lucide-react"
 import { useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { CreditBadge } from "@/components/credit-badge"
 import { DPE_HEX, dpeInk } from "@/components/dpe"
+import { LabelChip, useLabels } from "@/components/labels"
+import { DEFAULTS, FilterBar, keeps, labelOk, MINE, NO_LABEL, type Filters } from "@/components/list-tab"
 import { useRun } from "@/components/run-dialog"
 import { Gap, levelOf, Ruler } from "@/components/ruler"
 import { TypeIcon } from "@/components/type-icon"
@@ -18,10 +21,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { DpeClasses, Dvf, Housing, Listing, PropertyType, Tax } from "@/lib/api"
 import { date, eur, LEVEL_LABEL, m2, month, num, pct, perUnit, share, titleCase, TYPE_PLURAL, UNIT } from "@/lib/format"
-import { useSearch } from "@/lib/store"
+import { useSearch, useStoredState } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 const DAY = 864e5
+// the market's filters: those of the list, kept apart and filtering nothing at first (every status, the expired
+// listings too: what went offline is part of the market)
+const FILTERS: Filters = { ...DEFAULTS, mine: Object.keys(MINE), hideExpired: false }
+// when a listing went offline (its « expired » change), or null while it is online
+const gone = (l: Listing) => { const c = l.changes?.find(x => x.kind === "expired")?.date; return c ? Date.parse(c) : l.status === "EXPIRED" ? Date.parse(l.first_seen) : null }
 const LEVEL_COLOR = { below: "var(--below)", at: "var(--at)", above: "var(--above)" } as const
 const ok = <T,>(x: T | { error: string } | null | undefined): T | null => (x && !(typeof x === "object" && "error" in x) ? (x as T) : null)
 const day = (t: number) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(new Date(t))
@@ -58,9 +66,9 @@ function Kpi({ title, value, sub, icon, tone, children }: { title: string; value
 }
 
 export function MarketTab() {
-  const { slug, data, state, types } = useSearch()
+  const { slug, data, state, types, lastVisit, aidsFor } = useSearch()
   const run = useRun()
-  const [type, setType] = useState<PropertyType>(types[0])
+  const [type, setType] = useState<PropertyType>(types[0]), [f, setF] = useStoredState<Filters>(`immo:${slug}:market`, FILTERS)
   // the asking prices are those of the search's first type (paid API)
   const d = data.market.dvf?.[type], se = data.market.stream && (data.market.stream.type ?? "flat") === type ? data.market.stream : undefined
   const streamOn = state.stream_estate && data.search.mode === "stream-estate", u = (n: number | null | undefined) => perUnit(n, type)
@@ -68,15 +76,19 @@ export function MarketTab() {
   // a year of rent over the sold price of a m²: the zone's gross yield
   const yieldOf = rent && d?.recent.median_ppm2 ? (rent.per_m2 * 12) / d.recent.median_ppm2 : null
   const context = data.market.context
-  const listings = data.listings.filter(l => typeOf(l) === type)
+  // the listings of the type the filters keep: `base` before the labels' filter (the study's rows), `listings` after
+  const typed = data.listings.filter(l => typeOf(l) === type), ctx = { criteria: data.search.criteria, types, lastVisit }
+  const base = typed.filter(l => keeps(l, f.score_min ? (score(l, aidsFor(l)).value as number | null) : null, { ...f, labels: [] }, ctx))
+  const listings = base.filter(l => labelOk(l, f.labels))
+  const toggle = types.length > 1 && (
+    <ToggleGroup type="single" variant="outline" size="sm" value={type} onValueChange={v => v && setType(v as PropertyType)} className="self-start" aria-label="Type de bien">
+      {types.map(t => <ToggleGroupItem key={t} value={t}><TypeIcon type={t} />{TYPE_PLURAL[t]}</ToggleGroupItem>)}
+    </ToggleGroup>
+  )
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      {types.length > 1 && (
-        <ToggleGroup type="single" variant="outline" size="sm" value={type} onValueChange={v => v && setType(v as PropertyType)} className="self-start" aria-label="Type de bien">
-          {types.map(t => <ToggleGroupItem key={t} value={t}><TypeIcon type={t} />{TYPE_PLURAL[t]}</ToggleGroupItem>)}
-        </ToggleGroup>
-      )}
+      {data.listings.length ? <FilterBar f={f} setF={setF} defaults={FILTERS} types={[type]} count={listings.length}>{toggle}</FilterBar> : toggle}
       {data.market.alsace_moselle && (
         <Alert><AlertTitle>Pas de ventes DVF en Alsace-Moselle</AlertTitle><AlertDescription>Le Bas-Rhin, le Haut-Rhin et la Moselle tiennent leur propre livre foncier, absent de DVF.</AlertDescription></Alert>
       )}
@@ -92,10 +104,11 @@ export function MarketTab() {
         <Kpi title="Rendement brut, zone" value={yieldOf ? share(yieldOf, 1) : "—"} sub={yieldOf ? `${num(1 / yieldOf)} ans de loyer pour payer le prix` : "Loyer et ventes nécessaires"} icon={CoinsIcon} tone="var(--chart-3)" />
         <Kpi title="Affiché, zone" value={m2(asking(data.market, type))} sub={se ? "Dernier mois, API" : "Nécessite l'API"} icon={EyeIcon} tone="var(--chart-4)" />
       </div>
+      {typed.length > 0 && <StudyCard type={type} d={d} base={base} picked={f.labels} onPick={labels => setF(x => ({ ...x, labels }))} />}
       {d && <TrendCard d={d} type={type} se={se} streamOn={streamOn} onAsking={() => run({ cmd: "market", slug, label: "Analyses du marché (API)" })} />}
       <div className="grid gap-4 xl:grid-cols-2">
         {d && <BudgetCard d={d} type={type} listings={listings} />}
-        <WatchCard type={type} listings={listings} />
+        <WatchCard type={type} listings={listings} total={typed.length} />
       </div>
       {d?.streets?.length ? <StreetsCard d={d} type={type} /> : null}
       {context && (type === "flat" || type === "house") && (
@@ -254,12 +267,87 @@ function BudgetCard({ d, type, listings }: { d: Dvf; type: PropertyType; listing
   )
 }
 
+// a set of listings as a market: the medians of what they ask, how long they stay online, how many dropped their
+// price (the expired ones count until they went offline)
+function figures(ls: Listing[]) {
+  const known = (xs: (number | null | undefined)[]) => xs.filter((x): x is number => x != null && x > 0)
+  return {
+    n: ls.length, expired: ls.filter(l => l.status === "EXPIRED").length,
+    price: median(known(ls.map(l => l.price))), area: median(known(ls.map(l => l.area ?? l.land_area))), ppm2: median(known(ls.map(unitPrice))),
+    days: median(ls.map(l => daysOnline(l, gone(l) ?? undefined)).filter((x): x is number => x != null)),
+    drops: ls.length ? ls.filter(l => dropped(l) > 0).length / ls.length : null,
+  }
+}
+
+// The listings label by label (the user's neighborhoods, a kind of home…): what each group asks against what sells in
+// the zone. A listing with two labels counts in both rows, once in the last; a row filters the page on its label.
+function StudyCard({ type, d, base, picked, onPick }: { type: PropertyType; d: Dvf | undefined; base: Listing[]; picked: string[]; onPick: (labels: string[]) => void }) {
+  const { marketOf } = useSearch(), labels = useLabels(), ref = marketOf(type).ref?.ppm2
+  const keys = picked.length ? picked : labels.length ? [...labels, NO_LABEL] : []
+  const groups = keys.map(key => ({ key, ls: base.filter(l => labelOk(l, [key])) })).filter(g => g.ls.length)
+  const all = base.filter(l => labelOk(l, picked)), rows = !all.length ? [] : groups.length === 1 ? groups : [...groups, { key: "", ls: all }]
+  const only = picked.length === 1 ? picked[0] : null, wide = "hidden md:table-cell"
+  return (
+    <Card>
+      <CardHeader>
+        <Title icon={TagsIcon} tone="var(--chart-4)">Étude par label</Title>
+        <CardDescription>
+          {labels.length ? `Les annonces groupées par label, leurs prix affichés médians et leur écart au prix vendu de la zone (${perUnit(ref, type)}). Une ligne filtre la page sur son label.` : "Donnez des labels à vos annonces (Liste, dossier), des quartiers par exemple, pour les comparer ici."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Label</TableHead><TableHead className="text-right">Annonces</TableHead><TableHead className="text-right">Prix médian</TableHead>
+              <TableHead className={cn("text-right", wide)}>Surface</TableHead><TableHead className="text-right">{UNIT[type]}</TableHead><TableHead className="text-right">Écart</TableHead>
+              <TableHead className={cn("text-right", wide)}>En ligne</TableHead><TableHead className={cn("text-right", wide)}>En baisse</TableHead>
+              {d?.recent.q1 ? <TableHead className="hidden w-64 xl:table-cell">Face aux ventes</TableHead> : null}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map(({ key, ls }) => {
+              const x = figures(ls), few = x.n < 3, dim = few && "text-muted-foreground", on = key && only === key
+              const pick = () => key && onPick(on ? [] : [key])
+              return (
+                <TableRow key={key || "all"} onClick={pick} className={cn(key ? "cursor-pointer" : "font-semibold", on && "bg-muted/50")}>
+                  <TableCell>
+                    {key ? (
+                      <button type="button" onClick={e => { e.stopPropagation(); pick() }} title={on ? "Retirer ce filtre" : "Filtrer la page sur ce label"} className="rounded-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+                        {key === NO_LABEL ? <span className="text-muted-foreground">Sans label</span> : <LabelChip name={key} />}
+                      </button>
+                    ) : picked.length ? "Ensemble" : "Toutes les annonces"}
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <span className="flex flex-col items-end leading-tight">
+                      <span className="tabular-nums">{num(x.n)}</span>
+                      {(x.expired > 0 || few) && <span className="text-xs font-normal text-muted-foreground">{few ? "peu d'annonces" : `dont ${num(x.expired)} retirée${x.expired > 1 ? "s" : ""}`}</span>}
+                    </span>
+                  </TableCell>
+                  <TableCell className={cn("text-right whitespace-nowrap", dim)}>{eur(x.price)}</TableCell>
+                  <TableCell className={cn("text-right whitespace-nowrap", wide, dim)}>{x.area ? `${num(x.area)} m²` : "—"}</TableCell>
+                  <TableCell className={cn("text-right font-semibold whitespace-nowrap", dim)}>{num(x.ppm2)}</TableCell>
+                  <TableCell className={cn("text-right", few && "opacity-60")}><Gap ppm2={x.ppm2} refPpm2={ref} /></TableCell>
+                  <TableCell className={cn("text-right whitespace-nowrap", wide, dim)}>{x.days == null ? "—" : `${num(x.days)} j`}</TableCell>
+                  <TableCell className={cn("text-right", wide, dim)}>{share(x.drops)}</TableCell>
+                  {d?.recent.q1 ? <TableCell className="hidden xl:table-cell"><Ruler stats={d.recent} ticks={ls.map(l => ({ id: l.id, ppm2: unitPrice(l) }))} /></TableCell> : null}
+                </TableRow>
+              )
+            })}
+            {!rows.length && <TableRow><TableCell colSpan={9} className="py-6 text-center text-muted-foreground">Aucune annonce pour ces filtres.</TableCell></TableRow>}
+          </TableBody>
+        </Table>
+        <p className="text-xs text-muted-foreground">Prix affichés, pas vendus : l'écart se lit comme la marge que les vendeurs se donnent. « En ligne » : la durée médiane, jusqu'au retrait pour les annonces retirées. Sous 3 annonces, les chiffres sont indicatifs.</p>
+      </CardContent>
+    </Card>
+  )
+}
+
 // the listings' follow-up as a market: the stock week by week, what came in and what went, the drops, the time
 // online and the gap between asked and sold prices
-function WatchCard({ type, listings }: { type: PropertyType; listings: Listing[] }) {
+function WatchCard({ type, listings, total }: { type: PropertyType; listings: Listing[]; total: number }) {
   const { data, marketOf } = useSearch()
   const [now] = useState(() => Date.now()), ref = marketOf(type).ref?.ppm2
-  const gone = (l: Listing) => { const c = l.changes?.find(x => x.kind === "expired")?.date; return c ? Date.parse(c) : l.status === "EXPIRED" ? Date.parse(l.first_seen) : null }
   const live = listings.filter(l => gone(l) == null)
   const first = Math.min(...listings.map(l => Date.parse(l.first_seen)))
   const weeks = listings.length ? Math.min(26, Math.max(4, Math.ceil((now - first) / (7 * DAY)))) : 0
@@ -290,7 +378,10 @@ function WatchCard({ type, listings }: { type: PropertyType; listings: Listing[]
     <Card>
       <CardHeader>
         <Title icon={EyeIcon} tone="var(--chart-4)">Veille des annonces</Title>
-        <CardDescription>{data.search.mode === "stream-estate" ? "Les annonces de la zone suivies par la recherche, semaine par semaine." : "Les annonces trouvées par l'agent, semaine par semaine : un échantillon, pas tout le marché."}</CardDescription>
+        <CardDescription>
+          {data.search.mode === "stream-estate" ? "Les annonces de la zone suivies par la recherche, semaine par semaine." : "Les annonces trouvées par l'agent, semaine par semaine : un échantillon, pas tout le marché."}
+          {listings.length < total && <b className="font-medium text-foreground"> {num(listings.length)} annonce{listings.length > 1 ? "s" : ""} sur {num(total)} (filtrées).</b>}
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid grid-cols-3 gap-x-3 gap-y-2 sm:grid-cols-6 xl:grid-cols-3 2xl:grid-cols-6">
