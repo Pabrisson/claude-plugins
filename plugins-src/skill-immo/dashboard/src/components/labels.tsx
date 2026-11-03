@@ -11,16 +11,18 @@ import { useSearch } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 // The user's free labels (listings.json `labels`, kept through every refresh, read by the agent): a search's labels are
-// those its listings carry, each in the color its name picks
+// those its listings carry. Each takes the tone of its rank among them (alphabetical): the first 8 never share one; a
+// new label ranked before others moves their tones along.
 const TONES = [
   "bg-sky-500/15 text-sky-700 dark:text-sky-300",
-  "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  "bg-rose-500/15 text-rose-700 dark:text-rose-300",
   "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
   "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-  "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+  "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  "bg-lime-500/15 text-lime-700 dark:text-lime-300",
   "bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300",
+  "bg-orange-500/15 text-orange-700 dark:text-orange-300",
 ]
-const tone = (name: string) => TONES[[...name].reduce((h, c) => (h * 31 + c.codePointAt(0)!) >>> 0, 7) % TONES.length]
 
 // every label of the search, in alphabetical order
 export function useLabels() {
@@ -29,8 +31,9 @@ export function useLabels() {
 }
 
 export function LabelChip({ name, onRemove, className }: { name: string; onRemove?: () => void; className?: string }) {
+  const tone = TONES[Math.max(0, useLabels().indexOf(name)) % TONES.length]
   return (
-    <Badge variant="secondary" className={cn("max-w-full", tone(name), onRemove && "pr-0.5", className)}>
+    <Badge variant="secondary" className={cn("max-w-full", tone, onRemove && "pr-0.5", className)}>
       <TagIcon data-icon="inline-start" /><span className="truncate">{name}</span>
       {onRemove && (
         <button type="button" aria-label={`Retirer le label ${name}`} onClick={e => { e.stopPropagation(); onRemove() }}
