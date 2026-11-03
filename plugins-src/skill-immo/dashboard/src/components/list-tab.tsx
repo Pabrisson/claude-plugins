@@ -1,6 +1,6 @@
 import { score } from "@engine/decide.js"
 import { badge, daysOnline, dropped, isHome, matches, typeOf, unitPrice } from "@engine/market.js"
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronDownIcon, EyeIcon, EyeOffIcon, RefreshCwIcon, RotateCcwIcon, ScaleIcon, SearchIcon, SlidersHorizontalIcon, StarOffIcon, TagIcon, TrendingDownIcon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronDownIcon, EyeIcon, EyeOffIcon, RefreshCwIcon, RotateCcwIcon, ScaleIcon, SearchIcon, SlidersHorizontalIcon, StarOffIcon, TagIcon, TagsIcon, TrendingDownIcon, XIcon } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
@@ -8,6 +8,7 @@ import { CreditBadge } from "@/components/credit-badge"
 import { Dpe } from "@/components/dpe"
 import { Star } from "@/components/favorite"
 import { Origin } from "@/components/origin"
+import { LabelChip, LabelPicker, useLabels } from "@/components/labels"
 import { Gap } from "@/components/ruler"
 import { useRun } from "@/components/run-dialog"
 import { NewBadge, StatusBadge, statusBand, StatusDot } from "@/components/status"
@@ -33,7 +34,7 @@ type Row = { l: Listing; score: number | null; gap: number | null; days: number 
 // each column: its header, what it sorts on, its cell; `wide` ones only show from a tablet up
 const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string | null; cell: (r: Row) => React.ReactNode; right?: boolean; center?: boolean; wide?: boolean }[] = [
   { key: "type", label: "Type", center: true, sort: r => typeOf(r.l), cell: r => <TypeIcon type={r.l.property_type} className="mx-auto size-4 text-muted-foreground" /> },
-  { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="flex max-w-72 items-center gap-1 font-medium">{r.l.favorite && <Star on className="size-3.5 shrink-0" />}<span className="truncate">{titleOf(r.l)}</span>{unseen(r.l) && <NewBadge className="h-4 shrink-0 px-1.5 text-[10px]" />}</span><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Origin l={r.l} />{[...new Set(r.l.urls.map(u => u.source).filter(Boolean))].join(", ")}</span></span> },
+  { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="flex max-w-72 items-center gap-1 font-medium">{r.l.favorite && <Star on className="size-3.5 shrink-0" />}<span className="truncate">{titleOf(r.l)}</span>{unseen(r.l) && <NewBadge className="h-4 shrink-0 px-1.5 text-[10px]" />}</span><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Origin l={r.l} />{[...new Set(r.l.urls.map(u => u.source).filter(Boolean))].join(", ")}</span>{!!r.l.labels?.length && <span className="mt-1 flex max-w-72 flex-wrap gap-1">{r.l.labels.map(x => <LabelChip key={x} name={x} className="h-4 px-1.5 text-[10px]" />)}</span>}</span> },
   { key: "price", label: "Prix", right: true, sort: r => r.l.price, cell: r => <PriceCell l={r.l} /> },
   { key: "area", label: "Surface", right: true, sort: r => r.l.area ?? r.l.land_area ?? null, cell: r => (r.l.area ? `${num(r.l.area)} m²` : r.l.land_area ? `${num(r.l.land_area)} m² de terrain` : "—") },
   { key: "ppm2", label: "Prix unitaire", right: true, wide: true, sort: r => unitPrice(r.l), cell: r => num(unitPrice(r.l)) },
@@ -69,15 +70,17 @@ const NOT_DROPPED = Object.keys(MINE).filter(k => k !== "dropped")
 // The list's filters, kept per search in this browser (useStoredState). Those of the « Filtres » popover: ranges read
 // as the search's criteria are (engine lib/market.js matches: an unknown value passes), the portals, a price drop.
 type Filters = {
-  type: "all" | PropertyType; floor: Floor; mine: string[]; status: string; onlyMatching: boolean; onlyNew: boolean; onlyFavorites: boolean; hideExpired: boolean
+  type: "all" | PropertyType; floor: Floor; mine: string[]; labels: string[]; status: string; onlyMatching: boolean; onlyNew: boolean; onlyFavorites: boolean; hideExpired: boolean
   price_min: string; price_max: string; area_min: string; area_max: string; rooms_min: string; score_min: string; dpe_max: string; sources: string[]; drops: boolean
   sort: { key: string; dir: 1 | -1 }
 }
 const DEFAULTS: Filters = {
-  type: "all", floor: "all", mine: NOT_DROPPED, status: "all", onlyMatching: false, onlyNew: false, onlyFavorites: false, hideExpired: true,
+  type: "all", floor: "all", mine: NOT_DROPPED, labels: [], status: "all", onlyMatching: false, onlyNew: false, onlyFavorites: false, hideExpired: true,
   price_min: "", price_max: "", area_min: "", area_max: "", rooms_min: "", score_min: "", dpe_max: "", sources: [], drops: false, sort: { key: "score", dir: -1 },
 }
 const MORE = ["price_min", "price_max", "area_min", "area_max", "rooms_min", "score_min", "dpe_max", "sources", "drops"] as const
+// the labels' filter: a listing carrying one of those ticked, or none when « Sans label » (NO_LABEL) is
+const NO_LABEL = "\u0000none"
 // a filter as it was at first (lists in any order)
 const same = (a: unknown, b: unknown) => JSON.stringify(Array.isArray(a) ? a.toSorted() : a) === JSON.stringify(Array.isArray(b) ? b.toSorted() : b)
 const isDefault = (f: Filters, k: keyof Filters) => same(f[k], DEFAULTS[k])
@@ -87,7 +90,7 @@ const number = (s: string) => (s.trim() === "" || !Number.isFinite(+s) ? undefin
 // select rows for the actions on several at once
 export function ListTab() {
   const { slug, data, types, lastVisit, marketFor, aidsFor, select, spot } = useSearch()
-  const [q, setQ] = useState(""), [f, setF] = useStoredState<Filters>(`immo:${slug}:list`, DEFAULTS), [picked, setPicked] = useState<string[]>([])
+  const [q, setQ] = useState(""), [f, setF] = useStoredState<Filters>(`immo:${slug}:list`, DEFAULTS), [picked, setPicked] = useState<string[]>([]), labels = useLabels()
   const set = (x: Partial<Filters>) => setF(v => ({ ...v, ...x }))
   const { sort, type, floor, mine, status, hideExpired } = f
   const rows = useMemo(() => data.listings.map(l => ({
@@ -100,6 +103,7 @@ export function ListTab() {
   const shown = rows
     .filter(({ l, score: sc }) => l.id === spot || (!needle || [titleOf(l), l.location.address, l.location.city, ...l.urls.map(u => u.source)].some(x => x?.toLowerCase().includes(needle)))
       && (type === "all" || typeOf(l) === type) && floorOk(l, floor) && mine.includes(l.my_status ?? "none")
+      && (!f.labels.length || f.labels.some(x => (x === NO_LABEL ? !l.labels?.length : !!l.labels?.includes(x))))
       && (status === "all" || (status === "online" ? l.status === "AVAILABLE" : l.status === status))
       && (!f.onlyMatching || matches(l, data.search.criteria, types)) && (!f.onlyNew || isNew(l, lastVisit)) && (!f.onlyFavorites || !!l.favorite)
       && (!hideExpired || status === "EXPIRED" || !shelved(l))
@@ -150,6 +154,25 @@ export function ListTab() {
             <DropdownMenuCheckboxItem checked={mine.length === Object.keys(MINE).length} onSelect={e => e.preventDefault()} onCheckedChange={on => set({ mine: on ? Object.keys(MINE) : [] })}>Tous</DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {(labels.length > 0 || f.labels.length > 0) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="Labels" className="flex h-8 w-fit max-w-64 items-center justify-between gap-1.5 rounded-md border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50">
+                <TagIcon className="size-4 text-muted-foreground" />
+                <span className="truncate">{f.labels.length ? f.labels.map(x => (x === NO_LABEL ? "Sans label" : x)).join(", ") : "Tous les labels"}</span>
+                <ChevronDownIcon className="size-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {labels.map(x => (
+                <DropdownMenuCheckboxItem key={x} checked={f.labels.includes(x)} onSelect={e => e.preventDefault()} onCheckedChange={on => setF(v => ({ ...v, labels: on ? [...v.labels, x] : v.labels.filter(y => y !== x) }))}><TagIcon />{x}</DropdownMenuCheckboxItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={f.labels.includes(NO_LABEL)} onSelect={e => e.preventDefault()} onCheckedChange={on => setF(v => ({ ...v, labels: on ? [...v.labels, NO_LABEL] : v.labels.filter(y => y !== NO_LABEL) }))}>Sans label</DropdownMenuCheckboxItem>
+              {f.labels.length > 0 && <DropdownMenuItem onSelect={() => set({ labels: [] })}><RotateCcwIcon />Tous les labels</DropdownMenuItem>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Select value={status} onValueChange={v => set({ status: v })}>
           <SelectTrigger size="sm" aria-label="Statut de l'annonce"><SelectValue /></SelectTrigger>
           <SelectContent><SelectGroup><SelectItem value="all">Toutes les annonces</SelectItem><SelectItem value="online">En ligne</SelectItem><SelectItem value="UNDER_OFFER">Sous offre</SelectItem><SelectItem value="EXPIRED">Expirées</SelectItem></SelectGroup></SelectContent>
@@ -279,10 +302,13 @@ function MoreFilters({ f, set, sources, count }: { f: Filters; set: (x: Partial<
 function BulkBar({ ls, onClear }: { ls: Listing[]; onClear: () => void }) {
   const { slug, data, state, reload, toggleCompare, clearCompare } = useSearch(), run = useRun(), [busy, setBusy] = useState(false)
   const n = ls.length, s = n > 1 ? "s" : "", fetched = ls.filter(l => l.se_id)
-  async function apply(body: { my_status?: Status; favorite?: boolean; seen?: boolean }, done: string) {
+  // ticked in the picker: the labels every listing of the selection carries; one picked goes on all, or off all
+  const common = (ls[0]?.labels ?? []).filter(x => ls.every(l => l.labels?.includes(x)))
+  const label = (x: string, on: boolean) => apply(l => ({ labels: on ? [...new Set([...(l.labels ?? []), x])] : (l.labels ?? []).filter(y => y !== x) }), `${n} bien${s} : label « ${x} » ${on ? "ajouté" : "retiré"}`)
+  async function apply(body: { my_status?: Status; favorite?: boolean; seen?: boolean } | ((l: Listing) => { labels: string[] }), done: string) {
     setBusy(true)
     try {
-      await Promise.all(ls.map(l => api.listing(slug, l.id, body)))
+      await Promise.all(ls.map(l => api.listing(slug, l.id, typeof body === "function" ? body(l) : body)))
       toast.success(done)
     } catch (e) { toast.error("Modification interrompue", { description: (e as Error).message }) } finally { await reload(); setBusy(false) }
   }
@@ -297,6 +323,9 @@ function BulkBar({ ls, onClear }: { ls: Listing[]; onClear: () => void }) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      <LabelPicker chosen={common} onPick={label}>
+        <Button size="sm" variant="outline" disabled={busy}><TagsIcon data-icon="inline-start" />Labels<ChevronDownIcon data-icon="inline-end" /></Button>
+      </LabelPicker>
       <Button size="sm" variant="outline" disabled={busy} onClick={() => apply({ favorite: true }, `${n} bien${s} en favoris`)}><Star on className="size-3.5" />Favoris</Button>
       <Button size="sm" variant="outline" disabled={busy} onClick={() => apply({ favorite: false }, `${n} bien${s} retiré${s} des favoris`)}><StarOffIcon data-icon="inline-start" />Retirer des favoris</Button>
       <Button size="sm" variant="outline" disabled={busy} onClick={() => apply({ seen: true }, `${n} bien${s} marqué${s} comme vu${s}`)}><EyeIcon data-icon="inline-start" />Marquer comme vu{s}</Button>

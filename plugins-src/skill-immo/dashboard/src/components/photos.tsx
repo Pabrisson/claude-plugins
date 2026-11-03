@@ -1,7 +1,6 @@
 import { ChevronLeftIcon, ChevronRightIcon, ImagesIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
-import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import type { Listing } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -32,6 +31,18 @@ export function Photos({ l }: { l: Listing }) {
   )
 }
 
+// ← or → over the whole height of the photo's side: the zone is the button, its round icon only shows it (no transform
+// on what is pressed: a button that moved under the pointer lost its click)
+function Side({ dir, onGo }: { dir: -1 | 1; onGo: (d: number) => void }) {
+  const Icon = dir < 0 ? ChevronLeftIcon : ChevronRightIcon
+  return (
+    <button type="button" aria-label={dir < 0 ? "Photo précédente" : "Photo suivante"} onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} onClick={() => onGo(dir)}
+      className={cn("group/side absolute inset-y-0 flex w-1/5 max-w-40 min-w-14 cursor-pointer items-center outline-none", dir < 0 ? "left-0 justify-start pl-2" : "right-0 justify-end pr-2")}>
+      <span className="grid size-11 place-items-center rounded-full bg-black/50 text-white transition-colors group-hover/side:bg-black/80 group-focus-visible/side:ring-3 group-focus-visible/side:ring-white/60 group-active/side:bg-black"><Icon className="size-6" /></span>
+    </button>
+  )
+}
+
 // The photos full screen: ← and → (keys, buttons, a swipe), the count, the thumbnails, Échap closes
 function Viewer({ photos, at, onAt, onFail }: { photos: string[]; at: number | null; onAt: (i: number | null) => void; onFail: (p: string) => void }) {
   const n = photos.length, i = at == null ? 0 : Math.min(at, n - 1), x0 = useRef<number | null>(null), strip = useRef<HTMLDivElement>(null)
@@ -48,8 +59,8 @@ function Viewer({ photos, at, onAt, onFail }: { photos: string[]; at: number | n
           {photos[i] && <img key={photos[i]} src={photos[i]} alt={`Photo ${i + 1} sur ${n}`} referrerPolicy="no-referrer" draggable={false} className="size-full object-contain" onError={() => onFail(photos[i])} />}
           {n > 1 && (
             <>
-              <Button variant="ghost" size="icon" aria-label="Photo précédente" onClick={() => go(-1)} className="absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white"><ChevronLeftIcon /></Button>
-              <Button variant="ghost" size="icon" aria-label="Photo suivante" onClick={() => go(1)} className="absolute top-1/2 right-1 -translate-y-1/2 rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white"><ChevronRightIcon /></Button>
+              <Side dir={-1} onGo={go} />
+              <Side dir={1} onGo={go} />
             </>
           )}
         </div>

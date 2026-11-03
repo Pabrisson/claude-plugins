@@ -37,12 +37,13 @@ test('merge: new, deduplicated by URL, the user keeps status and notes, drops an
   const [l] = r.listings
   l.my_status = 'to_visit'
   l.favorite = true
+  l.labels = ['coup de cœur']
   l.notes = 'lumineux'
   // Stream Estate finds it later: one listing, its id, the user's fields, and the drop from 290 000 to 280 000
   r = merge([l], [se], '2026-10-27')
   assert.equal(r.listings.length, 1)
   const m = r.listings[0]
-  assert.deepEqual([m.id, m.source, m.my_status, m.favorite, m.notes, m.first_seen], [raw.uuid, 'stream-estate', 'to_visit', true, 'lumineux', '2026-10-01'])
+  assert.deepEqual([m.id, m.source, m.my_status, m.favorite, m.labels, m.notes, m.first_seen], [raw.uuid, 'stream-estate', 'to_visit', true, ['coup de cœur'], 'lumineux', '2026-10-01'])
   assert.deepEqual(r.changes.map(c => [c.kind, c.from, c.to]), [['price_drop', 290000, 280000]])
   assert.deepEqual(m.price_history.map(h => h.price), [290000, 280000])
   // under offer, then gone from the zone

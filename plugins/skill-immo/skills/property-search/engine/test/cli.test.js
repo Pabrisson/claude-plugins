@@ -330,7 +330,7 @@ test('a message for a listing: kept with it, shown to the agent', async () => {
   await run(home, ['add', '-p', 'paul-bert', '--file', path.join(dir, 'l.json')], { key: null })
   await run(home, ['search', '-p', 'paul-bert'], { key: null })
   const shown = JSON.parse((await run(home, ['show', '-p', 'paul-bert', '--id', id], { key: null })).out)
-  assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent, shown.favorite], ['flat', 3, 883, false])
+  assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent, shown.favorite, shown.labels], ['flat', 3, 883, false, []])
   assert.deepEqual(shown.messages.map(x => [x.from, x.channel, !!x.sent_at]), [['them', 'phone', false], ['me', null, false], ['me', null, true]])
   assert.ok(shown.review.questions.length && shown.score.parts.length === 6)
 })

@@ -54,6 +54,8 @@ export type Listing = {
   my_status: Status
   // the user's star, apart from the status
   favorite?: boolean
+  // the user's free labels, to group listings (components/labels)
+  labels?: string[]
   // when the user first opened it (« Nouveau » until then)
   seen_at?: string | null
   notes: string
@@ -258,7 +260,7 @@ export const api = {
   cache: (clear = false) => json<{ files: number; bytes: number }>("/api/cache", clear ? { method: "DELETE" } : undefined),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; seen?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
   saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),

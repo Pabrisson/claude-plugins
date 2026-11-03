@@ -148,9 +148,9 @@ export function fromInput(x, source) {
   }
 }
 
-// what the user keeps on a listing (their star, when they first opened it, the messages the agent wrote for it
+// what the user keeps on a listing (their star, their labels, when they first opened it, the messages the agent wrote for it
 // included), and what the engine adds, through every refresh
-const KEPT = ['first_seen', 'price_history', 'my_status', 'favorite', 'seen_at', 'notes', 'messages', 'building', 'changes']
+const KEPT = ['first_seen', 'price_history', 'my_status', 'favorite', 'labels', 'seen_at', 'notes', 'messages', 'building', 'changes']
 
 // Merges listings into the known ones (by id, else by URL) on day `now`. A listing seen again keeps the user's status,
 // notes and history, and what the link check found of its adverts; a new price, status or expiry is logged in its

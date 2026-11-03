@@ -12,6 +12,8 @@ Contents: analyse and compare (`show`, `market.json`, the verdict) · messages a
 - its `type`, and the market badge against the sold unit price of that type (`reference.scope` says which: recent zone,
   zone or commune);
 - `favorite`: the user starred it in the dashboard. « Mes favoris » are the listings where it is true;
+- `labels`: the user's free labels from the dashboard (« coup de cœur », « à rappeler »…): « mes biens à rappeler »
+  are the listings carrying that label;
 - `review`: the strong points and the points to watch (each with its source) and the questions to ask;
 - `score`: out of 100, each part (price, budget, energy, transport, travel, outdoor) and its weight;
 - `rent`: the rent of the same home, the owner's monthly cost, the gross yield, and the years before buying beats

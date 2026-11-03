@@ -2,7 +2,7 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { CalendarClockIcon, CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquarePlusIcon, MessageSquareTextIcon, PenLineIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
@@ -11,6 +11,7 @@ import { Dpe } from "@/components/dpe"
 import { nearby } from "@/components/map-view"
 import { Gap, Ruler } from "@/components/ruler"
 import { FavoriteButton } from "@/components/favorite"
+import { LabelsEditor } from "@/components/labels"
 import { Origin } from "@/components/origin"
 import { Photos } from "@/components/photos"
 import { useRun } from "@/components/run-dialog"
@@ -233,7 +234,15 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
           {[l.area && `${l.area} m²`, l.land_area && `terrain de ${l.land_area} m²`, l.rooms && `${l.rooms} pièces`, t === "flat" && l.floor != null && (l.floor === 0 ? "rez-de-chaussée" : `${l.floor}ᵉ étage${l.floors ? ` sur ${l.floors}` : ""}`), perUnit(unitPrice(l), t)].filter(Boolean).join(" · ")}
         </span>
       </div>
-      <Origin l={l} variant="line" />
+      {/* found here, and first put online on a portal (the oldest of its adverts, engine lib/listings.js) */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Origin l={l} variant="line" />
+        {l.published_at && (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <CalendarClockIcon className="size-4" />1ʳᵉ mise en ligne le <span className="font-medium text-foreground">{date(l.published_at)}</span>{days != null && ` (${days ? `il y a ${days} j` : "aujourd'hui"})`}
+          </p>
+        )}
+      </div>
       <Portals l={l} />
       <Contacts l={l} />
       <div className="flex flex-wrap items-center gap-2">
@@ -248,6 +257,7 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
             onPick={k => { addFeedback({ kind: "message", text: `${MESSAGE_LABEL[k].toLowerCase()} pour ${l.id} — ${short} : rédige ${DRAFTS[k]}` }); toast.success("Ajouté au prompt : copiez-le pour l'agent, il rédigera le message et l'enregistrera ici") }} />
         </span>
       </div>
+      <LabelsEditor l={l} />
 
       <Synthesis l={l} aids={aids} />
 
@@ -258,7 +268,7 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
         <Row label={`Vendu, ${{ recent: "zone (2 ans)", zone: "zone (5 ans)", commune: "commune" }[ref?.scope ?? "recent"]}`} hint={ref ? `${ref.count} ventes` : undefined}>{perUnit(ref?.ppm2, t)}</Row>
         {data.market.dvf?.[t]?.street?.count ? <Row label={`Vendu, ${data.search.street?.name ?? "rue"}`}>{perUnit(data.market.dvf[t]!.street!.median_ppm2, t)}</Row> : null}
         {asking(data.market, t) ? <Row label="Affiché, zone (dernier mois)">{m2(asking(data.market, t))}</Row> : null}
-        <Row label="En ligne depuis">{days != null ? `${days} jours` : "—"}{l.urgent ? " · urgent" : ""}{l.favorites ? ` · ${l.favorites} favoris` : ""}</Row>
+        <Row label="En ligne depuis">{days != null ? `${days} jours, depuis le ${date(l.published_at ?? l.first_seen)}` : "—"}{l.urgent ? " · urgent" : ""}{l.favorites ? ` · ${l.favorites} favoris` : ""}</Row>
         {drop > 0 && <Row label="Baisses déjà faites">{pct(-drop, 1)}</Row>}
         {/* the portals' changes and those the search saw: a change both saw, once */}
         {[...new Map([...l.price_changes.map(c => ({ date: c.date, text: `${eur(c.from)} → ${eur(c.to)}` })), ...(l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, text: `${eur(c.from as number)} → ${eur(c.to as number)}` }))].map(c => [`${c.date.slice(0, 10)}|${c.text}`, c])).values()].map(c => (

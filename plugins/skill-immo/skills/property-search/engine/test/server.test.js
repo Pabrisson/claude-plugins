@@ -96,6 +96,12 @@ test("the user's status and notes, the last visit, the profile", async () => {
   assert.equal((await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { favorite: 'yes' })).json()).favorite, true)
   const fav = await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { favorite: false })).json()
   assert.deepEqual([fav.favorite, fav.my_status], [false, 'to_visit'])
+  // free labels: trimmed, without doubles or blanks, 40 characters and 20 labels at most; anything but strings refused
+  const tagged = await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { labels: [' coup de cœur ', 'coup de cœur', '', 'x'.repeat(50), ...Array.from({ length: 30 }, (_, i) => `l${i}`)] })).json()
+  assert.deepEqual([tagged.labels.length, tagged.labels[0], tagged.labels[1].length, tagged.my_status], [20, 'coup de cœur', 40, 'to_visit'])
+  assert.equal((await post(`/api/s/paul-bert/listings/${property.uuid}`, { labels: 'coup de cœur' })).status, 400)
+  assert.equal((await post(`/api/s/paul-bert/listings/${property.uuid}`, { labels: [1] })).status, 400)
+  assert.deepEqual((await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { labels: ['rdc'] })).json()).labels, ['rdc'])
   assert.equal((await post('/api/s/paul-bert/listings/nope', { notes: 'x' })).status, 404)
   assert.equal((await (await post('/api/s/paul-bert/visit', {})).json()).last_visit, null)
   assert.ok((await (await post('/api/s/paul-bert/visit', {})).json()).last_visit)

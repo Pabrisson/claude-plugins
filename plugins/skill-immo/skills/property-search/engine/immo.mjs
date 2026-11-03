@@ -989,7 +989,7 @@ function show() {
     return {
     id: l.id, source: l.source, type: t, title: l.title, url: l.urls.find(u => u.url)?.url ?? null, portals: l.urls.map(u => u.source),
     price: l.price, area: l.area, land_area: l.land_area ?? null, price_per_m2: l.price_per_m2, rooms: l.rooms, floor: l.floor, dpe: l.dpe?.energy, status: l.status,
-    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, favorite: !!l.favorite, notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), address: l.location.address,
+    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, favorite: !!l.favorite, labels: l.labels ?? [], notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), address: l.location.address,
     market: { reference: ref, badge: badge(unitPrice(l), ref?.ppm2), street_ppm2: m.dvf?.[t]?.street?.median_ppm2 ?? null, asking_ppm2: asking(m, t) },
     negotiation: negotiation(l, ref?.ppm2), days_online: daysOnline(l), dropped: Math.round(dropped(l) * 1000) / 1000, urgent: l.urgent, favorites: l.favorites,
     review: review(l, ctx), score: score(l, ctx),
@@ -1272,6 +1272,11 @@ async function handle(req, res) {
       if ('my_status' in body) { if (![null, 'to_visit', 'visited', 'offer', 'dropped'].includes(body.my_status)) return reply(res, 400, { error: 'bad status' }); l.my_status = body.my_status }
       if (typeof body.notes === 'string') l.notes = body.notes.slice(0, 5000)
       if (typeof body.favorite === 'boolean') l.favorite = body.favorite
+      // the user's free labels: trimmed, without doubles, 20 of 40 characters at most
+      if ('labels' in body) {
+        if (!Array.isArray(body.labels) || body.labels.some(x => typeof x !== 'string')) return reply(res, 400, { error: 'bad labels' })
+        l.labels = [...new Set(body.labels.map(x => x.trim().slice(0, 40)).filter(Boolean))].slice(0, 20)
+      }
       // opened: no longer « Nouveau »; seen: false puts it back
       if (typeof body.seen === 'boolean') l.seen_at = body.seen ? l.seen_at ?? now() : null
       // the conversation: a message the user adds (a reply received, a call), one marked sent or not, one deleted
