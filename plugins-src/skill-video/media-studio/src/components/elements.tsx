@@ -212,7 +212,7 @@ export function ElementsTab({
           tools={tools}
           engine={engine}
           onClose={stop}
-          onSaved={(name) => (stop(), onChanged(), setOpen(name))}
+          onSaved={() => (stop(), onChanged())}
           onUse={onUse}
         />
       )}

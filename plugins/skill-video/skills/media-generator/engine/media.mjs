@@ -333,9 +333,9 @@ const elementList = () => (fs.existsSync(at('elements')) ? fs.readdirSync(at('el
 
 // a file copied into an Element's or a style's folder: a result keeps its job in its name (each job has its out-1.png),
 // an upload loses its time stamp; the same file again is skipped, another of the same name gets -2, -3…
+const resultName = f => (inside(at('media'), f) ? `${path.basename(path.dirname(f))}-${path.basename(f)}` : null)
 function copyIn(dir, f) {
-  const job = inside(at('media'), f) && path.basename(path.dirname(f))
-  let name = job ? `${job}-${path.basename(f)}` : path.basename(f).replace(/^\d+-/, '')
+  let name = resultName(f) ?? path.basename(f).replace(/^\d+-/, '')
   const { name: base, ext } = path.parse(name), size = fs.statSync(f).size
   for (let i = 2; fs.existsSync(path.join(dir, name)); i++) {
     if (fs.statSync(path.join(dir, name)).size === size) return
@@ -371,8 +371,9 @@ function saveElement(name, { type, words, colors, font, voice, files = [], from 
   const own = voice === undefined ? now?.voice ?? undefined : String(voice).replace(/^@/, '') || undefined
   if (own && t !== 'character') throw userError('only a character has a voice of its own')
   if (own && element(own)?.type !== 'voice') throw userError(`no voice @${own} in the Library (elements add ${own} <clips…> --type voice)`)
-  // an Element of images has 2 at least: Kling takes 2 to 4 views of each, and every model reads it better
-  const kept = new Set([...(now?.files ?? []).map(f => path.basename(f)), ...all.map(f => path.basename(f))].filter(f => !drop.map(d => path.basename(d)).includes(f)))
+  // an Element of images has 2 at least: Kling takes 2 to 4 views of each, and every model reads it better; a result
+  // counted by its name in the folder (every job has its out-1.png), an upload by its own (two uploads of one name are two)
+  const kept = new Set([...(now?.files ?? []).map(f => path.basename(f)), ...all.map(f => resultName(f) ?? path.basename(f))].filter(f => !drop.map(d => path.basename(d)).includes(f)))
   if (want === 'image' && kept.size < 2) {
     const tool = REF_TOOLS[t]
     throw userError(`an Element takes 2 images at least, @${name} would have ${kept.size}: ${tool ? `make another view from it with ${tool} (media.mjs image --tool ${tool} --in references=<its image>, its estimate then the user's yes), then add it (--from <that generation>)` : 'add a second one (another version or angle)'}`)

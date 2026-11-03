@@ -187,6 +187,11 @@ test('Elements: typed, from files or results; an @name says what it is and where
   assert.match((await cli('elements', 'add', 'Veste', at('b.png'), '--type', 'outfit', '--from', jacket)).out, /^@Veste: outfit, 2 images$/m)
   assert.match((await cli('elements', 'add', 'Veste', '--from', jacket)).out, /^@Veste: outfit, 2 images$/m)
   assert.ok(fs.existsSync(at('elements', 'Veste', `${jacket}-out-1.png`)))
+  // two results, both out-1.png of their job, are two images
+  await cli('image', '--prompt', 'a jacket, back view', '--model', 'fake/img', '--spend', '1')
+  const back = media().filter(d => d.includes('-free-')).sort().at(-1)
+  assert.match((await cli('elements', 'add', 'Duo', '--type', 'outfit', '--from', `${jacket},${back}`)).out, /^@Duo: outfit, 2 images$/m)
+  await cli('elements', 'remove', 'Duo')
   assert.match((await cli('elements', 'add', 'Acme', ...two(), '--type', 'brand', '--colors', '#0E2A47, #F2B134', '--font', 'Inter')).out, /^@Acme: brand, 2 images · #0E2A47 #F2B134$/m)
   // in the prompt, after the tool's own images, each once; a style of the Library too; an unknown name stays
   await cli('styles', 'add', 'Ink', at('a.png'), '--words', 'thick brush ink')
