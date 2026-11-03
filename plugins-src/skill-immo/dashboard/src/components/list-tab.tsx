@@ -1,7 +1,7 @@
 import { score } from "@engine/decide.js"
 import { badge, daysOnline, dropped, isHome, matches, typeOf, unitPrice } from "@engine/market.js"
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronDownIcon, EyeIcon, EyeOffIcon, RefreshCwIcon, RotateCcwIcon, ScaleIcon, SearchIcon, SlidersHorizontalIcon, StarOffIcon, TagIcon, TagsIcon, TrendingDownIcon, XIcon } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, BadgeCheckIcon, BedDoubleIcon, ChevronDownIcon, CircleDotIcon, EllipsisIcon, EuroIcon, EyeIcon, EyeOffIcon, GaugeIcon, GlobeIcon, ListChecksIcon, RefreshCwIcon, RotateCcwIcon, RulerIcon, ScaleIcon, SearchIcon, SlidersHorizontalIcon, SparklesIcon, StarOffIcon, TagIcon, TagsIcon, TrendingDownIcon, XIcon, ZapIcon } from "lucide-react"
+import { createElement, useEffect, useMemo, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
 import { CreditBadge } from "@/components/credit-badge"
@@ -17,11 +17,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api, type Listing, type PropertyType, type Status } from "@/lib/api"
@@ -34,7 +35,7 @@ type Row = { l: Listing; score: number | null; gap: number | null; days: number 
 // each column: its header, what it sorts on, its cell; `wide` ones only show from a tablet up
 const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string | null; cell: (r: Row) => React.ReactNode; right?: boolean; center?: boolean; wide?: boolean }[] = [
   { key: "type", label: "Type", center: true, sort: r => typeOf(r.l), cell: r => <TypeIcon type={r.l.property_type} className="mx-auto size-4 text-muted-foreground" /> },
-  { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="flex max-w-72 items-center gap-1 font-medium">{r.l.favorite && <Star on className="size-3.5 shrink-0" />}<span className="truncate">{titleOf(r.l)}</span>{unseen(r.l) && <NewBadge className="h-4 shrink-0 px-1.5 text-[10px]" />}</span><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Origin l={r.l} />{[...new Set(r.l.urls.map(u => u.source).filter(Boolean))].join(", ")}</span>{!!r.l.labels?.length && <span className="mt-1 flex max-w-72 flex-wrap gap-1">{r.l.labels.map(x => <LabelChip key={x} name={x} className="h-4 px-1.5 text-[10px]" />)}</span>}</span> },
+  { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="flex max-w-72 items-center gap-1 font-medium">{r.l.favorite && <Star on className="size-3.5 shrink-0" />}<span className="truncate">{titleOf(r.l)}</span>{unseen(r.l) && <NewBadge className="h-4 shrink-0 px-1.5 text-[10px]" />}</span><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Origin l={r.l} />{[...new Set(r.l.urls.map(u => u.source).filter(Boolean))].join(", ")}</span></span> },
   { key: "price", label: "Prix", right: true, sort: r => r.l.price, cell: r => <PriceCell l={r.l} /> },
   { key: "area", label: "Surface", right: true, sort: r => r.l.area ?? r.l.land_area ?? null, cell: r => (r.l.area ? `${num(r.l.area)} m²` : r.l.land_area ? `${num(r.l.land_area)} m² de terrain` : "—") },
   { key: "ppm2", label: "Prix unitaire", right: true, wide: true, sort: r => unitPrice(r.l), cell: r => num(unitPrice(r.l)) },
@@ -44,8 +45,9 @@ const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string |
   { key: "dpe", label: "DPE", wide: true, sort: r => r.l.dpe?.energy ?? null, cell: r => (isHome(typeOf(r.l)) ? <Dpe value={r.l.dpe?.energy} /> : "—") },
   { key: "score", label: "Score", right: true, sort: r => r.score, cell: r => (r.score == null ? "—" : <span className="font-semibold tabular-nums">{r.score}</span>) },
   { key: "mine", label: "Mon statut", sort: r => (r.l.my_status ? Object.keys(STATUS_LABEL).indexOf(r.l.my_status) : -1), cell: r => (r.l.my_status ? <StatusBadge status={r.l.my_status} /> : <span className="text-muted-foreground">À trier</span>) },
-  { key: "status", label: "Annonce", wide: true, sort: r => r.l.status, cell: r => <span className={cn(r.l.status !== "AVAILABLE" && "text-muted-foreground")}>{r.l.status === "AVAILABLE" ? "En ligne" : SALE_STATUS[r.l.status] ?? r.l.status}</span> },
-  { key: "days", label: "En ligne", right: true, wide: true, sort: r => r.days, cell: r => (r.days == null ? "—" : `${r.days} j`) },
+  { key: "labels", label: "Labels", wide: true, sort: r => (r.l.labels?.length ? r.l.labels.toSorted((a, b) => a.localeCompare(b, "fr")).join(" ") : null), cell: r => <LabelsCell labels={r.l.labels ?? []} /> },
+  // the days online, or what the advert became (« Sous offre », « Expiré »…), its days on hover
+  { key: "days", label: "En ligne", right: true, wide: true, sort: r => r.days, cell: r => (r.l.status !== "AVAILABLE" ? <span className="whitespace-nowrap text-muted-foreground" title={r.days == null ? undefined : `${r.days} j en ligne`}>{SALE_STATUS[r.l.status] ?? r.l.status}</span> : r.days == null ? "—" : `${r.days} j`) },
   { key: "offer", label: "Offre", right: true, wide: true, sort: r => r.offer, cell: r => eur(r.offer) },
 ]
 // the price first: large, with the first price seen struck through when it has changed since
@@ -55,6 +57,16 @@ function PriceCell({ l }: { l: Listing }) {
     <span className="inline-flex flex-col items-end leading-tight">
       <span className="text-base font-bold tabular-nums whitespace-nowrap">{eur(l.price)}</span>
       {moved != null && <span className={cn("text-xs whitespace-nowrap", moved < 0 ? "text-below" : "text-above")}><s className="text-muted-foreground">{eur(first)}</s> {pct(moved)}</span>}
+    </span>
+  )
+}
+// a row's labels on one line: two, then « +n » naming the others on hover
+function LabelsCell({ labels }: { labels: string[] }) {
+  if (!labels.length) return <span className="text-muted-foreground">—</span>
+  return (
+    <span className="flex items-center gap-1 whitespace-nowrap">
+      {labels.slice(0, 2).map(x => <LabelChip key={x} name={x} className="h-4 max-w-28 px-1.5 text-[10px]" />)}
+      {labels.length > 2 && <Badge variant="outline" className="h-4 px-1.5 text-[10px]" title={labels.slice(2).join(", ")}>+{labels.length - 2}</Badge>}
     </span>
   )
 }
@@ -78,13 +90,39 @@ const DEFAULTS: Filters = {
   type: "all", floor: "all", mine: NOT_DROPPED, labels: [], status: "all", onlyMatching: false, onlyNew: false, onlyFavorites: false, hideExpired: true,
   price_min: "", price_max: "", area_min: "", area_max: "", rooms_min: "", score_min: "", dpe_max: "", sources: [], drops: false, sort: { key: "score", dir: -1 },
 }
-const MORE = ["price_min", "price_max", "area_min", "area_max", "rooms_min", "score_min", "dpe_max", "sources", "drops"] as const
 // the labels' filter: a listing carrying one of those ticked, or none when « Sans label » (NO_LABEL) is
 const NO_LABEL = "\u0000none"
+// the bar's two menus, drawn as a select's trigger
+const MENU = "flex h-8 w-fit max-w-64 items-center justify-between gap-1.5 rounded-md border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
 // a filter as it was at first (lists in any order)
 const same = (a: unknown, b: unknown) => JSON.stringify(Array.isArray(a) ? a.toSorted() : a) === JSON.stringify(Array.isArray(b) ? b.toSorted() : b)
 const isDefault = (f: Filters, k: keyof Filters) => same(f[k], DEFAULTS[k])
 const number = (s: string) => (s.trim() === "" || !Number.isFinite(+s) ? undefined : +s)
+const STATUS_FILTER: Record<string, string> = { all: "Toutes les annonces", online: "En ligne", UNDER_OFFER: "Sous offre", EXPIRED: "Expirées" }
+const span = (min: string, max: string, unit: string) => (min && max ? `${num(+min)} – ${num(+max)} ${unit}` : min ? `≥ ${num(+min)} ${unit}` : `≤ ${num(+max)} ${unit}`)
+
+// The filters the « Filtres » popover holds, each away from its default as a chip under the bar: its icon, what it
+// keeps, what its × puts back. Their count is the button's.
+type Chip = { key: string; label: string; icon: ReactNode; clear: Partial<Filters> }
+function chipsOf(f: Filters): Chip[] {
+  const c: (Chip | false)[] = [
+    f.onlyMatching && { key: "crit", label: "Dans mes critères", icon: <ListChecksIcon />, clear: { onlyMatching: false } },
+    f.onlyNew && { key: "new", label: "Nouveautés", icon: <SparklesIcon />, clear: { onlyNew: false } },
+    f.onlyFavorites && { key: "fav", label: "Favoris", icon: <Star on />, clear: { onlyFavorites: false } },
+    !f.hideExpired && f.status !== "EXPIRED" && { key: "exp", label: "Expirées affichées", icon: <EyeIcon />, clear: { hideExpired: true } },
+    f.type !== "all" && { key: "type", label: TYPE_PLURAL[f.type], icon: <TypeIcon type={f.type} />, clear: { type: "all" } },
+    f.floor !== "all" && { key: "floor", label: FLOORS[f.floor].label, icon: createElement(FLOORS[f.floor].icon), clear: { floor: "all" } },
+    (!!f.price_min || !!f.price_max) && { key: "price", label: span(f.price_min, f.price_max, "€"), icon: <EuroIcon />, clear: { price_min: "", price_max: "" } },
+    (!!f.area_min || !!f.area_max) && { key: "area", label: span(f.area_min, f.area_max, "m²"), icon: <RulerIcon />, clear: { area_min: "", area_max: "" } },
+    !!f.rooms_min && { key: "rooms", label: `${f.rooms_min}+ pièces`, icon: <BedDoubleIcon />, clear: { rooms_min: "" } },
+    !!f.dpe_max && { key: "dpe", label: f.dpe_max === "A" ? "DPE A" : `DPE A à ${f.dpe_max}`, icon: <ZapIcon />, clear: { dpe_max: "" } },
+    f.status !== "all" && { key: "status", label: STATUS_FILTER[f.status] ?? f.status, icon: <BadgeCheckIcon />, clear: { status: "all" } },
+    !!f.score_min && { key: "score", label: `Score ≥ ${f.score_min}`, icon: <GaugeIcon />, clear: { score_min: "" } },
+    f.sources.length > 0 && { key: "sources", label: f.sources.join(", "), icon: <GlobeIcon />, clear: { sources: [] } },
+    f.drops && { key: "drops", label: "Avec une baisse de prix", icon: <TrendingDownIcon />, clear: { drops: false } },
+  ]
+  return c.filter((x): x is Chip => !!x)
+}
 
 // Every listing of the search in one table: filters above, a sort on each column, a row opens the dossier, the boxes
 // select rows for the actions on several at once
@@ -116,76 +154,72 @@ export function ListTab() {
     })
   // the actions take the rows ticked that the filters still show
   const chosen = shown.filter(r => picked.includes(r.l.id)).map(r => r.l), all = shown.length > 0 && chosen.length === shown.length
-  const more = MORE.filter(k => !isDefault(f, k)).length, filtered = (Object.keys(DEFAULTS) as (keyof Filters)[]).some(k => k !== "sort" && !isDefault(f, k))
+  const chips = chipsOf(f), filtered = (Object.keys(DEFAULTS) as (keyof Filters)[]).some(k => k !== "sort" && !isDefault(f, k))
 
   useEffect(() => { if (spot) document.getElementById(`row-${spot}`)?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }) }, [spot])
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <InputGroup className="w-full sm:w-64">
-          <InputGroupAddon><SearchIcon /></InputGroupAddon>
-          <InputGroupInput value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher un bien, une adresse…" aria-label="Rechercher" />
-        </InputGroup>
-        {types.length > 1 && (
-          <Select value={type} onValueChange={v => set({ type: v as Filters["type"] })}>
-            <SelectTrigger size="sm" aria-label="Type de bien"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectGroup><SelectItem value="all">Tous les types</SelectItem>{types.map(t => <SelectItem key={t} value={t}><TypeIcon type={t} />{TYPE_PLURAL[t]}</SelectItem>)}</SelectGroup></SelectContent>
-          </Select>
-        )}
-        {types.includes("flat") && (
-          <Select value={floor} onValueChange={v => set({ floor: v as Floor })}>
-            <SelectTrigger size="sm" aria-label="Étage des appartements"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectGroup>{Object.entries(FLOORS).map(([k, x]) => <SelectItem key={k} value={k}><x.icon />{x.label}</SelectItem>)}</SelectGroup></SelectContent>
-          </Select>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" aria-label="Mon statut" className="flex h-8 w-fit items-center justify-between gap-1.5 rounded-md border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50">
-              {mine.length === Object.keys(MINE).length ? "Tous mes statuts" : same(mine, NOT_DROPPED) ? "Sans les écartés" : mine.length ? Object.keys(MINE).filter(k => mine.includes(k)).map(k => MINE[k]).join(", ") : "Aucun statut"}
-              <ChevronDownIcon className="size-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {Object.entries(MINE).map(([k, v]) => (
-              <DropdownMenuCheckboxItem key={k} checked={mine.includes(k)} onSelect={e => e.preventDefault()} onCheckedChange={on => setF(x => ({ ...x, mine: on ? [...x.mine, k] : x.mine.filter(m => m !== k) }))}>{v}</DropdownMenuCheckboxItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem checked={mine.length === Object.keys(MINE).length} onSelect={e => e.preventDefault()} onCheckedChange={on => set({ mine: on ? Object.keys(MINE) : [] })}>Tous</DropdownMenuCheckboxItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {(labels.length > 0 || f.labels.length > 0) && (
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <InputGroup className="w-full sm:w-72">
+            <InputGroupAddon><SearchIcon /></InputGroupAddon>
+            <InputGroupInput value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher un bien, une adresse…" aria-label="Rechercher" />
+          </InputGroup>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" aria-label="Labels" className="flex h-8 w-fit max-w-64 items-center justify-between gap-1.5 rounded-md border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50">
-                <TagIcon className="size-4 text-muted-foreground" />
-                <span className="truncate">{f.labels.length ? f.labels.map(x => (x === NO_LABEL ? "Sans label" : x)).join(", ") : "Tous les labels"}</span>
+              <button type="button" aria-label="Mon statut" className={MENU}>
+                <CircleDotIcon className="size-4 text-muted-foreground" />
+                <span className="truncate">{mine.length === Object.keys(MINE).length ? "Tous mes statuts" : same(mine, NOT_DROPPED) ? "Sans les écartés" : mine.length ? Object.keys(MINE).filter(k => mine.includes(k)).map(k => MINE[k]).join(", ") : "Aucun statut"}</span>
                 <ChevronDownIcon className="size-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              {labels.map(x => (
-                <DropdownMenuCheckboxItem key={x} checked={f.labels.includes(x)} onSelect={e => e.preventDefault()} onCheckedChange={on => setF(v => ({ ...v, labels: on ? [...v.labels, x] : v.labels.filter(y => y !== x) }))}><TagIcon />{x}</DropdownMenuCheckboxItem>
+              {Object.entries(MINE).map(([k, v]) => (
+                <DropdownMenuCheckboxItem key={k} checked={mine.includes(k)} onSelect={e => e.preventDefault()} onCheckedChange={on => setF(x => ({ ...x, mine: on ? [...x.mine, k] : x.mine.filter(m => m !== k) }))}><StatusDot status={k === "none" ? null : (k as Status)} />{v}</DropdownMenuCheckboxItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={f.labels.includes(NO_LABEL)} onSelect={e => e.preventDefault()} onCheckedChange={on => setF(v => ({ ...v, labels: on ? [...v.labels, NO_LABEL] : v.labels.filter(y => y !== NO_LABEL) }))}>Sans label</DropdownMenuCheckboxItem>
-              {f.labels.length > 0 && <DropdownMenuItem onSelect={() => set({ labels: [] })}><RotateCcwIcon />Tous les labels</DropdownMenuItem>}
+              <DropdownMenuCheckboxItem checked={mine.length === Object.keys(MINE).length} onSelect={e => e.preventDefault()} onCheckedChange={on => set({ mine: on ? Object.keys(MINE) : [] })}>Tous</DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {(labels.length > 0 || f.labels.length > 0) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Labels" className={MENU}>
+                  <TagIcon className="size-4 text-muted-foreground" />
+                  <span className="truncate">{f.labels.length ? f.labels.map(x => (x === NO_LABEL ? "Sans label" : x)).join(", ") : "Tous les labels"}</span>
+                  <ChevronDownIcon className="size-4 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {labels.map(x => (
+                  <DropdownMenuCheckboxItem key={x} checked={f.labels.includes(x)} onSelect={e => e.preventDefault()} onCheckedChange={on => setF(v => ({ ...v, labels: on ? [...v.labels, x] : v.labels.filter(y => y !== x) }))}><TagIcon />{x}</DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={f.labels.includes(NO_LABEL)} onSelect={e => e.preventDefault()} onCheckedChange={on => setF(v => ({ ...v, labels: on ? [...v.labels, NO_LABEL] : v.labels.filter(y => y !== NO_LABEL) }))}>Sans label</DropdownMenuCheckboxItem>
+                {f.labels.length > 0 && <DropdownMenuItem onSelect={() => set({ labels: [] })}><RotateCcwIcon />Tous les labels</DropdownMenuItem>}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <MoreFilters f={f} set={set} sources={sources} types={types} count={chips.length} onClear={() => set(Object.assign({}, ...chips.map(c => c.clear)))} />
+          <span className="ml-auto flex items-center gap-1 text-sm whitespace-nowrap text-muted-foreground">
+            {shown.length} bien{shown.length > 1 ? "s" : ""}
+            {filtered && <Button size="icon-sm" variant="ghost" aria-label="Réinitialiser les filtres" title="Réinitialiser les filtres" onClick={() => setF(x => ({ ...DEFAULTS, sort: x.sort }))}><RotateCcwIcon /></Button>}
+          </span>
+        </div>
+        {chips.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Filtres actifs">
+            {chips.map(c => (
+              <Badge key={c.key} variant="secondary" className="h-6 max-w-full pr-0.5 pl-2">
+                {c.icon}<span className="truncate">{c.label}</span>
+                <button type="button" aria-label={`Retirer le filtre ${c.label}`} onClick={() => set(c.clear)}
+                  className="grid size-5 shrink-0 place-items-center rounded-full hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+                  <XIcon className="size-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
         )}
-        <Select value={status} onValueChange={v => set({ status: v })}>
-          <SelectTrigger size="sm" aria-label="Statut de l'annonce"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectGroup><SelectItem value="all">Toutes les annonces</SelectItem><SelectItem value="online">En ligne</SelectItem><SelectItem value="UNDER_OFFER">Sous offre</SelectItem><SelectItem value="EXPIRED">Expirées</SelectItem></SelectGroup></SelectContent>
-        </Select>
-        <MoreFilters f={f} set={set} sources={sources} count={more} />
-        <div className="flex items-center gap-2"><Switch id="l-crit" checked={f.onlyMatching} onCheckedChange={v => set({ onlyMatching: v })} /><Label htmlFor="l-crit">Dans mes critères</Label></div>
-        <div className="flex items-center gap-2"><Switch id="l-new" checked={f.onlyNew} onCheckedChange={v => set({ onlyNew: v })} /><Label htmlFor="l-new" title="Jamais ouvertes, ou modifiées depuis votre dernière visite">Nouveautés</Label></div>
-        <div className="flex items-center gap-2"><Switch id="l-exp" checked={hideExpired && status !== "EXPIRED"} disabled={status === "EXPIRED"} onCheckedChange={v => set({ hideExpired: v })} /><Label htmlFor="l-exp" title="Sauf celles que vous suivez (un statut autre que « À trier »)">Masquer les expirées</Label></div>
-        <div className="flex items-center gap-2"><Switch id="l-fav" checked={f.onlyFavorites} onCheckedChange={v => set({ onlyFavorites: v })} /><Label htmlFor="l-fav"><Star on className="size-3.5" />Favoris</Label></div>
-        <span className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
-          {filtered && <Button size="sm" variant="ghost" onClick={() => setF(x => ({ ...DEFAULTS, sort: x.sort }))}><RotateCcwIcon data-icon="inline-start" />Réinitialiser</Button>}
-          {shown.length} bien{shown.length > 1 ? "s" : ""}
-        </span>
       </div>
       {chosen.length > 0 && <BulkBar ls={chosen} onClear={() => setPicked([])} />}
       <div className="overflow-x-auto rounded-xl border">
@@ -200,11 +234,11 @@ export function ListTab() {
                 const on = sort.key === c.key, Icon = !on ? ArrowUpDownIcon : sort.dir === 1 ? ArrowUpIcon : ArrowDownIcon
                 return (
                   <TableHead key={c.key} aria-sort={on ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn(c.right && "text-right", c.center && "w-16 text-center", c.wide && "hidden md:table-cell")}>
-                    {/* the arrow of the sorted column only, the others' on hover: it sits on the side away from the
-                        column's alignment, so the labels line up with their values */}
+                    {/* the arrow of the sorted column only, the others' on hover: it sits in the gap beside the label, on
+                        the side away from the column's alignment (no room taken: the labels line up with their values) */}
                     <button type="button" onClick={() => set({ sort: { key: c.key, dir: sort.key === c.key ? (-sort.dir as 1 | -1) : c.key === "score" ? -1 : 1 } })}
-                      className={cn("group/sort relative inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", c.right && "flex-row-reverse", on && "text-foreground")}>
-                      {c.label}<Icon className={cn("size-3.5", c.center && "absolute left-full ml-1", !on && "opacity-0 group-hover/sort:opacity-60 group-focus-visible/sort:opacity-60")} />
+                      className={cn("group/sort relative inline-flex items-center rounded-sm hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", on && "text-foreground")}>
+                      {c.label}<Icon className={cn("absolute size-3", c.right ? "right-full mr-0.5" : "left-full ml-0.5", !on && "opacity-0 group-hover/sort:opacity-60 group-focus-visible/sort:opacity-60")} />
                     </button>
                   </TableHead>
                 )
@@ -237,8 +271,9 @@ export function ListTab() {
   )
 }
 
-// « Filtres »: what the toolbar has no room for, its count on the button
-function MoreFilters({ f, set, sources, count }: { f: Filters; set: (x: Partial<Filters>) => void; sources: string[]; count: number }) {
+// « Filtres »: every filter but my statuses and the labels, by section (what is shown, the property, the advert); its
+// count on the button, the chips under the bar
+function MoreFilters({ f, set, sources, types, count, onClear }: { f: Filters; set: (x: Partial<Filters>) => void; sources: string[]; types: PropertyType[]; count: number; onClear: () => void }) {
   const range = (label: string, min: "price_min" | "area_min", max: "price_max" | "area_max", unit: string) => (
     <Field>
       <FieldLabel>{label}</FieldLabel>
@@ -252,14 +287,54 @@ function MoreFilters({ f, set, sources, count }: { f: Filters; set: (x: Partial<
       </span>
     </Field>
   )
+  const toggle = (id: string, label: ReactNode, k: "onlyMatching" | "onlyNew" | "onlyFavorites" | "hideExpired", title?: string, disabled = false) => (
+    <div className="flex items-center gap-2"><Switch id={id} checked={f[k] && !(k === "hideExpired" && f.status === "EXPIRED")} disabled={disabled} onCheckedChange={v => set({ [k]: v })} /><Label htmlFor={id} title={title}>{label}</Label></div>
+  )
+  const part = "flex flex-col gap-3", heading = "text-xs font-medium text-muted-foreground"
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button size="sm" variant="outline"><SlidersHorizontalIcon data-icon="inline-start" />Filtres{count > 0 && <Badge className="h-4 min-w-4 px-1 tabular-nums">{count}</Badge>}</Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80">
-        <PopoverHeader><PopoverTitle>Filtres</PopoverTitle></PopoverHeader>
-        <FieldGroup className="gap-4">
+      <PopoverContent align="start" className="flex max-h-(--radix-popover-content-available-height) w-96 max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-y-auto">
+        <div className="flex items-center justify-between gap-2">
+          <PopoverTitle>Filtres</PopoverTitle>
+          {count > 0 && <Button size="xs" variant="ghost" onClick={onClear}><RotateCcwIcon data-icon="inline-start" />Effacer ces filtres</Button>}
+        </div>
+        <section className={part}>
+          <h3 className={heading}>Affichage</h3>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+            {toggle("f-crit", "Dans mes critères", "onlyMatching")}
+            {toggle("f-new", "Nouveautés", "onlyNew", "Jamais ouvertes, ou modifiées depuis votre dernière visite")}
+            {toggle("f-fav", <><Star on className="size-3.5" />Favoris</>, "onlyFavorites")}
+            {toggle("f-exp", "Masquer les expirées", "hideExpired", "Sauf celles que vous suivez (un statut autre que « À trier »)", f.status === "EXPIRED")}
+          </div>
+        </section>
+        <Separator />
+        <section className={part}>
+          <h3 className={heading}>Bien</h3>
+          {(types.length > 1 || types.includes("flat")) && (
+            <span className="grid grid-cols-2 gap-3">
+              {types.length > 1 && (
+                <Field>
+                  <FieldLabel>Type</FieldLabel>
+                  <Select value={f.type} onValueChange={v => set({ type: v as Filters["type"] })}>
+                    <SelectTrigger size="sm" className="w-full" aria-label="Type de bien"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup><SelectItem value="all">Tous les types</SelectItem>{types.map(t => <SelectItem key={t} value={t}><TypeIcon type={t} />{TYPE_PLURAL[t]}</SelectItem>)}</SelectGroup></SelectContent>
+                  </Select>
+                </Field>
+              )}
+              {types.includes("flat") && (
+                <Field>
+                  <FieldLabel>Étage</FieldLabel>
+                  <Select value={f.floor} onValueChange={v => set({ floor: v as Floor })}>
+                    <SelectTrigger size="sm" className="w-full" aria-label="Étage des appartements"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup>{Object.entries(FLOORS).map(([k, x]) => <SelectItem key={k} value={k}><x.icon />{x.label}</SelectItem>)}</SelectGroup></SelectContent>
+                  </Select>
+                </Field>
+              )}
+            </span>
+          )}
           {range("Prix", "price_min", "price_max", "€")}
           {range("Surface", "area_min", "area_max", "m²")}
           <span className="grid grid-cols-2 gap-3">
@@ -268,17 +343,30 @@ function MoreFilters({ f, set, sources, count }: { f: Filters; set: (x: Partial<
               <InputGroup><InputGroupInput id="f-rooms" inputMode="numeric" placeholder="—" value={f.rooms_min} onChange={e => set({ rooms_min: e.target.value.replace(/[^\d]/g, "") })} /></InputGroup>
             </Field>
             <Field>
+              <FieldLabel>DPE au plus</FieldLabel>
+              <Select value={f.dpe_max || "all"} onValueChange={v => set({ dpe_max: v === "all" ? "" : v })}>
+                <SelectTrigger size="sm" className="w-full" aria-label="DPE au plus"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectGroup><SelectItem value="all">Tous les DPE</SelectItem>{[..."ABCDEFG"].map(x => <SelectItem key={x} value={x}><Dpe value={x} />{x === "A" ? "A seulement" : `A à ${x}`}</SelectItem>)}</SelectGroup></SelectContent>
+              </Select>
+            </Field>
+          </span>
+        </section>
+        <Separator />
+        <section className={part}>
+          <h3 className={heading}>Annonce</h3>
+          <span className="grid grid-cols-2 gap-3">
+            <Field>
+              <FieldLabel>Statut</FieldLabel>
+              <Select value={f.status} onValueChange={v => set({ status: v })}>
+                <SelectTrigger size="sm" className="w-full" aria-label="Statut de l'annonce"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectGroup>{Object.entries(STATUS_FILTER).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectGroup></SelectContent>
+              </Select>
+            </Field>
+            <Field>
               <FieldLabel htmlFor="f-score">Score min.</FieldLabel>
               <InputGroup><InputGroupInput id="f-score" inputMode="numeric" placeholder="sur 100" value={f.score_min} onChange={e => set({ score_min: e.target.value.replace(/[^\d]/g, "").slice(0, 3) })} /></InputGroup>
             </Field>
           </span>
-          <Field>
-            <FieldLabel>DPE au plus</FieldLabel>
-            <Select value={f.dpe_max || "all"} onValueChange={v => set({ dpe_max: v === "all" ? "" : v })}>
-              <SelectTrigger size="sm" aria-label="DPE au plus"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectGroup><SelectItem value="all">Tous les DPE</SelectItem>{[..."ABCDEFG"].map(x => <SelectItem key={x} value={x}><Dpe value={x} />{x === "A" ? "A seulement" : `A à ${x}`}</SelectItem>)}</SelectGroup></SelectContent>
-            </Select>
-          </Field>
           {sources.length > 1 && (
             <Field>
               <FieldLabel>Portails</FieldLabel>
@@ -290,8 +378,7 @@ function MoreFilters({ f, set, sources, count }: { f: Filters; set: (x: Partial<
             </Field>
           )}
           <div className="flex items-center gap-2"><Switch id="f-drops" checked={f.drops} onCheckedChange={v => set({ drops: v })} /><Label htmlFor="f-drops"><TrendingDownIcon className="size-3.5" />Avec une baisse de prix</Label></div>
-          {count > 0 && <Button size="sm" variant="ghost" className="self-start" onClick={() => set(Object.fromEntries(MORE.map(k => [k, DEFAULTS[k]])))}><RotateCcwIcon data-icon="inline-start" />Effacer ces filtres</Button>}
-        </FieldGroup>
+        </section>
       </PopoverContent>
     </Popover>
   )
@@ -316,8 +403,8 @@ function BulkBar({ ls, onClear }: { ls: Listing[]; onClear: () => void }) {
     <div role="toolbar" aria-label="Actions sur la sélection" className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/50 px-3 py-2">
       <span className="mr-1 text-sm font-medium tabular-nums">{n} sélectionné{s}</span>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button size="sm" variant="outline" disabled={busy}><TagIcon data-icon="inline-start" />Mon statut<ChevronDownIcon data-icon="inline-end" /></Button></DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
+        <DropdownMenuTrigger asChild><Button size="sm" variant="outline" disabled={busy}><CircleDotIcon data-icon="inline-start" />Mon statut<ChevronDownIcon data-icon="inline-end" /></Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-max whitespace-nowrap">
           {Object.entries(MINE).map(([k, v]) => (
             <DropdownMenuItem key={k} onSelect={() => apply({ my_status: k === "none" ? null : (k as Status) }, `${n} bien${s} : ${v}`)}><StatusDot status={k === "none" ? null : (k as Status)} />{v}</DropdownMenuItem>
           ))}
@@ -326,18 +413,31 @@ function BulkBar({ ls, onClear }: { ls: Listing[]; onClear: () => void }) {
       <LabelPicker chosen={common} onPick={label}>
         <Button size="sm" variant="outline" disabled={busy}><TagsIcon data-icon="inline-start" />Labels<ChevronDownIcon data-icon="inline-end" /></Button>
       </LabelPicker>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => apply({ favorite: true }, `${n} bien${s} en favoris`)}><Star on className="size-3.5" />Favoris</Button>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => apply({ favorite: false }, `${n} bien${s} retiré${s} des favoris`)}><StarOffIcon data-icon="inline-start" />Retirer des favoris</Button>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => apply({ seen: true }, `${n} bien${s} marqué${s} comme vu${s}`)}><EyeIcon data-icon="inline-start" />Marquer comme vu{s}</Button>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => apply({ seen: false }, `${n} bien${s} de nouveau « Nouveau »`)}><EyeOffIcon data-icon="inline-start" />Marquer non vu{s}</Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button size="sm" variant="outline" disabled={busy}><Star on className="size-3.5" />Favoris<ChevronDownIcon data-icon="inline-end" /></Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-max whitespace-nowrap">
+          <DropdownMenuItem onSelect={() => apply({ favorite: true }, `${n} bien${s} en favoris`)}><Star on />Ajouter aux favoris</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => apply({ favorite: false }, `${n} bien${s} retiré${s} des favoris`)}><StarOffIcon />Retirer des favoris</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button size="sm" variant="outline" disabled={busy || n < 2 || n > 4} title="De 2 à 4 biens" onClick={() => { clearCompare(); ls.forEach(l => toggleCompare(l.id)); toast.success(`${n} biens dans « Comparer »`) }}><ScaleIcon data-icon="inline-start" />Comparer</Button>
-      {state.stream_estate && data.search.mode === "stream-estate" && fetched.length > 0 && (
-        <Button size="sm" variant="outline" disabled={busy} title="Photos, prix et annonces des portails lus à nouveau sur l'API ; celles qui ont disparu expirent"
-          onClick={() => run({ cmd: "reread", slug, args: { id: fetched.map(l => l.id).join(",") }, label: `Relecture de ${fetched.length} annonce${fetched.length > 1 ? "s" : ""} (API)` })}>
-          <RefreshCwIcon data-icon="inline-start" />Relire sur l'API<CreditBadge cost={{ route: "GET /documents/properties/{id}", calls: fetched.length }} />
-        </Button>
-      )}
-      <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}><XIcon data-icon="inline-start" />Désélectionner</Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button size="sm" variant="outline" disabled={busy}><EllipsisIcon data-icon="inline-start" />Plus<ChevronDownIcon data-icon="inline-end" /></Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-max whitespace-nowrap">
+          <DropdownMenuItem onSelect={() => apply({ seen: true }, `${n} bien${s} marqué${s} comme vu${s}`)}><EyeIcon />Marquer comme vu{s}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => apply({ seen: false }, `${n} bien${s} de nouveau « Nouveau »`)}><EyeOffIcon />Marquer non vu{s}</DropdownMenuItem>
+          {state.stream_estate && data.search.mode === "stream-estate" && fetched.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem title="Photos, prix et annonces des portails lus à nouveau sur l'API ; celles qui ont disparu expirent"
+                onSelect={() => run({ cmd: "reread", slug, args: { id: fetched.map(l => l.id).join(",") }, label: `Relecture de ${fetched.length} annonce${fetched.length > 1 ? "s" : ""} (API)` })}>
+                <RefreshCwIcon />Relire sur l'API<CreditBadge cost={{ route: "GET /documents/properties/{id}", calls: fetched.length }} />
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label="Désélectionner" title="Désélectionner" onClick={onClear}><XIcon /></Button>
     </div>
   )
 }
