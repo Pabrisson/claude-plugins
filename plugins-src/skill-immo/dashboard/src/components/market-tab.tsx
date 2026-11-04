@@ -1,7 +1,7 @@
 import { score } from "@engine/decide.js"
 import { median } from "@engine/dvf.js"
-import { asking, badge, daysOnline, dropped, typeOf, unitPrice } from "@engine/market.js"
-import { ArrowDownRightIcon, ArrowRightIcon, ArrowUpRightIcon, BarChart3Icon, BuildingIcon, CoinsIcon, EyeIcon, HouseIcon, KeyRoundIcon, LandmarkIcon, LeafIcon, MapPinnedIcon, ReceiptTextIcon, TagsIcon, TrendingUpIcon, WalletIcon, type LucideIcon } from "lucide-react"
+import { asking, badge, daysOnline, dropped, gone, study, typeOf, unitPrice } from "@engine/market.js"
+import { ArrowDownRightIcon, ArrowRightIcon, ArrowUpRightIcon, BarChart3Icon, BuildingIcon, CoinsIcon, Columns3Icon, EyeIcon, HouseIcon, KeyRoundIcon, LandmarkIcon, LeafIcon, MapPinnedIcon, ReceiptTextIcon, Rows3Icon, TagsIcon, TrendingUpIcon, WalletIcon, type LucideIcon } from "lucide-react"
 import { useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart, XAxis, YAxis } from "recharts"
 
@@ -20,7 +20,7 @@ import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartToo
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { DpeClasses, Dvf, Housing, Listing, PropertyType, Tax } from "@/lib/api"
-import { date, eur, LEVEL_LABEL, m2, month, num, pct, perUnit, share, titleCase, TYPE_PLURAL, UNIT } from "@/lib/format"
+import { date, eur, keur, LEVEL_LABEL, m2, month, num, pct, perUnit, share, titleCase, TYPE_PLURAL, UNIT } from "@/lib/format"
 import { useSearch, useStoredState } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -28,8 +28,6 @@ const DAY = 864e5
 // the market's filters: those of the list, kept apart and filtering nothing at first (every status, the expired
 // listings too: what went offline is part of the market)
 const FILTERS: Filters = { ...DEFAULTS, mine: Object.keys(MINE), hideExpired: false }
-// when a listing went offline (its « expired » change), or null while it is online
-const gone = (l: Listing) => { const c = l.changes?.find(x => x.kind === "expired")?.date; return c ? Date.parse(c) : l.status === "EXPIRED" ? Date.parse(l.first_seen) : null }
 const LEVEL_COLOR = { below: "var(--below)", at: "var(--at)", above: "var(--above)" } as const
 const ok = <T,>(x: T | { error: string } | null | undefined): T | null => (x && !(typeof x === "object" && "error" in x) ? (x as T) : null)
 const day = (t: number) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(new Date(t))
@@ -267,79 +265,185 @@ function BudgetCard({ d, type, listings }: { d: Dvf; type: PropertyType; listing
   )
 }
 
-// a set of listings as a market: the medians of what they ask, how long they stay online, how many dropped their
-// price (the expired ones count until they went offline)
-function figures(ls: Listing[]) {
-  const known = (xs: (number | null | undefined)[]) => xs.filter((x): x is number => x != null && x > 0)
-  return {
-    n: ls.length, expired: ls.filter(l => l.status === "EXPIRED").length,
-    price: median(known(ls.map(l => l.price))), area: median(known(ls.map(l => l.area ?? l.land_area))), ppm2: median(known(ls.map(unitPrice))),
-    days: median(ls.map(l => daysOnline(l, gone(l) ?? undefined)).filter((x): x is number => x != null)),
-    drops: ls.length ? ls.filter(l => dropped(l) > 0).length / ls.length : null,
-  }
-}
+type Study = ReturnType<typeof study>
+type Group = { key: string; ls: Listing[]; x: Study }
+const VIEW = { summary: { label: "Synthèse", icon: Rows3Icon }, compare: { label: "Comparatif", icon: Columns3Icon } } as const
 
 // The listings label by label (the user's neighborhoods, a kind of home…): what each group asks against what sells in
-// the zone. A listing with two labels counts in both rows, once in the last; a row filters the page on its label.
+// the zone. A listing with two labels counts in both groups, once in the last; a group filters the page on its label.
+// « Synthèse » a row a group, « Comparatif » a column a group and a row a figure (lib/market.js study).
 function StudyCard({ type, d, base, picked, onPick }: { type: PropertyType; d: Dvf | undefined; base: Listing[]; picked: string[]; onPick: (labels: string[]) => void }) {
-  const { marketOf } = useSearch(), labels = useLabels(), ref = marketOf(type).ref?.ppm2
+  const { slug, data, marketOf, aidsFor } = useSearch(), labels = useLabels(), ref = marketOf(type).ref?.ppm2
+  const [{ view }, setView] = useStoredState<{ view: keyof typeof VIEW }>(`immo:${slug}:study`, { view: "summary" })
+  const [now] = useState(() => Date.now())
   const keys = picked.length ? picked : labels.length ? [...labels, NO_LABEL] : []
   const groups = keys.map(key => ({ key, ls: base.filter(l => labelOk(l, [key])) })).filter(g => g.ls.length)
-  const all = base.filter(l => labelOk(l, picked)), rows = !all.length ? [] : groups.length === 1 ? groups : [...groups, { key: "", ls: all }]
-  const only = picked.length === 1 ? picked[0] : null, wide = "hidden md:table-cell"
+  const all = base.filter(l => labelOk(l, picked))
+  const opts = { ref, rooms: d?.by_rooms?.rows ?? [], budget: data.search.criteria.budget_max, score: (l: Listing) => score(l, aidsFor(l)).value as number | null, now }
+  const rows: Group[] = (!all.length ? [] : groups.length === 1 ? groups : [...groups, { key: "", ls: all }]).map(g => ({ ...g, x: study(g.ls, opts) }))
+  const only = picked.length === 1 ? picked[0] : null
+  const pick = (key: string) => key && onPick(only === key ? [] : [key])
+  const name = (key: string) => (key ? (key === NO_LABEL ? <span className="text-muted-foreground">Sans label</span> : <LabelChip name={key} />) : picked.length ? "Ensemble" : "Toutes les annonces")
+  // a group's name, a button filtering the page on its label (the whole has none)
+  const head = (key: string) => key ? (
+    <button type="button" onClick={e => { e.stopPropagation(); pick(key) }} title={only === key ? "Retirer ce filtre" : "Filtrer la page sur ce label"} className="rounded-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{name(key)}</button>
+  ) : name(key)
   return (
     <Card>
       <CardHeader>
         <Title icon={TagsIcon} tone="var(--chart-4)">Étude par label</Title>
         <CardDescription>
-          {labels.length ? `Les annonces groupées par label, leurs prix affichés médians et leur écart au prix vendu de la zone (${perUnit(ref, type)}). Une ligne filtre la page sur son label.` : "Donnez des labels à vos annonces (Liste, dossier), des quartiers par exemple, pour les comparer ici."}
+          {labels.length ? `Les annonces groupées par label, leurs prix affichés médians et leur écart au prix vendu de la zone (${perUnit(ref, type)}). ${view === "compare" ? "Une colonne" : "Une ligne"} filtre la page sur son label.` : "Donnez des labels à vos annonces (Liste, dossier), des quartiers par exemple, pour les comparer ici."}
         </CardDescription>
+        {rows.length > 0 && (
+          <CardAction>
+            <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={v => v && setView({ view: v as keyof typeof VIEW })} aria-label="Vue de l'étude">
+              {Object.entries(VIEW).map(([k, { label, icon: Icon }]) => <ToggleGroupItem key={k} value={k} aria-label={label} title={label}><Icon /><span className="hidden sm:inline">{label}</span></ToggleGroupItem>)}
+            </ToggleGroup>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-2 overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Label</TableHead><TableHead className="text-right">Annonces</TableHead><TableHead className="text-right">Prix médian</TableHead>
-              <TableHead className={cn("text-right", wide)}>Surface</TableHead><TableHead className="text-right">{UNIT[type]}</TableHead><TableHead className="text-right">Écart</TableHead>
-              <TableHead className={cn("text-right", wide)}>En ligne</TableHead><TableHead className={cn("text-right", wide)}>En baisse</TableHead>
-              {d?.recent.q1 ? <TableHead className="hidden w-64 xl:table-cell">Face aux ventes</TableHead> : null}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map(({ key, ls }) => {
-              const x = figures(ls), few = x.n < 3, dim = few && "text-muted-foreground", on = key && only === key
-              const pick = () => key && onPick(on ? [] : [key])
-              return (
-                <TableRow key={key || "all"} onClick={pick} className={cn(key ? "cursor-pointer" : "font-semibold", on && "bg-muted/50")}>
-                  <TableCell>
-                    {key ? (
-                      <button type="button" onClick={e => { e.stopPropagation(); pick() }} title={on ? "Retirer ce filtre" : "Filtrer la page sur ce label"} className="rounded-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-                        {key === NO_LABEL ? <span className="text-muted-foreground">Sans label</span> : <LabelChip name={key} />}
-                      </button>
-                    ) : picked.length ? "Ensemble" : "Toutes les annonces"}
-                  </TableCell>
-                  <TableCell className="text-right whitespace-nowrap">
-                    <span className="flex flex-col items-end leading-tight">
-                      <span className="tabular-nums">{num(x.n)}</span>
-                      {(x.expired > 0 || few) && <span className="text-xs font-normal text-muted-foreground">{few ? "peu d'annonces" : `dont ${num(x.expired)} retirée${x.expired > 1 ? "s" : ""}`}</span>}
-                    </span>
-                  </TableCell>
-                  <TableCell className={cn("text-right whitespace-nowrap", dim)}>{eur(x.price)}</TableCell>
-                  <TableCell className={cn("text-right whitespace-nowrap", wide, dim)}>{x.area ? `${num(x.area)} m²` : "—"}</TableCell>
-                  <TableCell className={cn("text-right font-semibold whitespace-nowrap", dim)}>{num(x.ppm2)}</TableCell>
-                  <TableCell className={cn("text-right", few && "opacity-60")}><Gap ppm2={x.ppm2} refPpm2={ref} /></TableCell>
-                  <TableCell className={cn("text-right whitespace-nowrap", wide, dim)}>{x.days == null ? "—" : `${num(x.days)} j`}</TableCell>
-                  <TableCell className={cn("text-right", wide, dim)}>{share(x.drops)}</TableCell>
-                  {d?.recent.q1 ? <TableCell className="hidden xl:table-cell"><Ruler stats={d.recent} ticks={ls.map(l => ({ id: l.id, ppm2: unitPrice(l) }))} /></TableCell> : null}
-                </TableRow>
-              )
-            })}
-            {!rows.length && <TableRow><TableCell colSpan={9} className="py-6 text-center text-muted-foreground">Aucune annonce pour ces filtres.</TableCell></TableRow>}
-          </TableBody>
-        </Table>
-        <p className="text-xs text-muted-foreground">Prix affichés, pas vendus : l'écart se lit comme la marge que les vendeurs se donnent. « En ligne » : la durée médiane, jusqu'au retrait pour les annonces retirées. Sous 3 annonces, les chiffres sont indicatifs.</p>
+        {view === "compare" && rows.length ? <StudyCompare type={type} rows={rows} refPpm2={ref} sized={!!d?.by_rooms?.rows.length} only={only} head={head} /> : <StudySummary type={type} d={d} rows={rows} refPpm2={ref} only={only} head={head} pick={pick} />}
       </CardContent>
     </Card>
+  )
+}
+
+function StudySummary({ type, d, rows, refPpm2: ref, only, head, pick }: { type: PropertyType; d: Dvf | undefined; rows: Group[]; refPpm2: number | undefined; only: string | null; head: (key: string) => React.ReactNode; pick: (key: string) => void }) {
+  const wide = "hidden md:table-cell"
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Label</TableHead><TableHead className="text-right">Annonces</TableHead><TableHead className="text-right">Prix médian</TableHead>
+            <TableHead className={cn("text-right", wide)}>Surface</TableHead><TableHead className="text-right">{UNIT[type]}</TableHead><TableHead className="text-right">Écart</TableHead>
+            <TableHead className={cn("text-right", wide)}>En ligne</TableHead><TableHead className={cn("text-right", wide)}>En baisse</TableHead>
+            {d?.recent.q1 ? <TableHead className="hidden w-64 xl:table-cell">Face aux ventes</TableHead> : null}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(({ key, ls, x }) => {
+            const few = x.n < 3, dim = few && "text-muted-foreground", on = key && only === key
+            return (
+              <TableRow key={key || "all"} onClick={() => pick(key)} className={cn(key ? "cursor-pointer" : "font-semibold", on && "bg-muted/50")}>
+                <TableCell>{head(key)}</TableCell>
+                <TableCell className="text-right whitespace-nowrap">
+                  <span className="flex flex-col items-end leading-tight">
+                    <span className="tabular-nums">{num(x.n)}</span>
+                    {(x.expired > 0 || few) && <span className="text-xs font-normal text-muted-foreground">{few ? "peu d'annonces" : `dont ${num(x.expired)} retirée${x.expired > 1 ? "s" : ""}`}</span>}
+                  </span>
+                </TableCell>
+                <TableCell className={cn("text-right whitespace-nowrap", dim)}>{eur(x.price)}</TableCell>
+                <TableCell className={cn("text-right whitespace-nowrap", wide, dim)}>{x.area ? `${num(x.area)} m²` : "—"}</TableCell>
+                <TableCell className={cn("text-right font-semibold whitespace-nowrap", dim)}>{num(x.ppm2)}</TableCell>
+                <TableCell className={cn("text-right", few && "opacity-60")}><Gap ppm2={x.ppm2} refPpm2={ref} /></TableCell>
+                <TableCell className={cn("text-right whitespace-nowrap", wide, dim)}>{x.days == null ? "—" : `${num(x.days)} j`}</TableCell>
+                <TableCell className={cn("text-right", wide, dim)}>{share(x.drops)}</TableCell>
+                {d?.recent.q1 ? <TableCell className="hidden xl:table-cell"><Ruler stats={d.recent} ticks={ls.map(l => ({ id: l.id, ppm2: unitPrice(l) }))} /></TableCell> : null}
+              </TableRow>
+            )
+          })}
+          {!rows.length && <TableRow><TableCell colSpan={9} className="py-6 text-center text-muted-foreground">Aucune annonce pour ces filtres.</TableCell></TableRow>}
+        </TableBody>
+      </Table>
+      <p className="text-xs text-muted-foreground">Prix affichés, pas vendus : l'écart se lit comme la marge que les vendeurs se donnent. « En ligne » : la durée médiane, jusqu'au retrait pour les annonces retirées. Sous 3 annonces, les chiffres sont indicatifs.</p>
+    </>
+  )
+}
+
+// a mix as one bar: each part its width, its name written when it takes a fifth or more
+function MixBar({ parts }: { parts: { key: string; n: number; color: string; ink: string; label: string }[] }) {
+  const total = parts.reduce((a, p) => a + p.n, 0)
+  if (!total) return <span className="text-muted-foreground">—</span>
+  return (
+    <div className="ml-auto flex h-5 w-full max-w-36 min-w-24 overflow-hidden rounded" role="img" aria-label={parts.filter(p => p.n).map(p => `${p.label} ${share(p.n / total)}`).join(", ")}>
+      {parts.filter(p => p.n).map(p => (
+        <div key={p.key} className="grid place-items-center text-[10px] font-semibold" style={{ width: `${(p.n / total) * 100}%`, background: p.color, color: p.ink }} title={`${p.label} : ${share(p.n / total)} (${num(p.n)})`}>
+          {p.n / total >= 0.2 ? p.key : ""}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const days = (n: number | null) => (n == null ? "—" : `${num(n)} j`)
+const floorOf = (n: number | null) => (n == null ? "—" : n === 0 ? "RDC" : n === 1 ? "1er" : `${n}e`)
+
+// The groups side by side: a column each, a row a figure, in four parts (price, what they are, their pace, what the
+// user made of them). The figures of a group under 3 listings are greyed.
+function StudyCompare({ type, rows, refPpm2: ref, sized, only, head }: { type: PropertyType; rows: Group[]; refPpm2: number | undefined; sized: boolean; only: string | null; head: (key: string) => React.ReactNode }) {
+  const { data, select } = useSearch()
+  const budget = data.search.criteria.budget_max, home = type === "flat" || type === "house", flat = type === "flat"
+  const ofId = new Map(rows.flatMap(r => r.ls.map(l => [l.id, l] as const)))
+  type Line = [string, (x: Study) => React.ReactNode] | false
+  const parts: [string, Line[]][] = [
+    ["Prix", [
+      ["Annonces", x => <>{num(x.n)}{x.expired > 0 && <span className="block text-xs text-muted-foreground">dont {num(x.expired)} retirée{x.expired > 1 ? "s" : ""}</span>}</>],
+      ["Prix médian", x => eur(x.price)],
+      [`${UNIT[type]} médian`, x => <><b>{num(x.ppm2)}</b>{x.ppm2_min !== x.ppm2_max && <span className="block text-xs text-muted-foreground">{num(x.ppm2_min)} à {num(x.ppm2_max)}</span>}</>],
+      ["Écart au vendu de la zone", x => <Gap ppm2={x.ppm2} refPpm2={ref} />],
+      home && sized && ["Écart à taille égale", x => (x.gap_size == null ? "—" : <Gap ppm2={1 + x.gap_size} refPpm2={1} />)],
+      ["Marge négociable", x => (x.margin ? `${Math.round((x.margin.low ?? 0) * 100)} à ${Math.round((x.margin.high ?? 0) * 100)} %` : "—")],
+      !!budget && ["Dans le budget", x => share(x.in_budget)],
+      !!budget && home && ["Surface pour le budget", x => (x.ppm2 ? `≈ ${num(budget! / x.ppm2)} m²` : "—")],
+    ]],
+    ["Ce qu'on y trouve", [
+      home && ["Typologie", x => <MixBar parts={[1, 2, 3, 4, 5].map((r, i) => ({ key: flat ? `T${r}${r === 5 ? "+" : ""}` : `${r}${r === 5 ? "+" : ""}p`, n: x.rooms[r], color: `color-mix(in oklab, var(--chart-2) ${15 + i * 14}%, transparent)`, ink: "var(--foreground)", label: flat ? `T${r}${r === 5 ? " et plus" : ""}` : `${r}${r === 5 ? " pièces et plus" : " pièces"}` }))} />],
+      ["Surface médiane", x => (x.area ? `${num(x.area)} m²` : "—")],
+      type === "house" && ["Terrain médian", x => (x.land ? `${num(x.land)} m²` : "—")],
+      home && ["DPE", x => <><MixBar parts={[..."ABCDEFG"].map(c => ({ key: c, n: x.dpe[c], color: DPE_HEX[c], ink: dpeInk(c), label: `DPE ${c}` }))} />{x.poor != null && <span className="block text-xs text-muted-foreground">F et G : {share(x.poor)}</span>}</>],
+      home && ["Extérieur", x => share(x.outdoor)],
+      home && ["Parking", x => share(x.parking)],
+      flat && ["Ascenseur", x => share(x.elevator)],
+      flat && ["Étage médian", x => floorOf(x.floor)],
+      home && ["Construction (médiane)", x => (x.year ? String(x.year) : "—")],
+    ]],
+    ["Rythme", [
+      ["Nouvelles (30 j)", x => num(x.added)],
+      ["Retirées (30 j)", x => num(x.removed)],
+      ["En ligne depuis", x => days(x.days)],
+      ["Durée avant retrait", x => days(x.days_off)],
+      ["En baisse", x => <>{share(x.drops)}{x.drop != null && <span className="block text-xs text-muted-foreground">{pct(-x.drop, x.drop < 0.01 ? 1 : 0)} en médiane</span>}</>],
+    ]],
+    ["Mes annonces", [
+      ["Favoris", x => num(x.favorites)],
+      ["Écartées", x => num(x.dismissed)],
+      ["Score médian", x => num(x.score)],
+      ["Meilleure annonce", x => {
+        const l = x.best && ofId.get(x.best.id)
+        return l ? <Button variant="link" size="xs" className="h-auto px-0" onClick={() => select(l.id)} title="Ouvrir le dossier">{x.best!.value} · {keur(l.price)}</Button> : "—"
+      }],
+    ]],
+  ]
+  const sticky = "sticky left-0 z-10 bg-card"
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className={sticky} />
+            {rows.map(({ key }) => <TableHead key={key || "all"} className={cn("min-w-32 text-right", !key && "font-semibold text-foreground", key && only === key && "bg-muted/50")}>{head(key)}</TableHead>)}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {parts.map(([part, lines]) => [
+            <TableRow key={part} className="hover:bg-transparent">
+              <TableCell className={cn(sticky, "pt-4 text-xs font-semibold tracking-wide text-muted-foreground uppercase")}>{part}</TableCell>
+              <TableCell colSpan={rows.length} />
+            </TableRow>,
+            ...lines.filter(x => !!x).map(([label, cell]) => (
+              <TableRow key={label} className="hover:bg-transparent">
+                <TableCell className={cn(sticky, "w-28 align-top whitespace-normal text-muted-foreground sm:w-auto sm:whitespace-nowrap")}>{label}</TableCell>
+                {rows.map(({ key, x }) => <TableCell key={key || "all"} className={cn("text-right align-top whitespace-nowrap tabular-nums", !key && "font-semibold", x.n < 3 && "text-muted-foreground opacity-70", key && only === key && "bg-muted/50")}>{cell(x)}</TableCell>)}
+              </TableRow>
+            )),
+          ])}
+        </TableBody>
+      </Table>
+      <p className="text-xs text-muted-foreground">À taille égale : chaque annonce face aux ventes DVF de son nombre de pièces (T1 à T5 et plus), la médiane du groupe ; elle corrige l'effet des petites surfaces, plus chères au m². Marge négociable : l'estimation du dossier, sur les annonces en ligne. Extérieur, parking, ascenseur : ce que les annonces citent. Durée avant retrait : pour les annonces retirées, une approximation du temps de vente. Sous 3 annonces, les chiffres sont grisés.</p>
+    </>
   )
 }
 
