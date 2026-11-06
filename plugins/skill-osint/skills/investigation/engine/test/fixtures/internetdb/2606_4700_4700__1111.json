@@ -1,0 +1,1 @@
+{"cpes":["cpe:/a:cloudflare:cloudflare"],"hostnames":["one.one.one.one","ping.icomera.com"],"ip":"2606:4700:4700::1111","ports":[80,443],"tags":["cdn"],"vulns":[]}

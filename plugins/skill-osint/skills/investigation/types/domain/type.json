@@ -1,0 +1,50 @@
+{
+  "id": "domain",
+  "label": "Domain",
+  "icon": "globe",
+  "description": "A domain or a website: registration, DNS, certificates, archived history, hosting, shared trackers, one read of the home page",
+  "frame": ["noisy", "person"],
+  "inputs": [
+    { "id": "domain", "kind": "text", "label": "Domain or URL", "required": true, "placeholder": "example.org" },
+    { "id": "depth", "kind": "chips", "label": "Depth", "default": "standard", "options": [
+      { "value": "quick", "label": "Quick", "icon": "zap" },
+      { "value": "standard", "label": "Standard", "icon": "layers" }
+    ] },
+    { "id": "subdomains", "kind": "toggle", "label": "Resolve every subdomain", "when": { "depth": "standard" } }
+  ],
+  "levels": [
+    { "id": "owner", "label": "Owner", "criteria": {
+      "high": "a legal identifier read on the site (SIREN, company name) that a registry confirms, or the registrant read in RDAP",
+      "medium": "one read source names the owner, nothing contradicts it",
+      "low": "inferred from hosting, trackers or style only" } },
+    { "id": "infrastructure", "label": "Infrastructure", "criteria": {
+      "high": "DNS and RDAP read today agree",
+      "medium": "one of them, or data older than a month",
+      "low": "inferred from a single header or record" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "collect", "label": "Collect" }, { "id": "process", "label": "Process" },
+    { "id": "analyse", "label": "Analyse" }, { "id": "redteam", "label": "Red team" }, { "id": "conclude", "label": "Conclude" },
+    { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "hypotheses" }, { "widget": "sources" }, { "widget": "timeline" },
+    { "widget": "table", "label": "Subdomains", "icon": "network", "kind": "domain", "where": { "role": "subdomain" }, "columns": ["value", "ip", "first_seen", "issuer"] },
+    { "widget": "table", "label": "DNS", "icon": "list-tree", "view": "dns", "columns": ["type", "value"] }
+  ],
+  "actions": [
+    { "id": "legal-notice", "label": "Read the legal notice", "icon": "scale", "target": "case", "prompt": "[domain:legal-notice] {value}", "noisy": false, "minutes": 2 },
+    { "id": "deep-wayback", "label": "Read past home pages", "icon": "history", "target": "case", "prompt": "[domain:deep-wayback] {value}", "noisy": false, "minutes": 10 },
+    { "id": "tracker-search", "label": "Find other sites with this tracker", "icon": "radar", "target": "entity:tracker", "prompt": "[domain:tracker-search] {value}", "noisy": false, "minutes": 5 }
+  ],
+  "pivots": ["domain", "url", "email"],
+  "refresh": [
+    { "id": "rdap", "by": "engine", "run": "collect --only rdap", "noun": ["registration record", "registration records"], "watch": true },
+    { "id": "dns", "by": "engine", "run": "collect --only dns", "noun": ["DNS record", "DNS records"], "watch": true },
+    { "id": "crt", "by": "engine", "run": "collect --only crt", "noun": ["certificate", "certificates"], "watch": true },
+    { "id": "wayback", "by": "engine", "run": "collect --only wayback", "noun": ["archive record", "archive records"], "watch": true },
+    { "id": "host", "by": "engine", "run": "collect --only host", "noun": ["hosting record", "hosting records"], "watch": true },
+    { "id": "home", "by": "engine", "noisy": true, "run": "collect --only home", "watch": false, "noun": ["home page item", "home page items"] }
+  ],
+  "requires": { "bins": [], "packs": [], "keys": [] }
+}

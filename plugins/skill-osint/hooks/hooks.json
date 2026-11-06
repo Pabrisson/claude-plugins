@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "k=$(printf %s \"$CLAUDE_PLUGIN_OPTION_MAPILLARY_TOKEN\" | tr -d '[:space:]'); f=\"$CLAUDE_PLUGIN_DATA/mapillary-token\"; case \"$k\" in ''|*[!A-Za-z0-9_.\\|-]*) rm -f \"$f\" ;; *) mkdir -p \"$CLAUDE_PLUGIN_DATA\" && (umask 077; printf %s \"$k\" > \"$f\") && [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export MAPILLARY_TOKEN=\"$(cat %s)\"\\n' \"'$f'\" >> \"$CLAUDE_ENV_FILE\" ;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

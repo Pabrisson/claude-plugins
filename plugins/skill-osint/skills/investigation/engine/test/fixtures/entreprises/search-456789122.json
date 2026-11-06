@@ -1,0 +1,102 @@
+{
+  "results": [
+    {
+      "siren": "456789122",
+      "siren_conserve": null,
+      "nom_complet": "BOULANGERIE DURAND",
+      "nom_raison_sociale": "BOULANGERIE DURAND",
+      "sigle": null,
+      "nombre_etablissements": 3,
+      "nombre_etablissements_ouverts": 2,
+      "siege": {
+        "activite_principale": "10.71C",
+        "adresse": "1 PLACE DE L'EXEMPLE 99999 EXEMPLEVILLE",
+        "code_postal": "99999",
+        "date_creation": "1987-04-01",
+        "date_fermeture": null,
+        "est_siege": true,
+        "etat_administratif": "A",
+        "latitude": "45.9012",
+        "libelle_commune": "EXEMPLEVILLE",
+        "liste_enseignes": [
+          "BOULANGERIE DURAND"
+        ],
+        "longitude": "2.7021",
+        "nom_commercial": null,
+        "siret": "45678912200011",
+        "tranche_effectif_salarie": "03",
+        "coordonnees": "45.9012,2.7021",
+        "commune": "99999"
+      },
+      "activite_principale": "10.71C",
+      "categorie_entreprise": "PME",
+      "annee_categorie_entreprise": "2024",
+      "date_creation": "1987-04-01",
+      "date_fermeture": null,
+      "date_mise_a_jour": "2026-10-30T08:00:00",
+      "dirigeants": [
+        {
+          "nom": "DURAND",
+          "prenoms": "JEANNE",
+          "annee_de_naissance": "1961",
+          "date_de_naissance": "1961-04",
+          "qualite": "Gérant",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        },
+        {
+          "nom": "DURAND",
+          "prenoms": "PAUL",
+          "annee_de_naissance": "1988",
+          "date_de_naissance": "1988-09",
+          "qualite": "Gérant",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        },
+        {
+          "nom": "DURAND",
+          "prenoms": "JEANNE",
+          "annee_de_naissance": "1961",
+          "date_de_naissance": "1961-04",
+          "qualite": "Associé",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        },
+        {
+          "siren": "111111118",
+          "denomination": "EXEMPLE AUDIT",
+          "qualite": "Commissaire aux comptes titulaire",
+          "type_dirigeant": "personne morale"
+        }
+      ],
+      "etat_administratif": "A",
+      "nature_juridique": "5499",
+      "section_activite_principale": "C",
+      "tranche_effectif_salarie": "03",
+      "annee_tranche_effectif_salarie": "2024",
+      "statut_diffusion": "O",
+      "matching_etablissements": [],
+      "finances": {
+        "2023": {
+          "ca": 398000,
+          "resultat_net": 15500
+        },
+        "2024": {
+          "ca": 412000,
+          "resultat_net": 18000
+        }
+      },
+      "complements": {
+        "est_entrepreneur_individuel": false,
+        "est_ess": false
+      },
+      "tva": [
+        "FR72456789122"
+      ]
+    }
+  ],
+  "total_results": 1,
+  "page": 1,
+  "per_page": 10,
+  "total_pages": 1
+}

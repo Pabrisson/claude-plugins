@@ -1,0 +1,37 @@
+{
+  "id": "person",
+  "label": "Person",
+  "icon": "user",
+  "description": "A person, from a name and the identifiers already known: one child case proposed per username, email, phone, domain or employer (a town is kept, never searched), the findings consolidated in Profile.md, each identifier weighed as the subject's or another person's. A purpose and a legal basis first; never sensitive data, never a minor, never to find, contact or follow a private person",
+  "frame": [{ "id": "person", "always": true, "purpose": true }, "noisy"],
+  "inputs": [
+    { "id": "name", "kind": "text", "label": "Full name", "required": true, "placeholder": "Jeanne Durand" },
+    { "id": "identifiers", "kind": "text", "multiline": true, "label": "Identifiers already known, one per line", "required": true,
+      "placeholder": "username: durand.bakery\njeanne@durand-bakery.example\n+33 6 39 98 12 34\nemployer: Boulangerie Durand\ncity: Exempleville",
+      "help": "Usernames, emails, phone numbers, domains, the employer and the city. Start a line with username:, email:, phone:, domain:, employer: or city: when it could be read two ways. Never a street address." }
+  ],
+  "levels": [
+    { "id": "identity", "label": "Identity", "criteria": {
+      "high": "each identifier kept is tied to the subject by two independent links (profiles that cite each other, a registry record, the same unique email or phone)",
+      "medium": "one link for each identifier kept, the rest consistent (name, town, dates)",
+      "low": "the name only: a namesake is not ruled out" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "plan", "label": "Plan" }, { "id": "children", "label": "Child cases" },
+    { "id": "consolidate", "label": "Consolidate" }, { "id": "analyse", "label": "Analyse" }, { "id": "redteam", "label": "Red team" },
+    { "id": "conclude", "label": "Conclude" }, { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "table", "label": "Identifiers", "icon": "id-card", "view": "identifiers", "columns": ["kind", "value", "confidence", "belongs", "case", "source"] },
+    { "widget": "table", "label": "Candidates", "icon": "user-search", "view": "candidates", "columns": ["kind", "value", "confidence", "case", "source"] },
+    { "widget": "timeline" }, { "widget": "hypotheses" }, { "widget": "sources" }
+  ],
+  "actions": [
+    { "id": "consolidate", "label": "Consolidate the child cases", "icon": "combine", "target": "case", "prompt": "[person:consolidate] {value}", "noisy": false, "minutes": 2 },
+    { "id": "identity", "label": "Weigh whose identifiers they are", "icon": "scale", "target": "case", "prompt": "[person:identity] {value}", "noisy": false, "minutes": 10 },
+    { "id": "employer", "label": "Open a company case on this employer", "icon": "building-2", "target": "entity:organization", "prompt": "[pivot:company-fr] {value}", "noisy": false, "minutes": 10 }
+  ],
+  "pivots": ["person"],
+  "refresh": [{ "id": "profile", "by": "engine", "run": "consolidate --children", "noisy": false, "sends_image": false, "paid": false, "watch": true, "noun": ["identifier", "identifiers"] }],
+  "requires": { "bins": [], "packs": [], "keys": [] }
+}

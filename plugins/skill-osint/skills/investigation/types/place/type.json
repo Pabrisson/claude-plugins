@@ -1,0 +1,48 @@
+{
+  "id": "place",
+  "label": "Place",
+  "icon": "map-pin",
+  "description": "An address or a point: what stands there and who is there (OpenStreetMap, the official address base, the French company register), ground images with their date and bearing, and how the place changed (IGN orthophotos since 1950, Esri Wayback links) — public sources only, nobody contacted",
+  "frame": ["noisy", "person"],
+  "inputs": [
+    { "id": "place", "kind": "text", "label": "Address or coordinates", "required": true, "placeholder": "1 place de l'Exemple, 99999 Exempleville — or 45.9012, 2.7021" }
+  ],
+  "levels": [
+    { "id": "identity", "label": "What stands there", "criteria": {
+      "high": "two independent sources agree on what occupies the place today: the official address or OpenStreetMap, and a dated ground image or the company register",
+      "medium": "one source says what is there and nothing contradicts it",
+      "low": "the geocoder alone, an undated or old image, or sources that disagree" } },
+    { "id": "history", "label": "How it changed", "criteria": {
+      "high": "dated imagery of at least two periods and a dated record (the register, an image) show the change",
+      "medium": "one dated source shows the change",
+      "low": "inferred from undated sources or from absence" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "collect", "label": "Collect" }, { "id": "process", "label": "Process" },
+    { "id": "analyse", "label": "Analyse" }, { "id": "redteam", "label": "Red team" }, { "id": "conclude", "label": "Conclude" },
+    { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "map" },
+    { "widget": "evidence", "label": "Ground images", "icon": "camera" },
+    { "widget": "table", "label": "Points of interest", "icon": "store", "view": "pois", "columns": ["name", "category", "distance_m", "website", "phone", "url"] },
+    { "widget": "table", "label": "Companies", "icon": "building-2", "view": "companies", "columns": ["name", "siren", "naf", "state", "address", "distance_m"] },
+    { "widget": "table", "label": "Imagery", "icon": "layers", "view": "imagery", "columns": ["source", "period", "url"] },
+    { "widget": "timeline" }, { "widget": "hypotheses" }, { "widget": "sources" }
+  ],
+  "actions": [
+    { "id": "ground-look", "label": "Look at the ground images", "icon": "camera", "target": "case", "prompt": "[place:ground-look] {value}", "noisy": false, "minutes": 15 },
+    { "id": "history", "label": "How the place changed", "icon": "history", "target": "case", "prompt": "[place:history] {value}", "noisy": false, "minutes": 15 }
+  ],
+  "pivots": [{ "kind": "place", "has": "lat" }],
+  "refresh": [
+    { "id": "ground", "by": "engine", "run": "collect --only ground", "noun": ["ground image", "ground images"], "watch": true },
+    { "id": "companies", "by": "engine", "run": "collect --only companies", "noun": ["company establishment", "company establishments"], "watch": true },
+    { "id": "osm", "by": "engine", "run": "collect --only osm", "watch": false, "noun": ["OpenStreetMap place", "OpenStreetMap places"] }
+  ],
+  "requires": {
+    "bins": [], "packs": [],
+    "keys": [{ "id": "MAPILLARY_TOKEN", "optional": true, "off": "Mapillary ground images skipped; Panoramax and KartaView still searched", "configure": "/plugin configure skill-osint@pabrisson, or MAPILLARY_TOKEN" }],
+    "datasets": [{ "id": "libphonenumber", "label": "libphonenumber metadata (Apache-2.0)" }]
+  }
+}

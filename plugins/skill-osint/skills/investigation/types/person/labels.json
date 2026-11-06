@@ -1,0 +1,20 @@
+{
+  "en": {
+    "profile": "Profile", "born_is": "Born {born}", "linked_are": "Linked cases:", "parent": "parent",
+    "child": "child", "identifier": "Identifier", "case": "Case", "source": "Source",
+    "confidence": "Confidence", "belongs": "The subject's", "why": "Why the purpose needs it", "proposed": "no case yet: a pivot is proposed", "no_child": "no case: a town alone opens none",
+    "not_weighed": "not weighed", "lrs": "{n} LR", "as_role": "as {role}", "identity": "Identity", "candidates": "Candidates (not weighed)", "candidates_note": "Found by a child case: nothing says yet that they are the subject's. They join the profile when a likelihood ratio above 1 is recorded for them.",
+    "none": "none", "kind_username": "Usernames", "kind_account": "Accounts", "kind_email": "Email addresses",
+    "kind_phone": "Phone numbers", "kind_domain": "Domains", "kind_organization": "Employers and companies", "kind_place": "Places",
+    "kind_image": "Images"
+  },
+  "fr": {
+    "profile": "Profil", "born_is": "Naissance : {born}", "linked_are": "Enquêtes liées :", "parent": "parent",
+    "child": "enfant", "identifier": "Identifiant", "case": "Enquête", "source": "Source",
+    "confidence": "Confiance", "belongs": "Au sujet", "why": "Pourquoi le but en a besoin", "proposed": "pas encore d'enquête : un pivot est proposé", "no_child": "pas d'enquête : une ville seule n'en ouvre pas",
+    "not_weighed": "non pesé", "lrs": "{n} LR", "as_role": "comme {role}", "identity": "Identité", "candidates": "Candidats (non pesés)", "candidates_note": "Trouvés par une enquête enfant : rien ne dit encore qu'ils sont ceux du sujet. Ils entrent dans le profil quand un rapport de vraisemblance supérieur à 1 est enregistré pour eux.",
+    "none": "aucun", "kind_username": "Pseudos", "kind_account": "Comptes", "kind_email": "Adresses email",
+    "kind_phone": "Numéros de téléphone", "kind_domain": "Domaines", "kind_organization": "Employeurs et sociétés", "kind_place": "Lieux",
+    "kind_image": "Images"
+  }
+}

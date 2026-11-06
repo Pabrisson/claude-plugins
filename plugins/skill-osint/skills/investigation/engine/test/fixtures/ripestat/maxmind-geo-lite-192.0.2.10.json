@@ -1,0 +1,1 @@
+{"messages":[],"data_call_name":"maxmind-geo-lite","status":"ok","status_code":200,"data":{"located_resources":[{"resource":"192.0.2.10/32","locations":[{"country":"FR","city":"Lyon","resources":["192.0.2.0/24"],"latitude":45.7485,"longitude":4.8467,"covered_percentage":100}],"unknown_percentage":0}],"result_time":"2026-10-30T18:31:22"}}

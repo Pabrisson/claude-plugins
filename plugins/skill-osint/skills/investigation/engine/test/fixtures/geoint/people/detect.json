@@ -1,0 +1,2 @@
+{ "tool": "detect.py", "model": "google/owlv2-base-patch16-ensemble", "image": "", "size": [960, 715], "threshold": 0.15,
+  "detections": [{ "cls": "a person", "prompt": "a person", "score": 0.44, "box": [120, 300, 180, 470], "tile": [0, 0, 960, 715], "also": [], "crop": "01_a person.jpg", "id": 1 }] }

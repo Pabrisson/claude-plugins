@@ -1,0 +1,11 @@
+[{
+  "SourceFile": "Evidence/E01-evora-temple.jpg",
+  "ExifTool:ExifToolVersion": 13.36,
+  "System:FileName": "E01-evora-temple.jpg", "System:Directory": "Evidence", "System:FileSize": 208685,
+  "System:FileModifyDate": "2026:11:03 10:00:00+01:00", "System:FileAccessDate": "2026:11:03 10:00:00+01:00",
+  "System:FileInodeChangeDate": "2026:11:03 10:00:00+01:00", "System:FilePermissions": 100444,
+  "File:FileType": "JPEG", "File:FileTypeExtension": "JPG", "File:MIMEType": "image/jpeg",
+  "File:ImageWidth": 960, "File:ImageHeight": 715, "File:EncodingProcess": 0, "File:BitsPerSample": 8,
+  "File:ColorComponents": 3, "File:YCbCrSubSampling": "2 2",
+  "Composite:ImageSize": "960 715", "Composite:Megapixels": 0.6864
+}]

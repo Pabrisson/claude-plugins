@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "siren": "456789122",
+      "nom_complet": "BOULANGERIE DURAND",
+      "nom_raison_sociale": "BOULANGERIE DURAND",
+      "etat_administratif": "A",
+      "siege": {
+        "libelle_commune": "EXEMPLEVILLE",
+        "siret": "45678912200011"
+      }
+    },
+    {
+      "siren": "222222226",
+      "nom_complet": "DURAND TRANSPORTS",
+      "nom_raison_sociale": "DURAND TRANSPORTS",
+      "etat_administratif": "C",
+      "siege": {
+        "libelle_commune": "EXEMPLEVILLE-SUR-MER",
+        "siret": "22222222600016"
+      }
+    }
+  ],
+  "total_results": 2,
+  "page": 1,
+  "per_page": 5,
+  "total_pages": 1
+}

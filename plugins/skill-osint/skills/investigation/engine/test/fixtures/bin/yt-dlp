@@ -1,0 +1,16 @@
+#!/usr/bin/env node
+// A stand-in for yt-dlp in the tests and the demo: writes <id>.mp4 (OSINT_FAKE_VIDEO's bytes, else a few bytes) and
+// <id>.info.json where -o points, as yt-dlp does with --write-info-json.
+import fs from 'node:fs'
+import path from 'node:path'
+
+const a = process.argv.slice(2)
+if (a.includes('--version')) { console.log('2026.10.20 (fake)'); process.exit(0) }
+const tpl = a[a.indexOf('-o') + 1], url = a.at(-1), id = 'fakeid0001'
+// a page without a video (an article, a post behind a login): yt-dlp's own failure
+if (/^https?:\/\/no-video\.example\//.test(url)) { console.error(`ERROR: [generic] Unsupported URL: ${url}`); process.exit(1) }
+const file = tpl.replace('%(id)s', id).replace('%(ext)s', 'mp4')
+fs.mkdirSync(path.dirname(file), { recursive: true })
+fs.writeFileSync(file, process.env.OSINT_FAKE_VIDEO ? fs.readFileSync(process.env.OSINT_FAKE_VIDEO) : Buffer.from('not a real video'))
+fs.writeFileSync(file.replace(/\.mp4$/, '.info.json'), JSON.stringify({ id, title: 'A walk around the Roman temple', uploader: 'example-uploader', upload_date: '20240716', webpage_url: url, duration: 6 }))
+console.log(`[download] Destination: ${file}`)

@@ -1,0 +1,41 @@
+{
+  "id": "phone",
+  "label": "Phone number",
+  "icon": "phone",
+  "description": "A phone number: its E.164 form, country and line type (libphonenumber), who holds its block in France (ARCEP), its mentions on the web. Never a call, a text or a messaging app lookup",
+  "frame": ["noisy", "person"],
+  "inputs": [
+    { "id": "number", "kind": "text", "label": "Phone number", "required": true, "placeholder": "+33 1 99 00 12 34" },
+    { "id": "country", "kind": "text", "label": "Country of a number written without its country code (ISO code)", "default": "FR", "placeholder": "FR" }
+  ],
+  "levels": [
+    { "id": "owner", "label": "Owner", "criteria": {
+      "high": "two independent sources tie the number to the same holder (the holder's own page and a registry, or two unrelated pages)",
+      "medium": "one source ties the number to a holder and nothing contradicts it",
+      "low": "inferred from the area, the block holder or a single directory entry" } },
+    { "id": "line", "label": "Line", "criteria": {
+      "high": "the line type and the country read in the numbering plan and, in the French plan, the block read in the ARCEP's register",
+      "medium": "the line type read in the numbering plan, the block holder unknown",
+      "low": "the number fits no range of its country's plan, or only its length was checked" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "collect", "label": "Collect" }, { "id": "mentions", "label": "Web mentions" },
+    { "id": "process", "label": "Process" }, { "id": "analyse", "label": "Analyse" }, { "id": "redteam", "label": "Red team" },
+    { "id": "conclude", "label": "Conclude" }, { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "hypotheses" }, { "widget": "sources" }, { "widget": "timeline" },
+    { "widget": "table", "label": "Mentions", "icon": "search", "kind": "url", "where": { "role": "mention" }, "columns": ["value", "site", "writing", "seen"] },
+    { "widget": "table", "label": "Writings", "icon": "text-cursor-input", "view": "writings", "columns": ["writing"] }
+  ],
+  "actions": [
+    { "id": "deep-mentions", "label": "Search every writing and the directories", "icon": "search", "target": "case", "prompt": "[phone:deep-mentions] {value}", "noisy": false, "minutes": 15 }
+  ],
+  "pivots": ["phone"],
+  "refresh": [{ "id": "mentions", "by": "agent", "section": "refresh-mentions", "noisy": false, "sends_image": false, "paid": false, "watch": false, "noun": ["web mention", "web mentions"] }],
+  "requires": { "bins": [], "packs": [], "keys": [], "datasets": [
+    { "id": "libphonenumber", "label": "libphonenumber metadata (Apache-2.0)" },
+    { "id": "arcep-majnum", "label": "ARCEP numbering register (MAJNUM)" },
+    { "id": "arcep-operators", "label": "ARCEP operators (identifiants CE)" }
+  ] }
+}

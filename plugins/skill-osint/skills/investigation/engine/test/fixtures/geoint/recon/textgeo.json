@@ -1,0 +1,8 @@
+{"tool": "textgeo.py", "n_lines": 2, "min_conf": 0.3, "lines": ["Largo do Conde de Vila Flor", "TEMPLO ROMANO"],
+ "languages": [{"text": "Largo do Conde de Vila Flor", "language": "pt", "confidence": 0.71, "margin": 0.33}, {"text": "Largo do Conde de Vila Flor · TEMPLO ROMANO", "language": "pt", "confidence": 0.74, "margin": 0.38}],
+ "places": [],
+ "signals": [{"kind": "language", "clue": "language identified as “pt” (lingua, weight 1.7)", "status": "inferred", "level": "country",
+   "lr": {"PT": 3.0, "BR": 3.0, "AO": 3.0, "MZ": 3.0, "CV": 3.0, "GW": 3.0, "ST": 3.0, "TL": 1.5, "MO": 1.5, "GQ": 1.5}, "file": "recon/intake/ocr.png", "language": "pt"}],
+ "shortlist": [{"iso2": "PT", "name": "Portugal", "log_lr": 1.1, "reasons": ["language×3"]}, {"iso2": "BR", "name": "Brazil", "log_lr": 1.1, "reasons": ["language×3"]},
+   {"iso2": "AO", "name": "Angola", "log_lr": 1.1, "reasons": ["language×3"]}, {"iso2": "MZ", "name": "Mozambique", "log_lr": 1.1, "reasons": ["language×3"]},
+   {"iso2": "CV", "name": "Cabo Verde", "log_lr": 1.1, "reasons": ["language×3"]}, {"iso2": "TL", "name": "Timor-Leste", "log_lr": 0.41, "reasons": ["language×1.5"]}]}

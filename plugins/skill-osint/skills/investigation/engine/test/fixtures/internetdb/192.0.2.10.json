@@ -1,0 +1,1 @@
+{ "ip": "192.0.2.10", "ports": [80, 443], "hostnames": ["web1.exemple-hebergement.example"], "cpes": ["cpe:/a:nginx:nginx"], "tags": [], "vulns": [] }

@@ -1,0 +1,19 @@
+{
+  "id": "watched", "label": "Watched", "icon": "eye", "description": "A type for the watch's tests",
+  "frame": ["noisy"],
+  "inputs": [{ "id": "thing", "kind": "text", "label": "Thing", "required": true }],
+  "levels": [{ "id": "answer", "label": "Answer", "criteria": { "high": "h", "medium": "m", "low": "l" } }],
+  "phases": [{ "id": "collect", "label": "Collect" }],
+  "views": [], "actions": [], "pivots": [],
+  "refresh": [
+    { "id": "quiet", "by": "engine", "run": "collect --step quiet", "watch": true, "noun": ["thing", "things"] },
+    { "id": "manual", "by": "engine", "run": "collect --step manual", "watch": false },
+    { "id": "unmarked", "by": "engine", "run": "collect --step unmarked" },
+    { "id": "loud", "by": "engine", "run": "collect --step loud", "noisy": true },
+    { "id": "image", "by": "engine", "run": "collect --step image", "sends_image": true },
+    { "id": "cost", "by": "engine", "run": "collect --step cost", "paid": true },
+    { "id": "sneaky", "by": "engine", "run": "collect --step sneaky", "noisy": true, "watch": true },
+    { "id": "read", "by": "agent", "section": "refresh-read" }
+  ],
+  "requires": { "bins": [], "packs": [], "keys": [] }
+}

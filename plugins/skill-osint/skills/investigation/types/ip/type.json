@@ -1,0 +1,46 @@
+{
+  "id": "ip",
+  "label": "IP address",
+  "icon": "server",
+  "description": "An IPv4 or IPv6 address: who holds and announces it, its reverse name, a coarse location, what Shodan saw, a Tor exit or a published cloud range — from registries and published lists, never from the address itself",
+  "frame": ["noisy", "person"],
+  "inputs": [
+    { "id": "ip", "kind": "text", "label": "IP address", "required": true, "placeholder": "203.0.113.7 or 2001:db8::7" }
+  ],
+  "levels": [
+    { "id": "operator", "label": "Operator", "criteria": {
+      "high": "the registry's holder and the AS that announces the prefix agree, or a list the operator publishes (cloud ranges, Tor exits) names it",
+      "medium": "one registry names it and nothing contradicts it",
+      "low": "inferred from hostnames, a reverse name or Shodan's tags only" } },
+    { "id": "location", "label": "Location", "criteria": {
+      "high": "a country only, read in a list the operator publishes (a cloud region) and consistent with the geolocation database",
+      "medium": "a country on which the geolocation database and the registry agree",
+      "low": "the geolocation database alone, or any city" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "collect", "label": "Collect" }, { "id": "process", "label": "Process" },
+    { "id": "analyse", "label": "Analyse" }, { "id": "redteam", "label": "Red team" }, { "id": "conclude", "label": "Conclude" },
+    { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "hypotheses" }, { "widget": "sources" },
+    { "widget": "table", "label": "Ports and names", "icon": "plug", "view": "open", "columns": ["type", "value"] },
+    { "widget": "table", "label": "Hostnames", "icon": "globe", "kind": "domain", "columns": ["value", "role", "confirmed"] },
+    { "widget": "map" }, { "widget": "timeline" }
+  ],
+  "actions": [
+    { "id": "web-mentions", "label": "Search the web for this address", "icon": "search", "target": "case", "prompt": "[ip:web-mentions] {value}", "noisy": false, "minutes": 5 }
+  ],
+  "pivots": ["ip"],
+  "refresh": [
+    { "id": "ports", "by": "engine", "run": "collect --only ports", "noun": ["Shodan finding", "Shodan findings"], "watch": true },
+    { "id": "rdns", "by": "engine", "run": "collect --only rdns", "noun": ["reverse name", "reverse names"], "watch": true },
+    { "id": "prefix", "by": "engine", "run": "collect --only prefix", "noun": ["routed prefix", "routed prefixes"], "watch": true },
+    { "id": "tor", "by": "engine", "run": "collect --only tor", "noun": ["Tor exit listing", "Tor exit listings"], "watch": true }
+  ],
+  "requires": { "bins": [], "packs": [], "keys": [], "datasets": [
+    { "id": "tor-exits", "label": "tor exit list" }, { "id": "aws-ranges", "label": "aws ip ranges" },
+    { "id": "gcp-ranges", "label": "google cloud ip ranges" }, { "id": "cloudflare-v4", "label": "cloudflare ipv4 ranges" },
+    { "id": "cloudflare-v6", "label": "cloudflare ipv6 ranges" }
+  ] }
+}

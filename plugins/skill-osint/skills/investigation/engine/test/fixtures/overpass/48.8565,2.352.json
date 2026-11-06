@@ -1,0 +1,1058 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-11-06T13:38:06Z",
+    "timestamp_areas_base": "2026-11-06T11:33:16Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "relation",
+  "id": 284089,
+  "center": {
+    "lat": 48.8564265,
+    "lon": 2.3525270
+  },
+  "tags": {
+    "addr:city": "Paris",
+    "addr:postcode": "75004",
+    "addr:street": "Place de l’Hotel de Ville",
+    "alt_name": "Hôtel de ville de Paris",
+    "amenity": "townhall",
+    "building": "civic",
+    "building:levels": "4",
+    "contact:facebook": "https://www.facebook.com/paris",
+    "contact:instagram": "https://www.instagram.com/paris_maville",
+    "contact:phone": "+33 1 42 76 40 40",
+    "contact:website": "https://www.paris.fr",
+    "height": "40",
+    "heritage": "3",
+    "heritage:operator": "mhs",
+    "internet_access": "wlan",
+    "internet_access:fee": "no",
+    "internet_access:operator": "Mairie de Paris",
+    "mhs:inscription_date": "1975-01-15",
+    "name": "Hôtel de ville",
+    "name:br": "Ti-kêr Pariz",
+    "name:de": "Hôtel de Ville",
+    "name:en": "Hôtel de Ville",
+    "name:es": "Ayuntamiento de París",
+    "name:fr": "Hôtel de ville",
+    "name:ja": "パリ市庁舎",
+    "name:ru": "Отель-де-Виль",
+    "name:zh": "巴黎市政厅",
+    "name:zh-Hans": "巴黎市政厅",
+    "name:zh-Hant": "巴黎市政廳",
+    "opening_hours": "Mo-Sa 10:00-19:00",
+    "ref:FR:RNB": "8PWJVCN6NEYJ",
+    "ref:FR:SIRET": "21750001600019",
+    "ref:mhs": "PA00086319",
+    "roof:levels": "2",
+    "source": "cadastre-dgi-fr source : Direction Générale des Impôts - Cadastre;mise à jour : 2010",
+    "source:heritage": "Ministère de la Culture - 2026-09",
+    "source:internet_access": "Paris Open Data",
+    "tourism": "attraction",
+    "townhall:type": "main",
+    "type": "multipolygon",
+    "wheelchair": "limited",
+    "wikidata": "Q640968",
+    "wikimedia_commons": "File:Hôtel ville façade principale Paris 11.jpg",
+    "wikipedia": "fr:Hôtel de ville de Paris"
+  }
+},
+{
+  "type": "here",
+  "id": 1
+},
+{
+  "type": "node",
+  "id": 218119662,
+  "lat": 48.8562998,
+  "lon": 2.3535246,
+  "tags": {
+    "amenity": "parking_entrance",
+    "brand": "Indigo",
+    "brand:wikidata": "Q3559970",
+    "brand:wikipedia": "fr:Indigo (entreprise)",
+    "fee": "yes",
+    "maxheight": "1.9",
+    "name": "Lobau Rivoli",
+    "operator": "Indigo",
+    "operator:wikidata": "Q3559970",
+    "operator:wikipedia": "fr:Indigo (entreprise)",
+    "parking": "underground",
+    "website": "https://fr.parkindigo.com/parking/lobau-rivoli-75040600"
+  }
+},
+{
+  "type": "node",
+  "id": 320799890,
+  "lat": 48.8574803,
+  "lon": 2.3523420,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "66",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Rivoli",
+    "check_date": "2026-09-05",
+    "level": "0",
+    "name": "Miniso",
+    "shop": "collector",
+    "source": "survey",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 557420805,
+  "lat": 48.8566083,
+  "lon": 2.3533348,
+  "tags": {
+    "amenity": "parking_entrance",
+    "fee": "yes",
+    "maxheight": "1.9",
+    "name": "Lobau Rivoli",
+    "operator": "Indigo"
+  }
+},
+{
+  "type": "node",
+  "id": 658959185,
+  "lat": 48.8575059,
+  "lon": 2.3526422,
+  "tags": {
+    "amenity": "atm",
+    "brand": "SG",
+    "brand:wikidata": "Q270363",
+    "brand:wikipedia": "en:Société Générale",
+    "cash_in": "no",
+    "check_date": "2024-10-30",
+    "indoor": "no",
+    "name": "SG",
+    "operator": "SG",
+    "operator:wikidata": "Q270363",
+    "operator:wikipedia": "en:Société Générale"
+  }
+},
+{
+  "type": "node",
+  "id": 697179489,
+  "lat": 48.8576618,
+  "lon": 2.3525656,
+  "tags": {
+    "check_date": "2025-10-20",
+    "indoor_seating": "no",
+    "name": "The French Bastards",
+    "opening_hours": "Mo-Fr 07:30-20:00; Sa 08:30-20:00; Su 08:30-18:00",
+    "outdoor_seating": "no",
+    "shop": "bakery",
+    "source": "survey",
+    "takeaway": "only",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 697183314,
+  "lat": 48.8562818,
+  "lon": 2.3505430,
+  "tags": {
+    "amenity": "restaurant",
+    "contact:city": "Paris 4eme Arrondissement",
+    "contact:housenumber": "1",
+    "contact:phone": "+33 1 42 72 00 04",
+    "contact:postcode": "75004",
+    "contact:street": "Place De L'hôtel De Ville",
+    "indoor_seating": "yes",
+    "name": "Bistrot Marguerite",
+    "name:fr": "Bistrot Marguerite",
+    "outdoor_seating": "yes",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 698083476,
+  "lat": 48.8566955,
+  "lon": 2.3538078,
+  "tags": {
+    "access": "yes",
+    "amenity": "parking",
+    "fee": "yes",
+    "layer": "-1",
+    "name": "Lobau Rivoli",
+    "parking": "underground"
+  }
+},
+{
+  "type": "node",
+  "id": 698083584,
+  "lat": 48.8555458,
+  "lon": 2.3531126,
+  "tags": {
+    "amenity": "parking_entrance",
+    "exit": "yes",
+    "fee": "yes",
+    "name": "Lobau Rivoli",
+    "parking": "underground"
+  }
+},
+{
+  "type": "node",
+  "id": 2162802071,
+  "lat": 48.8560563,
+  "lon": 2.3534444,
+  "tags": {
+    "access": "yes",
+    "amenity": "parking",
+    "brand": "Q-Park",
+    "fee": "yes",
+    "layer": "-1",
+    "name": "Q-Park Marais Lobau Notre Dame",
+    "operator": "Q-Park",
+    "parking": "underground",
+    "source": "Q-Park website",
+    "website": "https://www.q-park.fr/fr-fr/villes/paris/lobau/"
+  }
+},
+{
+  "type": "node",
+  "id": 2211556497,
+  "lat": 48.8575470,
+  "lon": 2.3507258,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "33",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Rivoli",
+    "amenity": "bank",
+    "brand": "BRED",
+    "brand:website": "https://www.bred.fr",
+    "brand:wikidata": "Q2877455",
+    "check_date": "2026-04-02",
+    "name": "BRED",
+    "official_name": "Banque régionale d'escompte et de dépôts",
+    "opening_hours": "Tu-We 09:00-13:00,14:00-18:00; Th 10:00-13:00,14:00-18:00; Fr 09:00-13:00,14:00-18:00; Sa 09:00-13:00,14:00-17:00",
+    "website": "https://agences.banquepopulaire.fr/fr/agence/paris-hotel-de-ville-1010700177"
+  }
+},
+{
+  "type": "node",
+  "id": 2211556510,
+  "lat": 48.8567308,
+  "lon": 2.3537614,
+  "tags": {
+    "amenity": "taxi",
+    "bench": "yes",
+    "name": "Hôtel de Ville",
+    "ref": "119",
+    "shelter": "yes",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 2666807384,
+  "lat": 48.8572235,
+  "lon": 2.3521054,
+  "tags": {
+    "board:title": "Histoire de Paris",
+    "board_type": "history",
+    "check_date": "2022-04-15",
+    "information": "board",
+    "inscription": "A l'origine de la municipalité parisienne se trouve le Parloir aux bourgeois, situé sans doute près de l'église Saint-Leufroi. En 1357, le corps de ville achète la Maison aux piliers, place de Grève",
+    "inscription:2": "et s'y installe. En 1533, Dominique de Cortone , dit le Boccador, est chargé de la construction d'un hôtel de ville qui associe une riche décoration à l'italienne aux hautes toitures du nord de la Loire.",
+    "inscription:3": "Cet édifice prestigieux n'est achevé qu'en 1606. Il est agrandi à plusieurs reprises, notamment en 1803 et de 1837 à 1841, avant de disparaître, le 24 mai 1871, dans l'incendie allumé par la Commune",
+    "inscription:4": ", qui détruit aussi les archives et la bibliothèque de la ville. Edifié entre 1873 et 1883 par Ballu et Deperthes, l'actuel bâtiment s'inspire de l'oeuvre du Boccador.",
+    "name": "Hôtel de Ville",
+    "operator": "Mairie de Paris",
+    "panoramax": "6e54be03-796d-4cc6-8d74-18182d65b6c1",
+    "subject:wikidata": "Q640968",
+    "tourism": "information",
+    "wikidata": "Q60291497",
+    "wikimedia_commons": "File:Panneau Hôtel de Ville.jpg;File:Hôtel de ville de Paris, rue de Rivoli, Paris 4e.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 2981458874,
+  "lat": 48.8575321,
+  "lon": 2.3524357,
+  "tags": {
+    "check_date": "2026-04-02",
+    "name": "KN'L",
+    "shop": "clothes",
+    "source": "survey",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 2981458877,
+  "lat": 48.8577322,
+  "lon": 2.3526298,
+  "tags": {
+    "check_date": "2025-10-20",
+    "name": "Texaffaires",
+    "opening_hours": "Mo-Su 10:00-19:00",
+    "shop": "interior_decoration",
+    "source": "survey",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 2997913294,
+  "lat": 48.8567195,
+  "lon": 2.3532017,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "5",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Lobau",
+    "amenity": "library",
+    "email": "bhdv@paris.fr",
+    "internet_access": "wlan",
+    "internet_access:fee": "no",
+    "internet_access:operator": "Mairie de Paris",
+    "name": "Bibliothèque de l'Hôtel de Ville",
+    "old_name": "Bibliothèque Administrative de la Ville de Paris",
+    "opening_hours": "Mo-Fr 09:30-18:00; Jul 06-Sep 01: Mo-Fr 09:30-17:00",
+    "phone": "+33 1 42 76 48 87",
+    "short_name": "BHDV",
+    "source:internet_access": "Paris Open Data",
+    "website": "http://equipement.paris.fr/bibliotheque-de-l-hotel-de-ville-bhdv-17",
+    "wheelchair": "yes",
+    "wikidata": "Q2901369",
+    "wikipedia": "fr:Bibliothèque de l'hôtel de ville de Paris"
+  }
+},
+{
+  "type": "node",
+  "id": 3342900967,
+  "lat": 48.8573959,
+  "lon": 2.3511801,
+  "tags": {
+    "check_date": "2026-04-02",
+    "name": "basket4ballers",
+    "shop": "sports",
+    "website": "https://www.basket4ballers.com/"
+  }
+},
+{
+  "type": "node",
+  "id": 3342900968,
+  "lat": 48.8575974,
+  "lon": 2.3517147,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "70",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Rivoli",
+    "brand": "Geox",
+    "brand:wikidata": "Q588001",
+    "brand:wikipedia": "en:Geox",
+    "check_date": "2026-09-05",
+    "name": "Geox",
+    "phone": "+33 1 42 76 02 24",
+    "shop": "shoes",
+    "website": "https://www.geox.com/int/storedetails/paris-104187",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 3342900970,
+  "lat": 48.8575144,
+  "lon": 2.3520816,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "68",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Rivoli",
+    "brand": "Dim",
+    "brand:wikidata": "Q3028013",
+    "check_date": "2026-09-05",
+    "clothes": "underwear",
+    "name": "DIM",
+    "shop": "clothes"
+  }
+},
+{
+  "type": "node",
+  "id": 3405085787,
+  "lat": 48.8577196,
+  "lon": 2.3513477,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "74",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Rivoli",
+    "brand": "Oysho",
+    "brand:wikidata": "Q3327046",
+    "brand:wikipedia": "en:Oysho",
+    "check_date": "2026-09-05",
+    "name": "Oysho",
+    "opening_hours": "Mo-Sa 10:00-20:00; Su 10:30-19:00",
+    "phone": "+33 159202130",
+    "shop": "clothes",
+    "website": "https://www.oysho.com/fr/store-locator/paris/rue-de-rivoli-74-s7839.html",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 3801064168,
+  "lat": 48.8568501,
+  "lon": 2.3503923,
+  "tags": {
+    "addr:housenumber": "3",
+    "contact:phone": "+33 1 40 27 00 00",
+    "description": "Entrée principale du siège de l'AP-HP",
+    "entrance": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 3980384396,
+  "lat": 48.8577232,
+  "lon": 2.3511740,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "74",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Rivoli",
+    "check_date": "2026-09-05",
+    "mobile": "+33 626745052",
+    "name": "Normal",
+    "shop": "supermarket",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4760691715,
+  "lat": 48.8560500,
+  "lon": 2.3503500,
+  "tags": {
+    "addr:street": "Voie Georges Pompidou",
+    "contact:facebook": "https://www.facebook.com/SoliCycle/?ref=bookmarks",
+    "email": "berges@solicycle.org",
+    "name": "SoliCycle Rives de Seine",
+    "opening_hours": "We,Fr,Sa 10:30-13:00,14:00-18:30",
+    "operator": "Etudes et Chantiers Île-de-France",
+    "phone": "+33639980012",
+    "ref:FR:SIRET": "44066204700032",
+    "second_hand": "only",
+    "service:bicycle:diy": "yes",
+    "service:bicycle:pump": "yes",
+    "service:bicycle:repair": "yes",
+    "service:bicycle:retail": "no",
+    "service:bicycle:second_hand": "no",
+    "shop": "bicycle",
+    "source": "CRESS Île-de-France",
+    "survey:date": "2024-01-03",
+    "website": "https://solicycle.org/",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 5203388432,
+  "lat": 48.8558244,
+  "lon": 2.3516226,
+  "tags": {
+    "board:title": "Histoire de Paris",
+    "board_type": "history",
+    "check_date": "2023-10-06",
+    "information": "board",
+    "inscription": "La veille du solstice d'été était jour de liesse pour les parisiens. Les magistrats faisaient édifier sur la place de la Grève un vaste bûcher, garni d'un mât haut de vingt mètres et couronné de fleurs. Des fusées et des pétards s'accrochaient en grappe",
+    "inscription:2": "autour d'une statue placée au centre de cette montagne de combustible. Le Bureau de la Ville s'avançait sur la place, une torche de cire jaune à la main, et présentait au roi une autre torche, blanche, ornée de poignées de velours rouge.",
+    "inscription:3": "Aussitôt le feu allumé, vingt couleuvrines rangées en bord de Seine tiraient trois salves consécutives; archers et arquebusiers avaient peine à contenir les badauds, qui se ruaient sur les collations et même sur les cendres et les tisons, considérés",
+    "inscription:4": "comme des talismans! Toute la nuit, les bouquetières parcouraient la ville, criant à tue-tête \"Des bouquets pour Jeannot-Jeannette !\" Même si les rois cessent peu à peu d'y assister, ces réjouissances populaires demeurent très vivantes jusqu'à la fin du",
+    "inscription:5": "XVIIIe siècle.",
+    "mapillary": "198653368762910",
+    "name": "Les feux de la Saint-Jean",
+    "operator": "Mairie de Paris",
+    "subject:wikidata": "Q10398273",
+    "tourism": "information",
+    "wikidata": "Q60291510",
+    "wikimedia_commons": "File:Panneau Feux de la Saint-Jean.jpg;File:F1933 Paris IV quai hotel de ville borne Histoire de Paris rwk.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 5203388433,
+  "lat": 48.8556128,
+  "lon": 2.3526631,
+  "tags": {
+    "check_date": "2022-04-13",
+    "historic": "memorial",
+    "inscription": "Ce jardin rend hommage aux combattants de la Nueve (9e Compagnie), unité de choc de la 2e Division blindée du Général Leclerc, arrivée la première à l'Hôtel de Ville à la Libération le 24 août 1944. Elle était majoritairement composée de républicains",
+    "inscription:2": "espagnols réfugiés en France après la victoire de Franco. Une statue équestre représente Étienne Marcel, prévôt des marchands de Paris au XIVe siècle et figure fondatrice de l'administration parisienne. Elle est l’œuvre de Jean-Antoine-Marie Idrac et de",
+    "inscription:3": "Laurent Marqueste. Autrefois jardin privé du préfet de la Seine, puis du maire de Paris, c'est aujourd'hui le jardin de la crèche de l'Hôtel de Ville. Il est ouvert au public depuis 2015.",
+    "memorial": "plaque",
+    "name": "Jardin des Combattants-de-la-Nueve",
+    "operator": "Mairie de Paris",
+    "wikimedia_commons": "File:Panneau Jardin Combattants Nueve - Paris IV (FR75) - 2021-07-21 - 1.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 6216897829,
+  "lat": 48.8566508,
+  "lon": 2.3518681,
+  "tags": {
+    "artist_name": "Jules Blanchard (1832-1916)",
+    "artwork_type": "statue",
+    "name": "La Science",
+    "name:en": "The Science",
+    "name:fr": "La Science",
+    "tourism": "artwork",
+    "wikidata": "Q63341415"
+  }
+},
+{
+  "type": "node",
+  "id": 6216912785,
+  "lat": 48.8565387,
+  "lon": 2.3518054,
+  "tags": {
+    "artist_name": "Laurent-Honoré Marqueste (1848-1920)",
+    "artwork_type": "statue",
+    "name": "L'Art",
+    "name:en": "The Art",
+    "name:fr": "L'Art",
+    "tourism": "artwork",
+    "wikidata": "Q63341353"
+  }
+},
+{
+  "type": "node",
+  "id": 6435368573,
+  "lat": 48.8573016,
+  "lon": 2.3515339,
+  "tags": {
+    "amenity": "bicycle_rental",
+    "bicycle_rental": "docking_station",
+    "brand": "Vélib' Métropole",
+    "brand:wikidata": "Q1120762",
+    "brand:wikipedia": "fr:Vélib' Métropole",
+    "capacity": "14",
+    "check_date": "2024-11-02",
+    "level": "0",
+    "name": "Place de l'Hôtel de Ville",
+    "network": "Vélib' Métropole",
+    "network:wikidata": "Q1120762",
+    "network:wikipedia": "fr:Vélib' Métropole",
+    "operator": "Smovengo",
+    "operator:type": "private",
+    "operator:wikidata": "Q47008427",
+    "operator:wikipedia": "fr:Smovengo",
+    "ref": "4017",
+    "source": "survey 04/2019",
+    "wikidata": "Q86255016"
+  }
+},
+{
+  "type": "node",
+  "id": 6438519108,
+  "lat": 48.8562451,
+  "lon": 2.3532830,
+  "tags": {
+    "amenity": "bicycle_rental",
+    "bicycle_rental": "docking_station",
+    "brand": "Vélib' Métropole",
+    "brand:wikidata": "Q1120762",
+    "brand:wikipedia": "fr:Vélib' Métropole",
+    "capacity": "60",
+    "name": "Lobau - Hôtel de Ville",
+    "network": "Vélib' Métropole",
+    "network:wikidata": "Q1120762",
+    "network:wikipedia": "fr:Vélib' Métropole",
+    "operator": "Smovengo",
+    "operator:type": "private",
+    "operator:wikidata": "Q47008427",
+    "operator:wikipedia": "fr:Smovengo",
+    "ref": "4016",
+    "source": "Autolib Velib Métropole - 2021-03",
+    "unsigned_ref": "98187918",
+    "wikidata": "Q86254997"
+  }
+},
+{
+  "type": "node",
+  "id": 7078311737,
+  "lat": 48.8560210,
+  "lon": 2.3504591,
+  "tags": {
+    "board:title": "Gens de Seine, l'histoire dans les oreilles",
+    "board_type": "history",
+    "fixme": "à compléter (ref, name, website avec le lien précis…)",
+    "information": "board",
+    "tourism": "information",
+    "website": "http://gensdelaseine.com/"
+  }
+},
+{
+  "type": "node",
+  "id": 8163669466,
+  "lat": 48.8573463,
+  "lon": 2.3516453,
+  "tags": {
+    "board:title": "Histoire de Paris",
+    "board_type": "history",
+    "information": "board",
+    "name": "Place de grève",
+    "operator": "Mairie de Paris",
+    "subject:wikidata": "Q1469337",
+    "tourism": "information",
+    "wikidata": "Q60291514",
+    "wikimedia_commons": "File:Panneau Place de Grève.jpg;File:Panneau Histoire de Paris, place de Grève, Paris 4e.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 8932455801,
+  "lat": 48.8574019,
+  "lon": 2.3526636,
+  "tags": {
+    "amenity": "cafe",
+    "cuisine": "coffee_shop",
+    "kids_area": "no",
+    "level": "3",
+    "name": "Marlette",
+    "opening_hours": "Mo-Su 11:30-19:30",
+    "operator": "Coutume Café",
+    "outdoor_seating": "no",
+    "smoking": "no",
+    "takeaway": "no",
+    "toilets": "no",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 9835789648,
+  "lat": 48.8575762,
+  "lon": 2.3507843,
+  "tags": {
+    "amenity": "atm",
+    "brand": "BRED",
+    "brand:wikidata": "Q2877455",
+    "check_date": "2026-04-02",
+    "name": "BRED",
+    "official_name": "Banque régionale d'escompte et de dépôts",
+    "operator": "BRED",
+    "operator:wikidata": "Q2877455",
+    "survey:date": "2025-10-29"
+  }
+},
+{
+  "type": "node",
+  "id": 10920092319,
+  "lat": 48.8575386,
+  "lon": 2.3519077,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "68",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Rivoli",
+    "check_date": "2026-09-05",
+    "name": "Pikolinos",
+    "shop": "shoes"
+  }
+},
+{
+  "type": "node",
+  "id": 11164777293,
+  "lat": 48.8569919,
+  "lon": 2.3510286,
+  "tags": {
+    "artist:wikidata": "Q1671666",
+    "artist:wikipedia": "fr:Invader (artiste)",
+    "artist_name": "Invader",
+    "artwork_subject": "street_art",
+    "artwork_type": "mosaic",
+    "description": "donkey kong",
+    "indoor": "no",
+    "source": "survey 2023",
+    "support": "wall_mounted",
+    "tourism": "artwork",
+    "website": "https://space-invaders.com/"
+  }
+},
+{
+  "type": "node",
+  "id": 11194580053,
+  "lat": 48.8566921,
+  "lon": 2.3518912,
+  "tags": {
+    "historic": "memorial",
+    "memorial": "plaque",
+    "name": "Le président du conseil ministre de la guerre cite à l'ordre de l'armée la Ville de Paris",
+    "panoramax": "8a98d1b4-7af5-415d-9892-8f891ee42899",
+    "wikimedia_commons": "File:Citation Paris ordre armée 1914-1918 Clémenceau.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 11194580055,
+  "lat": 48.8564954,
+  "lon": 2.3517812,
+  "tags": {
+    "historic": "memorial",
+    "memorial": "plaque",
+    "name": "Le gouvernement provisoire de la République Française décerne la Croix de la Libération à la Ville de Paris",
+    "panoramax": "9cc38bf6-6a40-4adf-b2be-4447eb361202",
+    "wikimedia_commons": "File:Plaque Croix Libération Hôtel ville façade principale Paris 6.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 11459214383,
+  "lat": 48.8566215,
+  "lon": 2.3501865,
+  "tags": {
+    "addr:housenumber": "3",
+    "addr:street": "Place de l'Hôtel de Ville",
+    "name": "Les Arches Citoyennes",
+    "office": "association",
+    "opening_hours": "Mo 09:00-18:00; Tu-Fr 09:00-24:00; Sa 12:00-23:00",
+    "operator": "Plateau Urbain",
+    "website": "https://lesarchescitoyennes.fr/"
+  }
+},
+{
+  "type": "node",
+  "id": 11781433971,
+  "lat": 48.8577614,
+  "lon": 2.3517689,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "2",
+    "addr:postcode": "75004",
+    "addr:street": "Rue du Renard",
+    "check_date": "2026-06-03",
+    "description": "Concept store japonais",
+    "email": "contact@his-world.com",
+    "name": "HIS Paris",
+    "opening_hours": "Mo-Fr 12:00-19:30; Sa 11:00-19:00",
+    "shop": "vacant",
+    "website": "https://www.hisparis.com/"
+  }
+},
+{
+  "type": "node",
+  "id": 12298810360,
+  "lat": 48.8563052,
+  "lon": 2.3505033,
+  "tags": {
+    "level": "1",
+    "name": "Stéphane Bianca",
+    "shop": "clothes"
+  }
+},
+{
+  "type": "node",
+  "id": 12299554981,
+  "lat": 48.8569618,
+  "lon": 2.3528207,
+  "tags": {
+    "name": "Paris boutique",
+    "opening_hours": "Mo-Sa 10:00-19:00",
+    "shop": "gift",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 12306707563,
+  "lat": 48.8575219,
+  "lon": 2.3519856,
+  "tags": {
+    "addr:city": "Paris",
+    "addr:housenumber": "68",
+    "addr:postcode": "75004",
+    "addr:street": "Rue de Rivoli",
+    "amenity": "fast_food",
+    "brand": "Ben's Cookies",
+    "brand:wikidata": "Q4885143",
+    "check_date": "2026-09-05",
+    "level": "0",
+    "name": "Ben's Cookies",
+    "opening_hours": "Mo-Sa 10:00-20:00; Su 11:00-19:00",
+    "shop": "confectionery",
+    "website": "https://www.benscookies.com/stores/rivoli/"
+  }
+},
+{
+  "type": "node",
+  "id": 12735429850,
+  "lat": 48.8572064,
+  "lon": 2.3521759,
+  "tags": {
+    "board:title": "Parcours révolution",
+    "board_type": "history",
+    "information": "board",
+    "name": "Autour de l'Hôtel de Ville",
+    "panoramax": "c31be8ca-e0f6-420a-9657-06691a058367;5ca2ce82-6017-4e9f-9fd2-c97dadc53c6e",
+    "survey:date": "2023-05-20",
+    "tourism": "information"
+  }
+},
+{
+  "type": "node",
+  "id": 13293388870,
+  "lat": 48.8563487,
+  "lon": 2.3503601,
+  "tags": {
+    "information": "office",
+    "name": "Paris Today",
+    "operator": "private",
+    "tourism": "information",
+    "website": "https://paristoday.travel/"
+  }
+},
+{
+  "type": "node",
+  "id": 13410848155,
+  "lat": 48.8575449,
+  "lon": 2.3524730,
+  "tags": {
+    "check_date": "2026-04-02",
+    "contact:website": "https://teatribesandco.com/",
+    "email": "service-client@teatribesandco.com",
+    "name": "Tea Tribes & Co",
+    "opening_hours": "Mo-Su,PH 11:00-20:00",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "shop": "tea",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 25992413,
+  "center": {
+    "lat": 48.8547442,
+    "lon": 2.3531977
+  },
+  "tags": {
+    "addr:city": "Paris",
+    "check_date": "2026-07-31",
+    "description": "This park is mostly unknown,and as surch is a great picnic spot during Paris Plage",
+    "leisure": "park",
+    "name": "Jardin Federico-García-Lorca",
+    "ref:FR:FANTOIR": "751043851Y",
+    "source": "cadastre-dgi-fr source : Direction Générale des Impôts - Cadastre. Mise à jour : 2010",
+    "website": "https://www.paris.fr/lieux/jardin-federico-garcia-lorca-1204",
+    "wikidata": "Q3495077",
+    "wikipedia": "fr:Jardin Federico-García-Lorca"
+  }
+},
+{
+  "type": "way",
+  "id": 29168869,
+  "center": {
+    "lat": 48.8574684,
+    "lon": 2.3533171
+  },
+  "tags": {
+    "alt_name": "Bazar de l'Hôtel de Ville",
+    "baby_feeding": "room",
+    "building": "yes",
+    "building:levels": "9",
+    "changing_table": "yes",
+    "changing_table:location": "room",
+    "check_date": "2025-07-02",
+    "contact:city": "Paris",
+    "contact:housenumber": "52",
+    "contact:postcode": "75004",
+    "contact:street": "Rue de Rivoli",
+    "contact:website": "https://www.bhv.fr/",
+    "diff:ref:FR:RNB": "multiple",
+    "highchair": "yes",
+    "name": "Le BHV Marais",
+    "name:zh": "玛莱BHV百货",
+    "opening_hours": "Mo-Sa 10:00-20:00; Su 11:00-19:00",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "ref:FR:RNB": "V1M44ETSPD3Q;99DF2KEEYCNW",
+    "shop": "department_store",
+    "toilets": "yes",
+    "toilets:wheelchair": "yes",
+    "wheelchair": "yes",
+    "wikidata": "Q2892394",
+    "wikipedia": "fr:Bazar de l'Hôtel de Ville"
+  }
+},
+{
+  "type": "way",
+  "id": 55477526,
+  "center": {
+    "lat": 48.8556731,
+    "lon": 2.3521197
+  },
+  "tags": {
+    "area": "yes",
+    "artwork_type": "statue",
+    "material": "bronze",
+    "name": "Étienne Marcel, prévôt des marchands",
+    "statue": "equestrian",
+    "subject:wikidata": "Q143046",
+    "subject:wikipedia": "fr:Étienne Marcel",
+    "tourism": "artwork",
+    "wikidata": "Q18156540"
+  }
+},
+{
+  "type": "way",
+  "id": 200164063,
+  "center": {
+    "lat": 48.8543873,
+    "lon": 2.3541955
+  },
+  "tags": {
+    "leisure": "marina",
+    "name": "Port de l'Hôtel-de-Ville",
+    "ref:FR:FANTOIR": "751044666J",
+    "seamark:harbour:category": "marina",
+    "seamark:type": "harbour",
+    "wikidata": "Q3398599",
+    "wikipedia": "fr:Port de l'Hôtel-de-Ville"
+  }
+},
+{
+  "type": "way",
+  "id": 468735435,
+  "center": {
+    "lat": 48.8557648,
+    "lon": 2.3521643
+  },
+  "tags": {
+    "contact:website": "https://www.paris.fr/lieux/jardin-des-combattants-de-la-nueve-17991",
+    "leisure": "park",
+    "name": "Jardin des Combattants-de-la-Nueve",
+    "ref:FR:FANTOIR": "751042220A",
+    "wikidata": "Q19945094"
+  }
+},
+{
+  "type": "way",
+  "id": 1208125226,
+  "center": {
+    "lat": 48.8558206,
+    "lon": 2.3537393
+  },
+  "tags": {
+    "description": "Jardin en hommage aux victimes des attentats du 13 novembre 2015",
+    "leisure": "garden",
+    "name": "Jardin du 13 Novembre 2015",
+    "name:zh": "2015年11月13日花园",
+    "source": "https://www.paris.fr/",
+    "start_date": "2025",
+    "wikidata": "Q134461559",
+    "wikipedia": "fr:Jardin du 13 Novembre 2015"
+  }
+},
+{
+  "type": "way",
+  "id": 1228850171,
+  "center": {
+    "lat": 48.8573036,
+    "lon": 2.3425426
+  },
+  "tags": {
+    "bicycle": "no",
+    "duration": "00:15",
+    "foot": "yes",
+    "from": "Hôtel-de-Ville",
+    "motor_vehicle": "no",
+    "operator": "Batobus",
+    "route": "ferry",
+    "to": "Louvre",
+    "website": "https://www.batobus.com/fr/parcours"
+  }
+},
+{
+  "type": "relation",
+  "id": 284089,
+  "center": {
+    "lat": 48.8564265,
+    "lon": 2.3525270
+  },
+  "tags": {
+    "addr:city": "Paris",
+    "addr:postcode": "75004",
+    "addr:street": "Place de l’Hotel de Ville",
+    "alt_name": "Hôtel de ville de Paris",
+    "amenity": "townhall",
+    "building": "civic",
+    "building:levels": "4",
+    "contact:facebook": "https://www.facebook.com/paris",
+    "contact:instagram": "https://www.instagram.com/paris_maville",
+    "contact:phone": "+33 1 42 76 40 40",
+    "contact:website": "https://www.paris.fr",
+    "height": "40",
+    "heritage": "3",
+    "heritage:operator": "mhs",
+    "internet_access": "wlan",
+    "internet_access:fee": "no",
+    "internet_access:operator": "Mairie de Paris",
+    "mhs:inscription_date": "1975-01-15",
+    "name": "Hôtel de ville",
+    "name:br": "Ti-kêr Pariz",
+    "name:de": "Hôtel de Ville",
+    "name:en": "Hôtel de Ville",
+    "name:es": "Ayuntamiento de París",
+    "name:fr": "Hôtel de ville",
+    "name:ja": "パリ市庁舎",
+    "name:ru": "Отель-де-Виль",
+    "name:zh": "巴黎市政厅",
+    "name:zh-Hans": "巴黎市政厅",
+    "name:zh-Hant": "巴黎市政廳",
+    "opening_hours": "Mo-Sa 10:00-19:00",
+    "ref:FR:RNB": "8PWJVCN6NEYJ",
+    "ref:FR:SIRET": "21750001600019",
+    "ref:mhs": "PA00086319",
+    "roof:levels": "2",
+    "source": "cadastre-dgi-fr source : Direction Générale des Impôts - Cadastre;mise à jour : 2010",
+    "source:heritage": "Ministère de la Culture - 2026-09",
+    "source:internet_access": "Paris Open Data",
+    "tourism": "attraction",
+    "townhall:type": "main",
+    "type": "multipolygon",
+    "wheelchair": "limited",
+    "wikidata": "Q640968",
+    "wikimedia_commons": "File:Hôtel ville façade principale Paris 11.jpg",
+    "wikipedia": "fr:Hôtel de ville de Paris"
+  }
+},
+{
+  "type": "relation",
+  "id": 7510228,
+  "center": {
+    "lat": 48.8561136,
+    "lon": 2.3532166
+  },
+  "tags": {
+    "amenity": "parking",
+    "brand": "Indigo",
+    "brand:wikidata": "Q3559970",
+    "brand:wikipedia": "fr:Indigo (entreprise)",
+    "fee": "yes",
+    "name": "Lobau Rivoli",
+    "operator": "Indigo",
+    "operator:type": "private",
+    "operator:wikidata": "Q3559970",
+    "operator:wikipedia": "fr:Indigo (entreprise)",
+    "parking": "underground",
+    "type": "site"
+  }
+}
+
+  ]
+}

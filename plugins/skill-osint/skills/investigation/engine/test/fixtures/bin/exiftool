@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+// A stand-in for exiftool in the tests and the demo. -j prints test/fixtures/exiftool/<name>.json (the file's name
+// without its E01- prefix nor its extension; the shape exiftool -j -G1 -a -n gives), or the few File tags of a file
+// without metadata; -b -<Tag> writes test/fixtures/exiftool/<name>.<Tag>.jpg when there is one, else nothing.
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const FX = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'exiftool')
+const a = process.argv.slice(2)
+if (a.includes('-ver') || a.includes('--version')) { console.log('13.36 (fake)'); process.exit(0) }
+const file = a.at(-1), stem = path.basename(file).replace(/^E\d+-/, '').replace(/\.[^.]+$/, '')
+if (!fs.existsSync(file)) { console.error(`Error: File not found - ${file}`); process.exit(1) }
+const tag = a.find(x => /^-[A-Z][A-Za-z]+$/.test(x))?.slice(1)
+if (a.includes('-b') && tag) {
+  const f = path.join(FX, `${stem}.${tag}.jpg`)
+  if (fs.existsSync(f)) process.stdout.write(fs.readFileSync(f))
+  process.exit(0)
+}
+const f = path.join(FX, `${stem}.json`)
+const out = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : [{ 'ExifTool:ExifToolVersion': 13.36, 'System:FileName': path.basename(file), 'File:FileType': 'JPEG', 'File:MIMEType': 'image/jpeg' }]
+out[0].SourceFile = file
+console.log(JSON.stringify(out, null, 2))

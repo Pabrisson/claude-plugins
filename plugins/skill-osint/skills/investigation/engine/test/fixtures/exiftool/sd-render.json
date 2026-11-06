@@ -1,0 +1,2 @@
+[{ "SourceFile": "Evidence/E01-sd-render.png", "File:FileType": "PNG", "PNG:ImageWidth": 1024, "PNG:ImageHeight": 1024,
+   "PNG:Parameters": "a roman temple in the rain at night, photorealistic\nSteps: 30, Sampler: DPM++ 2M Karras, CFG scale: 7, Seed: 1234567, Size: 1024x1024, Model: sd_xl_base_1.0" }]

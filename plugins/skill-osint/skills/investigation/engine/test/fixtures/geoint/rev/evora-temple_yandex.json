@@ -1,0 +1,10 @@
+{
+  "url": "https://yandex.com/images/search?cbir_id=4471234%2Fexample&rpt=imageview",
+  "guess": ["Image appears to contain: Temple of Diana / Évora / Roman temple / ancient architecture"],
+  "links": [
+    { "title": "File:Roman Temple of Évora 1.jpg - Wikimedia Commons", "url": "https://commons.wikimedia.org/wiki/File:Roman_Temple_of_%C3%89vora_1.jpg", "site": "commons.wikimedia.org" },
+    { "title": "The Alentejo in three days — Blog Example", "url": "https://blog.example/travel/alentejo-in-three-days?utm_source=yandex", "site": "blog.example" },
+    { "title": "Storm over Extremadura: the night in pictures", "url": "https://news.example/2025/03/04/storm-merida/", "site": "news.example" }
+  ],
+  "text_head": "Image appears to contain\nTemple of Diana\nÉvora\nRoman temple"
+}

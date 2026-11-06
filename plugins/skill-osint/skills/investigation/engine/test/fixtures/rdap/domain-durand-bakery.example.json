@@ -1,0 +1,4 @@
+{ "objectClassName": "domain", "ldhName": "durand-bakery.example", "status": ["client transfer prohibited"],
+  "events": [{ "eventAction": "registration", "eventDate": "2019-03-14T09:12:00Z" }, { "eventAction": "expiration", "eventDate": "2027-03-14T09:12:00Z" }, { "eventAction": "last changed", "eventDate": "2026-02-01T10:00:00Z" }],
+  "entities": [{ "objectClassName": "entity", "roles": ["registrar"], "handle": "9999", "vcardArray": ["vcard", [["version", {}, "text", "4.0"], ["fn", {}, "text", "Exemple Registrar SAS"]]] }],
+  "nameservers": [{ "objectClassName": "nameserver", "ldhName": "NS1.EXEMPLE-HEBERGEMENT.EXAMPLE" }, { "objectClassName": "nameserver", "ldhName": "NS2.EXEMPLE-HEBERGEMENT.EXAMPLE" }] }

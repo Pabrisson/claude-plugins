@@ -1,0 +1,36 @@
+{
+  "en": {
+    "registry": "Registry record, SIREN {siren}", "not_found": "No company {siren} in the registry",
+    "identity": "{name}: {form}, SIREN {siren}, created on {created}", "active": "Active in the registry", "ceased": "Ceased on {date}",
+    "activity": "Main activity: NAF {naf}", "head_office": "Head office: {address}", "finances": "{year}: revenue {ca} €, net income {rn} €",
+    "created_on": "Company created", "ceased_on": "Company ceased",
+    "establishments_src": "Establishments of {name}", "establishments": "{n} establishments in the registry, {open} open; {listed} read with their address",
+    "opened": "Establishment opened: {label}", "closed": "Establishment closed: {label}", "closed_label": "{label} (closed)",
+    "officers": "{n} officers in the registry: {list}",
+    "bodacc_src": "BODACC notices, SIREN {siren}", "bodacc_none": "No BODACC notice for SIREN {siren}",
+    "bodacc_summary": "{n} BODACC notices from {first} to {last}{more}: {counts}", "bodacc_more": " (the {n} latest of {total})",
+    "procedure": "Insolvency proceeding: {text} (BODACC {date})", "struck_off": "Struck off the register: {text} (BODACC {date})",
+    "accounts": "Last accounts filed: {text} (BODACC {date})", "other_party": "the company is the other party",
+    "officer_search": "Other companies of {name}",
+    "network_high": "{name} is also {role} of {company} (SIREN {siren}): same name, same month of birth",
+    "network_medium": "{name} may be {role} of {company} (SIREN {siren}): same name, same year of birth",
+    "namesakes": "Namesakes of {name} in other companies, not linked: {n}"
+  },
+  "fr": {
+    "registry": "Fiche du registre, SIREN {siren}", "not_found": "Aucune société {siren} au registre",
+    "identity": "{name} : {form}, SIREN {siren}, créée le {created}", "active": "Active au registre", "ceased": "Cessée le {date}",
+    "activity": "Activité principale : NAF {naf}", "head_office": "Siège : {address}", "finances": "{year} : chiffre d'affaires {ca} €, résultat net {rn} €",
+    "created_on": "Création de la société", "ceased_on": "Cessation de la société",
+    "establishments_src": "Établissements de {name}", "establishments": "{n} établissements au registre, dont {open} ouverts ; {listed} lus avec leur adresse",
+    "opened": "Ouverture d'établissement : {label}", "closed": "Fermeture d'établissement : {label}", "closed_label": "{label} (fermé)",
+    "officers": "{n} dirigeants au registre : {list}",
+    "bodacc_src": "Annonces BODACC, SIREN {siren}", "bodacc_none": "Aucune annonce BODACC pour le SIREN {siren}",
+    "bodacc_summary": "{n} annonces BODACC du {first} au {last}{more} : {counts}", "bodacc_more": " (les {n} plus récentes sur {total})",
+    "procedure": "Procédure collective : {text} (BODACC du {date})", "struck_off": "Radiation : {text} (BODACC du {date})",
+    "accounts": "Derniers comptes déposés : {text} (BODACC du {date})", "other_party": "la société est l'autre partie",
+    "officer_search": "Autres sociétés de {name}",
+    "network_high": "{name} est aussi {role} de {company} (SIREN {siren}) : même nom, même mois de naissance",
+    "network_medium": "{name} est peut-être {role} de {company} (SIREN {siren}) : même nom, même année de naissance",
+    "namesakes": "Homonymes de {name} dans d'autres sociétés, non reliés : {n}"
+  }
+}

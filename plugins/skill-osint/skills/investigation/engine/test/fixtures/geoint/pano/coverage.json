@@ -1,0 +1,4 @@
+{"center": [38.5725, -7.9075], "radius_m": 300, "providers": {
+ "google": {"n": 1, "nearest_m": 12, "nearest_id": "CAoSLEFGMVFpcE9fZXhhbXBsZV9wYW5vX2lk", "dates": "2023-05", "seconds": 1.1}, "apple": {"n": 0, "seconds": 0.8}, "bing": {"n": 0, "seconds": 0.9},
+ "kartaview": {"n": 4, "nearest_m": 25, "nearest_id": "3176451", "dates": "2017-08-14 … 2019-06-02", "seconds": 2.0}, "panoramax": {"n": 6, "nearest_m": 9, "nearest_id": "6c1b3f0e-5f0e-4a51-9a39-6d7f3c2b8a11", "dates": "2023-09-02 … 2024-07-16", "seconds": 1.4},
+ "mapillary": {"status": "skipped: set MAPILLARY_TOKEN, or browse mapillary.com/app in the browser"}, "yandex": {"n": 0, "seconds": 1.6}, "naver": {"n": 0, "seconds": 0.7}, "kakao": {"n": 0, "seconds": 0.7}, "mapy": {"n": 0, "seconds": 0.9}, "ja": {"n": 0, "seconds": 0.6}}}

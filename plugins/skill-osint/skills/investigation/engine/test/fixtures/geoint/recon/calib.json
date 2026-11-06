@@ -1,0 +1,5 @@
+{"tool": "calib.py", "image": "", "size": [960, 715], "hfov_deg": 55.96, "vfov_deg": 43.17, "focal_px": 903.4, "focal_35mm_equiv": 32.6, "principal_point": [480.0, 357.5],
+ "roll_deg": -0.84, "pitch_deg": 4.12, "gravity_camera": [-0.0147, 0.9971, 0.0738],
+ "horizon": {"left": [0, 427.2], "right": [960, 413.1], "row_at_centre": 420.1, "in_frame": true},
+ "uncertainty": {"roll_uncertainty": 0.41, "pitch_uncertainty": 0.62, "vfov_uncertainty": 1.9, "focal_uncertainty": 38.2},
+ "prior_focal_35mm": null, "device": "cpu", "note": "pitch + = camera tilted up (horizon below the centre); roll + = clockwise image rotation as GeoCalib defines it. Use hfov for geo.py/pose.py, horizon.row_at_centre for terrain.py --hrow."}

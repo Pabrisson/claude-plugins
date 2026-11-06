@@ -1,0 +1,17 @@
+[{
+  "SourceFile": "Evidence/E01-street-2019.jpg",
+  "ExifTool:ExifToolVersion": 13.36,
+  "System:FileName": "E01-street-2019.jpg", "System:FileModifyDate": "2026:11:03 10:00:00+01:00",
+  "File:FileType": "JPEG", "File:ImageWidth": 960, "File:ImageHeight": 715,
+  "IFD0:Make": "Apple", "IFD0:Model": "iPhone 12",
+  "IFD0:Software": "Adobe Photoshop Lightroom Classic 13.0 (Macintosh)", "IFD0:ModifyDate": "2023:06:14 18:02:11",
+  "ExifIFD:DateTimeOriginal": "2021:11:12 14:06:13", "ExifIFD:CreateDate": "2021:11:12 14:06:13",
+  "ExifIFD:OffsetTime": "+01:00", "ExifIFD:OffsetTimeOriginal": "+00:00",
+  "ExifIFD:LensModel": "iPhone 12 back dual wide camera 4.2mm f/1.6",
+  "GPS:GPSLatitudeRef": "N", "GPS:GPSLatitude": 38.572792, "GPS:GPSLongitudeRef": "W", "GPS:GPSLongitude": 7.907642,
+  "IFD1:ThumbnailImage": "(Binary data 4805 bytes, use -b option to extract)",
+  "XMP-xmp:CreatorTool": "Adobe Photoshop Lightroom Classic 13.0 (Macintosh)", "XMP-xmp:ModifyDate": "2023:06:14 18:02:11+01:00",
+  "XMP-photoshop:DateCreated": "2021:11:12 14:06:13", "XMP-dc:Description": "Templo romano, Évora",
+  "IPTC:Caption-Abstract": "Templo romano, Évora",
+  "Composite:GPSLatitude": 38.572792, "Composite:GPSLongitude": -7.907642, "Composite:ImageSize": "960 715"
+}]

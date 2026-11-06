@@ -1,0 +1,38 @@
+{
+  "en": {
+    "numbering_source": "Numbering plan for {e164}",
+    "line": "{number}: {type}, {country}",
+    "no_range": "{number} fits no range of the numbering plan of {country}",
+    "bad_length": "{number} has a length no number of {country} has",
+    "assumed": "Read in the numbering plan of {country} ({code}): written without its country code",
+    "outside_plan": "{e164} is outside the French numbering plan: no ARCEP lookup",
+    "arcep_source": "ARCEP numbering register: {number}",
+    "operator_source": "ARCEP operator {code}: {name}",
+    "holder": "Block {block} attributed by the ARCEP to {name} ({code}) on {date}, {territory}: the original operator, the number may have been ported since",
+    "fiction": "Block kept by the ARCEP for works of fiction: {number} reaches nobody (decision 2019-0954)",
+    "no_block": "No operator holds the block of {number} in the ARCEP's register: unassigned or reserved",
+    "attributed": "Block attributed to {name}",
+    "type_fixed-line": "fixed line", "type_mobile": "mobile", "type_fixed-line-or-mobile": "fixed line or mobile",
+    "type_toll-free": "toll-free", "type_premium-rate": "premium rate", "type_shared-cost": "shared cost", "type_voip": "VoIP",
+    "type_personal": "personal number", "type_pager": "pager", "type_uan": "universal access number",
+    "type_voicemail": "voicemail access", "type_unknown": "unknown type"
+  },
+  "fr": {
+    "numbering_source": "Plan de numérotation pour {e164}",
+    "line": "{number} : {type}, {country}",
+    "no_range": "{number} n'entre dans aucune tranche du plan de numérotation ({country})",
+    "bad_length": "{number} n'a la longueur d'aucun numéro ({country})",
+    "assumed": "Lu dans le plan de numérotation du pays {code} ({country}) : écrit sans indicatif",
+    "outside_plan": "{e164} est hors du plan de numérotation français : pas de recherche ARCEP",
+    "arcep_source": "Registre de numérotation de l'ARCEP : {number}",
+    "operator_source": "Opérateur ARCEP {code} : {name}",
+    "holder": "Bloc {block} attribué par l'ARCEP à {name} ({code}) le {date}, {territory} : l'opérateur d'origine, le numéro a pu être porté depuis",
+    "fiction": "Bloc réservé par l'ARCEP aux œuvres de fiction : {number} ne sonne chez personne (décision 2019-0954)",
+    "no_block": "Aucun opérateur ne détient le bloc de {number} dans le registre de l'ARCEP : non attribué ou réservé",
+    "attributed": "Bloc attribué à {name}",
+    "type_fixed-line": "ligne fixe", "type_mobile": "mobile", "type_fixed-line-or-mobile": "fixe ou mobile",
+    "type_toll-free": "numéro gratuit", "type_premium-rate": "numéro surtaxé", "type_shared-cost": "coût partagé", "type_voip": "VoIP",
+    "type_personal": "numéro personnel", "type_pager": "radiomessagerie", "type_uan": "numéro d'accès universel",
+    "type_voicemail": "accès à la messagerie vocale", "type_unknown": "type inconnu"
+  }
+}

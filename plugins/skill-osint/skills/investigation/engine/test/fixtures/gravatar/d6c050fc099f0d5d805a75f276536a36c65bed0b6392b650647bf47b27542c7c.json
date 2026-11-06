@@ -1,0 +1,18 @@
+{
+  "hash": "d6c050fc099f0d5d805a75f276536a36c65bed0b6392b650647bf47b27542c7c",
+  "display_name": "Boulangerie Durand",
+  "profile_url": "https://gravatar.com/boulangeriedurandexample",
+  "avatar_url": "https://0.gravatar.com/avatar/d6c050fc099f0d5d805a75f276536a36c65bed0b6392b650647bf47b27542c7c",
+  "avatar_alt_text": "",
+  "location": "Lyon, France",
+  "description": "Pains au levain et viennoiseries depuis 2019.",
+  "job_title": "",
+  "company": "Boulangerie Durand SARL",
+  "verified_accounts": [
+    { "service_type": "instagram", "service_label": "Instagram", "service_icon": "https://gravatar.com/icons/instagram.svg", "url": "https://www.instagram.com/durand.bakery", "is_hidden": false },
+    { "service_type": "facebook", "service_label": "Facebook", "service_icon": "https://gravatar.com/icons/facebook.svg", "url": "https://www.facebook.com/BoulangerieDurandExample", "is_hidden": true }
+  ],
+  "pronunciation": "",
+  "pronouns": "",
+  "last_profile_edit": "2026-09-14T08:30:00Z"
+}

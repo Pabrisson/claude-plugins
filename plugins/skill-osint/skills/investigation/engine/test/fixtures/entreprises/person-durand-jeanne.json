@@ -1,0 +1,101 @@
+{
+  "results": [
+    {
+      "siren": "456789122",
+      "nom_complet": "BOULANGERIE DURAND",
+      "nom_raison_sociale": "BOULANGERIE DURAND",
+      "etat_administratif": "A",
+      "siege": {
+        "libelle_commune": "EXEMPLEVILLE",
+        "siret": "45678912200010"
+      },
+      "dirigeants": [
+        {
+          "nom": "DURAND",
+          "prenoms": "JEANNE",
+          "annee_de_naissance": "1961",
+          "date_de_naissance": "1961-04",
+          "qualite": "Gérant",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        }
+      ]
+    },
+    {
+      "siren": "567891239",
+      "nom_complet": "SCI DURAND EXEMPLE",
+      "nom_raison_sociale": "SCI DURAND EXEMPLE",
+      "etat_administratif": "A",
+      "siege": {
+        "libelle_commune": "EXEMPLEVILLE",
+        "siret": "56789123900010"
+      },
+      "dirigeants": [
+        {
+          "nom": "DURAND",
+          "prenoms": "JEANNE",
+          "annee_de_naissance": "1961",
+          "date_de_naissance": "1961-04",
+          "qualite": "Gérant",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        }
+      ]
+    },
+    {
+      "siren": "678912346",
+      "nom_complet": "EPICERIE MARTIN",
+      "nom_raison_sociale": "EPICERIE MARTIN",
+      "etat_administratif": "A",
+      "siege": {
+        "libelle_commune": "EXEMPLEVILLE",
+        "siret": "67891234600010"
+      },
+      "dirigeants": [
+        {
+          "nom": "MARTIN",
+          "prenoms": "LUC",
+          "annee_de_naissance": "1970",
+          "date_de_naissance": "1970-02",
+          "qualite": "Gérant",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        },
+        {
+          "nom": "DURAND",
+          "prenoms": "JEANNE MARIE",
+          "annee_de_naissance": "1961",
+          "date_de_naissance": null,
+          "qualite": "Associé",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        }
+      ]
+    },
+    {
+      "siren": "222222226",
+      "nom_complet": "DURAND TRANSPORTS",
+      "nom_raison_sociale": "DURAND TRANSPORTS",
+      "etat_administratif": "C",
+      "siege": {
+        "libelle_commune": "EXEMPLEVILLE-SUR-MER",
+        "siret": "22222222600010"
+      },
+      "dirigeants": [
+        {
+          "nom": "DURAND",
+          "prenoms": "JEANNE",
+          "annee_de_naissance": "1961",
+          "date_de_naissance": "1961-11",
+          "qualite": "Président",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        }
+      ]
+    }
+  ],
+  "total_results": 4,
+  "page": 1,
+  "per_page": 25,
+  "total_pages": 1
+}

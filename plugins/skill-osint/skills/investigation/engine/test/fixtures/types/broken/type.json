@@ -1,0 +1,13 @@
+{
+  "id": "broken", "label": "Broken", "icon": "bug", "description": "Every mistake a manifest can make",
+  "frame": ["mood"],
+  "inputs": [{ "id": "x", "kind": "slider", "label": "X", "when": { "nope": "1" } }, { "id": "y", "kind": "chips", "label": "Y", "options": [{ "value": "a", "label": "A" }] }, { "id": "z", "kind": "toggle", "label": "Z", "multiple": true }],
+  "levels": [{ "id": "l", "label": "L", "criteria": { "high": "h" } },
+             { "id": "m", "label": "M", "criteria": { "high": "h", "medium": "m", "low": "l" }, "max": { "confidence": "high", "unless": "Not a flag" } }],
+  "phases": [{ "id": "p", "label": "P" }],
+  "views": [{ "widget": "pie" }],
+  "actions": [{ "id": "a", "label": "A", "icon": "a", "target": "planet", "prompt": "p", "noisy": "no", "minutes": 0 }],
+  "pivots": ["planet"],
+  "refresh": [{ "id": "r", "by": "engine", "run": "missing" }, { "id": "s", "by": "agent", "section": "nowhere" }],
+  "requires": { "bins": [], "packs": [], "keys": [] }
+}

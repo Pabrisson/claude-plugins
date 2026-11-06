@@ -1,0 +1,16 @@
+{
+  "id": "sample", "label": "Sample", "icon": "flask-conical", "description": "A type for the engine's tests",
+  "frame": ["noisy"],
+  "inputs": [{ "id": "thing", "kind": "text", "label": "Thing", "required": true }],
+  "levels": [{ "id": "answer", "label": "Answer", "criteria": { "high": "h", "medium": "m", "low": "l" } }],
+  "phases": [{ "id": "collect", "label": "Collect" }],
+  "views": [{ "widget": "sources" }],
+  "actions": [{ "id": "dig", "label": "Dig", "icon": "shovel", "target": "case", "prompt": "[sample:dig] {value}", "noisy": false, "minutes": 1 }],
+  "pivots": ["domain"],
+  "refresh": [
+    { "id": "items", "by": "engine", "run": "collect" },
+    { "id": "loud", "by": "engine", "run": "collect --loud", "noisy": true },
+    { "id": "read", "by": "agent", "section": "refresh-read" }
+  ],
+  "requires": { "datasets": [{ "id": "sample", "label": "sample data" }], "bins": [{ "id": "osint-no-such-extra", "optional": true, "short": "no extra", "off": "the extra step is skipped" }], "packs": [], "keys": [] }
+}

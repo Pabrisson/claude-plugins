@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "siren": "456789122",
+      "nom_complet": "BOULANGERIE DURAND",
+      "nom_raison_sociale": "BOULANGERIE DURAND",
+      "etat_administratif": "A",
+      "siege": {
+        "libelle_commune": "EXEMPLEVILLE",
+        "siret": "45678912200010"
+      },
+      "dirigeants": [
+        {
+          "nom": "DURAND",
+          "prenoms": "PAUL",
+          "annee_de_naissance": "1988",
+          "date_de_naissance": "1988-09",
+          "qualite": "Gérant",
+          "nationalite": "Française",
+          "type_dirigeant": "personne physique"
+        }
+      ]
+    }
+  ],
+  "total_results": 1,
+  "page": 1,
+  "per_page": 25,
+  "total_pages": 1
+}

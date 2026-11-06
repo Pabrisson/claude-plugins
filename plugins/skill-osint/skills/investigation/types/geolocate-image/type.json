@@ -1,0 +1,54 @@
+{
+  "id": "geolocate-image", "label": "Geolocate an image", "icon": "map-pinned",
+  "description": "Where a photo, a video or a Street View capture was taken: GeoINT's method and local models (metadata, OCR, world prior, detections, camera, reverse search, street-level sweeps), one answer with its radius",
+  "frame": ["image", "noisy", "person"],
+  "inputs": [
+    { "id": "source", "kind": "chips", "label": "Source", "default": "image", "options": [
+      { "value": "image", "label": "Image", "icon": "image" },
+      { "value": "video", "label": "Video", "icon": "film" },
+      { "value": "streetview", "label": "Street View capture", "icon": "map-pinned" } ] },
+    { "id": "image", "kind": "file", "label": "Image", "accept": "image/*", "required": true, "when": { "source": "image" } },
+    { "id": "video", "kind": "file", "label": "Video (a file or a link)", "accept": "video/*", "link": true, "required": true, "when": { "source": "video" } },
+    { "id": "capture", "kind": "file", "label": "Street View capture", "accept": "image/*", "required": true, "when": { "source": "streetview" } },
+    { "id": "speed", "kind": "chips", "label": "Speed", "default": "quick", "options": [
+      { "value": "quick", "label": "Quick", "icon": "zap" },
+      { "value": "deep", "label": "Deep", "icon": "microscope" } ] },
+    { "id": "claim", "kind": "text", "label": "Claim to test (a caption, a place someone gave)", "multiline": true, "placeholder": "Taken in Évora, July 2024" }
+  ],
+  "levels": [
+    { "id": "country", "label": "Country", "criteria": { "high": "read text/plates/phone, or a confirmed anchor", "medium": "several independent visual clues agree", "low": "gut or a single clue" } },
+    { "id": "region", "label": "Region / city", "criteria": { "high": "regional code, named place, or reference sheets that clearly separate", "medium": "consistent clues, alternatives unchecked", "low": "hunch" } },
+    { "id": "street", "label": "Street", "criteria": { "high": "ground-level match on ≥2 unique features", "medium": "layout fits + 1 feature", "low": "satellite layout only" } },
+    { "id": "point", "label": "Building / camera point", "criteria": { "high": "two independent constraints + ≥3-feature match", "medium": "one of the two", "low": "estimate" } }
+  ],
+  "phases": [
+    { "id": "archive", "label": "Archive" }, { "id": "gut", "label": "Gut call" }, { "id": "recon", "label": "Recon" },
+    { "id": "read-search", "label": "Read and search" }, { "id": "country", "label": "Country" }, { "id": "region", "label": "Region" },
+    { "id": "pinpoint", "label": "Pinpoint" }, { "id": "verify", "label": "Verify" }, { "id": "answer", "label": "Answer" }
+  ],
+  "views": [{ "widget": "map" }, { "widget": "evidence" }, { "widget": "hypotheses" }, { "widget": "calibration" }, { "widget": "sources" }],
+  "actions": [
+    { "id": "ground-check", "label": "Check on the ground", "icon": "footprints", "target": "hyp", "prompt": "[geolocate-image:ground-check] {hyp}", "noisy": false, "minutes": 15 },
+    { "id": "chronolocate", "label": "When was it taken", "icon": "sun", "target": "case", "prompt": "[geolocate-image:chronolocate] {value}", "noisy": false, "minutes": 10 },
+    { "id": "same-place-images", "label": "Find other images of the place", "icon": "images", "target": "evidence", "prompt": "[geolocate-image:same-place-images] {file}", "noisy": false, "minutes": 10 },
+    { "id": "identify-building", "label": "Identify this building", "icon": "building", "target": "evidence", "prompt": "[geolocate-image:identify-building] {file}", "noisy": false, "minutes": 10 }
+  ],
+  "pivots": ["image"],
+  "refresh": [
+    { "id": "rev", "by": "engine", "run": "rev", "sends_image": true, "watch": false, "noun": ["result page", "result pages"] },
+    { "id": "panos", "by": "engine", "run": "panos", "noun": ["panorama", "panoramas"], "watch": true },
+    { "id": "reverse-links", "by": "agent", "section": "refresh-reverse-links" }
+  ],
+  "requires": {
+    "bins": [
+      { "id": "uv", "optional": false, "for": "Python 3.12 managed by uv", "off": "geolocate-image cannot run (the GeoINT pack runs on uv's Python)" },
+      { "id": "git", "optional": false, "for": "setup geoint", "off": "setup geoint cannot fetch the GeoINT pack" },
+      { "id": "ffmpeg", "optional": true, "for": "video frames, masks", "off": "no video frames; masks fall back on the GeoINT pack's Pillow" },
+      { "id": "exiftool", "optional": true, "for": "deep metadata", "off": "metadata limited to JPEG/PNG EXIF read by the GeoINT pack; video, XMP and IPTC unread" },
+      { "id": "yt-dlp", "optional": true, "for": "videos by link", "off": "a video given by link must be downloaded by hand" },
+      { "id": "cloudflared", "optional": true, "for": "reverse search by link", "off": "reverse image search by link (Lens, Bing, TinEye, Yandex, Baidu) is off (cloudflared needs no account); Yandex/Baidu direct upload still works" }
+    ],
+    "packs": [{ "id": "geoint", "optional": false, "off": "geolocate-image cannot run" }],
+    "keys": [{ "id": "MAPILLARY_TOKEN", "optional": true, "off": "Mapillary panoramas skipped, KartaView, Panoramax and the others still swept", "configure": "/plugin configure skill-osint@pabrisson, or MAPILLARY_TOKEN" }]
+  }
+}

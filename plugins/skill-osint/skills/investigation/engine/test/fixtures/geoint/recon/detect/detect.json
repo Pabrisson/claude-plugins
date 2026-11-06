@@ -1,0 +1,4 @@
+{"tool": "detect.py", "model": "google/owlv2-base-patch16-ensemble", "image": "", "size": [960, 715], "threshold": 0.2,
+ "detections": [
+  {"cls": "sign", "prompt": "a sign with text", "score": 0.31, "box": [598, 392, 752, 428], "tile": [0, 0, 960, 715], "also": [], "crop": "01_sign.jpg", "id": 1},
+  {"cls": "pole", "prompt": "a utility pole", "score": 0.24, "box": [880, 210, 904, 520], "tile": [480, 0, 960, 429], "also": [], "crop": "02_pole.jpg", "id": 2}]}

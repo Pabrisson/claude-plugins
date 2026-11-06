@@ -1,0 +1,38 @@
+{
+  "en": {
+    "gmail_aliases": "Gmail ignores dots and +tags: {aliases} reach the same inbox",
+    "webmail": "{d} is a public webmail: the domain says nothing of the owner",
+    "role_address": "{local}@ is a role address (a shared or service mailbox), not a person's own",
+    "disposable_list": "Disposable email domains list", "disposable": "{d} is a disposable address provider (disposable-email-domains)",
+    "not_disposable": "{d} is not in the list of {n} disposable domains",
+    "mail_dns": "Mail DNS of {d}", "null_mx": "{d} accepts no mail (null MX, RFC 7505)", "no_mx": "No MX record for {d}",
+    "provider": "Mail handled by {provider} ({by})", "spf": "The SPF of {d} includes {includes}",
+    "spf_none": "The SPF of {d} lets no server send mail (v=spf1 -all)", "dmarc": "DMARC policy of {d}: {policy}",
+    "gravatar_profile": "Gravatar profile of {address}", "no_gravatar": "No public Gravatar profile for this address",
+    "gravatar_name": "Name on Gravatar: {value}", "gravatar_location": "Location on Gravatar: {value}",
+    "gravatar_job": "Job title on Gravatar: {value}", "gravatar_company": "Company on Gravatar: {value}",
+    "gravatar_accounts": "Accounts verified by Gravatar: {list}", "gravatar_avatar": "Avatar on Gravatar",
+    "gravatar_edited": "Gravatar profile last edited on {date}",
+    "breaches_source": "XposedOrNot breaches of {address}", "breaches": "In {n} known breaches (names only, XposedOrNot): {names}",
+    "no_breach": "In no breach XposedOrNot knows",
+    "holehe_source": "Holehe sign-up forms for {address}", "holehe_hit": "A site says an account uses this address: {site} (Holehe)"
+  },
+  "fr": {
+    "gmail_aliases": "Gmail ignore les points et les +tags : {aliases} arrivent dans la même boîte",
+    "webmail": "{d} est une messagerie publique : le domaine ne dit rien du titulaire",
+    "role_address": "{local}@ est une adresse de rôle (boîte partagée ou de service), pas celle d'une personne",
+    "disposable_list": "Liste des domaines d'adresses jetables", "disposable": "{d} fournit des adresses jetables (disposable-email-domains)",
+    "not_disposable": "{d} n'est pas dans la liste des {n} domaines jetables",
+    "mail_dns": "DNS de messagerie de {d}", "null_mx": "{d} n'accepte aucun courrier (MX nul, RFC 7505)", "no_mx": "Aucun enregistrement MX pour {d}",
+    "provider": "Messagerie chez {provider} ({by})", "spf": "Le SPF de {d} inclut {includes}",
+    "spf_none": "Le SPF de {d} n'autorise aucun serveur à envoyer (v=spf1 -all)", "dmarc": "Politique DMARC de {d} : {policy}",
+    "gravatar_profile": "Profil Gravatar de {address}", "no_gravatar": "Aucun profil Gravatar public pour cette adresse",
+    "gravatar_name": "Nom sur Gravatar : {value}", "gravatar_location": "Lieu sur Gravatar : {value}",
+    "gravatar_job": "Fonction sur Gravatar : {value}", "gravatar_company": "Entreprise sur Gravatar : {value}",
+    "gravatar_accounts": "Comptes vérifiés par Gravatar : {list}", "gravatar_avatar": "Avatar sur Gravatar",
+    "gravatar_edited": "Profil Gravatar modifié pour la dernière fois le {date}",
+    "breaches_source": "Fuites XposedOrNot de {address}", "breaches": "Présente dans {n} fuites connues (noms seulement, XposedOrNot) : {names}",
+    "no_breach": "Dans aucune fuite connue de XposedOrNot",
+    "holehe_source": "Formulaires d'inscription Holehe pour {address}", "holehe_hit": "Un site dit qu'un compte utilise cette adresse : {site} (Holehe)"
+  }
+}

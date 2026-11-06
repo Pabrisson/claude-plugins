@@ -1,0 +1,43 @@
+{
+  "id": "email", "label": "Email", "icon": "mail",
+  "description": "An email address: its provider, a disposable domain, a public Gravatar profile, the names of the breaches it appears in; sign-up probes only after the user's yes, never the mail server",
+  "frame": [{ "id": "person", "always": true }, "noisy"],
+  "inputs": [
+    { "id": "email", "kind": "text", "label": "Email address", "required": true, "placeholder": "name@example.org" }
+  ],
+  "levels": [
+    { "id": "owner", "label": "Owner", "criteria": {
+      "high": "two independent links name the same owner (a verified Gravatar account, a page the owner runs that publishes the address, a registry)",
+      "medium": "one public profile or page names the owner, nothing contradicts it",
+      "low": "the local part or the domain only" } },
+    { "id": "in-use", "label": "In use", "criteria": {
+      "high": "the domain accepts mail and a recent sign is read (a profile edited this year, the address on a live page)",
+      "medium": "the domain accepts mail and older signs agree (breaches, a profile, sign-up hits)",
+      "low": "the domain accepts mail, nothing else" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "collect", "label": "Collect" }, { "id": "process", "label": "Process" },
+    { "id": "analyse", "label": "Analyse" }, { "id": "redteam", "label": "Red team" }, { "id": "conclude", "label": "Conclude" },
+    { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "hypotheses" }, { "widget": "sources" },
+    { "widget": "table", "label": "Accounts", "icon": "at-sign", "view": "accounts", "columns": ["site", "state", "url", "source"] },
+    { "widget": "table", "label": "Breaches", "icon": "shield-alert", "view": "breaches", "columns": ["name", "source"] },
+    { "widget": "table", "label": "Mail DNS", "icon": "list-tree", "view": "mail-dns", "columns": ["type", "name", "value"] }
+  ],
+  "actions": [
+    { "id": "account-probe", "label": "Probe sign-up forms (Holehe)", "icon": "door-open", "target": "case", "prompt": "[email:account-probe] {value}", "noisy": true, "minutes": 3 }
+  ],
+  "pivots": ["email"],
+  "refresh": [
+    { "id": "breaches", "by": "engine", "run": "collect --only breaches", "noun": ["breach", "breaches"], "watch": true },
+    { "id": "gravatar", "by": "engine", "run": "collect --only gravatar", "noun": ["Gravatar profile", "Gravatar profiles"], "watch": true },
+    { "id": "mail", "by": "engine", "run": "collect --only mail", "noun": ["mail DNS record", "mail DNS records"], "watch": true }
+  ],
+  "requires": {
+    "bins": [{ "id": "uv", "optional": true, "off": "account-probe (Holehe, after the user's yes) is off; every other step runs" }],
+    "packs": [], "keys": [],
+    "datasets": [{ "id": "disposable-domains", "label": "disposable email domains" }]
+  }
+}

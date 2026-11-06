@@ -1,0 +1,12 @@
+[{
+  "SourceFile": "Evidence/E01-zero-dates.jpg",
+  "System:FileModifyDate": "2026:11:03 10:00:00+01:00",
+  "File:FileType": "JPEG",
+  "IFD0:Make": "Canon", "IFD0:Model": "Canon EOS 5D Mark IV", "IFD0:Software": "",
+  "IFD0:ModifyDate": "0000:00:00 00:00:00", "IFD0:ImageDescription": "                               ",
+  "ExifIFD:DateTimeOriginal": "0000:00:00 00:00:00", "ExifIFD:CreateDate": "2019:05:01 10:20:30",
+  "XMP-photoshop:DateCreated": "2019:05:01",
+  "GPS:GPSLatitudeRef": "N", "GPS:GPSLatitude": 0, "GPS:GPSLongitudeRef": "E", "GPS:GPSLongitude": 0,
+  "Composite:GPSLatitude": 0, "Composite:GPSLongitude": 0,
+  "MakerNotes:PreviewImage": "(Binary data 8045 bytes, use -b option to extract)"
+}]

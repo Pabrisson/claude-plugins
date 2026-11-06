@@ -1,0 +1,1 @@
+{ "objectClassName": "autnum", "handle": "AS64500", "name": "EXEMPLE-HEBERGEMENT", "entities": [{ "roles": ["registrant"], "vcardArray": ["vcard", [["fn", {}, "text", "Exemple Hébergement SAS"]]] }] }

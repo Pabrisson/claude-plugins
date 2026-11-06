@@ -1,0 +1,56 @@
+{
+  "id": "verify-media", "label": "Verify an image or a video", "icon": "scan-search",
+  "description": "Where an image or a video first appeared, whether what is said about it holds, and the signs of editing or generation: first sightings dated on a timeline, metadata, C2PA, reverse search",
+  "frame": ["image", "noisy", "person"],
+  "inputs": [
+    { "id": "media", "kind": "chips", "label": "Media", "default": "image", "options": [
+      { "value": "image", "label": "Image", "icon": "image" },
+      { "value": "video", "label": "Video", "icon": "film" } ] },
+    { "id": "image", "kind": "file", "label": "Image (a file or a link)", "accept": "image/*", "link": true, "required": true, "when": { "media": "image" } },
+    { "id": "video", "kind": "file", "label": "Video (a file or a link)", "accept": "video/*", "link": true, "required": true, "when": { "media": "video" } },
+    { "id": "claim", "kind": "text", "label": "Claim to test (date, place, event)", "multiline": true, "placeholder": "The Temple of Diana in Mérida during the storm of 3 March 2025" }
+  ],
+  "levels": [
+    { "id": "origin", "label": "Origin (first appearance)", "criteria": {
+      "high": "the earliest dated copy is read and archived, and every engine and the archives found nothing earlier",
+      "medium": "an early dated copy, some engines or archives unchecked",
+      "low": "a single page, or a date read from metadata only" } },
+    { "id": "claim", "label": "Claim", "criteria": {
+      "high": "a contradiction read or computed (another place identified, an earlier copy, the weather or the sun of that day), or every part of the claim checked and consistent",
+      "medium": "consistent clues, the place or the date unchecked",
+      "low": "only the caption and the page that carries it" } },
+    { "id": "integrity", "label": "Integrity", "criteria": {
+      "high": "a signed and valid C2PA manifest of the original says how it was made",
+      "medium": "metadata, the embedded thumbnail and a close look at hands, text and shadows agree",
+      "low": "a single sign, or a stripped file with nothing to read" },
+      "max": { "confidence": "medium", "unless": "c2pa_valid", "why": "signs of editing or generation are clues, never a verdict: only a signed and valid C2PA manifest of the original goes above medium" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "archive", "label": "Archive" }, { "id": "metadata", "label": "Metadata" },
+    { "id": "reverse", "label": "Reverse search" }, { "id": "first-seen", "label": "First seen" }, { "id": "claim", "label": "Test the claim" },
+    { "id": "integrity", "label": "Integrity" }, { "id": "redteam", "label": "Red team" }, { "id": "answer", "label": "Answer" }
+  ],
+  "views": [{ "widget": "evidence" }, { "widget": "timeline" }, { "widget": "sources" }, { "widget": "hypotheses", "label": "Claim and alternatives" }],
+  "actions": [
+    { "id": "frames-reverse", "label": "Reverse search the key frames", "icon": "film", "target": "case", "prompt": "[verify-media:frames-reverse] {value}", "noisy": false, "minutes": 15 },
+    { "id": "first-seen-deep", "label": "Search X, Telegram, TikTok and YouTube", "icon": "search", "target": "case", "prompt": "[verify-media:first-seen-deep] {value}", "noisy": false, "minutes": 20 },
+    { "id": "chronolocate", "label": "When was it taken (sun, weather)", "icon": "sun", "target": "case", "prompt": "[verify-media:chronolocate] {value}", "noisy": false, "minutes": 10 }
+  ],
+  "pivots": ["image", "video", "url"],
+  "refresh": [
+    { "id": "direct", "by": "engine", "run": "direct", "sends_image": true, "watch": false, "noun": ["result page", "result pages"] },
+    { "id": "cdx", "by": "engine", "run": "first-seen --cdx", "noun": ["archived page", "archived pages"], "watch": true },
+    { "id": "engines", "by": "agent", "section": "refresh-engines" }
+  ],
+  "requires": {
+    "bins": [
+      { "id": "exiftool", "optional": true, "for": "deep metadata", "off": "metadata limited to JPEG/PNG EXIF read by the GeoINT pack; video, XMP and IPTC unread" },
+      { "id": "c2patool", "optional": true, "for": "C2PA manifests", "off": "no C2PA manifest check (verify-media)" },
+      { "id": "ffmpeg", "optional": true, "for": "video frames, masks", "off": "no video frames; masks fall back on the GeoINT pack's Pillow" },
+      { "id": "yt-dlp", "optional": true, "for": "videos by link", "off": "a video given by link must be downloaded by hand" },
+      { "id": "cloudflared", "optional": true, "for": "reverse search by link", "off": "reverse image search by link (Lens, Bing, TinEye, Yandex, Baidu) is off (cloudflared needs no account); Yandex/Baidu direct upload still works" }
+    ],
+    "packs": [{ "id": "geoint", "optional": true, "short": "no direct upload", "off": "no direct Yandex/Baidu upload for verify-media; the tunnel's links still work" }],
+    "keys": []
+  }
+}

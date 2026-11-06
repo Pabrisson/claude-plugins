@@ -1,0 +1,30 @@
+{
+  "id": "shop-audit",
+  "label": "Shop audit",
+  "icon": "store",
+  "description": "An online shop before an order: who sells, how to reach them, the terms of sale, the consumer mediator, read once on the shop's own pages",
+  "frame": ["noisy"],
+  "inputs": [
+    { "id": "shop", "kind": "text", "label": "Shop domain or URL", "required": true, "placeholder": "example.org" }
+  ],
+  "levels": [
+    { "id": "seller", "label": "Seller", "criteria": {
+      "high": "the legal notice names the seller with a SIREN that passes its check, a way to reach them, the terms of sale and the consumer mediator",
+      "medium": "the seller is named with a SIREN, but the terms of sale or the consumer mediator are not found",
+      "low": "only the home page names the shop" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "collect", "label": "Collect" }, { "id": "analyse", "label": "Analyse" },
+    { "id": "redteam", "label": "Red team" }, { "id": "conclude", "label": "Conclude" }, { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "hypotheses" }, { "widget": "sources" },
+    { "widget": "table", "label": "Checks", "icon": "list-checks", "view": "checks", "columns": ["check", "status", "where"] }
+  ],
+  "actions": [
+    { "id": "read-terms", "label": "Read the terms of sale", "icon": "file-text", "target": "case", "prompt": "[shop-audit:read-terms] {value}", "noisy": false, "minutes": 5 }
+  ],
+  "pivots": ["domain"],
+  "refresh": [{ "id": "checks", "by": "engine", "run": "collect", "noisy": false, "sends_image": false, "paid": false, "watch": false, "noun": ["check", "checks"] }],
+  "requires": { "bins": [], "packs": [], "keys": [] }
+}

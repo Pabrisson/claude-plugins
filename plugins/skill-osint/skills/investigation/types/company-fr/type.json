@@ -1,0 +1,45 @@
+{
+  "id": "company-fr",
+  "label": "Company (France)",
+  "icon": "building-2",
+  "description": "A French company from its name, SIREN or SIRET: its registry identity, its establishments on a map, its officers and their other companies, its BODACC legal notices (changes, insolvency proceedings, strike-off, filed accounts)",
+  "frame": [{ "id": "person", "always": true, "legal_basis": "Legitimate interest — public registry data" }],
+  "inputs": [
+    { "id": "company", "kind": "text", "label": "Company name, SIREN or SIRET", "required": true, "placeholder": "456 789 122" }
+  ],
+  "levels": [
+    { "id": "identity", "label": "Identity", "criteria": {
+      "high": "the registry's answer for the SIREN matches what the input or the parent case read (name, address, legal notice), and BODACC agrees",
+      "medium": "one registry answer matches, a field differs (name, address) or nothing else confirms it",
+      "low": "only a name matches: several companies could be meant" } },
+    { "id": "network", "label": "Officers' network", "criteria": {
+      "high": "same name and same month of birth in the registry",
+      "medium": "same name and same year of birth, the month unknown on one side",
+      "low": "same name only: a namesake is possible" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "collect", "label": "Collect" }, { "id": "process", "label": "Process" },
+    { "id": "analyse", "label": "Analyse" }, { "id": "redteam", "label": "Red team" }, { "id": "conclude", "label": "Conclude" },
+    { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "map" },
+    { "widget": "timeline" },
+    { "widget": "table", "label": "Officers", "icon": "users", "view": "officers", "columns": ["name", "type", "role", "born", "other_companies"] },
+    { "widget": "table", "label": "Establishments", "icon": "store", "kind": "place", "columns": ["value", "sign", "address", "state", "created"] },
+    { "widget": "table", "label": "Other companies", "icon": "network", "view": "network", "columns": ["officer", "company", "siren", "role", "born", "level", "state", "city"] },
+    { "widget": "hypotheses" },
+    { "widget": "sources" }
+  ],
+  "actions": [
+    { "id": "website", "label": "Find the official website", "icon": "globe", "target": "case", "prompt": "[company-fr:website] {value}", "noisy": false, "minutes": 5 },
+    { "id": "officers-deep", "label": "Check this officer's other companies", "icon": "user-search", "target": "entity:person", "prompt": "[company-fr:officers-deep] {value}", "noisy": false, "minutes": 10 }
+  ],
+  "pivots": [{ "kind": "organization", "has": "siren" }],
+  "refresh": [
+    { "id": "registry", "by": "engine", "run": "collect", "noun": ["registry record", "registry records"], "watch": true },
+    { "id": "bodacc", "by": "engine", "run": "bodacc", "noun": ["BODACC notice", "BODACC notices"], "watch": true },
+    { "id": "officers", "by": "engine", "run": "officers", "noun": ["officer's other company", "officers' other companies"], "watch": true }
+  ],
+  "requires": { "bins": [], "packs": [], "keys": [] }
+}

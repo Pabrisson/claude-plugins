@@ -1,0 +1,20 @@
+{
+  "en": {
+    "home_page": "Home page of {d}", "legal_page": "Legal notice of {d}",
+    "c_legal": "Legal notice", "c_siren": "SIREN", "c_contact": "Contact", "c_terms": "Terms of sale", "c_mediator": "Consumer mediator",
+    "found": "found", "missing": "missing",
+    "on_home": "the home page", "on_legal": "the legal notice", "on_pages": "the home page and the legal notice",
+    "clue_found": "{check}: found on {where}", "clue_missing": "{check}: nothing on {where}", "siren": "SIREN {siren} in {where}",
+    "checklist": "Before ordering", "todo_terms": "Read the terms of sale: withdrawal right, delivery, returns",
+    "todo_mediator": "Find the consumer mediator", "todo_payment": "Check that payment happens on the shop's own domain"
+  },
+  "fr": {
+    "home_page": "Page d'accueil de {d}", "legal_page": "Mentions légales de {d}",
+    "c_legal": "Mentions légales", "c_siren": "SIREN", "c_contact": "Contact", "c_terms": "Conditions générales de vente", "c_mediator": "Médiateur de la consommation",
+    "found": "trouvé", "missing": "absent",
+    "on_home": "la page d'accueil", "on_legal": "les mentions légales", "on_pages": "la page d'accueil et les mentions légales",
+    "clue_found": "{check} : lu sur {where}", "clue_missing": "{check} : rien sur {where}", "siren": "SIREN {siren} dans {where}",
+    "checklist": "Avant de commander", "todo_terms": "Lire les conditions générales de vente : droit de rétractation, livraison, retours",
+    "todo_mediator": "Trouver le médiateur de la consommation", "todo_payment": "Vérifier que le paiement se fait sur le domaine de la boutique"
+  }
+}

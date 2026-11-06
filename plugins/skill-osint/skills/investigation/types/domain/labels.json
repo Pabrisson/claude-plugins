@@ -1,0 +1,26 @@
+{
+  "en": {
+    "no_rdap": "No RDAP record for {d}", "registrar": "Registrar: {name}", "registered": "Registered on {date}",
+    "registered_on": "Registered", "expires_on": "Expires", "rdap_changed": "RDAP record changed",
+    "mail_by": "Mail by {provider} (MX {mx})", "spf": "SPF includes {includes}",
+    "subdomains": "{n} subdomains in Certificate Transparency ({kept} recorded)", "first_cert": "First certificate for {name}",
+    "never_archived": "{d} was never archived by the Wayback Machine", "archived": "Archived from {first} to {last}, {n} different versions",
+    "first_capture": "First archived", "last_capture": "Last archived", "hosted_by": "Hosted by {holder} ({asn}, {prefix})",
+    "home_page": "Home page of {d}", "site_title": "Title of the site: {title}", "built_with": "Built with {tech}",
+    "trackers": "Trackers on the home page: {ids}", "siren_home": "SIREN {siren} on the home page", "legal_notice": "Legal notice of {d}",
+    "siren_legal": "SIREN {siren} in the legal notice", "publisher": "Publication director: {name}",
+    "legal_host": "Host named in the legal notice: {name}", "editor": "Publisher named in the legal notice: {name}"
+  },
+  "fr": {
+    "no_rdap": "Aucune fiche RDAP pour {d}", "registrar": "Bureau d'enregistrement : {name}", "registered": "Enregistré le {date}",
+    "registered_on": "Enregistrement", "expires_on": "Expiration", "rdap_changed": "Fiche RDAP modifiée",
+    "mail_by": "Messagerie chez {provider} (MX {mx})", "spf": "Le SPF inclut {includes}",
+    "subdomains": "{n} sous-domaines dans les certificats ({kept} enregistrés)", "first_cert": "Premier certificat pour {name}",
+    "never_archived": "{d} n'a jamais été archivé par la Wayback Machine", "archived": "Archivé du {first} au {last}, {n} versions différentes",
+    "first_capture": "Première archive", "last_capture": "Dernière archive", "hosted_by": "Hébergé par {holder} ({asn}, {prefix})",
+    "home_page": "Page d'accueil de {d}", "site_title": "Titre du site : {title}", "built_with": "Construit avec {tech}",
+    "trackers": "Traceurs sur la page d'accueil : {ids}", "siren_home": "SIREN {siren} sur la page d'accueil", "legal_notice": "Mentions légales de {d}",
+    "siren_legal": "SIREN {siren} dans les mentions légales", "publisher": "Directeur de la publication : {name}",
+    "legal_host": "Hébergeur nommé dans les mentions légales : {name}", "editor": "Éditeur nommé dans les mentions légales : {name}"
+  }
+}

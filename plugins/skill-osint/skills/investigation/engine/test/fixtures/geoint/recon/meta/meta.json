@@ -1,0 +1,42 @@
+{
+ "digest": {
+  "file": "evora-temple.jpg",
+  "bytes": 208685,
+  "sha256": "d15d9430a14fed93b5fa5c0d6900702708fc5f2c6f414d488577bf36c44300cf",
+  "image": {
+   "format": "JPEG",
+   "size": [
+    960,
+    715
+   ]
+  },
+  "filename_hints": [],
+  "camera": {
+   "Make": "Apple",
+   "Model": "iPhone SE (2nd generation)",
+   "Software": "14.8.1"
+  },
+  "gps": {
+   "lat": 38.5727917,
+   "lon": -7.9076417,
+   "source_tag": "Composite:GPSLatitude"
+  },
+  "time": {
+   "DateTimeOriginal": "2021:11:12 14:06:13"
+  },
+  "location_text": {},
+  "provenance": {
+   "IFD0:Software": "14.8.1"
+  },
+  "has_exif": true,
+  "backend": "exiftool",
+  "previews": []
+ },
+ "raw": {
+  "IFD0:Make": "Apple",
+  "IFD0:Model": "iPhone SE (2nd generation)",
+  "ExifIFD:DateTimeOriginal": "2021:11:12 14:06:13",
+  "Composite:GPSLatitude": 38.5727917,
+  "Composite:GPSLongitude": -7.9076417
+ }
+}

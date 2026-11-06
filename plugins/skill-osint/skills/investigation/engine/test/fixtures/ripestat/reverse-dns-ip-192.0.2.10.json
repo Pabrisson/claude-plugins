@@ -1,0 +1,1 @@
+{"messages":[],"data_call_name":"reverse-dns-ip","status":"ok","status_code":200,"data":{"resource":"192.0.2.10","result":["web1.exemple-hebergement.example"],"error":""}}

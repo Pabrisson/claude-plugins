@@ -1,0 +1,157 @@
+{
+  "durand-bakery.example": {
+    "A": [
+      "192.0.2.10"
+    ],
+    "AAAA": [],
+    "MX": [
+      {
+        "exchange": "aspmx.l.google.com",
+        "priority": 1
+      }
+    ],
+    "NS": [
+      "ns1.exemple-hebergement.example",
+      "ns2.exemple-hebergement.example"
+    ],
+    "TXT": [
+      [
+        "v=spf1 include:_spf.google.com ~all"
+      ],
+      [
+        "google-site-verification=durandVERIFY123"
+      ]
+    ],
+    "CNAME": [],
+    "SOA": [
+      {
+        "nsname": "ns1.exemple-hebergement.example",
+        "hostmaster": "hostmaster.exemple-hebergement.example",
+        "serial": 2026020101
+      }
+    ],
+    "CAA": [
+      {
+        "critical": 0,
+        "issue": "letsencrypt.org"
+      }
+    ]
+  },
+  "www.durand-bakery.example": {
+    "A": [
+      "192.0.2.10"
+    ]
+  },
+  "shop.durand-bakery.example": {
+    "A": [
+      "192.0.2.20"
+    ]
+  },
+  "mail.durand-bakery.example": {
+    "A": []
+  },
+  "live.durand-bakery.example": {
+    "A": [
+      "192.0.2.10"
+    ],
+    "NS": [
+      "ns1.exemple-hebergement.example"
+    ]
+  },
+  "example.org": {
+    "A": [
+      "104.20.26.136",
+      "172.66.157.237"
+    ],
+    "AAAA": [
+      "2606:4700:10::ac42:9ded",
+      "2606:4700:10::6814:1a88"
+    ],
+    "MX": [
+      {
+        "exchange": "",
+        "priority": 0
+      }
+    ],
+    "NS": [
+      "mitch.ns.cloudflare.com",
+      "katelyn.ns.cloudflare.com"
+    ],
+    "TXT": [
+      [
+        "v=spf1 -all"
+      ],
+      [
+        "_uyh0vgv5ukyofwj3ddwspnni01vmlyy"
+      ]
+    ],
+    "CNAME": [],
+    "SOA": [
+      {
+        "nsname": "katelyn.ns.cloudflare.com",
+        "hostmaster": "dns.cloudflare.com",
+        "serial": 2418002692,
+        "refresh": 10000,
+        "retry": 2400,
+        "expire": 604800,
+        "minttl": 1800
+      }
+    ],
+    "CAA": []
+  },
+  "other-shop.example": {
+    "A": [
+      "192.0.2.30"
+    ],
+    "NS": [
+      "ns1.exemple-hebergement.example"
+    ],
+    "MX": [],
+    "TXT": []
+  },
+  "_dmarc.durand-bakery.example": {
+    "TXT": [
+      [
+        "v=DMARC1; p=quarantine; rua=mailto:dmarc@durand-bakery.example"
+      ]
+    ]
+  },
+  "example.com": {
+    "MX": [
+      {
+        "exchange": "",
+        "priority": 0
+      }
+    ],
+    "TXT": [
+      [
+        "v=spf1 -all"
+      ],
+      [
+        "_k2n1y4vw3qtb4skdx9e7dxt97qrmmq9"
+      ]
+    ]
+  },
+  "_dmarc.example.com": {
+    "TXT": [
+      [
+        "v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s"
+      ]
+    ]
+  },
+  "one.one.one.one": {
+    "A": [
+      "1.1.1.1",
+      "1.0.0.1"
+    ],
+    "AAAA": [
+      "2606:4700:4700::1001",
+      "2606:4700:4700::1111"
+    ]
+  },
+  "web1.exemple-hebergement.example": {
+    "A": [
+      "192.0.2.10"
+    ]
+  }
+}

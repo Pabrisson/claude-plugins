@@ -1,0 +1,15 @@
+{"tool": "prior.py", "photo": "", "device": "cpu", "crops": 5, "models": ["streetclip", "geoclip"],
+ "streetclip": {"countries": [{"iso2": "PT", "name": "Portugal", "p": 0.4021}, {"iso2": "ES", "name": "Spain", "p": 0.2513}, {"iso2": "IT", "name": "Italy", "p": 0.1102}],
+   "regions": {"PT": [{"admin1": "Évora", "code": "08", "p_given_country": 0.3114, "p": 0.1252}, {"admin1": "Lisbon", "code": "14", "p_given_country": 0.2203, "p": 0.0886}]}, "seconds": 3.1},
+ "geoclip": {"top_k": 100, "mass_in_top_k": 0.5823, "countries": [{"iso2": "PT", "name": "Portugal", "p": 0.5203}, {"iso2": "ES", "name": "Spain", "p": 0.1661}, {"iso2": "IT", "name": "Italy", "p": 0.1286}],
+   "clusters": [
+    {"lat": 38.6012, "lon": -8.0143, "mass": 0.2731, "n": 41, "near": {"name": "Évora", "country": "PT", "country_name": "Portugal", "admin1": "Évora", "admin1_code": "08", "lat": 38.56667, "lon": -7.9, "population": 56596, "feature": "PPLA", "geonameid": 2268406, "distance_km": 10.53}},
+    {"lat": 38.9168, "lon": -6.3438, "mass": 0.1102, "n": 17, "near": {"name": "Mérida", "country": "ES", "country_name": "Spain", "admin1": "Extremadura", "admin1_code": "57", "lat": 38.91611, "lon": -6.34366, "population": 55000, "feature": "PPLA", "geonameid": 2513917, "distance_km": 0.07}},
+    {"lat": 41.8903, "lon": 12.4922, "mass": 0.0815, "n": 9, "near": {"name": "Rome", "country": "IT", "country_name": "Italy", "admin1": "Latium", "admin1_code": "07", "lat": 41.89193, "lon": 12.51133, "population": 2318895, "feature": "PPLC", "geonameid": 3169070, "distance_km": 1.6}}],
+   "points": [], "seconds": 4.4},
+ "combined": [{"iso2": "PT", "name": "Portugal", "p": 0.4612}, {"iso2": "ES", "name": "Spain", "p": 0.2087}, {"iso2": "IT", "name": "Italy", "p": 0.1194}, {"iso2": "FR", "name": "France", "p": 0.0503}, {"iso2": "GR", "name": "Greece", "p": 0.0311}],
+ "assessment": {"informative": true, "chroma": 21.4, "top_p": 0.4612, "reasons": []},
+ "best_guess": {"lat": 38.6012, "lon": -8.0143, "country": "PT", "near": "Évora", "how": "GeoCLIP cluster in top country"},
+ "signals": [{"kind": "model", "status": "model", "level": "country", "clue": "world-prior models (streetclip + geoclip) rank: Portugal 46%, Spain 21%, Italy 12%, France 5%, Greece 3%",
+   "p": {"PT": 0.4612, "ES": 0.2087, "IT": 0.1194, "FR": 0.0503, "GR": 0.0311, "HR": 0.0188, "MA": 0.0142, "TR": 0.012, "MT": 0.0101, "US": 0.0093, "BR": 0.0041, "AO": 0.0007},
+   "n_classes": 220, "file": "recon/prior/prior.json"}]}

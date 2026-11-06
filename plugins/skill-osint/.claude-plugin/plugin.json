@@ -1,0 +1,16 @@
+{
+  "name": "skill-osint",
+  "version": "1.0.0",
+  "description": "Skill investigation: OSINT cases as Obsidian vaults (one second brain per case, live in a local dashboard), a common intelligence cycle (sources archived and hashed, Admiralty grading, hypotheses with capped likelihood ratios and ACH, red team, one answer with its confidence), modular case types (domain, geolocate-image, verify-media, username, company-fr, email, phone, ip, place, person), refresh, next actions and pivots to linked child cases",
+  "author": {
+    "name": "Pierre Alain BRISSON"
+  },
+  "userConfig": {
+    "mapillary_token": {
+      "type": "string",
+      "title": "Mapillary token",
+      "description": "Optional, the Client Token (MLY|…) of a free application registered at mapillary.com/dashboard/developers; no OAuth flow needed: Mapillary panoramas in the street-level sweeps of geolocate-image. Empty: KartaView, Panoramax and the other providers are still swept",
+      "sensitive": true
+    }
+  }
+}

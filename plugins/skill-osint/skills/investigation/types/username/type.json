@@ -1,0 +1,63 @@
+{
+  "id": "username",
+  "label": "Username",
+  "icon": "user-round-search",
+  "description": "A username: the public accounts that carry it on WhatsMyName's sites (Maigret's too, as an option), candidate accounts and not identities, then each profile read once",
+  "frame": [{ "id": "person", "always": true }, "noisy"],
+  "inputs": [
+    { "id": "username", "kind": "text", "label": "Username or profile URL", "required": true, "placeholder": "durand.bakery" },
+    { "id": "categories", "kind": "chips", "multiple": true, "label": "WhatsMyName categories",
+      "default": ["archived", "art", "blog", "business", "coding", "finance", "gaming", "hobby", "images", "misc", "music", "news", "search", "shopping", "social", "tech", "video"],
+      "options": [
+        { "value": "archived", "label": "Archived", "icon": "archive" },
+        { "value": "art", "label": "Art", "icon": "palette" },
+        { "value": "blog", "label": "Blog", "icon": "pen-line" },
+        { "value": "business", "label": "Business", "icon": "briefcase" },
+        { "value": "coding", "label": "Coding", "icon": "code" },
+        { "value": "dating", "label": "Dating", "icon": "heart" },
+        { "value": "finance", "label": "Finance", "icon": "landmark" },
+        { "value": "gaming", "label": "Gaming", "icon": "gamepad-2" },
+        { "value": "health", "label": "Health", "icon": "heart-pulse" },
+        { "value": "hobby", "label": "Hobby", "icon": "puzzle" },
+        { "value": "images", "label": "Images", "icon": "image" },
+        { "value": "misc", "label": "Misc", "icon": "shapes" },
+        { "value": "music", "label": "Music", "icon": "music" },
+        { "value": "news", "label": "News", "icon": "newspaper" },
+        { "value": "political", "label": "Political", "icon": "vote" },
+        { "value": "search", "label": "Search", "icon": "search" },
+        { "value": "shopping", "label": "Shopping", "icon": "shopping-cart" },
+        { "value": "social", "label": "Social", "icon": "users" },
+        { "value": "tech", "label": "Tech", "icon": "cpu" },
+        { "value": "video", "label": "Video", "icon": "video" },
+        { "value": "nsfw", "label": "NSFW", "icon": "eye-off" }
+      ] },
+    { "id": "maigret", "kind": "toggle", "label": "Also run Maigret (needs uv, a few minutes)" }
+  ],
+  "levels": [
+    { "id": "same-person", "label": "Same person", "criteria": {
+      "high": "two independent links: profiles that cite each other, the same avatar checked full size, the same unique email",
+      "medium": "name, bio and avatar consistent",
+      "low": "the same username only" } }
+  ],
+  "phases": [
+    { "id": "frame", "label": "Frame" }, { "id": "collect", "label": "Collect" }, { "id": "process", "label": "Process" },
+    { "id": "analyse", "label": "Analyse" }, { "id": "redteam", "label": "Red team" }, { "id": "conclude", "label": "Conclude" },
+    { "id": "leads", "label": "Leads" }
+  ],
+  "views": [
+    { "widget": "table", "label": "Accounts", "icon": "at-sign", "view": "accounts", "columns": ["site", "category", "state", "url", "via"] },
+    { "widget": "hypotheses" }, { "widget": "sources" }
+  ],
+  "actions": [
+    { "id": "profile-read", "label": "Read this profile", "icon": "book-open", "target": "entity:account", "prompt": "[username:profile-read] {value}", "noisy": false, "minutes": 3 },
+    { "id": "avatar-compare", "label": "Compare the avatars", "icon": "scan-face", "target": "case", "prompt": "[username:avatar-compare] {value}", "noisy": false, "minutes": 10 },
+    { "id": "maigret", "label": "Run Maigret too", "icon": "list-checks", "target": "case", "prompt": "[username:maigret] {value}", "noisy": false, "minutes": 10 }
+  ],
+  "pivots": ["username", "account"],
+  "refresh": [{ "id": "accounts", "by": "engine", "run": "check", "watch": true, "noun": ["account", "accounts"] }],
+  "requires": {
+    "bins": [{ "id": "uv", "optional": true, "off": "Also run Maigret is off; WhatsMyName still runs" }],
+    "packs": [], "keys": [],
+    "datasets": [{ "id": "wmn", "label": "whatsmyname data" }]
+  }
+}

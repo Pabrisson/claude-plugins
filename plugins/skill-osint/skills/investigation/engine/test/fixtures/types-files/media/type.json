@@ -1,0 +1,14 @@
+{
+  "id": "media", "label": "Media", "icon": "image", "description": "A type that starts from a file, for the engine's tests",
+  "frame": ["image", "noisy"],
+  "inputs": [
+    { "id": "source", "kind": "chips", "label": "Source", "default": "photo", "options": [
+      { "value": "photo", "label": "Photo", "icon": "image" }, { "value": "clip", "label": "Clip", "icon": "film" } ] },
+    { "id": "photo", "kind": "file", "label": "Photo", "accept": "image/*", "required": true, "when": { "source": "photo" } },
+    { "id": "clip", "kind": "file", "label": "Clip (a file or a link)", "accept": "video/*", "link": true, "required": true, "when": { "source": "clip" } }
+  ],
+  "levels": [{ "id": "answer", "label": "Answer", "criteria": { "high": "h", "medium": "m", "low": "l" } }],
+  "phases": [{ "id": "look", "label": "Look" }],
+  "views": [{ "widget": "evidence" }], "actions": [], "pivots": [], "refresh": [],
+  "requires": { "bins": [], "packs": [], "keys": [] }
+}

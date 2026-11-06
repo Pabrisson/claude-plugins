@@ -1,0 +1,16 @@
+#!/usr/bin/env node
+// A stand-in for c2patool in the tests and the demo: prints test/fixtures/c2pa/<name>.json (the file's name without
+// its E01- prefix nor its extension), a real report recorded from contentauth/example-assets; else what c2patool says
+// of a file without a manifest.
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const FX = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'c2pa')
+const a = process.argv.slice(2)
+if (a.includes('--version') || a.includes('-V')) { console.log('c2patool 0.28.4 (fake)'); process.exit(0) }
+const file = a.find(x => !x.startsWith('-'))
+if (!file || !fs.existsSync(file)) { console.error(`Error: file not found: ${file}`); process.exit(1) }
+const f = path.join(FX, `${path.basename(file).replace(/^E\d+-/, '').replace(/\.[^.]+$/, '')}.json`)
+if (!fs.existsSync(f)) { console.error('Error: No claim found'); process.exit(1) }
+process.stdout.write(fs.readFileSync(f))

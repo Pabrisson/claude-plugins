@@ -1,0 +1,1 @@
+{"messages":[],"data_call_name":"reverse-dns-ip","status":"ok","status_code":200,"data":{"resource":"203.0.113.99","result":null,"error":"Domain name doesn't exist (NXDOMAIN): 99.113.0.203.in-addr.arpa. (PTR)"}}

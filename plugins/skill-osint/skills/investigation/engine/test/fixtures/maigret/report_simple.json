@@ -1,0 +1,16 @@
+{
+  "GitHub": {
+    "username": "durand.bakery", "parsing_enabled": false, "url_main": "https://github.com/", "keywords": [], "cookies": null,
+    "url_user": "https://github.com/durand.bakery",
+    "status": { "username": "durand.bakery", "site_name": "GitHub", "url": "https://github.com/durand.bakery", "status": "Claimed", "ids": {}, "tags": ["coding", "us"], "keywords": [], "keyword_match_status": "None" },
+    "http_status": 200, "is_similar": false, "rank": 25,
+    "site": { "tags": ["coding", "us"], "checkType": "status_code", "url": "https://github.com/{username}", "urlMain": "https://github.com/", "usernameClaimed": "blue", "usernameUnclaimed": "noonewouldeverusethis7", "alexaRank": 25 }
+  },
+  "Instagram": {
+    "username": "durand.bakery", "parsing_enabled": false, "url_main": "https://www.instagram.com/", "keywords": [], "cookies": null,
+    "url_user": "https://www.instagram.com/durand.bakery",
+    "status": { "username": "durand.bakery", "site_name": "Instagram", "url": "https://www.instagram.com/durand.bakery", "status": "Claimed", "ids": {}, "tags": ["photo", "social"], "keywords": [], "keyword_match_status": "None" },
+    "http_status": 200, "is_similar": false, "rank": 12,
+    "site": { "tags": ["photo", "social"], "checkType": "message", "url": "https://www.instagram.com/{username}", "urlMain": "https://www.instagram.com/", "usernameClaimed": "instagram", "usernameUnclaimed": "noonewouldeverusethis7", "alexaRank": 12 }
+  }
+}

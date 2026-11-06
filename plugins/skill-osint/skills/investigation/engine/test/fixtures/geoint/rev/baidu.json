@@ -1,0 +1,9 @@
+{"url": "https://graph.baidu.com/s?card_key=&entrance=GENERAL&f=all&isLogoShow=1&session_id=17722013905624390000&sign=126e3a0c64c86cbe5bbe401730299093&tpl_from=pc",
+ "guess": ["图中可能是：埃武拉罗马神庙"],
+ "links": [{"title": "埃武拉罗马神庙_百度百科", "url": "https://baike.baidu.com/item/%E5%9F%83%E6%AD%A6%E6%8B%89%E7%BD%97%E9%A9%AC%E7%A5%9E%E5%BA%99", "site": "baike.baidu.com"}],
+ "text_head": "图中可能是：埃武拉罗马神庙",
+ "similar": [
+  {"thumb": "https://img0.baidu.com/it/u=1234567890,987654321&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=375", "from": "https://pt.wikipedia.org/wiki/Templo_romano_de_%C3%89vora", "site": "pt.wikipedia.org"},
+  {"thumb": "https://img1.baidu.com/it/u=2233445566,1122334455&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=333", "from": "https://www.visitportugal.com/en/content/roman-temple-evora", "site": "visitportugal.com"},
+  {"thumb": "https://img2.baidu.com/it/u=3344556677,5566778899&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=375", "from": "https://commons.wikimedia.org/wiki/File:Templo_romano_de_%C3%89vora_(2).jpg", "site": "commons.wikimedia.org"}],
+ "engine": "baidu"}

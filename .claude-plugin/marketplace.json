@@ -51,6 +51,11 @@
       "description": "Skill property-search: find property for sale in France (flats, houses, plots, parkings, premises) around an address, a street or a neighborhood, weigh each against the real sales of its type, its building, its neighborhood, the rent and the buyer's budget, write offer letters, in a local dashboard; listings from the Stream Estate API (paid, with the user's yes on every credit) or found by the agent"
     },
     {
+      "name": "skill-osint",
+      "source": "./plugins/skill-osint",
+      "description": "Skill investigation: OSINT cases as Obsidian vaults shown live in a local dashboard, a common intelligence cycle (sources archived and hashed, Admiralty grading, hypotheses with capped likelihood ratios and ACH, red team, one answer with its confidence), modular case types (domain, geolocate-image, verify-media), refresh, next actions and pivots to linked child cases"
+    },
+    {
       "name": "skill-security",
       "source": {
         "source": "github",

@@ -1,0 +1,209 @@
+{
+ "about": "18 free photos of Wikimedia Commons, two per category of the skill-osint spec § 13.4, chosen with the Commons API on 2026-11-04; lat/lon is the camera position the file page gives",
+ "photos": [
+  {
+   "id": "famous-1",
+   "category": "famous monument",
+   "page": "https://commons.wikimedia.org/wiki/File%3ACastle_Neuschwanstein_on_a_sunny_summer_day_as_seen_from_Marienbruecke_(south).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Castle_Neuschwanstein_on_a_sunny_summer_day_as_seen_from_Marienbruecke_%28south%29.jpg/1920px-Castle_Neuschwanstein_on_a_sunny_summer_day_as_seen_from_Marienbruecke_%28south%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "author": "Jürgen Matern",
+   "lat": 47.554945,
+   "lon": 10.7495,
+   "make": "photo"
+  },
+  {
+   "id": "famous-2",
+   "category": "famous monument",
+   "page": "https://commons.wikimedia.org/wiki/File%3AHagia_Sophia_Mars_2013.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/22/Hagia_Sophia_Mars_2013.jpg/1920px-Hagia_Sophia_Mars_2013.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "author": "Arild Vågen",
+   "lat": 41.00635833,
+   "lon": 28.97970556,
+   "make": "photo"
+  },
+  {
+   "id": "little-1",
+   "category": "little-known monument",
+   "page": "https://commons.wikimedia.org/wiki/File%3ACapela_de_San_Roque%2C_Puxallos_01.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/91/Capela_de_San_Roque%2C_Puxallos_01.jpg/1920px-Capela_de_San_Roque%2C_Puxallos_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "author": "Simon Burchell",
+   "lat": 42.604722,
+   "lon": -8.080556,
+   "make": "photo"
+  },
+  {
+   "id": "little-2",
+   "category": "little-known monument",
+   "page": "https://commons.wikimedia.org/wiki/File%3AConas_-_Croix_de_St_Martin.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/Conas_-_Croix_de_St_Martin.jpg/1920px-Conas_-_Croix_de_St_Martin.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC0",
+   "author": "RobOrRoss",
+   "lat": 43.441303,
+   "lon": 3.414908,
+   "make": "photo"
+  },
+  {
+   "id": "street-1",
+   "category": "urban street without a monument",
+   "page": "https://commons.wikimedia.org/wiki/File%3A%CE%9F%CE%B4%CF%8C%CF%82_%CE%A6%CE%B9%CE%BB%CE%B5%CE%BB%CE%BB%CE%AE%CE%BD%CF%89%CE%BD_1661.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/22/%CE%9F%CE%B4%CF%8C%CF%82_%CE%A6%CE%B9%CE%BB%CE%B5%CE%BB%CE%BB%CE%AE%CE%BD%CF%89%CE%BD_1661.jpg/1920px-%CE%9F%CE%B4%CF%8C%CF%82_%CE%A6%CE%B9%CE%BB%CE%B5%CE%BB%CE%BB%CE%AE%CE%BD%CF%89%CE%BD_1661.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "author": "C messier",
+   "lat": 37.972502,
+   "lon": 23.733625,
+   "make": "photo"
+  },
+  {
+   "id": "street-2",
+   "category": "urban street without a monument",
+   "page": "https://commons.wikimedia.org/wiki/File%3ABoulevard_du_pr%C3%A9sident_Wilson_%C3%A0_Bordeaux_depuis_la_barri%C3%A8re_du_M%C3%A9doc.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Boulevard_du_pr%C3%A9sident_Wilson_%C3%A0_Bordeaux_depuis_la_barri%C3%A8re_du_M%C3%A9doc.jpg/1920px-Boulevard_du_pr%C3%A9sident_Wilson_%C3%A0_Bordeaux_depuis_la_barri%C3%A8re_du_M%C3%A9doc.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "author": "Thomasbr33",
+   "lat": 44.853227,
+   "lon": -0.594051,
+   "make": "photo"
+  },
+  {
+   "id": "rural-1",
+   "category": "rural road or landscape",
+   "page": "https://commons.wikimedia.org/wiki/File%3ALahdenper%C3%A4n_kyl%C3%A4%C3%A4_Suodenniemell%C3%A4.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/Lahdenper%C3%A4n_kyl%C3%A4%C3%A4_Suodenniemell%C3%A4.jpg/1920px-Lahdenper%C3%A4n_kyl%C3%A4%C3%A4_Suodenniemell%C3%A4.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 4.0",
+   "author": "Suodenniemi-Seura ry",
+   "lat": 61.628678,
+   "lon": 22.836286,
+   "make": "photo"
+  },
+  {
+   "id": "rural-2",
+   "category": "rural road or landscape",
+   "page": "https://commons.wikimedia.org/wiki/File%3AArgan_trees_Morocco.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7e/Argan_trees_Morocco.jpg/1920px-Argan_trees_Morocco.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "author": "Elena Tatiana Chis",
+   "lat": 31.5489602,
+   "lon": -9.3768613,
+   "make": "photo"
+  },
+  {
+   "id": "sign-1",
+   "category": "shop sign or readable text",
+   "page": "https://commons.wikimedia.org/wiki/File%3AHahndorf_(AU)%2C_Bakery_Wunderbar_--_2019_--_0680.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/05/Hahndorf_%28AU%29%2C_Bakery_Wunderbar_--_2019_--_0680.jpg/1920px-Hahndorf_%28AU%29%2C_Bakery_Wunderbar_--_2019_--_0680.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "author": "Dietmar Rabich",
+   "lat": -35.031842,
+   "lon": 138.81157,
+   "make": "photo"
+  },
+  {
+   "id": "sign-2",
+   "category": "shop sign or readable text",
+   "page": "https://commons.wikimedia.org/wiki/File%3AAhrweiler%2C_Raths_B%C3%A4ckerei_und_Konditorei_--_2020_--_8569.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2e/Ahrweiler%2C_Raths_B%C3%A4ckerei_und_Konditorei_--_2020_--_8569.jpg/1920px-Ahrweiler%2C_Raths_B%C3%A4ckerei_und_Konditorei_--_2020_--_8569.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "author": "Dietmar Rabich",
+   "lat": 50.541128,
+   "lon": 7.096558,
+   "make": "photo"
+  },
+  {
+   "id": "notext-1",
+   "category": "photo without any text",
+   "page": "https://commons.wikimedia.org/wiki/File%3ASpiny_Forest_Ifaty_Madagascar.jpg",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/Spiny_Forest_Ifaty_Madagascar.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+   "license": "CC BY-SA 4.0",
+   "author": "JialiangGao www.peace-on-earth.org",
+   "lat": -23.125194,
+   "lon": 43.630806,
+   "make": "photo"
+  },
+  {
+   "id": "notext-2",
+   "category": "photo without any text",
+   "page": "https://commons.wikimedia.org/wiki/File%3AVerzasca_Hut.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Verzasca_Hut.JPG/1920px-Verzasca_Hut.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "author": "H005",
+   "lat": 46.34472222,
+   "lon": 8.79194444,
+   "make": "photo"
+  },
+  {
+   "id": "shot-1",
+   "category": "screenshot with an interface",
+   "page": "https://commons.wikimedia.org/wiki/File%3AView_of_Vina%C5%99ice_-_panoramio.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/View_of_Vina%C5%99ice_-_panoramio.jpg/1920px-View_of_Vina%C5%99ice_-_panoramio.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 3.0",
+   "author": "Petr Kraumann",
+   "lat": 50.26076,
+   "lon": 13.806896,
+   "make": "screenshot"
+  },
+  {
+   "id": "shot-2",
+   "category": "screenshot with an interface",
+   "page": "https://commons.wikimedia.org/wiki/File%3ASlippery_Elm_Trail_-_Farmland.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Slippery_Elm_Trail_-_Farmland.jpg/1920px-Slippery_Elm_Trail_-_Farmland.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 4.0",
+   "author": "Mbrickn",
+   "lat": 41.323628,
+   "lon": -83.660033,
+   "make": "screenshot"
+  },
+  {
+   "id": "sv-1",
+   "category": "Street View capture",
+   "page": "https://commons.wikimedia.org/wiki/File%3AMapillary_(XdrRSO5Kb6HJugoM9Plpyq)_(tomislavzen12)_2024-08-13_11H55M35S518.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/Mapillary_%28XdrRSO5Kb6HJugoM9Plpyq%29_%28tomislavzen12%29_2024-08-13_11H55M35S518.jpg/1920px-Mapillary_%28XdrRSO5Kb6HJugoM9Plpyq%29_%28tomislavzen12%29_2024-08-13_11H55M35S518.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "author": "tomislavzen12",
+   "lat": 45.8092645,
+   "lon": 15.9767929,
+   "make": "streetview",
+   "heading": 90,
+   "date": "Aug 2024"
+  },
+  {
+   "id": "sv-2",
+   "category": "Street View capture",
+   "page": "https://commons.wikimedia.org/wiki/File%3AMapillary_(PfG4q_0GUPAHiP1uVHrTzQ)_(reggie)_2017-12-12_08H14M14S675.jpg",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/6/61/Mapillary_%28PfG4q_0GUPAHiP1uVHrTzQ%29_%28reggie%29_2017-12-12_08H14M14S675.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+   "license": "CC BY-SA 4.0",
+   "author": "reggie",
+   "lat": -1.31657622,
+   "lon": 36.90469547,
+   "make": "streetview",
+   "heading": 90,
+   "date": "Dec 2017"
+  },
+  {
+   "id": "video-1",
+   "category": "video frame",
+   "page": "https://commons.wikimedia.org/wiki/File%3AFalkirk_Wheel_Timelapse%2C_Scotland_-_Diliff.webm",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/5/5d/Falkirk_Wheel_Timelapse%2C_Scotland_-_Diliff.webm?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "license": "CC BY-SA 3.0",
+   "author": "Diliff",
+   "lat": 56.000934,
+   "lon": -3.842597,
+   "make": "video-frame",
+   "t": 5
+  },
+  {
+   "id": "video-2",
+   "category": "video frame",
+   "page": "https://commons.wikimedia.org/wiki/File%3ASunshine_Coast_RU6.ogv",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/1/19/Sunshine_Coast_RU6.ogv?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "license": "CC BY-SA 3.0",
+   "author": "Patrick Gillett",
+   "lat": -26.733768,
+   "lon": 153.12585,
+   "make": "video-frame",
+   "t": 5
+  }
+ ]
+}

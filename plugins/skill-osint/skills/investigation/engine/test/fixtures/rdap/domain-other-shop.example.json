@@ -1,0 +1,4 @@
+{ "objectClassName": "domain", "ldhName": "other-shop.example", "status": ["active"],
+  "events": [{ "eventAction": "registration", "eventDate": "2021-05-02T08:00:00Z" }, { "eventAction": "expiration", "eventDate": "2027-05-02T08:00:00Z" }],
+  "entities": [{ "objectClassName": "entity", "roles": ["registrar"], "vcardArray": ["vcard", [["version", {}, "text", "4.0"], ["fn", {}, "text", "Exemple Registrar SAS"]]] }],
+  "nameservers": [{ "objectClassName": "nameserver", "ldhName": "NS1.EXEMPLE-HEBERGEMENT.EXAMPLE" }] }

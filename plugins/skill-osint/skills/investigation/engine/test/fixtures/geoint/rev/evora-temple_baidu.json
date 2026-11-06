@@ -1,0 +1,10 @@
+{
+  "url": "https://graph.baidu.com/s?sign=1260e3b3example&f=all",
+  "guess": ["图中可能是：埃武拉罗马神庙"],
+  "links": [{ "title": "埃武拉罗马神庙 旅游指南", "url": "https://lvyou.example/evora/temple.html", "site": "lvyou.example" }],
+  "text_head": "图中可能是：埃武拉罗马神庙",
+  "similar": [
+    { "thumb": "https://mms0.baidu.com/it/u=1,2&fm=253&fmt=auto", "from": "https://lvyou.example/evora/temple.html", "site": "lvyou.example" },
+    { "thumb": "https://mms1.baidu.com/it/u=3,4&fm=253&fmt=auto", "from": "https://blog.example/travel/alentejo-in-three-days", "site": "blog.example" }
+  ]
+}

@@ -1,0 +1,11 @@
+#!/usr/bin/env node
+// A stand-in for cloudflared in the tests and the demo: `tunnel --url http://127.0.0.1:<port>` registers a fixed public
+// name with the fake server (OSINT_BASE_WEB's origin), which relays /web/<name>/… to that port; it prints what
+// cloudflared prints, and stays until it is killed.
+const a = process.argv.slice(2)
+if (a.includes('--version')) { console.log('cloudflared version 2026.10.0 (fake)'); process.exit(0) }
+const target = a[a.indexOf('--url') + 1], host = process.env.OSINT_FAKE_TUNNEL_HOST || 'osint-fake-tunnel.trycloudflare.com'
+if (process.env.OSINT_BASE_WEB) await fetch(`${new URL(process.env.OSINT_BASE_WEB).origin}/__tunnel`, { method: 'POST', body: JSON.stringify({ host, target }) }).catch(() => {})
+if (process.env.OSINT_FAKE_CF_PIDS) (await import('node:fs')).appendFileSync(process.env.OSINT_FAKE_CF_PIDS, `${process.pid}\n`) // the tests check it is killed
+process.stderr.write(`INF Requesting new quick Tunnel on trycloudflare.com...\nINF |  https://${host}  |\nINF Registered tunnel connection connIndex=0 location=fake\n`)
+setInterval(() => {}, 1 << 30)

@@ -1,0 +1,13 @@
+{
+  "id": "needs", "label": "Needs", "icon": "wrench", "description": "A type that needs what this machine lacks",
+  "frame": ["noisy"],
+  "inputs": [{ "id": "thing", "kind": "text", "label": "Thing", "required": true }],
+  "levels": [{ "id": "answer", "label": "Answer", "criteria": { "high": "h", "medium": "m", "low": "l" } }],
+  "phases": [{ "id": "collect", "label": "Collect" }],
+  "views": [], "actions": [], "pivots": [], "refresh": [],
+  "requires": {
+    "bins": [{ "id": "osint-no-such-tool", "optional": false, "off": "nothing of this type runs" }, { "id": "osint-no-such-helper", "optional": true, "off": "the helper's step is skipped" }],
+    "packs": [{ "id": "geoint", "optional": false, "off": "nothing of this type runs" }],
+    "keys": [{ "id": "OSINT_TEST_TOKEN", "optional": true, "off": "the token's source is skipped", "configure": "set OSINT_TEST_TOKEN" }]
+  }
+}

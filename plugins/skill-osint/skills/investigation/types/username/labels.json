@@ -1,0 +1,22 @@
+{
+  "en": {
+    "wmn_source": "WhatsMyName check of {name}",
+    "maigret_source": "Maigret search of {name}",
+    "whatsmyname_found": "{n} candidate accounts named {name} (WhatsMyName): {sites}",
+    "whatsmyname_found_title": "{n} candidate accounts named {name} (WhatsMyName)",
+    "whatsmyname_none": "No account named {name} found by WhatsMyName",
+    "maigret_found": "{n} candidate accounts named {name} (Maigret): {sites}",
+    "maigret_found_title": "{n} candidate accounts named {name} (Maigret)",
+    "maigret_none": "No account named {name} found by Maigret"
+  },
+  "fr": {
+    "wmn_source": "Vérification WhatsMyName de {name}",
+    "maigret_source": "Recherche Maigret de {name}",
+    "whatsmyname_found": "{n} comptes candidats au nom de {name} (WhatsMyName) : {sites}",
+    "whatsmyname_found_title": "{n} comptes candidats au nom de {name} (WhatsMyName)",
+    "whatsmyname_none": "Aucun compte au nom de {name} trouvé par WhatsMyName",
+    "maigret_found": "{n} comptes candidats au nom de {name} (Maigret) : {sites}",
+    "maigret_found_title": "{n} comptes candidats au nom de {name} (Maigret)",
+    "maigret_none": "Aucun compte au nom de {name} trouvé par Maigret"
+  }
+}
