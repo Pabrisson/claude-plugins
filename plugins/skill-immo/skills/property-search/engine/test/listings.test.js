@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import { addressQuery, allGone, fromInput, fromStreamEstate, linkGone, merge, normUrl } from '../lib/listings.js'
+import { addressQuery, allGone, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl } from '../lib/listings.js'
 import { badge, daysOnline, dropped, matches, negotiation } from '../lib/market.js'
 
 // a v1 PropertyDocument with the shape of a recorded one (2026-10-28), its values made up, placed rue Paul Bert
@@ -135,4 +135,24 @@ test('a page gone, one online, one blocked', async () => {
   await new Promise(ok => server.listen(0, '127.0.0.1', ok))
   const at = p => linkGone(`http://127.0.0.1:${server.address().port}${p}`)
   try { assert.deepEqual(await Promise.all(['/gone', '/moved', '/ok', '/blocked'].map(at)), [true, true, false, null]) } finally { server.close() }
+})
+
+test('locate: the user\'s place wins over a refresh, the source\'s is kept and comes back', () => {
+  const [l] = merge([], [se], '2026-10-01').listings
+  const moved = locate(l, { point: [4.846, 45.7565], address: '10 Rue Paul Bert', by: 'osint', osint: { case: 'photo-1', confidence: 'medium', radius_m: 40 } }, '2026-10-02')
+  assert.deepEqual([moved.location.point, moved.location.address, moved.location.accuracy, moved.location.by, moved.location.osint.case], [[4.846, 45.7565], '10 Rue Paul Bert', 'PRECISE', 'osint', 'photo-1'])
+  assert.deepEqual(moved.location_source, l.location)
+  assert.equal(moved.location.postcode, l.location.postcode)
+  // moved again: the source's place stays the first one
+  const again = locate(moved, { point: [4.847, 45.757] }, '2026-10-03')
+  assert.deepEqual([again.location.by, again.location.osint, again.location.address, again.location_source], ['hand', null, null, l.location])
+  // a refresh brings the source's new place: it waits aside, the user's stays
+  const refreshed = { ...se, location: { ...se.location, point: [4.9, 45.8] } }
+  const [r] = merge([again], [refreshed], '2026-10-04').listings
+  assert.deepEqual([r.location.point, r.location_source.point], [[4.847, 45.757], [4.9, 45.8]])
+  // back: the source's latest place, nothing of the user's left
+  const back = locate(r, null)
+  assert.deepEqual(back.location.point, [4.9, 45.8])
+  assert.equal('location_source' in back, false)
+  assert.equal(locate(back, null), back)
 })

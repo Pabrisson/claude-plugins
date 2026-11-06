@@ -22,6 +22,12 @@ Mapping: GeoINT's `photo_session` is the case itself; `board.py` is `hyp`; `fini
 
 One adaptation: "Never stop to ask the user anything" holds once the frame is set. Ask for the frame in one single question, before anything else.
 
+## listing-for-sale
+A prompt of skill-immo's « Préciser l'adresse » (`osint : où a été prise cette photo ? … (recherche immo <slug>)`): a home publicly listed for sale, located from its own listing's photos so that a buyer can weigh it (its building, its sales, its DPE). It is allowed within these limits: never look for who owns it, lives or lived there (no name, no register of people, no social network); never a property that is not for sale; a person visible in a photo is masked before it leaves.
+- The frame is the prompt's `cadre` line: ask nothing. `osint.mjs new geolocate-image --file "<the main photo's URL>" --title "Annonce <the listing id's first 8 characters>, <its town>" --question "<the prompt's first line>" --frame purpose="achat immobilier : localiser un bien publié à la vente" --frame person=false --frame noisy=never --frame image_may_leave=<its value> --in claim="<the prompt's indice line>" --lang fr`; each other photo: `osint.mjs evidence "<URL>" -p <slug>`. A photo that does not download (gone from its portal): the next one.
+- The listing's text (`immo.mjs show`, the `annonce` line): its landmarks (a view, a station, a school, a dead end) are clues to read; the search's zone is a claim to test, not a proof.
+- Then the whole method, to `conclude`. A point at the `point` level with a medium or high confidence: the prompt's `ensuite` line (skill-immo's engine: `immo.mjs locate … --osint <this case's slug>`), with the hypothesis's radius, and `--address` only for a number and a street read on the images or in a source. Otherwise the listing stays where it is: say what the case found (the street, the candidates) so that the user can place it by hand.
+
 ## archive
 The original is already `E01` (copied, hashed, read-only). A video: `osint.mjs geolocate-image intake -p <slug>` (key frames; a link goes through yt-dlp and its page becomes a source). A Street View capture: read its capture date and its compass yourself and record them with `clue … --status read --where E01-….jpg`.
 

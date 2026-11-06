@@ -19,7 +19,7 @@ import { review, score, WEIGHTS } from './lib/decide.js'
 import { recentDpe } from './lib/dpe.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, band, bbox, center, circle, corridor, distance, IDU, inGeometry, inZone, middleOf, thin } from './lib/geo.js'
-import { addressQuery, deadAd, fromInput, fromStreamEstate, linkGone, merge, normUrl } from './lib/listings.js'
+import { addressQuery, deadAd, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl } from './lib/listings.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
 import { openData, pool } from './lib/opendata.js'
@@ -80,6 +80,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' }, from: { type: 'string' }, channel: { type: 'string' }, date: { type: 'string' }, sent: { type: 'boolean' },
     url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' },
     open: { type: 'boolean' }, preview: { type: 'boolean' },
+    at: { type: 'string' }, address: { type: 'string' }, osint: { type: 'string' }, confidence: { type: 'string' }, reset: { type: 'boolean' },
   },
 })
 
@@ -715,6 +716,45 @@ async function enrichAll(dir, s, ids) {
   return ls.filter(l => set.has(l.id) && l.building).length
 }
 
+// the address shown at a point: its house number within 40 m, else its street (the address base, reverse)
+async function addressAt(point) {
+  const p = (await od.reverse(point).catch(() => null))?.properties
+  return p ? { address: p.type === 'housenumber' && p.distance <= 40 ? p.name : p.street ?? p.name, postcode: p.postcode ?? null, city: p.city ?? null, insee: p.citycode ?? null } : {}
+}
+
+// « Préciser l'adresse »: the listing at the user's place (`at`: lib/listings.js locate; without an address, the
+// address base's at its point), or back at its source's (null); then its building data again at that place (free)
+async function placeListing(dir, id, at) {
+  const f = path.join(dir, 'listings.json'), ls = readJson(f, []), i = ls.findIndex(x => x.id === id)
+  if (i < 0) throw new Error(`no listing ${id}`)
+  if (at && !at.address) at = { ...at, ...(await addressAt(at.point)) }
+  ls[i] = locate(ls[i], at, now())
+  // back at a source's place without a point: nothing to read a building at
+  if (!ls[i].location.point) delete ls[i].building
+  writeJson(f, ls)
+  if (ls[i].location.point) await enrichAll(dir, readJson(path.join(dir, 'search.json')), [id])
+  return listingsOf(dir).find(x => x.id === id)
+}
+const CONFIDENCES = ['high', 'medium', 'low']
+
+// locate -p <slug> --id <id> --at <lat,lon> [--address "<number street>"] [--osint <case> --confidence … --radius <m>]
+// | --reset: the listing at a place of the user's or of an OSINT case on its photos, its source's place kept
+async function locateCmd() {
+  const dir = searchDir(), usage = `usage: locate -p <slug> --id <listing id> --at <lat,lon> [--address "<number street>"] [--osint <case slug> --confidence ${CONFIDENCES.join('|')} --radius <m>] | --reset`
+  if (!opt.id || !opt.reset === !opt.at) die(usage)
+  let at = null
+  if (opt.at) {
+    const [lat, lon] = opt.at.split(',').map(Number)
+    if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) die(`--at is lat,lon (48.8601,2.1143). ${usage}`)
+    if (opt.confidence && !CONFIDENCES.includes(opt.confidence)) die(`--confidence is ${CONFIDENCES.join(', ')}`)
+    at = { point: [lon, lat], address: opt.address, by: opt.osint ? 'osint' : 'hand', osint: opt.osint ? { case: opt.osint, confidence: opt.confidence ?? null, radius_m: opt.radius ? +opt.radius : null } : null }
+  }
+  const l = await placeListing(dir, opt.id, at).catch(e => die(e.message)), o = l.location_source
+  console.log(o ? `${l.id} placed at ${l.location.address ?? l.location.point.toReversed().join(',')} (${l.location.by}${l.location.osint ? `, case ${l.location.osint.case}` : ''}); its source's place is kept: locate --reset puts it back`
+    : `${l.id} back at its source's place (${l.location.address ?? l.location.accuracy ?? 'no point'})`)
+  console.log(l.building ? `building data read again: ${l.building.ban ? `address ${l.building.ban}` : 'no address in the address base'}, ${l.building.dpe?.length ?? 0} DPE, ${l.building.sales?.length ?? 0} sales of the building` : 'no building data (no point)')
+}
+
 // new listings with a point get the free building data, 50 at most a run (the rest: enrich)
 // ponytail: a fixed cap of 50 to keep a run short, a background queue if searches grow past it
 const autoEnrich = (dir, s, changes) => enrichAll(dir, s, changes.filter(c => c.kind === 'new').map(c => c.id).filter(id => listingsOf(dir).find(l => l.id === id)?.location.point).slice(0, 50))
@@ -990,6 +1030,7 @@ function show() {
     id: l.id, source: l.source, type: t, title: l.title, url: l.urls.find(u => u.url)?.url ?? null, portals: l.urls.map(u => u.source),
     price: l.price, area: l.area, land_area: l.land_area ?? null, price_per_m2: l.price_per_m2, rooms: l.rooms, floor: l.floor, dpe: l.dpe?.energy, status: l.status,
     matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, favorite: !!l.favorite, labels: l.labels ?? [], notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), address: l.location.address,
+    located: l.location_source ? { by: l.location.by, at: l.location.at, osint: l.location.osint ?? null, source: { point: l.location_source.point, accuracy: l.location_source.accuracy, address: l.location_source.address } } : null,
     market: { reference: ref, badge: badge(unitPrice(l), ref?.ppm2), street_ppm2: m.dvf?.[t]?.street?.median_ppm2 ?? null, asking_ppm2: asking(m, t) },
     negotiation: negotiation(l, ref?.ppm2), days_online: daysOnline(l), dropped: Math.round(dropped(l) * 1000) / 1000, urgent: l.urgent, favorites: l.favorites,
     review: review(l, ctx), score: score(l, ctx),
@@ -1162,6 +1203,7 @@ async function handle(req, res) {
     return reply(res, 200, profile())
   }
   if (p === '/api/autocomplete') return reply(res, 200, await od.completion(url.searchParams.get('q') ?? '').catch(() => []))
+  if (p === '/api/reverse') { const pt = (url.searchParams.get('point') ?? '').split(',').map(Number); return pt.length === 2 && pt.every(Number.isFinite) ? reply(res, 200, await addressAt(pt)) : reply(res, 400, { error: 'point is lon,lat' }) }
   // a box of the map at zoom 14 or closer: about 0.15° by 0.1° on a large screen
   if (p === '/api/odds') {
     const bb = (url.searchParams.get('bbox') ?? '').split(',').map(Number)
@@ -1267,7 +1309,14 @@ async function handle(req, res) {
     }
     const lm = sub.match(/^\/listings\/([\w-]+)$/)
     if (lm && post) {
-      const body = await readBody(req), f = path.join(dir, 'listings.json'), ls = readJson(f, []), l = ls.find(x => x.id === lm[1])
+      const body = await readBody(req)
+      // « Préciser l'adresse »: a point and the address shown (empty: the address base's), or null back to the source's
+      if ('location' in body) {
+        const at = body.location, str = v => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null)
+        if (at !== null && !(Array.isArray(at?.point) && at.point.length === 2 && Math.abs(at.point[0]) <= 180 && Math.abs(at.point[1]) <= 90)) return reply(res, 400, { error: 'bad location' })
+        try { return reply(res, 200, await placeListing(dir, lm[1], at && { point: at.point.map(Number), address: str(at.address), postcode: str(at.postcode), city: str(at.city), by: 'hand' })) } catch (e) { return reply(res, 404, { error: e.message }) }
+      }
+      const f = path.join(dir, 'listings.json'), ls = readJson(f, []), l = ls.find(x => x.id === lm[1])
       if (!l) return reply(res, 404, { error: 'no such listing' })
       if ('my_status' in body) { if (![null, 'to_visit', 'visited', 'offer', 'dropped'].includes(body.my_status)) return reply(res, 400, { error: 'bad status' }); l.my_status = body.my_status }
       if (typeof body.notes === 'string') l.notes = body.notes.slice(0, 5000)
@@ -1519,7 +1568,7 @@ async function dashboard() {
 
 const commands = {
   doctor, setup: () => setup(...args), geocode: () => geocode(args.join(' ')), search: () => search(args.join(' ')), fetch: fetchListings, market, add, enrich, refresh, reread,
-  alert: () => alert(args[0]), alerts: alertsCmd, cadastre: () => cadastre(args.join(' ')), usage: usageCmd, costs: () => costs(...args), show, message, list, dashboard, serve,
+  alert: () => alert(args[0]), alerts: alertsCmd, cadastre: () => cadastre(args.join(' ')), usage: usageCmd, costs: () => costs(...args), show, message, locate: locateCmd, list, dashboard, serve,
 }
 if (!commands[cmd]) die(`usage: immo.mjs <${Object.keys(commands).join(' | ')}> [-p <slug>]`)
 await commands[cmd]()

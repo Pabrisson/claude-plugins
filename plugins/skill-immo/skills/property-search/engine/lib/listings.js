@@ -174,7 +174,8 @@ export function merge(known, incoming, now, gone = []) {
     // a Stream Estate property found for an assisted listing takes its place, and its id
     if (n.source === 'stream-estate' && old.source !== 'stream-estate') byId.delete(old.id)
     // what the agent did not read stays as it was
-    for (const [k, v] of Object.entries(n)) if (!KEPT.includes(k) && v != null && !(Array.isArray(v) && !v.length && old[k]?.length)) old[k] = v
+    // (a listing the user placed keeps their place: the source's new one waits in location_source, locate)
+    for (const [k, v] of Object.entries(n)) if (!KEPT.includes(k) && v != null && !(Array.isArray(v) && !v.length && old[k]?.length)) old[k === 'location' && old.location_source ? 'location_source' : k] = v
     const urls = new Map(before.urls.map(u => [normUrl(u.url) ?? u.source, u]))
     for (const u of n.urls) { const k = normUrl(u.url) ?? u.source; urls.set(k, { ...urls.get(k), ...u }) }
     old.urls = [...urls.values()]
@@ -188,4 +189,18 @@ export function merge(known, incoming, now, gone = []) {
   }
   for (const l of new Set(byId.values())) if (l.status !== 'EXPIRED' && (gone.includes(l.id) || allGone(l))) { log(l, 'expired', l.status, 'EXPIRED'); l.status = 'EXPIRED' }
   return { listings: [...new Set(byId.values())], changes }
+}
+
+// The user's own place for a listing (the dashboard's « Préciser l'adresse »: by hand on the map, or found by an OSINT
+// case on its photos, `immo.mjs locate`): `location` becomes it, so the map, the neighborhood and the building data use
+// it, and the source's own place waits in `location_source` (a refresh writes there, merge). `at` is { point, address,
+// postcode, city, insee, by: hand|osint, osint: { case, confidence, radius_m } }; null puts the source's place back.
+export function locate(l, at, now) {
+  const { location_source: src, ...rest } = l
+  if (!at) return src ? { ...rest, location: src } : l
+  const from = src ?? l.location, pick = k => at[k] ?? from[k] ?? null
+  return {
+    ...rest, location_source: from,
+    location: { ...from, point: at.point, address: at.address || null, postcode: pick('postcode'), city: pick('city'), insee: pick('insee'), accuracy: 'PRECISE', by: at.by === 'osint' ? 'osint' : 'hand', at: now, osint: at.by === 'osint' ? at.osint ?? null : null },
+  }
 }

@@ -1,6 +1,13 @@
 // The engine's local API (immo.mjs serve) and the shapes of a search's files (references/search-files.md).
 
 export type Point = [number, number]
+// where a listing is: its source's place, or the user's (`by`: placed by hand or found by an OSINT case on its photos)
+export type Location = {
+  point: Point | null; accuracy: string | null; address: string | null; city: string | null; postcode?: string | null; neighborhood: string | null; iris: string | null
+  by?: "hand" | "osint"; at?: string; osint?: { case: string; confidence: "high" | "medium" | "low" | null; radius_m: number | null } | null
+}
+// the place the user gives a listing (null: back to its source's); without an address, the engine takes the one at the point
+export type NewLocation = { point: Point; address?: string | null; postcode?: string | null; city?: string | null } | null
 export type Geometry = { type: "Polygon" | "MultiPolygon"; coordinates: unknown }
 export type Status = "to_visit" | "visited" | "offer" | "dropped" | null
 export type PropertyType = "flat" | "house" | "land" | "parking" | "premises"
@@ -37,7 +44,9 @@ export type Listing = {
   legal_proceedings?: boolean | null
   features: Record<string, boolean | null | string | string[]>
   outdoor_area: number | null
-  location: { point: Point | null; accuracy: string | null; address: string | null; city: string | null; neighborhood: string | null; iris: string | null }
+  location: Location
+  // « Préciser l'adresse »: the source's own place, kept aside while the user's is in `location` (engine lib/listings.js locate)
+  location_source?: Location
   fees: { agency: { amount: number | null; percentage: number | null; included: boolean | null; paid_by: string | null } | null; condo_yearly: number | null; property_tax: number | null }
   status: string
   publishers: { type: string | null; name: string | null; card: string | null; phone: string | null; email: string | null; website: string | null }[]
@@ -260,7 +269,7 @@ export const api = {
   cache: (clear = false) => json<{ files: number; bytes: number }>("/api/cache", clear ? { method: "DELETE" } : undefined),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage }; location?: NewLocation }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
   saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),
@@ -268,6 +277,8 @@ export const api = {
   // the zone drawn on the map, kept as a draft until the agent applies it
   saveZone: (slug: string, geometry: Geometry) => post<{ geometry: Geometry }>(`/api/s/${slug}/zone`, { geometry }),
   autocomplete: (q: string) => json<Hit[]>(`/api/autocomplete?q=${encodeURIComponent(q)}`),
+  // the address at a point: its house number within 40 m, else its street
+  reverse: (point: Point) => json<{ address?: string; postcode?: string; city?: string }>(`/api/reverse?point=${point.join(",")}`),
   odds: (bbox: number[], signal?: AbortSignal) => json<Odds>(`/api/odds?bbox=${bbox.join(",")}`, { signal }),
   cadastre: (idu: string, signal?: AbortSignal) => json<Cadastre>(`/api/cadastre?idu=${idu}`, { signal }),
   // the parcel at a point (a listing's), with all of it

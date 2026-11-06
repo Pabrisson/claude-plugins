@@ -273,3 +273,18 @@ test('WhatsMyName: more than the cap is refused with a message; the site headers
     assert.match(r.err, /over the 5000 this engine accepts/)
   } finally { fx.close() }
 })
+
+test('a picture downloaded from a link without a known extension takes its Content-Type\'s', async () => {
+  const home = casesFolder()
+  const s = await listen((q, r) => { r.writeHead(200, { 'content-type': 'image/jpeg' }); r.end(Buffer.from('ffd8ffe000', 'hex')) })
+  const env = { OSINT_BASE_WEB: `http://127.0.0.1:${s.address().port}` }
+  try {
+    assert.equal((await run(home, NEW)).status, 0)
+    const long = `https://file.example/photo/${'x'.repeat(130)}.jpg_DATEMAJ_30_10_2026`
+    const r = await run(home, ['evidence', long, '-p', 'durand-bakery-example'], env)
+    assert.equal(r.status, 0, r.err)
+    const [f] = fs.readdirSync(path.join(home, 'durand-bakery-example', 'Evidence')).filter(x => x.startsWith('E01-'))
+    assert.match(f, /\.jpg$/)
+    assert.ok(f.length <= 124, f)
+  } finally { s.close() }
+})

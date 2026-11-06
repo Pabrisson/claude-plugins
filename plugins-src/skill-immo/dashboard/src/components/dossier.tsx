@@ -12,6 +12,7 @@ import { nearby } from "@/components/map-view"
 import { Gap, Ruler } from "@/components/ruler"
 import { FavoriteButton } from "@/components/favorite"
 import { LabelsEditor } from "@/components/labels"
+import { LocationLine, placedBy } from "@/components/locate-dialog"
 import { Origin } from "@/components/origin"
 import { Photos } from "@/components/photos"
 import { useRun } from "@/components/run-dialog"
@@ -243,6 +244,7 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
           </p>
         )}
       </div>
+      <LocationLine l={l} />
       <Portals l={l} />
       <Contacts l={l} />
       <div className="flex flex-wrap items-center gap-2">
@@ -288,7 +290,7 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
       <Section title="Bâtiment et risques" action={
         <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
       }>
-        <Row label="Localisation">{l.location.address ?? "—"} ({ACCURACY_LABEL[l.location.accuracy ?? "UNKNOWN"] ?? "inconnue"})</Row>
+        <Row label="Localisation">{l.location.address ?? "—"} ({l.location_source ? placedBy(l.location) : ACCURACY_LABEL[l.location.accuracy ?? "UNKNOWN"] ?? "inconnue"})</Row>
         {home && <Row label="DPE de l'annonce"><Dpe value={l.dpe?.energy} />{l.dpe?.energy_value ? <span className="ml-2 text-muted-foreground">{l.dpe.energy_value} kWh/m²/an</span> : null}</Row>}
         {home && <Row label="DPE au registre ADEME">{dpeReg ? <><Dpe value={dpeReg.energy} /><span className="ml-2 text-muted-foreground">{date(dpeReg.date)} · {dpeReg.area} m² · {eur(dpeReg.cost)}/an</span></> : b?.dpe.length ? `${b.dpe.length} DPE à l'adresse, aucun de cette surface` : "—"}</Row>}
         {budget(l, profile).rent_ban && <Row label="Location interdite">dès {budget(l, profile).rent_ban!.slice(0, 4)} (classe {l.dpe!.energy})</Row>}

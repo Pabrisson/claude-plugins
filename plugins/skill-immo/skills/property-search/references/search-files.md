@@ -26,7 +26,8 @@ snake_case.
 | `dpe` | `{ energy, energy_value, ghg, date, reference }` from the listing |
 | `construction_year`, `lots`, `construction_type`, `condition`, `legal_proceedings`, `new_build` | The building |
 | `features` | `{ balcony, terrace, garden, cellar, parking, elevator, caretaker, bike_room, fiber, crossing, quiet, orientation[], heating }` |
-| `location` | `{ point: [lon, lat], accuracy, address, city, insee, postcode, neighborhood, iris, city_id }`. Stream Estate gives no address: `accuracy` says how close its point is (`PRECISE` at the house number, `NEIGHBORHOOD`) |
+| `location` | `{ point: [lon, lat], accuracy, address, city, insee, postcode, neighborhood, iris, city_id }`. Stream Estate gives no address: `accuracy` says how close its point is (`PRECISE` at the house number, `NEIGHBORHOOD`). A place the user gave (« Préciser l'adresse », `locate`) adds `by: hand\|osint`, `at` and `osint { case, confidence, radius_m }` |
+| `location_source` | The source's own place while the user's is in `location`: a refresh writes there, `locate --reset` puts it back |
 | `fees` | `{ agency: { amount, percentage, included, paid_by }, condo_yearly, property_tax }` (€ a year) |
 | `status` | `AVAILABLE`, `UNDER_OFFER`, `SOLD`, `WITHDRAWN` or `EXPIRED` (Stream Estate: `AVAILABLE` or `EXPIRED` only) |
 | `publishers[]` | `{ type, name, card, website, phone, email, profile_url, mandate }` |

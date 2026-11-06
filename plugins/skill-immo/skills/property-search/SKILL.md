@@ -206,6 +206,15 @@ Read `references/follow-up.md` and follow it: `refresh`, `reread` (listings read
 photos, the gone ones expire), the alerts (make, change or turn off one), the « Prospection » map and its odds, the
 dashboard server's free watch, its daily link check and its news.
 
+## A listing's address: « Préciser l'adresse »
+
+The dossier places a listing by hand itself (a pin, the address shown), or copies a prompt `osint : où a été prise cette
+photo ? … (recherche immo <slug>)` for the OSINT skill (skill-osint): it geolocates the photos, then moves the listing
+with `immo.mjs locate -p <slug> --id <id> --at <lat,lon> --osint <case> --confidence high|medium --radius <m> [--address
+"<number street>"]` (free; without an address, the address base's at the point), only for a point found with a medium
+or high confidence. The building data are read again at the new place. Nothing is lost: the source's place waits in
+`location_source`, a refresh never moves the listing back, `locate --reset` (« Revenir à l'origine ») does.
+
 ## Analyse, compare and messages
 
 Read `references/analyse-and-messages.md` and follow it: what `show` gives, how to answer on a listing or the market,
@@ -287,7 +296,7 @@ no need to tell the user to reload it.
 | Passing `--accept-unknown` or `--force` "to save a round trip" | Ask; an unknown cost is the user's call |
 | WebFetching a SeLoger or Leboncoin results page to list flats | WebSearch, then one listing page at a time |
 | Filling a missing DPE or floor from a guess | Leave it out of the JSON |
-| Giving a Stream Estate listing's point as its address | Say « autour de » the street; the address is unknown |
+| Giving a Stream Estate listing's point as its address | Say « autour de » the street; the address is unknown, unless `show`'s `located` says who placed it (the user, an OSINT case and its confidence): say so |
 | Calling a flat a bargain on the street's median alone | Use `show`'s `reference`, and say its scope and count |
 | Weighing a house or a parking against the flats' prices | Each type has its own reference in `show`; say which |
 | An offer above the asking price, or with an argument the data does not hold | The negotiation range and `review` only |

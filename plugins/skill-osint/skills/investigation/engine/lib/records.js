@@ -176,6 +176,10 @@ export async function evidence(dir, fileOrUrl, { of = null, by, kind, name: give
     if (r.status >= 400) fail(`${fileOrUrl} answered ${r.status}`)
     bytes = r.body
     name = path.posix.basename(new URL(fileOrUrl).pathname) || 'download'
+    // a link without a known extension (a portal's …/photo.jpg_DATEMAJ_…): its Content-Type's, within safeName's 120
+    // characters, so the file opens as what it is
+    const ext = extOf(r.headers['content-type'])
+    if (mimeOf(name) === 'application/octet-stream' && ext !== '.bin') name = `${name.slice(0, 120 - ext.length)}${ext}`
   } else {
     if (!fs.existsSync(fileOrUrl)) fail(`no file ${fileOrUrl}`)
     name = path.basename(fileOrUrl)
