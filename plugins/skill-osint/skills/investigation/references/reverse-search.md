@@ -8,7 +8,7 @@ Only with `image_may_leave: true` (the frame, in `Case.md`). Otherwise every sen
 
 ## What may leave
 
-A file of `Evidence/` in JPEG, PNG, WebP or GIF that is a masked copy (`evidence mask E01 --box x,y,w,h [--box …]`, or `--people`: the pack's detector adds the persons and faces it sees; look at the result anyway), or that you looked at whole and declared free of people (`--no-people` on `reverse`, `recon` or `run`). Never a capture of results, never a file outside `Evidence/`. The mask is flat black by ffmpeg (else the pack's Pillow, else exit 3); its boxes stay in `case.json`. Only `verify-media` takes `--unmasked`.
+A file of `Evidence/` in JPEG, PNG, WebP or GIF that is a masked copy (`evidence mask E01 --box x,y,w,h [--box …]`, or `--people`: the pack's detector adds the persons and faces it sees; look at the result anyway), or that you looked at whole and declared free of people (`--no-people` on `reverse`, `recon` or `run`). Never a capture of results, never a file outside `Evidence/`. What leaves is always a copy without its metadata (EXIF, GPS, XMP; `.osint/cache/send/`, one Journal line), never the file as it is. The mask is flat black by ffmpeg (else the pack's Pillow, else exit 3); its boxes stay in `case.json`. Only `verify-media` takes `--unmasked`.
 
 ## The tunnel
 

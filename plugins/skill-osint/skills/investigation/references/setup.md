@@ -1,5 +1,7 @@
 # Setup, doctor, the dashboard server
 
+Contents: doctor · setup · the dashboard server · .gitignore · setup geoint · the Mapillary token · verify-media tools.
+
 ## doctor
 
 `osint.mjs doctor [--json]`: one line per need. `ok` fine; `MISSING` (Node 22, the dashboard build) stops everything: give the fix; `missing` (git, a type's optional tool) disables one feature, the line says which, with the install command for this OS; `info` keys (set or not, never their value), `gemini` and `google vision` (always off: the agent checks matches itself); `warning` a broken type manifest, an evidence file gone or changed since it was added (originals must stay intact), a `.gitignore` that would hide the cases.
