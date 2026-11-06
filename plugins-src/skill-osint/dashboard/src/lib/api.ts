@@ -90,6 +90,8 @@ export const api = {
   workspace: (b: { new?: string; slug?: string; use?: true; rename?: string; remove?: true; move?: string }) => post("/api/workspaces", b).then(r => json<Workspaces>(r)),
   refresh: (slug: string) => post(`/api/cases/${slug}/refresh`).then(r => json<RefreshResult>(r)),
   seen: (slug: string) => post(`/api/cases/${slug}/seen`).then(r => json<object>(r)),
+  // « Open in Obsidian »: ok once a vault holds the case (registered now if Obsidian was closed); else why not
+  obsidian: (slug: string) => post(`/api/cases/${slug}/obsidian`).then(r => json<{ dir: string; ok: boolean; running?: boolean; missing?: boolean }>(r)),
   shared: () => fetch("/api/entities/shared").then(r => json<SharedEntity[]>(r)),
   // a file of the New case form, sent before the case exists (a Blob: the browser sets Content-Length); its progress, and an abort
   upload: (file: File, onProgress?: (share: number) => void, signal?: AbortSignal) => new Promise<Upload>((ok, ko) => {

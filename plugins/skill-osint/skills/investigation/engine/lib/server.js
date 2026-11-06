@@ -20,6 +20,7 @@ import { openTunnel, sendList } from './tunnel.js'
 import { findType, loadTypes } from './types.js'
 import { fail, fakeApis, hasBin, isUrl, nowIso, readJson, safeName, sha256File, VERSION } from './util.js'
 import { readNote } from './vault.js'
+import { registerVaults } from './obsidian.js'
 import { clock, dueCases, keepsServer, saveDeveloper, saveSettings, setWatch, settings, watchedCases } from './watch.js'
 import { moveCase, newWorkspace, removeWorkspace, renameWorkspace, useWorkspace, workspaces } from './workspaces.js'
 
@@ -356,6 +357,11 @@ export async function startServer({ home, port, dist, engine, loaded, run = runE
       }
       if (sub === '/file') { const f = vaultPath(dir, url.searchParams.get('path')); return f ? sendFile(res, f, false, true) : reply(res, 404, { error: 'not found' }) }
       if (sub.startsWith('/view/')) return reply(res, 200, readJson(path.join(dir, '.osint', 'views', `${sub.slice(6)}.json`), null))
+      // « Open in Obsidian »: the case's investigation registered as vaults when Obsidian can take them (lib/obsidian.js)
+      if (sub === '/obsidian' && method === 'POST') {
+        const up = parents(home), root = rootOf(home, slug, up), tree = [root, ...descendants(home, root, up).map(x => x.slug)]
+        return reply(res, 200, { dir, ...registerVaults([dir, ...tree.filter(s => s !== slug).map(s => path.join(home, s))]) })
+      }
       if (sub === '/seen' && method === 'POST') { updateCase(dir, c => { c.seen_at = nowIso() }); return reply(res, 200, {}) }
       if (sub === '/watch' && method === 'POST') {
         const b = await readBody(req)

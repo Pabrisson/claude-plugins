@@ -3,7 +3,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { Icon } from "@/components/icon"
-import { caseDirOf, useObsidian } from "@/components/obsidian-button"
+import { useObsidian } from "@/components/obsidian-button"
 import { PrivateBadge, TypeMissingBadge } from "@/components/private-badge"
 import { ConfidenceBadge, LiveDot, StatusBadge } from "@/components/status"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -29,8 +29,8 @@ import { cn } from "@/lib/utils"
 // them; a menu (Obsidian, move to a workspace, delete with its sub-cases). The card's title is the link;
 // the color lives in the tile and the badges, never in a band on an edge. The thumbnail is a fixed tile beside the
 // answer and the footer sits at the bottom: the cards of a row line up, with an image or without.
-export function CaseCard({ summary: c, below = [], types = [], type, color, home, titles, now, workspace = "default", showWorkspace }: {
-  summary: CaseSummary & { thumbCase?: string }; below?: Below[]; types?: Manifest[]; type: Manifest | undefined; color: string; home: string; titles: Record<string, string>; now: number; workspace?: string; showWorkspace?: boolean
+export function CaseCard({ summary: c, below = [], types = [], type, color, titles, now, workspace = "default", showWorkspace }: {
+  summary: CaseSummary & { thumbCase?: string }; below?: Below[]; types?: Manifest[]; type: Manifest | undefined; color: string; titles: Record<string, string>; now: number; workspace?: string; showWorkspace?: boolean
 }) {
   const [busy, setBusy] = useState(false), [ask, setAsk] = useState(false)
   const obsidian = useObsidian(), ws = useWorkspaces()
@@ -72,7 +72,7 @@ export function CaseCard({ summary: c, below = [], types = [], type, color, home
             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={t("More for {title}", { title: c.title })}><EllipsisIcon /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-56">
               <DropdownMenuGroup>
-                <DropdownMenuItem onSelect={() => obsidian.open(caseDirOf(home, c.slug))}><Icon name="gem" />{t("Open in Obsidian")}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => obsidian.open(c.slug)}><Icon name="gem" />{t("Open in Obsidian")}</DropdownMenuItem>
                 <MoveToWorkspace slug={c.slug} current={workspace} />
               </DropdownMenuGroup>
               <DropdownMenuSeparator />

@@ -1,5 +1,5 @@
 import { actionsFor, itemOf, pivotsFor } from "@engine/prompt.js"
-import { ListPlusIcon } from "lucide-react"
+import { CheckCheckIcon, ListPlusIcon, XIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
@@ -48,6 +48,8 @@ export function NextActions({ open, setOpen, cases, types }: { open: boolean; se
   const many = cases.length > 1
   const blocks = cases.map((c, i) => { const m = types.find(x => x.id === c.index.type); return { c, m, ...picksOf(c.index, m, types, i ? c.slug : null) } })
   const all = blocks.flatMap(b => [...b.groups.flatMap(([, p]) => p), ...b.leads, ...b.pivots])
+  const every = all.length > 0 && all.every(p => checked.has(p.key))
+  const toggleAll = () => setChecked(every ? new Set() : new Set(all.map(p => p.key)))
   const toggle = (k: string) => setChecked(s => { const x = new Set(s); if (x.has(k)) x.delete(k); else x.add(k); return x })
   const addChecked = () => {
     const picks = all.filter(p => checked.has(p.key))
@@ -60,7 +62,7 @@ export function NextActions({ open, setOpen, cases, types }: { open: boolean; se
       <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-muted/60 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50">
         <Checkbox checked={checked.has(p.key)} onCheckedChange={() => toggle(p.key)} className="mt-0.5" />
         <Icon name={p.icon} className="mt-0.5 size-4 shrink-0" style={p.color ? { color: p.color } : undefined} aria-hidden />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm [overflow-wrap:anywhere]">
           <span className="font-medium">{p.label}</span>
           {p.sub && <span className="text-xs text-muted-foreground">{p.sub}</span>}
           {(p.minutes || p.noisy) && (
@@ -106,8 +108,11 @@ export function NextActions({ open, setOpen, cases, types }: { open: boolean; se
             )
           })}
         </div>
-        <SheetFooter className="flex-row items-center justify-between border-t">
-          <span className="text-sm text-muted-foreground tabular-nums">{t("{n} checked", { n: checked.size })}</span>
+        <SheetFooter className="flex-row flex-wrap items-center justify-between border-t">
+          <span className="flex flex-wrap items-center gap-x-2">
+            <Button variant="ghost" size="sm" onClick={toggleAll} disabled={!all.length}>{every ? <XIcon data-icon="inline-start" /> : <CheckCheckIcon data-icon="inline-start" />}{every ? t("Unselect all") : t("Select all")}</Button>
+            <span className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">{t("{n} checked", { n: checked.size })}</span>
+          </span>
           <Button onClick={addChecked} disabled={!checked.size}><ListPlusIcon data-icon="inline-start" />{t("Add to prompt")}</Button>
         </SheetFooter>
       </SheetContent>

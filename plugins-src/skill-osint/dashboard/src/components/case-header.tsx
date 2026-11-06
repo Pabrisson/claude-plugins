@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, ListChecksIcon, RefreshCwIcon } from "lucide-react"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 
 import { AskAgent } from "@/components/home"
 import { Icon } from "@/components/icon"
@@ -20,11 +20,11 @@ import { cn } from "@/lib/utils"
 
 // The case's head: its type, title, status and live dot, the phases as steps, the confidence (each level and its
 // criteria on hover), Refresh, Next actions, Ask Agent, Export ▾ (Export PDF, Print view, Open in Obsidian), and on a
-// second row Watch (its switch, period and last and next pass). With sub-cases, Refresh ▾ refreshes the whole
-// investigation or one of its cases, and Next actions covers them all.
-export function CaseHeader({ index, m, color, now, onRefresh, refreshing, onNext, cases = [], onRefreshOne }: {
+// second row Watch (its switch, period and last and next pass) then children (the sub-cases' chips). With sub-cases,
+// Refresh ▾ refreshes the whole investigation or one of its cases, and Next actions covers them all.
+export function CaseHeader({ index, m, color, now, onRefresh, refreshing, onNext, cases = [], onRefreshOne, children }: {
   index: CaseIndex; m: Manifest | undefined; color: string; now: number; onRefresh: () => void; refreshing: boolean; onNext: () => void
-  cases?: { slug: string; title: string; icon: string; depth: number }[]; onRefreshOne?: (slug: string) => void
+  cases?: { slug: string; title: string; icon: string; depth: number }[]; onRefreshOne?: (slug: string) => void; children?: ReactNode
 }) {
   const p = index.props, title = index.notes.find(n => n.path === "Case.md")?.title ?? index.slug
   const { state } = useWatchState()
@@ -67,7 +67,12 @@ export function CaseHeader({ index, m, color, now, onRefresh, refreshing, onNext
           <ExportMenu slug={index.slug} index={index} />
         </div>
       </div>
-      {m && <WatchControl slug={index.slug} manifest={m} watch={index.watch} paused={state ? !state.on : false} />}
+      {(m || cases.length > 1) && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          {m && <WatchControl slug={index.slug} manifest={m} watch={index.watch} paused={state ? !state.on : false} />}
+          {children}
+        </div>
+      )}
       {phases.length > 0 && (
         <ol className="relative flex items-center gap-1 overflow-x-auto pb-1" aria-label={t("Phases")}>
           {phases.map((ph, i) => {

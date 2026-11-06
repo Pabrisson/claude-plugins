@@ -61,7 +61,7 @@ export function ExportMenu({ slug, index, small }: { slug: string; index: CaseIn
           <DropdownMenuItem onSelect={() => { panel.current = true }}><FileDownIcon />{t("Export PDF")}…</DropdownMenuItem>
           <DropdownMenuItem asChild><a href={printUrl(slug)} target="_blank" rel="noreferrer"><PrinterIcon />{t("Print view")}</a></DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => obsidian.open(index.dir)}><Icon name="gem" />{t("Open in Obsidian")}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => obsidian.open(slug)}><Icon name="gem" />{t("Open in Obsidian")}</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <PopoverContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">

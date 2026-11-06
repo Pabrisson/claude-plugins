@@ -6,7 +6,7 @@ import { CaseCard } from "@/components/case-card"
 import { Chips } from "@/components/chips"
 import { SharedEntities } from "@/components/shared-entities"
 import { STATUS } from "@/components/status"
-import { appState, TopBar } from "@/components/top-bar"
+import { TopBar } from "@/components/top-bar"
 import { nameOf, useWorkspaces, useWorkspaceView } from "@/components/workspace-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,7 +33,6 @@ export function Home() {
   const [cases, setCases] = useState<CaseSummary[] | null>(null)
   const [types, setTypes] = useState<Manifest[]>([])
   const [shared, setShared] = useState<SharedEntity[] | null>(null)
-  const [home, setHome] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [f, setF] = useState(loadFilters)
   const [only, setOnly] = useState<SharedEntity | null>(null)
@@ -45,7 +44,6 @@ export function Home() {
   useEffect(() => {
     api.cases().then(setCases, (e: Error) => setError(e.message))
     api.types().then(setTypes, () => {})
-    appState().then(s => setHome(s.home))
     loadShared()
   }, [loadShared])
   // live: the summary replaces its card, a new case comes in, null removes it; shared entities follow, 3 s apart
@@ -130,7 +128,7 @@ export function Home() {
           )}
           {here.length > 0 && !shown.length && <p className="py-10 text-center text-sm text-muted-foreground">{t("No case matches these filters.")}</p>}
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {shown.map(({ sum, below }) => <CaseCard key={sum.slug} summary={sum} below={below} types={types} type={types.find(t => t.id === sum.type)} color={typeColor(sum.type, types)} home={home} titles={titles} now={now} workspace={wsOf(sum)} showWorkspace={all && (ws?.list.length ?? 0) > 1} />)}
+            {shown.map(({ sum, below }) => <CaseCard key={sum.slug} summary={sum} below={below} types={types} type={types.find(t => t.id === sum.type)} color={typeColor(sum.type, types)} titles={titles} now={now} workspace={wsOf(sum)} showWorkspace={all && (ws?.list.length ?? 0) > 1} />)}
           </div>
         </main>
         {wide && f.shared && (
@@ -145,7 +143,7 @@ export function Home() {
       </div>
       {!wide && (
         <Sheet open={sheet} onOpenChange={setSheet}>
-          <SheetContent className="w-[22rem]">
+          <SheetContent className="w-[min(22rem,90vw)]">
             <SheetHeader><SheetTitle>{t("Shared entities")}</SheetTitle><SheetDescription>{t("Found in two investigations or more. A click keeps their cards.")}</SheetDescription></SheetHeader>
             <div className="overflow-y-auto px-4 pb-4">{panel}</div>
           </SheetContent>

@@ -126,9 +126,10 @@ export function CasePage({ slug, tab, note }: { slug: string; tab: string; note:
       <div className="border-b">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 px-4 py-3">
           <CaseHeader index={index} m={m} color={typeColor(index.type, types)} now={now} onRefresh={refreshAll} refreshing={refreshing} onNext={() => setNext(true)}
-            cases={cases.map(c => ({ slug: c.slug, title: c.title, depth: c.depth, icon: types.find(x => x.id === c.index.type)?.icon ?? "circle-help" }))} onRefreshOne={refreshOne} />
-          <SubCases cases={subs} types={types} now={now} paused={watch ? !watch.on : false} viewsOf={viewTabs} onOpen={of => openNote("Case.md", null, of)}
-            onView={(of, id) => go(caseHref(slug, subTab(of, id)))} onRefresh={refreshCase} onDeleted={reload} />
+            cases={cases.map(c => ({ slug: c.slug, title: c.title, depth: c.depth, icon: types.find(x => x.id === c.index.type)?.icon ?? "circle-help" }))} onRefreshOne={refreshOne}>
+            <SubCases cases={subs} types={types} now={now} paused={watch ? !watch.on : false} viewsOf={viewTabs} onOpen={of => openNote("Case.md", null, of)}
+              onView={(of, id) => go(caseHref(slug, subTab(of, id)))} onRefresh={refreshCase} onDeleted={reload} />
+          </CaseHeader>
           <Chips label={t("Views")} size="xs" value={current} onChange={t => go(caseHref(slug, t, t === "brain" ? note ?? undefined : undefined))} options={tabs.map(t => ({ value: t.id, label: t.label, icon: t.icon }))} />
         </div>
       </div>
@@ -159,7 +160,7 @@ export function CasePage({ slug, tab, note }: { slug: string; tab: string; note:
           <div className="overflow-y-auto px-3 pb-4"><InvestigationTree cases={cases} types={types} open={path} fresh={fresh} onOpen={openIn} /></div>
         </SheetContent>
       </Sheet>
-      <Palette open={palette} setOpen={setPalette} cases={cases} onOpen={openNote} onRefresh={m ? refreshAll : undefined} onObsidian={() => obsidian.open(index.dir)} />
+      <Palette open={palette} setOpen={setPalette} cases={cases} onOpen={openNote} onRefresh={m ? refreshAll : undefined} onObsidian={() => obsidian.open(slug)} />
       <NextActions open={next} setOpen={setNext} cases={cases} types={types} />
       {obsidian.dialog}
     </div>

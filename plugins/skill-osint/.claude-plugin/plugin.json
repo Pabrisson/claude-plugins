@@ -1,6 +1,6 @@
 {
   "name": "skill-osint",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Skill investigation: OSINT cases as Obsidian vaults (one second brain per case, live in a local dashboard), a common intelligence cycle (sources archived and hashed, Admiralty grading, hypotheses with capped likelihood ratios and ACH, red team, one answer with its confidence), modular case types (domain, geolocate-image, verify-media, username, company-fr, email, phone, ip, place, person), refresh, next actions and pivots to sub-cases, one investigation per tree, workspaces grouping investigations",
   "author": {
     "name": "Pierre Alain BRISSON"

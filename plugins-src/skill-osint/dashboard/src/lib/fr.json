@@ -549,10 +549,7 @@
   "{n} workspace": "{n} workspace",
   "{n} workspaces": "{n} workspaces",
   "Delete sub-case": "Supprimer la sous-enquête",
-  "Its refresh again on a period, by itself.": "Son rafraîchissement relancé à intervalle régulier, tout seul.",
-  "Its views": "Ses vues",
   "Open its Case note": "Ouvrir sa note Case",
-  "Watch {title}": "Surveiller {title}",
   "With the {n} cases below it": "Avec les {n} cas en dessous",
   "{name} is the current workspace": "{name} est le workspace courant",
   "A group of investigations. It becomes the current one: the cases you start next join it.": "Un groupe d'enquêtes. Il devient le workspace courant : les enquêtes que vous lancez ensuite le rejoignent.",
@@ -585,5 +582,14 @@
   "The case and its sub-case move to .trash in the cases folder.": "L'enquête et sa sous-enquête vont dans .trash du dossier des enquêtes.",
   "The case and its {n} sub-cases move to .trash in the cases folder.": "L'enquête et ses {n} sous-enquêtes vont dans .trash du dossier des enquêtes.",
   "Found in two investigations or more. A click keeps their cards.": "Trouvées dans deux enquêtes ou plus. Un clic garde leurs cartes.",
-  "An entity found in two investigations shows here.": "Une entité trouvée dans deux enquêtes s'affiche ici."
+  "An entity found in two investigations shows here.": "Une entité trouvée dans deux enquêtes s'affiche ici.",
+  "Select all": "Tout sélectionner",
+  "Unselect all": "Tout désélectionner",
+  "Not opened in Obsidian": "Pas ouvert dans Obsidian",
+  "Obsidian was not found on this computer: install it and open it once, then click again.": "Obsidian est introuvable sur cet ordinateur : installez-le et ouvrez-le une fois, puis recliquez.",
+  "Obsidian is open and does not know this vault yet: in Obsidian, Open folder as vault › choose this folder. Or quit Obsidian and click again: the dashboard adds it, with its sub-cases.": "Obsidian est ouvert et ne connaît pas encore ce coffre : dans Obsidian, Ouvrir un dossier comme coffre › choisissez ce dossier. Ou quittez Obsidian et recliquez : le dashboard l'ajoute lui-même, avec ses sous-enquêtes.",
+  "Obsidian's vaults": "Coffres d'Obsidian",
+  "under {title}": "sous {title}",
+  "Fewer": "Moins",
+  "+{n}": "+{n}"
 }
