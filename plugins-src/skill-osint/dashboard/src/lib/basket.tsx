@@ -38,3 +38,11 @@ export function BasketProvider({ scope, children }: { scope: Scope; children: Re
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 export const useBasket = () => { const b = useContext(Ctx); if (!b) throw new Error("useBasket outside BasketProvider"); return b }
+// a sub-case's item in its investigation's prompt ends with « (case <slug>) »: the agent does it in that case
+export const inCase = (i: Item, slug: string): Item => (/\(case [a-z0-9-]+\)$/.test(i.text) ? i : { ...i, text: `${i.text} (case ${slug})` })
+// what is shown of a sub-case (its note, its view, its next actions) adds to the page's prompt marked with its case
+export function CaseScope({ slug, children }: { slug: string | null; children: ReactNode }) {
+  const b = useBasket()
+  const value = useMemo(() => (slug ? { ...b, add: (i: Item) => b.add(inCase(i, slug)) } : b), [b, slug])
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
+}

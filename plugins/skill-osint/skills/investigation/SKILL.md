@@ -1,6 +1,6 @@
 ---
 name: investigation
-description: Runs OSINT investigations as cases, each an Obsidian vault shown live in a dashboard. A case starts from a domain or website, an image to geolocate, an image or video to verify, a username, a French company, an email, a phone number, an IP, a place or a person. Use it to investigate, look up or verify any of these, also when asked to call, text or probe a target (refused), to take up, refresh, watch, stop watching or export a case, for a private case type, or for a pasted OSINT dashboard prompt (« qui est derrière ce site », « où a été prise cette photo », « cette photo est-elle vraie », « sur quels sites est ce pseudo », « ce SIREN … », « à qui est cet email, cette boîte existe-t-elle », « à qui est ce numéro », « à qui est cette IP », « qu'y a-t-il à cette adresse », « enquête sur la personne … », « reprends l'enquête … », « surveille l'enquête … », « exporte l'enquête en PDF », « crée un type d'enquête privé », « osint follow-up », « osint case … start »).
+description: Runs OSINT investigations as cases, each an Obsidian vault shown live in a dashboard. A case starts from a domain or website, an image to geolocate, an image or video to verify, a username, a French company, an email, a phone number, an IP, a place or a person. Use it to investigate, look up or verify any of these, also when asked to call, text or probe a target (refused), to take up, refresh, watch, stop watching or export a case, for a workspace of cases, for a private case type, or for a pasted OSINT dashboard prompt (« qui est derrière ce site », « où a été prise cette photo », « cette photo est-elle vraie », « sur quels sites est ce pseudo », « ce SIREN … », « à qui est cet email, cette boîte existe-t-elle », « à qui est ce numéro », « à qui est cette IP », « qu'y a-t-il à cette adresse », « enquête sur la personne … », « reprends l'enquête … », « surveille l'enquête … », « exporte l'enquête en PDF », « crée un type d'enquête privé », « crée un workspace », « osint follow-up », « osint case … start »).
 argument-hint: "[<domain, URL, email, phone number, IP, address or lat,lon> [question] | <image or video path> [question] | resume <case> | refresh <case> | watch <case> <6h|12h|24h|7d|off> | export <case> [--journal] | dashboard [<case>] | setup [geoint] | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/osint.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/osint.mjs *)
 ---
@@ -37,6 +37,7 @@ Run `osint.mjs doctor` once per conversation. A `MISSING` line: give its fix and
 ## Modes (the request's first words)
 
 - A new case: below. `resume` or a question about a case: `brain context -p <slug>` first, then answer citing its notes (`references/brain.md`). `refresh`: `references/follow-up.md`. **watch** (« surveille <case> toutes les 24 h », « préviens-moi s'il y a du nouveau », "watch <case>", "stop watching"): `references/follow-up.md` (Watch), then `osint.mjs watch -p <slug> --every 6h|12h|24h|7d|off`; tell the user which steps run (the command prints them) and that the dashboard server stays on for it. **export** (a PDF of a case): `references/follow-up.md` (Export PDF and Print view), then `osint.mjs export -p <slug> [--journal]`. `dashboard`: `osint.mjs dashboard [-p <slug>] --open`, give the URL. `setup`: `references/setup.md`. A pasted prompt: see Pasted prompts.
+- **A workspace** (« crée un workspace Client X », « range cette enquête dans … »): `references/brain.md` (Workspaces).
 - **A case type** (« crée un type d'enquête », « modifie le type domain »): read `references/types.md` first. Never edit a type of the plugin's `types/` folder, not even when asked to change `domain`: make a private copy under a new id in `.osint-types/<id>/`. A private type is code: before you write it, tell the user its `engine.js` will run on their machine with the engine's rights. Refuse a type made to follow or locate a private person.
 
 ## A new case
@@ -53,7 +54,7 @@ Always through the engine (`source`, `evidence`, `entity`, `clue`, `hyp`, `note`
 
 - `osint case <slug>: start`: the frame is written, go on from step 3.
 - `osint follow-up (case <slug>)`: `brain context`, then each item in order: `[<type>:<action>]` is the `<action>` section of that type's `method.md`, wherever it is (the `method:` line of `brain context`); `[lead:Lnn]` the lead; `[pivot:<type>]` is `new <type> <value> --parent <slug> --from <note>` (inherits the frame); `[refresh]`; `[question]`; `[install] <tool>` is `setup <tool>`. End with one line per item.
-- An item that ends with `(case <slug>)` (a child's step handed back by a person's Refresh) is done in that case, `-p <slug>`.
+- An item that ends with `(case <slug>)` (a sub-case's item, or a child's step from a person's Refresh) is done in that case, `-p <slug>` (a `[pivot:<type>]`: `--parent <slug>`).
 - `osint (all cases)`: `brain search --all` / `brain entities --all`.
 - `osint : où a été prise cette photo ? … (recherche immo <slug>)` (skill-immo's « Préciser l'adresse »): its `cadre` line is the frame, ask nothing; follow the `listing-for-sale` section of `geolocate-image`'s method.md.
 
@@ -62,7 +63,7 @@ Always through the engine (`source`, `evidence`, `entity`, `clue`, `hyp`, `note`
 | The request touches | Read |
 |---|---|
 | the cycle's commands and rules: sources, evidence, clues, hypotheses, likelihood ratios, exclusions, red team, conclusion; a time or a day from shadows or the weather (`sun`, `weather`) | `references/cycle.md` |
-| taking a case up, answering about it, searching cases, editing notes, shared entities | `references/brain.md` |
+| taking a case up, answering about it, searching cases, editing notes, shared entities, a case and its sub-cases, workspaces | `references/brain.md` |
 | refresh, the watch, a case as a PDF or the print view, next actions, leads, pivots and child cases, the dashboard's prompts | `references/follow-up.md` |
 | a picture that may leave this machine: masks, the tunnel, each engine's link, reading results, verdicts | `references/reverse-search.md` |
 | doctor's lines, setup (`setup geoint` included), keys (the Mapillary token), the dashboard server, .gitignore | `references/setup.md` |

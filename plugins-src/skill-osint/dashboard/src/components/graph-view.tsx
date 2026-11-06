@@ -1,3 +1,4 @@
+import { normalize } from "@engine/kinds.js"
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type Simulation, type SimulationLinkDatum, type SimulationNodeDatum } from "d3-force"
 import { ScanIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -5,12 +6,12 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Chips } from "@/components/chips"
 import { kindOf } from "@/components/shared-entities"
 import { Button } from "@/components/ui/button"
-import type { CaseIndex } from "@/lib/api"
 import { t } from "@/lib/i18n"
-import { caseHref, go } from "@/lib/route"
 import { fit, usePanZoom } from "@/lib/pan-zoom"
+import type { TreeCase } from "@/lib/tree"
 
-type N = SimulationNodeDatum & { id: string; label: string; group: string; color: string; r: number; caseLink?: string }
+// of: the cases a node is in (an entity found in several is one node); open: the note a click opens, in its case
+type N = SimulationNodeDatum & { id: string; label: string; group: string; color: string; r: number; caseLink?: boolean; of: string[]; open: { slug: string | null; path: string } }
 type L = SimulationLinkDatum<N> & { source: N | string; target: N | string }
 // the notes that are not entities: one neutral tone per folder (CSS variables, read at draw time: they follow the theme)
 const FOLDER: Record<string, { label: string; icon: string; color: string }> = {
@@ -18,49 +19,54 @@ const FOLDER: Record<string, { label: string; icon: string; color: string }> = {
   Clues: { label: "Clues", icon: "search", color: "--muted-foreground" },
   Hypotheses: { label: "Hypotheses", icon: "lightbulb", color: "--chart-5" },
   Sources: { label: "Sources", icon: "library", color: "--ring" },
-  cases: { label: "Linked cases", icon: "folder-tree", color: "--chart-2" },
+  cases: { label: "Cases", icon: "folder-tree", color: "--chart-2" },
 }
 const css = (v: string) => (v.startsWith("--") ? getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#888" : v)
 
-// The case's notes as a graph (wikilinks), d3-force on a canvas: a node's color is its entity kind, or its folder's
-// tone; linked cases are squares. Drag a node, wheel to zoom, drag the background to move; a click opens the note
-// in Brain (a case, that case). Nodes already placed keep their place when the index changes.
-export function GraphView({ index }: { index: CaseIndex }) {
+// The investigation's notes as one graph (wikilinks), d3-force on a canvas: a node's color is its entity kind, or its
+// folder's tone; an entity found in several cases is one node; each case of an investigation is a square (its
+// Case.md) tied to the case above it. Drag a node, wheel to zoom, drag the background to move; a click opens the note
+// in Brain, in its case. Nodes already placed keep their place when the index changes.
+export function GraphView({ cases, onOpen }: { cases: TreeCase[]; onOpen: (path: string, slug: string | null) => void }) {
   const wrap = useRef<HTMLDivElement>(null), cv = useRef<HTMLCanvasElement>(null)
   const sim = useRef<Simulation<N, L> | null>(null), nodes = useRef(new Map<string, N>()), links = useRef<L[]>([])
   const hover = useRef<N | null>(null), dragging = useRef<N | null>(null), fitted = useRef(false)
-  const [hidden, setHidden] = useState<string[]>([])
-  const hiddenRef = useRef(hidden)
-  useEffect(() => { hiddenRef.current = hidden })
+  const [hidden, setHidden] = useState<string[]>([]), [hiddenCases, setHiddenCases] = useState<string[]>([])
+  const hiddenRef = useRef({ groups: hidden, cases: hiddenCases })
+  useEffect(() => { hiddenRef.current = { groups: hidden, cases: hiddenCases } })
+  const visible = (n: N) => !hiddenRef.current.groups.includes(n.group) && n.of.some(c => !hiddenRef.current.cases.includes(c))
   const toWorld = (e: { clientX: number; clientY: number }) => { const r = cv.current!.getBoundingClientRect(), t = tf.current; return { x: (e.clientX - r.left - t.x) / t.k, y: (e.clientY - r.top - t.y) / t.k } }
-  const hit = (e: { clientX: number; clientY: number }) => { const p = toWorld(e); let best: N | null = null; for (const n of nodes.current.values()) if (!hiddenRef.current.includes(n.group) && Math.hypot((n.x ?? 0) - p.x, (n.y ?? 0) - p.y) <= n.r + 4) best = n; return best }
+  const hit = (e: { clientX: number; clientY: number }) => { const p = toWorld(e); let best: N | null = null; for (const n of nodes.current.values()) if (visible(n) && Math.hypot((n.x ?? 0) - p.x, (n.y ?? 0) - p.y) <= n.r + 4) best = n; return best }
   const { transform, setTransform } = usePanZoom(wrap, e => !!hit(e))
+  const open = useRef(onOpen)
+  useEffect(() => { open.current = onOpen })
   const tf = useRef(transform)
   useEffect(() => { tf.current = transform; draw() })
 
-  // the graph's data from the index: notes, their resolved links (one per pair), the related cases
+  // the graph's data from the indexes: every case's notes (an entity by its normalized key, once), their resolved
+  // links (one per pair), each sub-case's Case.md tied to its parent's
   const data = useMemo(() => {
-    const ns: Omit<N, "x" | "y">[] = [], es = new Map<string, [string, string]>()
-    const deg = new Map<string, number>()
+    const byId = new Map<string, Omit<N, "x" | "y">>(), es = new Map<string, [string, string]>(), deg = new Map<string, number>(), many = cases.length > 1
     const edge = (a: string, b: string) => { if (a === b) return; const k = a < b ? `${a}|${b}` : `${b}|${a}`; if (!es.has(k)) { es.set(k, [a, b]); deg.set(a, (deg.get(a) ?? 0) + 1); deg.set(b, (deg.get(b) ?? 0) + 1) } }
-    const paths = new Set(index.notes.map(n => n.path))
-    for (const n of index.notes) for (const l of n.links) if (l.path && paths.has(l.path)) edge(n.path, l.path)
-    // the case above (↑) and the cases below (↓): an edge from Case.md, and from each entity a linked case found it for (props.cases)
-    const parent = typeof index.props.parent === "string" && index.props.parent ? index.props.parent : null
-    const below = ((index.props.children as string[] | undefined) ?? []).filter(c => typeof c === "string" && !!c)
-    const related = [...(parent ? [parent] : []), ...below]
-    for (const c of related) {
-      edge(`case:${c}`, "Case.md")
-      for (const n of index.notes) if (n.folder === "Entities" && Array.isArray(n.props.cases) && n.props.cases.includes(c)) edge(n.path, `case:${c}`)
+    const idOf = new Map<string, string>() // « <slug>|<path> » → node id
+    for (const [i, c] of cases.entries()) {
+      for (const n of c.index.notes) {
+        const entity = n.folder === "Entities", k = entity ? kindOf(String(n.props.kind)) : null, home = many && n.path === "Case.md"
+        const id = entity ? `ent:${normalize(String(n.props.kind), n.props.value, n.props)}` : `${c.slug}|${n.path}`
+        idOf.set(`${c.slug}|${n.path}`, id)
+        const had = byId.get(id)
+        if (had) { if (!had.of.includes(c.slug)) had.of.push(c.slug); continue }
+        byId.set(id, { id, label: home ? c.title : entity ? String(n.props.value ?? n.title) : n.title, group: home ? "cases" : entity ? `kind:${n.props.kind}` : n.folder in FOLDER ? n.folder : "", color: home ? FOLDER.cases.color : k ? k.color : FOLDER[n.folder in FOLDER ? n.folder : ""].color, r: 0, caseLink: home, of: [c.slug], open: { slug: i ? c.slug : null, path: n.path } })
+      }
     }
-    for (const n of index.notes) {
-      const entity = n.folder === "Entities", k = entity ? kindOf(String(n.props.kind)) : null
-      ns.push({ id: n.path, label: entity ? String(n.props.value ?? n.title) : n.title, group: entity ? `kind:${n.props.kind}` : n.folder in FOLDER ? n.folder : "", color: k ? k.color : FOLDER[n.folder in FOLDER ? n.folder : ""].color, r: 0 })
+    for (const c of cases) {
+      for (const n of c.index.notes) for (const l of n.links) { const b = l.path && idOf.get(`${c.slug}|${l.path}`); if (b) edge(idOf.get(`${c.slug}|${n.path}`)!, b) }
+      if (c.parent) edge(`${c.slug}|Case.md`, `${c.parent}|Case.md`)
     }
-    for (const c of related) ns.push({ id: `case:${c}`, label: `${c === parent ? "↑" : "↓"} ${c}`, group: "cases", color: FOLDER.cases.color, r: 0, caseLink: c })
+    const ns = [...byId.values()]
     for (const n of ns) n.r = 4 + Math.sqrt(deg.get(n.id) ?? 0) * 2.2
-    return { ns, es: [...es.values()] }
-  }, [index])
+    return { ns, es: [...es.values()].filter(([a, b]) => byId.has(a) && byId.has(b)) }
+  }, [cases])
 
   useEffect(() => {
     const old = nodes.current, next = new Map<string, N>()
@@ -96,10 +102,10 @@ export function GraphView({ index }: { index: CaseIndex }) {
     if (!c || !el) return
     const dpr = devicePixelRatio || 1, w = el.clientWidth, h = el.clientHeight
     if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); c.style.width = `${w}px`; c.style.height = `${h}px` }
-    const g = c.getContext("2d")!, t = tf.current, hid = hiddenRef.current, hv = hover.current
+    const g = c.getContext("2d")!, t = tf.current, hv = hover.current
     g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h)
     g.translate(t.x, t.y); g.scale(t.k, t.k)
-    const shown = (n: N) => !hid.includes(n.group)
+    const shown = visible
     const near = new Set<string>()
     if (hv) for (const l of links.current) { const a = l.source as N, b = l.target as N; if (a.id === hv.id) near.add(b.id); if (b.id === hv.id) near.add(a.id) }
     g.lineWidth = 1 / t.k
@@ -146,11 +152,11 @@ export function GraphView({ index }: { index: CaseIndex }) {
       const d = dragging.current
       if (!d) return
       dragging.current = null; d.fx = null; d.fy = null; sim.current?.alphaTarget(0)
-      if (!moved && start) go(start.caseLink ? caseHref(start.caseLink) : caseHref(index.slug, "brain", start.id))
+      if (!moved && start) open.current(start.open.path, start.open.slug)
     }
     c.addEventListener("pointerdown", down); c.addEventListener("pointermove", move); c.addEventListener("pointerup", up)
     return () => { c.removeEventListener("pointerdown", down); c.removeEventListener("pointermove", move); c.removeEventListener("pointerup", up) }
-  }, [index.slug]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const ro = new ResizeObserver(() => draw()); if (wrap.current) ro.observe(wrap.current); return () => ro.disconnect() })
 
   const groups = [...new Set(data.ns.map(n => n.group))].sort()
@@ -163,6 +169,7 @@ export function GraphView({ index }: { index: CaseIndex }) {
     <div className="flex h-full min-h-[70vh] flex-col gap-3 py-4 lg:min-h-0">
       <div className="flex flex-wrap items-center gap-2">
         <Chips multiple size="xs" label={t("Shown in the graph")} value={groups.filter(x => !hidden.includes(x))} onChange={v => setHidden(groups.filter(x => !v.includes(x)))} options={legend} />
+        {cases.length > 1 && <Chips multiple size="xs" label={t("Cases in the graph")} value={cases.map(c => c.slug).filter(x => !hiddenCases.includes(x))} onChange={v => setHiddenCases(cases.map(c => c.slug).filter(x => !v.includes(x)))} options={cases.map(c => ({ value: c.slug, label: c.title, icon: "folder-tree", count: data.ns.filter(n => n.of.includes(c.slug)).length }))} />}
         <span className="flex-1" />
         <Button variant="ghost" size="xs" onClick={fitView}><ScanIcon data-icon="inline-start" />{t("Fit")}</Button>
       </div>

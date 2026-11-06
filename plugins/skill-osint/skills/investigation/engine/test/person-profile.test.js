@@ -112,7 +112,7 @@ test('consolidate: Profile.md, the Identifiers table, the identifiers as entitie
   const tl = json(dir, '.osint/views/timeline.json')
   assert.ok(tl.some(i => i.label === 'durand-bakery-example · Registered' && i.case === 'durand-bakery-example' && !('ref' in i)))
   assert.ok(tl.some(i => i.kind === 'source' && i.url === 'https://durand-bakery.example/'))
-  const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--shared', '--json'], env)).out)
+  const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--json'], env)).out)
   assert.ok(shared.some(e => e.key === 'domain:durand-bakery.example' && e.cases.length === 2))
 })
 

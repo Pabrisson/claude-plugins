@@ -25,7 +25,7 @@ import { approvedHash, digestOf, typeDigest, unattended } from './watch-ok.js'
 // tags of the dashboard's prompts ([lead:L07], [pivot:domain]…). A test checks that the usage line's commands are here
 export const RESERVED_IDS = [
   'brain', 'clue', 'conclude', 'dashboard', 'doctor', 'entity', 'evidence', 'export', 'hyp', 'list', 'log', 'new', 'next',
-  'note', 'redteam', 'refresh', 'reverse', 'serve', 'setup', 'source', 'status', 'sun', 'types', 'vision', 'watch', 'weather',
+  'note', 'redteam', 'refresh', 'reverse', 'serve', 'setup', 'source', 'status', 'sun', 'types', 'vision', 'watch', 'weather', 'workspaces',
   'install', 'lead', 'pivot', 'question', 'reverse-results',
 ]
 const byId = (a, b) => a.id.localeCompare(b.id)

@@ -30,7 +30,7 @@ test('the demo builds a finished case, a child case that shares a tracker with i
     assert.ok(readNote(path.join(home, 'durand-bakery-example', 'Case.md')).props.children.includes('192-0-2-10'))
     assert.equal(json(path.join(home, '192-0-2-10'), '.osint/views/map.json').features[0].properties.radius_m, 50000)
     assert.deepEqual(pivotsFor({ kind: 'ip', value: '192.0.2.10', path: 'Entities/192.0.2.10.md' }, loadTypes()).map(p => [p.type, p.label]), [['ip', 'New IP address case on 192.0.2.10']])
-    const sharedIp = JSON.parse((await run(home, ['brain', 'entities', '--all', '--shared', '--json'], fakeEnv(fake.url))).out)
+    const sharedIp = JSON.parse((await run(home, ['brain', 'entities', '--all', '--json'], fakeEnv(fake.url))).out)
     for (const key of ['ip:192.0.2.10', 'organization:exemple hébergement sas']) assert.ok(sharedIp.some(e => e.key === key && e.cases.some(c => c.slug === '192-0-2-10')), key)
     const parent = readNote(path.join(home, 'durand-bakery-example', 'Case.md')).props
     assert.deepEqual([parent.status, parent.lang, parent.confidence], ['done', 'fr', 'high'])
@@ -39,7 +39,7 @@ test('the demo builds a finished case, a child case that shares a tracker with i
     const child = readNote(path.join(home, 'other-shop-example', 'Case.md')).props
     assert.deepEqual([child.parent, child.status], ['durand-bakery-example', 'running'])
     assert.ok(json(path.join(home, 'durand-bakery-example'), '.osint/case.json').leads.length >= 2)
-    const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--shared', '--json'], fakeEnv(fake.url))).out)
+    const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--json'], fakeEnv(fake.url))).out)
     assert.ok(shared.some(e => e.key === 'tracker:g-durand123'))
     // the username case, born of the account the bakery's home page links to
     const u = readNote(path.join(home, 'durand-bakery', 'Case.md')).props
@@ -76,7 +76,7 @@ test('the demo builds a finished case, a child case that shares a tracker with i
     const profile = read(PD, 'Profile.md')
     assert.match(profile, /# Profil — Jeanne Durand\n\nNaissance : 1961-04 · Enquêtes liées : \[boulangerie-durand-sarl\]/)
     assert.match(profile, /\| \[\[BOULANGERIE DURAND\]\] \| \[boulangerie-durand-sarl\]\([^)]+\) \(comme [^)]+\) \|/)
-    const people = JSON.parse((await run(home, ['brain', 'entities', '--all', '--shared', '--json'], fakeEnv(fake.url))).out)
+    const people = JSON.parse((await run(home, ['brain', 'entities', '--all', '--json'], fakeEnv(fake.url))).out)
     assert.ok(people.some(e => e.key === 'person:jeanne durand 1961-04' && e.cases.some(c => c.slug === 'jeanne-durand')))
     assert.ok(people.some(e => e.key === 'organization:456789122' && e.cases.some(c => c.slug === 'jeanne-durand')))
     // the sensitive site categories are never checked (the manifest's default leaves them out; sitesFor skips them; a person case filters a chosen one)
@@ -155,7 +155,7 @@ test('stage 5: the bakery\'s company, a child case started from the SIREN on its
     assert.equal(json(CO, '.osint/views/map.json').features.length, 3)
     assert.deepEqual(json(CO, '.osint/views/network.json').map(x => x.level), ['high', 'medium', 'low'])
     assert.ok(json(CO, '.osint/case.json').leads.length >= 2)
-    const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--shared', '--json'], fakeEnv(fake.url))).out)
+    const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--json'], fakeEnv(fake.url))).out)
     assert.ok(shared.some(e => e.key === 'organization:456789122' && e.cases.length >= 2))
     // a private type of the cases folder and a finished case of it, which shares the SIREN with the bakery's case
     const audit = readNote(path.join(home, 'durand-shop-audit', 'Case.md')).props
@@ -181,7 +181,7 @@ test('the demo\'s phone case: the number of the bakery\'s contact page, its pivo
     assert.ok(parent.children.includes('telephone-boulangerie-durand'))
     const phone = readNote(path.join(home, 'telephone-boulangerie-durand', 'Case.md')).props
     assert.deepEqual([phone.type, phone.status, phone.parent, phone.lang, phone.confidence], ['phone', 'done', 'durand-bakery-example', 'fr', 'high'])
-    const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--shared', '--json'], fakeEnv(fake.url))).out)
+    const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--json'], fakeEnv(fake.url))).out)
     assert.ok(shared.some(e => e.key === 'phone:fr:0199001234'))
     const rel = 'Entities/+33199001234.md', props = readNote(path.join(home, 'durand-bakery-example', rel)).props
     assert.ok(pivotsFor({ kind: props.kind, value: props.value, path: rel, props }, loadTypes(home)).some(p => p.type === 'phone'))
@@ -215,7 +215,7 @@ test('stage 9: the place of the bakery\'s head office, opened from its establish
     const image = fs.readdirSync(path.join(PL, 'Entities')).find(f => readNote(path.join(PL, 'Entities', f)).props.provider === 'Panoramax')
     assert.ok(on(`Entities/${image}`).includes('verify-media'))
     // shared with the other cases of the demo
-    const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--shared', '--json'], fakeEnv(fake.url))).out)
+    const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--json'], fakeEnv(fake.url))).out)
     const has = (key, slug) => shared.some(e => e.key === key && e.cases.some(c => c.slug === slug) && e.cases.some(c => c.slug === '1-place-de-l-exemple'))
     assert.ok(has('organization:456789122', 'boulangerie-durand-sarl'))
     assert.ok(has('domain:durand-bakery.example', 'durand-bakery-example'))

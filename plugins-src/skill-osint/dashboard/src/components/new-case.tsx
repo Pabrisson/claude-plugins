@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Chips } from "@/components/chips"
 import { InputField, type Value } from "@/components/field"
 import { Icon } from "@/components/icon"
+import { nameOf, useWorkspaces } from "@/components/workspace-menu"
 import { copyText } from "@/components/obsidian-button"
 import { PrivateBadge } from "@/components/private-badge"
 import { TopBar } from "@/components/top-bar"
@@ -46,6 +47,8 @@ export function NewCase({ type }: { type: string | null }) {
             <h1 className="text-xl font-semibold tracking-tight">{m ? t("New case: {type}", { type: m.label }) : t("New case")}</h1>
             <p className="text-sm text-muted-foreground">{m ? m.description : t("What does the case start from?")}</p>
           </div>
+          <span className="flex-1" />
+          <JoinsWorkspace />
         </div>
         {!types ? <Skeleton className="h-40 rounded-xl" /> : m ? <CaseForm key={m.id} m={m} color={typeColor(m.id, types)} /> : (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -218,4 +221,11 @@ function CaseForm({ m, color }: { m: Manifest; color: string }) {
       </div>
     </form>
   )
+}
+
+// the workspace the new case joins: the current one (the bar's switch changes it)
+function JoinsWorkspace() {
+  const w = useWorkspaces()
+  if (!w || w.list.length < 2) return null
+  return <Badge variant="outline" className="h-7 shrink-0 gap-1.5 px-2.5" title={t("The current workspace: the cases you start join it")}><Icon name="folder-kanban" aria-hidden />{t("Joins {name}", { name: nameOf(w, w.current) })}</Badge>
 }

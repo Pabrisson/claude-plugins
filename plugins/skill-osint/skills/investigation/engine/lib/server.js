@@ -8,7 +8,7 @@ import http from 'node:http'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { indexCase, summaries, summaryOf } from './brain.js'
-import { caseDir, journal, listCases, readCase, updateCase } from './case.js'
+import { caseDir, descendants, journal, listCases, parents, readCase, rootOf, updateCase } from './case.js'
 import { parseLatLon } from './geo.js'
 import { emit, eventsFile, lastEvents, readFrom } from './events.js'
 import { printHtml, PRINT_CSP } from './print.js'
@@ -21,6 +21,7 @@ import { findType, loadTypes } from './types.js'
 import { fail, fakeApis, hasBin, isUrl, nowIso, readJson, safeName, sha256File, VERSION } from './util.js'
 import { readNote } from './vault.js'
 import { clock, dueCases, keepsServer, saveDeveloper, saveSettings, setWatch, settings, watchedCases } from './watch.js'
+import { moveCase, newWorkspace, removeWorkspace, renameWorkspace, useWorkspace, workspaces } from './workspaces.js'
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8' }
 export const MAX_UPLOAD = 2e9
@@ -110,23 +111,47 @@ export async function startServer({ home, port, dist, engine, loaded, run = runE
   const hintOf = () => (hint === undefined ? (hint = clickHint()) : hint)
   const sse = res => { res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive' }); res.write(': connected\n\n') }
 
-  function caseStream(req, res, slug, dir) {
+  // A case's stream covers its investigation: the case and every case below it, each event with its `case`. The id
+  // holds each events file's byte offset: « <this case's>;<sub-case>=<offset>;… » (a bare number: this case's alone)
+  function caseStream(req, res, slug) {
     sse(res)
-    const last = Number(req.headers['last-event-id'])
-    let offset = Number.isFinite(last) && req.headers['last-event-id'] !== undefined ? last : (() => { try { return Math.max(0, fs.statSync(eventsFile(dir)).size - 32 * 1024) } catch { return 0 } })()
-    const push = () => {
-      const r = readFrom(dir, offset)
+    const offsets = new Map(), last = req.headers['last-event-id']
+    if (last !== undefined) String(last).split(';').forEach((part, i) => {
+      const [k, v] = i === 0 && !part.includes('=') ? [slug, part] : part.split('=')
+      if (k && v !== '' && Number.isFinite(Number(v))) offsets.set(k, Number(v))
+    })
+    const id = () => [offsets.get(slug) ?? 0, ...[...offsets].filter(([k]) => k !== slug).map(([k, v]) => `${k}=${v}`)].join(';')
+    const members = new Map() // slug → { push, view }
+    const pushOf = s => () => {
+      const d = path.join(home, s)
+      if (!offsets.has(s)) offsets.set(s, (() => { try { return Math.max(0, fs.statSync(eventsFile(d)).size - 32 * 1024) } catch { return 0 } })())
+      const r = readFrom(d, offsets.get(s))
       if (r.reset) res.write('event: reset\ndata: {}\n\n')
-      for (const { offset: o, ev } of r.events) res.write(`id: ${o}\ndata: ${JSON.stringify(ev)}\n\n`)
-      offset = r.end
+      let tree = r.reset
+      for (const { offset: o, ev } of r.events) {
+        offsets.set(s, o)
+        res.write(`id: ${id()}\ndata: ${JSON.stringify({ ...ev, case: s })}\n\n`)
+        if (ev.kind === 'note.write' && ev.path === 'Case.md') tree = true // a sub-case added (the parent's children) or moved
+      }
+      offsets.set(s, r.end)
+      if (tree) sync()
     }
-    push()
-    // a widget's data changed (.osint/views/<widget>.json): the page reloads that widget
-    const view = widget => res.write(`event: view\ndata: ${JSON.stringify({ widget })}\n\n`)
-    const subs = caseSubs.get(slug) ?? new Set(), views = viewSubs.get(slug) ?? new Set()
-    caseSubs.set(slug, subs.add(push)); viewSubs.set(slug, views.add(view))
+    // the members: this case and its descendants now; a sub-case made while the page is open joins
+    function sync() {
+      const now = new Set([slug, ...descendants(home, slug).map(x => x.slug)])
+      for (const [s, m] of members) if (!now.has(s)) { caseSubs.get(s)?.delete(m.push); viewSubs.get(s)?.delete(m.view); members.delete(s) }
+      for (const s of now) {
+        if (members.has(s)) continue
+        // a widget's data changed (.osint/views/<widget>.json): the page reloads that widget
+        const m = { push: pushOf(s), view: widget => res.write(`event: view\ndata: ${JSON.stringify({ widget, case: s })}\n\n`) }
+        members.set(s, m)
+        caseSubs.set(s, (caseSubs.get(s) ?? new Set()).add(m.push)); viewSubs.set(s, (viewSubs.get(s) ?? new Set()).add(m.view))
+        m.push()
+      }
+    }
+    sync()
     const ping = setInterval(() => res.write(': ping\n\n'), 25e3)
-    req.on('close', () => { clearInterval(ping); subs.delete(push); views.delete(view) })
+    req.on('close', () => { clearInterval(ping); for (const [s, m] of members) { caseSubs.get(s)?.delete(m.push); viewSubs.get(s)?.delete(m.view) } })
   }
   function homeStream(req, res) {
     sse(res)
@@ -134,6 +159,8 @@ export async function startServer({ home, port, dist, engine, loaded, run = runE
       const live = fs.existsSync(path.join(home, slug, '.osint', 'case.json'))
       res.write(`data: ${JSON.stringify({ slug, summary: live ? summaryOf(home, slug) : null })}\n\n`)
     }
+    // the workspaces changed (the dashboard, or the agent's `workspaces` command): every page follows
+    push.workspaces = () => res.write(`event: workspaces\ndata: ${JSON.stringify(workspaces(home))}\n\n`)
     homeSubs.add(push)
     const ping = setInterval(() => res.write(': ping\n\n'), 25e3)
     req.on('close', () => { clearInterval(ping); homeSubs.delete(push) })
@@ -199,6 +226,7 @@ export async function startServer({ home, port, dist, engine, loaded, run = runE
     if (!file) return
     const at = Date.now()
     const parts = String(file).split(/[\\/]/), slug = parts[0], rel = parts.slice(1).join('/')
+    if (slug === '.osint-settings.json') return later('|workspaces', () => { for (const push of homeSubs) push.workspaces() })
     if (!slug || slug.startsWith('.')) return
     if (rel === '' || rel === '.osint/events.jsonl' || rel === '.osint/case.json') return later(`${slug}|`, () => publish(slug))
     if (rel.startsWith('.osint/views/') && rel.endsWith('.json')) return later(`${slug}|${rel}`, () => { for (const view of viewSubs.get(slug) ?? []) view(path.posix.basename(rel, '.json')) })
@@ -244,6 +272,20 @@ export async function startServer({ home, port, dist, engine, loaded, run = runE
       return reply(res, 200, { ...settings(home).watch, click_hint: hintOf(), running: server.watch?.running() ?? false, stops: stopsSoon(home), cases: watchedCases(home) })
     }
     if (p === '/api/cases' && method === 'GET') return reply(res, 200, summaries(home))
+    if (p === '/api/workspaces') {
+      if (method === 'POST') {
+        const b = await readBody(req)
+        try {
+          if (b.new != null) newWorkspace(home, b.new)
+          else if (b.use) useWorkspace(home, String(b.slug))
+          else if (b.rename != null) renameWorkspace(home, String(b.slug), b.rename)
+          else if (b.remove) removeWorkspace(home, String(b.slug))
+          else if (b.move) moveCase(home, String(b.move), String(b.slug))
+          else return reply(res, 400, { error: 'expects { new: <name> } or { slug, use | rename: <name> | remove | move: <case> }' })
+        } catch (e) { if (!e.userError) throw e; return reply(res, 400, { error: e.message }) }
+      }
+      return reply(res, 200, workspaces(home))
+    }
     if (p === '/api/uploads' && method === 'POST') {
       const name = safeName(url.searchParams.get('name') ?? ''), size = Number(req.headers['content-length'])
       if (!/\.[a-z0-9]{2,5}$/i.test(name)) return reply(res, 400, { error: 'expects ?name=<the file name, with its extension>' })
@@ -268,12 +310,18 @@ export async function startServer({ home, port, dist, engine, loaded, run = runE
       const slug = m[1], sub = m[2] ?? ''
       let dir
       try { dir = caseDir(home, slug) } catch { return reply(res, 404, { error: `no case ${slug}` }) }
-      if (sub === '' && method === 'GET') return reply(res, 200, indexCase(home, slug))
+      // a case with its investigation: the case at its top (root), and below a top case every sub-case's own index
+      if (sub === '' && method === 'GET') {
+        const up = parents(home), root = rootOf(home, slug, up)
+        const subcases = root !== slug ? [] : descendants(home, slug, up).flatMap(d => { try { return [{ ...indexCase(home, d.slug), parent: d.parent, depth: d.depth }] } catch { return [] } })
+        return reply(res, 200, { ...indexCase(home, slug), root, subcases })
+      }
+      // a case goes to .trash with the cases below it
       if (sub === '' && method === 'DELETE') {
-        closeTunnel(slug, 'case deleted')
+        const tree = [slug, ...descendants(home, slug).map(x => x.slug)], at = nowIso().replace(/[:.]/g, '-')
         fs.mkdirSync(path.join(home, '.trash'), { recursive: true })
-        fs.renameSync(dir, path.join(home, '.trash', `${slug}-${nowIso().replace(/[:.]/g, '-')}`))
-        return reply(res, 200, {})
+        for (const s of tree) { closeTunnel(s, 'case deleted'); fs.renameSync(path.join(home, s), path.join(home, '.trash', `${s}-${at}`)) }
+        return reply(res, 200, { deleted: tree })
       }
       if (sub === '/tunnel' && method === 'GET') { const x = tunnels.get(slug); return reply(res, 200, x ? { open: true, until: x.until, files: x.files, served: x.t.served.length } : { open: false, cloudflared: hasBin('cloudflared') }) }
       if (sub === '/tunnel' && method === 'POST') {
@@ -299,7 +347,7 @@ export async function startServer({ home, port, dist, engine, loaded, run = runE
         const r = await runEngine(home, ['geolocate-image', 'truth', ll.join(','), '-p', slug], engine)
         return r.code === 0 ? reply(res, 200, readCase(dir).state['geolocate-image']?.truth ?? {}) : reply(res, 400, { error: r.err, code: r.code })
       }
-      if (sub === '/events') return caseStream(req, res, slug, dir)
+      if (sub === '/events') return caseStream(req, res, slug)
       if (sub === '/note') {
         const f = vaultPath(dir, url.searchParams.get('path'))
         if (!f || !f.endsWith('.md') || !fs.existsSync(f)) return reply(res, 404, { error: 'not found' })

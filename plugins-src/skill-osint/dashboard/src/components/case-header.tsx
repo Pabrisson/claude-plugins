@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, CheckIcon, ListChecksIcon, RefreshCwIcon } from "lucide-react"
+import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, ListChecksIcon, RefreshCwIcon } from "lucide-react"
 import { useState } from "react"
 
 import { AskAgent } from "@/components/home"
@@ -8,6 +8,7 @@ import { PrivateBadge, TypeMissingBadge } from "@/components/private-badge"
 import { CONFIDENCE, ConfidenceBadge, LiveDot, StatusBadge } from "@/components/status"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
 import { useWatchState, WatchControl } from "@/components/watch-control"
@@ -19,9 +20,11 @@ import { cn } from "@/lib/utils"
 
 // The case's head: its type, title, status and live dot, the phases as steps, the confidence (each level and its
 // criteria on hover), Refresh, Next actions, Ask Agent, Export ▾ (Export PDF, Print view, Open in Obsidian), and on a
-// second row Watch (its switch, period and last and next pass)
-export function CaseHeader({ index, m, color, now, onRefresh, refreshing, onNext }: {
+// second row Watch (its switch, period and last and next pass). With sub-cases, Refresh ▾ refreshes the whole
+// investigation or one of its cases, and Next actions covers them all.
+export function CaseHeader({ index, m, color, now, onRefresh, refreshing, onNext, cases = [], onRefreshOne }: {
   index: CaseIndex; m: Manifest | undefined; color: string; now: number; onRefresh: () => void; refreshing: boolean; onNext: () => void
+  cases?: { slug: string; title: string; icon: string; depth: number }[]; onRefreshOne?: (slug: string) => void
 }) {
   const p = index.props, title = index.notes.find(n => n.path === "Case.md")?.title ?? index.slug
   const { state } = useWatchState()
@@ -43,8 +46,23 @@ export function CaseHeader({ index, m, color, now, onRefresh, refreshing, onNext
           <Confidence index={index} m={m} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          {m && <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>{refreshing ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}{t("Refresh")}</Button>}
-          {m && <Button variant="outline" size="sm" onClick={onNext}><ListChecksIcon data-icon="inline-start" />{t("Next actions")}</Button>}
+          {m && cases.length < 2 && <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>{refreshing ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}{t("Refresh")}</Button>}
+          {m && cases.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={refreshing}>{refreshing ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}{t("Refresh")}<ChevronDownIcon data-icon="inline-end" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-64">
+                <DropdownMenuItem onSelect={onRefresh}><Icon name="folder-tree" />{t("Whole investigation")}<span className="ml-auto pl-3 text-xs text-muted-foreground tabular-nums">{t("{n} cases", { n: cases.length })}</span></DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>{t("One case")}</DropdownMenuLabel>
+                {cases.map(c => (
+                  <DropdownMenuItem key={c.slug} onSelect={() => onRefreshOne?.(c.slug)} style={{ paddingLeft: `${0.5 + c.depth * 0.75}rem` }}><Icon name={c.icon} /><span className="truncate">{c.title}</span></DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <Button variant="outline" size="sm" onClick={onNext}><ListChecksIcon data-icon="inline-start" />{t("Next actions")}</Button>
           <AskAgent />
           <ExportMenu slug={index.slug} index={index} />
         </div>

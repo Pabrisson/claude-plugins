@@ -151,8 +151,8 @@ test('plan: each identifier an entity with its reason, the subject with the birt
   const c = json(dir, '.osint/case.json')
   assert.deepEqual(c.state.person.identifiers.map(i => i.type), ['username', 'email', 'phone', 'company-fr', null, 'domain'])
   assert.equal(c.relations.filter(x => x.label === 'identifier' && x.from === 'Entities/Jeanne Durand.md').length, 6)
-  // the subject is the same person as in the parent: one shared entity
-  const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--shared', '--json'], env)).out)
+  // the subject is the same person as in the parent: one entity in both cases (one investigation: not « shared »)
+  const shared = JSON.parse((await run(home, ['brain', 'entities', '--all', '--json'], env)).out)
   assert.ok(shared.some(e => e.key === 'person:jeanne durand 1961-04' && e.cases.length === 2))
   // Next actions: each identifier pivots to its type; an employer by name has the person type's own action
   const types = loadTypes(), on = (value, props = {}) => pivotsFor({ kind: ent(dir, value).kind, value, path: `Entities/${value}.md`, props }, types).map(p => p.type)

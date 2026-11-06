@@ -3,7 +3,8 @@ import type { Feature, LineString, Point } from "geojson"
 import { localize } from "@/lib/i18n"
 
 export type Props = Record<string, unknown>
-export type OsintEvent = { t: string; kind: string; by: "engine" | "agent" | "vault" | "dashboard" | "watch"; phase?: string; text?: string; n?: number; of?: number; path?: string; id?: string; journal?: string; data?: Record<string, unknown>; deleted?: boolean }
+// case: the case of the investigation it happened in (a page's stream covers its sub-cases too)
+export type OsintEvent = { t: string; kind: string; by: "engine" | "agent" | "vault" | "dashboard" | "watch"; phase?: string; text?: string; n?: number; of?: number; path?: string; id?: string; journal?: string; data?: Record<string, unknown>; deleted?: boolean; case?: string }
 export type Link = { target: string; path: string | null; anchor: string | null; embed: boolean }
 export type NoteMeta = { path: string; title: string; folder: string; props: Props; tags: string[]; links: Link[]; blocks: string[]; headings: string[]; mtime: string; size: number; excerpt: string }
 export type Lead = { id: string; label: string; why: string; minutes: number | null; noisy: boolean; prompt: string; done: boolean; created: string }
@@ -18,7 +19,13 @@ export type CaseIndex = {
   leads: Lead[]; relations: Relation[]; evidence: EvidenceEntry[]; reverse: ReverseState; conclusion: Conclusion | null; last: OsintEvent | null
   counts: { entities: number; sources: number; clues: number; hypotheses: number; leads_open: number; new: number }
   watch: Watch | null
+  // the investigation: the case at its top; below a top case, every sub-case's index (depth first)
+  root?: string; subcases?: SubCase[]
 }
+export type SubCase = CaseIndex & { parent: string; depth: number }
+// groups of investigations; new cases join the current one
+export type Workspace = { slug: string; name: string }
+export type Workspaces = { current: string; list: Workspace[] }
 // the watch (spec § 12.1): a case's period with its last and next pass; the folder's switch and notifications
 export type Every = "6h" | "12h" | "24h" | "7d"
 // developer: the mode is on; fake: the engine commands run on the fake APIs now; fake_available: this server was started on
@@ -45,14 +52,14 @@ export type Scoreboard = { at: string; cases: number; median_km: number | null; 
 export type CalibrationView = { gut: Gut | null; truth: Truth | null; scoreboard: Scoreboard | null }
 export type Upload = { path: string; name: string; size: number }
 export type Status = "draft" | "running" | "done" | "blocked"
-export type CaseSummary = { slug: string; type: string; title: string; status: Status; phase: string | null; confidence: string | null; answer: string | null; created: string; last: OsintEvent | null; thumb: string | null; counts: { entities: number; sources: number; leads_open: number }; parent: string | null; children: string[]; new: number; watch: Watch | null }
+export type CaseSummary = { slug: string; type: string; title: string; status: Status; phase: string | null; confidence: string | null; answer: string | null; created: string; last: OsintEvent | null; thumb: string | null; counts: { entities: number; sources: number; leads_open: number }; parent: string | null; children: string[]; new: number; watch: Watch | null; workspace: string }
 export type Option = { value: string; label: string; icon: string }
 export type Input = { id: string; kind: "text" | "url" | "file" | "select" | "chips" | "toggle"; label: string; required?: boolean; placeholder?: string; default?: string | boolean | string[]; options?: Option[]; when?: Record<string, string | string[] | boolean>; multiline?: boolean; multiple?: boolean; help?: string; accept?: string; link?: boolean }
 export type View = { widget: string; label?: string; icon?: string; kind?: string; where?: Props; columns?: string[]; view?: string }
 export type Action = { id: string; label: string; icon: string; target: string; prompt: string; noisy: boolean; minutes: number }
 export type Manifest = { id: string; label: string; icon: string; description: string; frame: (string | { id: string; always?: boolean; legal_basis?: string; purpose?: boolean })[]; inputs: Input[]; levels: { id: string; label: string; criteria: Record<string, string> }[]; phases: { id: string; label: string }[]; views: View[]; actions: Action[]; pivots: (string | { kind: string; has: string })[]; private: boolean; fr?: Record<string, string> }
 export type Note = { path: string; props: Props; body: string; mtime: string }
-export type SharedEntity = { key: string; kind: string; value: string; cases: { slug: string; path: string }[] }
+export type SharedEntity = { key: string; kind: string; value: string; cases: { slug: string; path: string; root: string }[] }
 export type DoctorLine = { status: "ok" | "MISSING" | "missing" | "info" | "warning"; name: string; text: string; fix?: string }
 export type TypeReadiness = { id: string; label: string | null; private: boolean; path: string; where: string; ready: boolean; missing: string[]; notes: string[]; errors: string[]; refused: string | null }
 export type Doctor = { lines: DoctorLine[]; types: TypeReadiness[]; home: string }
@@ -76,7 +83,11 @@ export const api = {
   note: (slug: string, path: string) => fetch(`/api/cases/${slug}/note?path=${encodeURIComponent(path)}`).then(r => json<Note>(r)),
   view: <T,>(slug: string, widget: string) => fetch(`/api/cases/${slug}/view/${widget}`).then(r => json<T | null>(r)),
   create: (body: unknown) => post("/api/cases", body).then(r => json<{ slug: string }>(r)),
-  remove: (slug: string) => fetch(`/api/cases/${slug}`, { method: "DELETE" }).then(r => json<object>(r)),
+  // the case and the cases below it go to .trash
+  remove: (slug: string) => fetch(`/api/cases/${slug}`, { method: "DELETE" }).then(r => json<{ deleted: string[] }>(r)),
+  workspaces: () => fetch("/api/workspaces").then(r => json<Workspaces>(r)),
+  // { new: name } makes one (the current one); { slug, use } picks it; { slug, rename }; { slug, remove }; { slug, move: <case> } moves an investigation
+  workspace: (b: { new?: string; slug?: string; use?: true; rename?: string; remove?: true; move?: string }) => post("/api/workspaces", b).then(r => json<Workspaces>(r)),
   refresh: (slug: string) => post(`/api/cases/${slug}/refresh`).then(r => json<RefreshResult>(r)),
   seen: (slug: string) => post(`/api/cases/${slug}/seen`).then(r => json<object>(r)),
   shared: () => fetch("/api/entities/shared").then(r => json<SharedEntity[]>(r)),

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FakeSwitch } from "@/components/fake-switch"
+import { WorkspaceMenu } from "@/components/workspace-menu"
 import { api, type AppState } from "@/lib/api"
 import { t } from "@/lib/i18n"
 import { TONE } from "@/lib/tones"
@@ -28,7 +29,7 @@ export function useAppState() {
   return s
 }
 
-// The sticky bar on every page: « OSINT » home, the page's search, New case, Settings, the theme, « Fake APIs » in the
+// The sticky bar on every page: « OSINT » home, the workspace switch, the page's search, New case, Settings, the theme, « Fake APIs » in the
 // demo (an OSINT_BASE_* variable is set: every service answers from the tests' fixtures) with its switch in developer mode
 export function TopBar({ search, children }: { search?: { value: string; onChange: (v: string) => void; placeholder?: string }; children?: ReactNode }) {
   const { fake, developer, fake_available } = useAppState()
@@ -39,6 +40,7 @@ export function TopBar({ search, children }: { search?: { value: string; onChang
           <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground"><ScanSearchIcon className="size-4" /></span>
           <span className="max-sm:sr-only">OSINT</span>
         </a>
+        <WorkspaceMenu />
         {fake && (
           <Tooltip>
             <TooltipTrigger asChild><Badge className={TONE.amber}>{t("Fake APIs")}</Badge></TooltipTrigger>

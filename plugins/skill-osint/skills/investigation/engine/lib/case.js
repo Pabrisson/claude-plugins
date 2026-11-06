@@ -31,6 +31,38 @@ export function caseDir(home, slug) {
   if (!fs.existsSync(path.join(dir, '.osint', 'case.json'))) fail(`no case ${slug} in ${home}`)
   return dir
 }
+// an investigation is a tree: each case's parent is Case.md's `parent`, kept when that case is still in the folder (a
+// parent sent to .trash makes its child a root)
+export function parents(home) {
+  const all = listCases(home), here = new Set(all), up = new Map()
+  for (const s of all) {
+    let p = null
+    try { p = readNote(path.join(home, s, 'Case.md')).props.parent } catch {}
+    up.set(s, p && here.has(String(p)) && String(p) !== s ? String(p) : null)
+  }
+  return up
+}
+// the case at the top of a case's tree: itself when it has no parent
+export function rootOf(home, slug, up = parents(home)) {
+  const seen = new Set([slug])
+  let s = slug
+  while (up.get(s) && !seen.has(up.get(s))) { s = up.get(s); seen.add(s) }
+  return s
+}
+// the cases below a case, depth first, each level in the order they were made: { slug, parent, depth }
+export function descendants(home, slug, up = parents(home)) {
+  const kids = new Map(), made = s => { try { return readCase(path.join(home, s)).created ?? '' } catch { return '' } }
+  for (const [s, p] of up) if (p) kids.set(p, [...(kids.get(p) ?? []), s])
+  const out = [], seen = new Set([slug])
+  const walk = (s, depth) => {
+    for (const k of (kids.get(s) ?? []).sort((a, b) => made(a).localeCompare(made(b)) || a.localeCompare(b))) {
+      if (seen.has(k)) continue
+      seen.add(k); out.push({ slug: k, parent: s, depth }); walk(k, depth + 1)
+    }
+  }
+  walk(slug, 1)
+  return out
+}
 export const caseFile = dir => path.join(dir, '.osint', 'case.json')
 export const readCase = dir => readJson(caseFile(dir))
 
@@ -148,7 +180,7 @@ function relatedBlock(dir, L) {
   return lines.length ? `## ${L.related}\n\n${lines.join('\n')}` : ''
 }
 
-export async function createCase(home, manifest, { input, inputs = {}, file, question, frame = {}, title, lang = 'en', parent, from } = {}) {
+export async function createCase(home, manifest, { input, inputs = {}, file, question, frame = {}, title, lang = 'en', parent, from, workspace } = {}) {
   const main = mainInput(manifest)
   if (input) inputs = { ...inputs, [main.id]: input }
   if (file) {
@@ -156,6 +188,8 @@ export async function createCase(home, manifest, { input, inputs = {}, file, que
     if (!slot) fail(`--file: the ${manifest.id} type takes no file with these inputs`)
     inputs = { ...inputs, [slot.id]: file }
   }
+  // a sub-case lives in its parent's workspace
+  if (parent) workspace = readCase(caseDir(home, parent)).workspace
   if (parent) {
     const pp = readNote(path.join(caseDir(home, parent), 'Case.md')).props
     for (const k of ['purpose', 'person', 'legal_basis', 'image_may_leave', 'noisy']) if (frame[k] == null && pp[k] != null) frame = { ...frame, [k]: pp[k] }
@@ -195,7 +229,7 @@ export async function createCase(home, manifest, { input, inputs = {}, file, que
   for (let n = 2; fs.existsSync(path.join(home, slug)); n++) slug = `${base}-${n}`
   const dir = path.join(home, slug), now = nowIso(), L = labels(lang, typeLabelsOf(manifest.id, home)), vars = { ...L, title: name }
   for (const d of ['Entities', 'Clues', 'Hypotheses', 'Sources', 'Evidence', '.osint']) fs.mkdirSync(path.join(dir, d), { recursive: true })
-  writeJson(caseFile(dir), { version: 1, slug, type: manifest.id, created: now, input: values, counters: {}, leads: [], relations: [], evidence: [], refreshes: [], state: {}, seen_at: null, agent_at: now, ranked_at: null, redteam_at: null, redteam: null, conclusion: null })
+  writeJson(caseFile(dir), { version: 1, slug, type: manifest.id, created: now, input: values, counters: {}, leads: [], relations: [], evidence: [], refreshes: [], state: {}, seen_at: null, agent_at: now, ranked_at: null, redteam_at: null, redteam: null, conclusion: null, ...(workspace && workspace !== 'default' && { workspace }) })
   writeObsidianConfig(dir)
   emit(dir, { kind: 'case.new', text: `${manifest.label}: ${name}`, data: { type: manifest.id, slug } })
   writeJson(path.join(dir, 'Graph.canvas'), { nodes: [], edges: [] })

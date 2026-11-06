@@ -3,8 +3,10 @@ import { useState } from "react"
 
 import { Icon } from "@/components/icon"
 import { kindOf } from "@/components/shared-entities"
-import type { CaseIndex, NoteMeta } from "@/lib/api"
+import type { CaseIndex, Manifest, NoteMeta } from "@/lib/api"
 import { t } from "@/lib/i18n"
+import { splitNote } from "@/lib/route"
+import type { TreeCase } from "@/lib/tree"
 import { cn } from "@/lib/utils"
 
 const ROOT = ["Case.md", "Report.md", "Leads.md", "Journal.md"]
@@ -56,5 +58,38 @@ export function BrainTree({ index, open, fresh, onOpen }: { index: CaseIndex; op
         )
       })}
     </nav>
+  )
+}
+
+// The investigation's notes: its top case's tree, then each sub-case as a folder of its own notes (indented by depth,
+// folded until one of its notes is open). open and fresh name a sub-case's note « @<slug>/<path> ».
+export function InvestigationTree({ cases, types, open, fresh, onOpen }: { cases: TreeCase[]; types: Manifest[]; open: string; fresh: Set<string>; onOpen: (path: string, slug: string | null) => void }) {
+  const [unfolded, setUnfolded] = useState<Record<string, boolean>>({})
+  const [root, ...subs] = cases, at = splitNote(open)
+  const freshOf = (slug: string) => new Set([...fresh].map(splitNote).filter(x => x.slug === slug).map(x => x.path))
+  return (
+    <div className="flex flex-col gap-4">
+      <BrainTree index={root.index} open={at.slug ? null : at.path} fresh={new Set([...fresh].filter(p => !p.startsWith("@")))} onOpen={p => onOpen(p, null)} />
+      {subs.length > 0 && (
+        <div className="flex flex-col gap-1 border-t pt-3">
+          <p className="flex items-center gap-1.5 px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase"><Icon name="folder-tree" className="size-3.5" aria-hidden />{t("Sub-cases")}<span className="ml-auto tabular-nums">{subs.length}</span></p>
+          {subs.map(c => {
+            const m = types.find(x => x.id === c.index.type), shown = unfolded[c.slug] ?? at.slug === c.slug, mine = freshOf(c.slug)
+            return (
+              <div key={c.slug} style={{ paddingLeft: `${(c.depth - 1) * 0.75}rem` }}>
+                <button type="button" onClick={() => setUnfolded(u => ({ ...u, [c.slug]: !shown }))} aria-expanded={shown} title={c.slug}
+                  className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-left text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50">
+                  <ChevronRightIcon className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", shown && "rotate-90")} />
+                  <Icon name={m?.icon ?? "circle-help"} className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                  {!shown && mine.size > 0 && <span className="size-1.5 shrink-0 rounded-full bg-sky-500" aria-label={t("new notes inside")} />}
+                </button>
+                {shown && <div className="mt-1 ml-2 border-l pl-2"><BrainTree index={c.index} open={at.slug === c.slug ? at.path : null} fresh={mine} onOpen={p => onOpen(p, c.slug)} /></div>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }

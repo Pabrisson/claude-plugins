@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api, type CaseIndex, type OsintEvent } from "@/lib/api"
+import { subNote, subTab } from "@/lib/route"
 import { useCaseEvents } from "@/lib/use-events"
 
-// a case's index, live: reloaded after each event (300 ms apart at most), the last 200 events for the activity feed;
-// notePulse tells the open note its file changed, views[widget] counts the changes of a widget's data
+// a case's index with its sub-cases', live: reloaded after each event of the investigation (300 ms apart at most), the
+// last 200 events for the activity feed; notePulse tells the open note its file changed (a sub-case's: « @<slug>/… »),
+// views[widget] counts the changes of a widget's data (a sub-case's: « <widget>~<slug> »)
 export function useCase(slug: string) {
   const [index, setIndex] = useState<CaseIndex | null>(null)
   const [events, setEvents] = useState<OsintEvent[]>([])
@@ -20,11 +22,12 @@ export function useCase(slug: string) {
   useCaseEvents(slug, {
     event: e => {
       setEvents(xs => [...xs.slice(-199), e])
-      if (e.kind === "note.write" && e.path) setNotePulse(p => ({ path: e.path!, n: (p?.n ?? 0) + 1 }))
+      const own = !e.case || e.case === slug
+      if (e.kind === "note.write" && e.path) setNotePulse(p => ({ path: own ? e.path! : subNote(e.case!, e.path!), n: (p?.n ?? 0) + 1 }))
       reload()
     },
-    view: w => setViews(v => ({ ...v, [w]: (v[w] ?? 0) + 1 })),
+    view: (w, of) => { const k = !of || of === slug ? w : subTab(of, w); setViews(v => ({ ...v, [k]: (v[k] ?? 0) + 1 })) },
     reset: () => { setEvents([]); setNotePulse(p => ({ path: "*", n: (p?.n ?? 0) + 1 })); reload() },
   })
-  return { index, events, error, notePulse, views }
+  return { index, events, error, notePulse, views, reload }
 }

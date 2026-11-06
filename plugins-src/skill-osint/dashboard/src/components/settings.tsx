@@ -18,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { useWatchState } from "@/components/watch-control"
 import { WatchSettings } from "@/components/watch-settings"
+import { WorkspacesCard, useWorkspaces } from "@/components/workspace-menu"
 import { api, type Doctor, type DoctorLine } from "@/lib/api"
 import { useBasket } from "@/lib/basket"
 import { setLang, t, useLang, type Lang } from "@/lib/i18n"
@@ -78,7 +79,10 @@ export function Settings() {
   const types = useTypes()
   const { add } = useBasket()
   const { theme, setTheme } = useTheme()
-  const lang = useLang(), st = useAppState(), watch = useWatchState().state
+  const lang = useLang(), st = useAppState(), watch = useWatchState().state, ws = useWorkspaces()
+  // each workspace's investigations (the cases at a top), for Settings › Workspaces
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  useEffect(() => { api.cases().then(cs => { const here = new Set(cs.map(c => c.slug)), n: Record<string, number> = {}; for (const c of cs) if (!c.parent || !here.has(c.parent)) n[c.workspace] = (n[c.workspace] ?? 0) + 1; setCounts(n) }, () => {}) }, [ws])
   const [at, setAt] = useState("tools"), picked = useRef<string | null>(null)
   // the section in view: the last whose top passed under the bar; at the page's end, the one clicked if it shows, else the last
   useEffect(() => {
@@ -98,6 +102,8 @@ export function Settings() {
   }, [doc])
   const go = (id: string) => { picked.current = id; setAt(id); document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }) }
   useEffect(() => { api.doctor().then(setDoc, e => toast.error(t("doctor failed"), { description: (e as Error).message })); appState().then(s => setVersion(s.version)) }, [])
+  // #/settings?at=<section> (« Manage workspaces » in the bar): that section, once the page is drawn
+  useEffect(() => { const to = new URLSearchParams(location.hash.split("?")[1] ?? "").get("at"); if (!doc || !to) return; const id = setTimeout(() => go(to), 50); return () => clearTimeout(id) }, [doc])
   const keyIds = new Set((types ?? []).flatMap(t => (t as { requires?: { keys?: { id: string }[] } }).requires?.keys?.map(k => k.id) ?? []))
   const lines = doc?.lines ?? []
   // the PDF export line is an `info` line (the browser it prints with) or `missing`: shown in Tools either way
@@ -121,6 +127,7 @@ export function Settings() {
     { id: "network", icon: "wifi", title: t("Network"), status: wait || (net ? t("{n} of {m} answered", { n: answered, m: net.length }) : t("Not checked yet")), warn: !!net && answered < net.length },
     { id: "watch", icon: "eye", title: t("Watch"), status: !watch ? "…" : !watch.on ? t("Paused") : t(watch.cases.length === 1 ? "On · {n} case" : "On · {n} cases", { n: watch.cases.length }) },
     { id: "development", icon: "flask-conical", title: t("Development"), status: !st.developer ? t("Off") : st.fake ? t("On · fake APIs") : t("On") },
+    { id: "workspaces", icon: "folder-kanban", title: t("Workspaces"), status: ws ? t(ws.list.length === 1 ? "{n} workspace" : "{n} workspaces", { n: ws.list.length }) : "…" },
     { id: "folder", icon: "folder-open", title: t("Cases folder"), status: wait || (doc!.home.split(/[\\/]/).filter(Boolean).at(-1) ?? doc!.home) },
     { id: "appearance", icon: "palette", title: t("Appearance"), status: `${t({ light: "Light", system: "System" }[theme ?? ""] ?? "Dark")} · ${lang === "fr" ? "Français" : "English"}` },
   ]
@@ -250,6 +257,7 @@ export function Settings() {
               </Card>
               <div id="watch" data-toc className="scroll-mt-20"><WatchSettings /></div>
               <Development />
+              <WorkspacesCard counts={counts} />
               <Card id="folder" data-toc className="scroll-mt-20">
                 <CardHeader><CardTitle className="flex items-center gap-2"><Icon name="folder-open" className="size-4" />{t("Cases folder")}</CardTitle><CardDescription>{t("Each case is a folder in it, and an Obsidian vault.")}</CardDescription></CardHeader>
                 <CardContent>

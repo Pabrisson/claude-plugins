@@ -25,3 +25,15 @@ export function useRoute(): Route {
 }
 export const go = (to: string) => { location.hash = to }
 export const caseHref = (slug: string, tab = "brain", note?: string) => `#/c/${slug}/${tab}${note ? `?note=${encodeURIComponent(note)}` : ""}`
+// an investigation's page shows its sub-cases too: a sub-case's note is « @<sub-case>/<path> », its view tab
+// « <view>~<sub-case> »; a sub-case's own address opens its investigation's page there
+export const subNote = (slug: string, path: string) => `@${slug}/${path}`
+export function splitNote(note: string): { slug: string | null; path: string } {
+  const m = /^@([a-z0-9][a-z0-9-]*)\/(.*)$/.exec(note)
+  return m ? { slug: m[1], path: m[2] } : { slug: null, path: note }
+}
+export const subTab = (slug: string, tab: string) => `${tab}~${slug}`
+export function splitTab(tab: string): { slug: string | null; tab: string } {
+  const i = tab.lastIndexOf("~")
+  return i < 0 ? { slug: null, tab } : { slug: tab.slice(i + 1), tab: tab.slice(0, i) }
+}

@@ -12,13 +12,13 @@ import { cn } from "@/lib/utils"
 // called at render: the label in the dashboard's language
 export const kindOf = (k: string) => { const m = (KINDS as Record<string, { icon: string; color: string; label: string }>)[k]; return m ? { ...m, label: t(m.label) } : { icon: "circle", color: "var(--muted-foreground)", label: k } }
 
-// The entities found in two cases or more: a click on one keeps the cards of its cases; its case chips open the
+// The entities found in two investigations or more: a click on one keeps the cards of its cases; its case chips open the
 // entity's note in that case.
 export function SharedEntities({ list, titles, active, onPick }: { list: SharedEntity[] | null; titles: Record<string, string>; active: string | null; onPick: (e: SharedEntity) => void }) {
   if (!list) return <div className="flex flex-col gap-2">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14" />)}</div>
   if (!list.length) return (
     <Empty className="border border-dashed p-6">
-      <EmptyHeader><EmptyTitle className="text-sm">{t("Nothing shared yet")}</EmptyTitle><EmptyDescription>{t("An entity found in two cases shows here.")}</EmptyDescription></EmptyHeader>
+      <EmptyHeader><EmptyTitle className="text-sm">{t("Nothing shared yet")}</EmptyTitle><EmptyDescription>{t("An entity found in two investigations shows here.")}</EmptyDescription></EmptyHeader>
     </Empty>
   )
   return (

@@ -2,7 +2,7 @@
 // backlinks, the analysis, the leads; and one summary per case for the home page.
 import fs from 'node:fs'
 import path from 'node:path'
-import { listCases, readCase } from './case.js'
+import { descendants, listCases, parents, readCase, rootOf } from './case.js'
 import { cluesOf, hypsOf, leadsOf, ranking } from './cycle.js'
 import { lastEvents } from './events.js'
 import { haversineKm } from './geo.js'
@@ -86,7 +86,7 @@ export function summaryOf(home, slug) {
   return {
     slug, type: c.type, title: /^# (.+)$/m.exec(p.body)?.[1].trim() ?? slug, status: p.props.status, phase: p.props.phase,
     confidence: p.props.confidence ?? null, answer: p.props.answer ?? null, created: c.created, last: lastActivity(dir),
-    thumb: thumb && `Evidence/${thumb}`, parent: p.props.parent ?? null, children: p.props.children ?? [], new: newCount(c), watch: c.watch ?? null,
+    thumb: thumb && `Evidence/${thumb}`, parent: p.props.parent ?? null, children: p.props.children ?? [], new: newCount(c), watch: c.watch ?? null, workspace: c.workspace ?? 'default',
     counts: { entities: countMd(dir, 'Entities'), sources: countMd(dir, 'Sources'), leads_open: leadsOf(dir).filter(l => !l.done).length },
   }
 }
@@ -131,14 +131,26 @@ export function context(home, slug) {
   const changed = c.refreshes.at(-1)
   if (changed) lines.push('', `last refresh ${changed.at.slice(0, 16)}: ${changed.added} added, ${changed.removed} removed, ${changed.changed} changed`)
   if (p.parent || (p.children ?? []).length) lines.push('', `related: ${[p.parent && `parent ${p.parent}`, ...(p.children ?? []).map(x => `child ${x}`)].filter(Boolean).join(', ')}`)
+  // one investigation: the case at its top, and every case below this one (brain context -p <sub-case> for its details)
+  const up = parents(home), root = rootOf(home, slug, up), below = descendants(home, slug, up)
+  if (root !== slug) lines.push(`investigation: ${root} (its top case; brain context -p ${root} sums up all of it)`)
+  if (below.length) {
+    lines.push('', 'sub-cases (part of this investigation; brain search and brain entities -p cover them too):')
+    for (const b of below) {
+      const q = readNote(path.join(home, b.slug, 'Case.md')).props
+      lines.push(`${'  '.repeat(b.depth - 1)}- ${b.slug} (${q.type}, ${q.status}${q.phase ? ` · ${q.phase}` : ''}, under ${b.parent})${q.answer ? `: ${q.answer} (${q.confidence ?? '—'})` : ''} — ${q.question}`)
+    }
+  }
   return lines.join('\n')
 }
 
+// -p <slug>: that case and the cases below it (one investigation); --all: every case of the folder
+const scope = (home, slug, all) => (all ? listCases(home) : [slug, ...descendants(home, slug).map(x => x.slug)])
 export function search(home, q, { slug, all, kind } = {}) {
   const terms = fold(q).split(/\s+/).filter(Boolean)
   if (!terms.length) fail('brain search "<words>"')
   const out = []
-  for (const s of all ? listCases(home) : [slug]) {
+  for (const s of scope(home, slug, all)) {
     const dir = path.join(home, s)
     for (const f of vaultFiles(dir).filter(x => x.endsWith('.md'))) {
       const n = readNote(path.join(dir, f))
@@ -168,21 +180,22 @@ export function show(home, slug, ref) {
   return { path: rel, props: n.props, body: n.body, backlinks: ix.backlinks[rel] ?? [], links: ix.notes.find(x => x.path === rel)?.links ?? [] }
 }
 
+// shared: found in two investigations or more (a case and its own sub-cases are one investigation)
 export function entities(home, { slug, all, kind, shared } = {}) {
-  const groups = new Map(), propsOf = new Map()
-  for (const s of all ? listCases(home) : [slug]) {
+  const groups = new Map(), propsOf = new Map(), up = parents(home)
+  for (const s of scope(home, slug, all)) {
     const dir = path.join(home, s)
     for (const f of vaultFiles(dir).filter(x => x.startsWith('Entities/') && x.endsWith('.md'))) {
       const p = readNote(path.join(dir, f)).props
       if (!p.kind || (kind && p.kind !== kind)) continue
       const key = normalize(p.kind, p.value, p)
       const g = groups.get(key) ?? { key, kind: p.kind, value: p.value, cases: [] }
-      if (!g.cases.some(c => c.slug === s)) g.cases.push({ slug: s, path: f })
+      if (!g.cases.some(c => c.slug === s)) g.cases.push({ slug: s, path: f, root: rootOf(home, s, up) })
       groups.set(key, g)
       if (!propsOf.has(key)) propsOf.set(key, p)
     }
   }
-  return mergePlaces([...groups.values()], propsOf).filter(g => !shared || g.cases.length >= 2).sort((a, b) => a.key.localeCompare(b.key))
+  return mergePlaces([...groups.values()], propsOf).filter(g => !shared || new Set(g.cases.map(c => c.root)).size >= 2).sort((a, b) => a.key.localeCompare(b.key))
 }
 // § 2.7 for places: the places with an OpenStreetMap id stay as their key groups them; then each place without one
 // joins the nearest kept place within 100 m (kinds.samePlace). A place that joined another never pulls a third one in:

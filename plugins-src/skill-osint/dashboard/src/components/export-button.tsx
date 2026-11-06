@@ -22,15 +22,17 @@ const remembered = () => { try { return localStorage.getItem(KEY) === "1" } catc
 // edit, the engine prints the case's print view in Exports/, its SHA-256 goes to the Journal), Print view (the static
 // page any browser prints, in a new tab) and Open in Obsidian. With no Chromium-family browser here (code 3) nothing
 // failed: Print view prints from any browser.
-export function ExportMenu({ slug, index }: { slug: string; index: CaseIndex }) {
+// small: a sub-case's row (an xs button, and the palette's « Export PDF » is the top case's, not its)
+export function ExportMenu({ slug, index, small }: { slug: string; index: CaseIndex; small?: boolean }) {
   const [open, setOpen] = useState(false), [journal, setJournal] = useState(remembered), [busy, setBusy] = useState(false)
   const [done, setDone] = useState<ExportResult | null>(null), [problem, setProblem] = useState<{ message: string; code?: number } | null>(null)
   const obsidian = useObsidian(), panel = useRef(false)
   useEffect(() => {
+    if (small) return
     const f = () => setOpen(true)
     addEventListener(OPEN_EXPORT, f)
     return () => removeEventListener(OPEN_EXPORT, f)
-  }, [])
+  }, [small])
   const earlier = exportsOf(index.files).slice(0, 5)
   const setAppendix = (on: boolean) => { setJournal(on); try { localStorage.setItem(KEY, on ? "1" : "0") } catch { /* a per-browser convenience only */ } }
   async function run() {
@@ -47,7 +49,7 @@ export function ExportMenu({ slug, index }: { slug: string; index: CaseIndex }) 
       <DropdownMenu modal={false}>
         <PopoverAnchor asChild>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" aria-label={t("Export")}>
+            <Button variant="outline" size={small ? "xs" : "sm"} aria-label={t("Export")}>
               {busy ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : <FileDownIcon data-icon="inline-start" />}
               <span className="hidden sm:inline">{t("Export")}</span>
               <ChevronDownIcon data-icon="inline-end" />

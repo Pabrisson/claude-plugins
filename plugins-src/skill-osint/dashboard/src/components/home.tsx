@@ -7,6 +7,7 @@ import { Chips } from "@/components/chips"
 import { SharedEntities } from "@/components/shared-entities"
 import { STATUS } from "@/components/status"
 import { appState, TopBar } from "@/components/top-bar"
+import { nameOf, useWorkspaces, useWorkspaceView } from "@/components/workspace-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -20,6 +21,7 @@ import { useBasket } from "@/lib/basket"
 import { typeColor } from "@/lib/colors"
 import { useMedia, useNow } from "@/lib/format"
 import { t } from "@/lib/i18n"
+import { aggregate, investigations } from "@/lib/tree"
 import { useHomeEvents } from "@/lib/use-events"
 
 type Filters = { types: string[]; statuses: string[]; q: string; shared: boolean }
@@ -37,6 +39,7 @@ export function Home() {
   const [only, setOnly] = useState<SharedEntity | null>(null)
   const [sheet, setSheet] = useState(false) // the shared entities on a narrow screen: closed at each visit
   const wide = useMedia("(min-width: 1280px)"), now = useNow()
+  const ws = useWorkspaces(), all = useWorkspaceView() === "all"
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(f)) } catch { /* kept for this visit only */ } }, [f])
   const loadShared = useCallback(() => api.shared().then(setShared, () => setShared([])), [])
   useEffect(() => {
@@ -57,15 +60,21 @@ export function Home() {
   }, [loadShared]))
 
   const titles = useMemo(() => Object.fromEntries((cases ?? []).map(c => [c.slug, c.title])), [cases])
+  // one card per investigation (a case and the cases below it), the current workspace's or all of them
+  const wsOf = (c: CaseSummary) => (ws?.list.some(x => x.slug === c.workspace) ? c.workspace : "default")
+  const invs = useMemo(() => investigations(cases ?? []).map(inv => ({ ...inv, sum: aggregate(inv) })), [cases])
+  const here = invs.filter(inv => all || !ws || wsOf(inv.root) === ws.current), roots = new Set(here.map(inv => inv.root.slug))
   const q = f.q.trim().toLowerCase()
-  const shown = (cases ?? []).filter(c =>
-    (!f.types.length || f.types.includes(c.type)) && (!f.statuses.length || f.statuses.includes(c.status)) &&
-    (!q || [c.title, c.slug, c.answer ?? ""].some(s => s.toLowerCase().includes(q))) && (!only || only.cases.some(x => x.slug === c.slug)),
-  ).sort(byRecent)
-  const count = (k: "type" | "status", v: string) => (cases ?? []).filter(c => c[k] === v).length
+  const shown = here.filter(({ all: tree, sum }) =>
+    (!f.types.length || tree.some(c => f.types.includes(c.type))) && (!f.statuses.length || f.statuses.includes(sum.status)) &&
+    (!q || tree.some(c => [c.title, c.slug, c.answer ?? ""].some(s => s.toLowerCase().includes(q)))) && (!only || only.cases.some(x => tree.some(c => c.slug === x.slug))),
+  ).sort((a, b) => byRecent(a.sum, b.sum))
+  const count = (k: "type" | "status", v: string) => here.filter(inv => (k === "type" ? inv.all.some(c => c.type === v) : inv.sum.status === v)).length
   const typeIds = [...new Set([...types.map(t => t.id), ...(cases ?? []).map(c => c.type)])]
   const pick = (e: SharedEntity) => setOnly(o => (o?.key === e.key ? null : e))
-  const panel = <SharedEntities list={shared} titles={titles} active={only?.key ?? null} onPick={e => { pick(e); setSheet(false) }} />
+  // shared between two investigations or more of what is shown
+  const sharedHere = shared && shared.map(e => ({ ...e, cases: e.cases.filter(c => roots.has(c.root)) })).filter(e => new Set(e.cases.map(c => c.root)).size >= 2)
+  const panel = <SharedEntities list={sharedHere} titles={titles} active={only?.key ?? null} onPick={e => { pick(e); setSheet(false) }} />
 
   return (
     <>
@@ -75,12 +84,14 @@ export function Home() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="mr-auto">
               <h1 className="text-xl font-semibold tracking-tight">{t("Investigations")}</h1>
-              <p className="text-sm text-muted-foreground">{cases ? t(cases.length === 1 ? "{n} case, live" : "{n} cases, live", { n: cases.length }) : t("Loading…")}</p>
+              <p className="text-sm text-muted-foreground">
+                {cases ? <>{ws && <span className="font-medium text-foreground">{all ? t("All workspaces") : nameOf(ws, ws.current)}</span>}{ws && " · "}{t(here.length === 1 ? "{n} investigation, live" : "{n} investigations, live", { n: here.length })}</> : t("Loading…")}
+              </p>
             </div>
             <AskAgent />
             <Button variant="outline" size="sm" onClick={() => (wide ? setF(x => ({ ...x, shared: !x.shared })) : setSheet(true))} aria-expanded={wide ? f.shared : sheet}>
               {f.shared && wide ? <PanelRightCloseIcon data-icon="inline-start" /> : <PanelRightOpenIcon data-icon="inline-start" />}{t("Shared entities")}
-              {shared && shared.length > 0 && <Badge variant="secondary" className="ml-1 tabular-nums">{shared.length}</Badge>}
+              {sharedHere && sharedHere.length > 0 && <Badge variant="secondary" className="ml-1 tabular-nums">{sharedHere.length}</Badge>}
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -107,16 +118,26 @@ export function Home() {
               <EmptyContent><Button asChild><a href="#/new"><PlusIcon data-icon="inline-start" />{t("New case")}</a></Button></EmptyContent>
             </Empty>
           )}
-          {cases && cases.length > 0 && !shown.length && <p className="py-10 text-center text-sm text-muted-foreground">{t("No case matches these filters.")}</p>}
+          {cases && cases.length > 0 && !here.length && (
+            <Empty className="border border-dashed">
+              <EmptyHeader>
+                <EmptyMedia variant="icon"><Icon name="folder-kanban" /></EmptyMedia>
+                <EmptyTitle>{t("No investigation in this workspace yet")}</EmptyTitle>
+                <EmptyDescription>{t("The cases you start now join it. Another workspace, or All workspaces, is one click away in the bar.")}</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent><Button asChild><a href="#/new"><PlusIcon data-icon="inline-start" />{t("New case")}</a></Button></EmptyContent>
+            </Empty>
+          )}
+          {here.length > 0 && !shown.length && <p className="py-10 text-center text-sm text-muted-foreground">{t("No case matches these filters.")}</p>}
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {shown.map(c => <CaseCard key={c.slug} summary={c} type={types.find(t => t.id === c.type)} color={typeColor(c.type, types)} home={home} titles={titles} now={now} />)}
+            {shown.map(({ sum, below }) => <CaseCard key={sum.slug} summary={sum} below={below} types={types} type={types.find(t => t.id === sum.type)} color={typeColor(sum.type, types)} home={home} titles={titles} now={now} workspace={wsOf(sum)} showWorkspace={all && (ws?.list.length ?? 0) > 1} />)}
           </div>
         </main>
         {wide && f.shared && (
           <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] w-80 shrink-0 flex-col gap-3 self-start">
             <div>
               <h2 className="text-sm font-semibold">{t("Shared entities")}</h2>
-              <p className="text-xs text-muted-foreground">{t("Found in two cases or more. A click keeps their cases.")}</p>
+              <p className="text-xs text-muted-foreground">{t("Found in two investigations or more. A click keeps their cards.")}</p>
             </div>
             <div className="-mx-2 overflow-y-auto px-2">{panel}</div>
           </aside>
@@ -125,7 +146,7 @@ export function Home() {
       {!wide && (
         <Sheet open={sheet} onOpenChange={setSheet}>
           <SheetContent className="w-[22rem]">
-            <SheetHeader><SheetTitle>{t("Shared entities")}</SheetTitle><SheetDescription>{t("Found in two cases or more. A click keeps their cases.")}</SheetDescription></SheetHeader>
+            <SheetHeader><SheetTitle>{t("Shared entities")}</SheetTitle><SheetDescription>{t("Found in two investigations or more. A click keeps their cards.")}</SheetDescription></SheetHeader>
             <div className="overflow-y-auto px-4 pb-4">{panel}</div>
           </SheetContent>
         </Sheet>

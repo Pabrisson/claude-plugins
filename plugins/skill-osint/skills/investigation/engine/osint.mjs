@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { caseDir, createCase, homeDir, listCases, logStep, readCase, setStatus, updateCase } from './lib/case.js'
+import { caseDir, createCase, homeDir, listCases, logStep, parents, readCase, setStatus, updateCase } from './lib/case.js'
 import { context, entities, search, show } from './lib/brain.js'
 import { clue, declareClear, entity, evidence, note, reverseVerdict, source } from './lib/records.js'
 import { sendList } from './lib/tunnel.js'
@@ -23,6 +23,7 @@ import { getType, loadEngine, RESERVED_IDS, runTypeCommand, scanTypes } from './
 import { fail, hasBin, INSTALL, nowIso, sha256File } from './lib/util.js'
 import { readNote } from './lib/vault.js'
 import { runDue, saveSettings, setWatch, settings, watchedCases, when } from './lib/watch.js'
+import { moveCase, newWorkspace, removeWorkspace, renameWorkspace, useWorkspace, workspaceOf, workspaces } from './lib/workspaces.js'
 import { watchSteps } from './lib/watch-rules.js'
 
 // `osint.mjs <type> <command> [flags] -p <slug>`: the type's own flags, parsed by its engine.js. A refused private
@@ -57,7 +58,7 @@ try {
       question: { type: 'string' }, lang: { type: 'string' }, title: { type: 'string' }, in: { type: 'string', multiple: true }, frame: { type: 'string', multiple: true },
       parent: { type: 'string' }, from: { type: 'string' }, phase: { type: 'string' }, progress: { type: 'string' }, fail: { type: 'boolean' }, end: { type: 'boolean' },
       every: { type: 'string' }, due: { type: 'boolean' }, pause: { type: 'boolean' }, resume: { type: 'boolean' }, notify: { type: 'string' },
-      set: { type: 'string' }, why: { type: 'string' }, open: { type: 'boolean' },
+      set: { type: 'string' }, why: { type: 'string' }, open: { type: 'boolean' }, workspace: { type: 'string' },
       confidence: { type: 'string' }, sources: { type: 'string' }, entities: { type: 'string' }, aliases: { type: 'string' }, prop: { type: 'string', multiple: true },
       appendix: { type: 'boolean' }, status: { type: 'string' }, where: { type: 'string' }, credibility: { type: 'string' }, constraint: { type: 'boolean' }, journal: { type: 'string' },
       file: { type: 'string' }, level: { type: 'string' }, under: { type: 'string' }, 'refute-if': { type: 'string' }, point: { type: 'string' }, radius: { type: 'string' }, prior: { type: 'string' }, clue: { type: 'string' }, lr: { type: 'string' }, covers: { type: 'string' }, done: { type: 'string' }, all: { type: 'boolean' }, only: { type: 'string' }, network: { type: 'boolean' }, 'no-load': { type: 'boolean' }, kind: { type: 'string' }, shared: { type: 'boolean' }, archive: { type: 'string' }, reliability: { type: 'string' }, text: { type: 'string' }, block: { type: 'string' }, of: { type: 'string' },
@@ -77,13 +78,31 @@ const dir = () => caseDir(HOME, opt.project)
 
 export const COMMANDS = {
   new: async () => {
-    const [type, ...rest] = args
-    const r = await createCase(HOME, getType(type), { input: rest.join(' ') || undefined, inputs: kv(opt.in), file: opt.file, question: opt.question, frame: kv(opt.frame), title: opt.title, lang: opt.lang, parent: opt.parent, from: opt.from })
+    const [type, ...rest] = args, w = workspaces(HOME)
+    // a new investigation joins the current workspace; a sub-case its parent's
+    if (opt.workspace && opt.parent) fail('a sub-case lives in its parent\'s workspace: --workspace goes with a new investigation only')
+    if (opt.workspace && !w.list.some(x => x.slug === opt.workspace)) fail(`no workspace ${opt.workspace} (${w.list.map(x => x.slug).join(', ')}): osint.mjs workspaces new <name>`)
+    const r = await createCase(HOME, getType(type), { input: rest.join(' ') || undefined, inputs: kv(opt.in), file: opt.file, question: opt.question, frame: kv(opt.frame), title: opt.title, lang: opt.lang, parent: opt.parent, from: opt.from, workspace: opt.workspace ?? w.current })
     out(r, `case ${r.slug}: ${r.dir}`)
   },
   list: () => {
-    const rows = listCases(HOME).map(slug => { const p = readNote(path.join(HOME, slug, 'Case.md')).props; return { slug, type: p.type, status: p.status, phase: p.phase, question: p.question } })
-    out(rows, rows.map(r => `${r.slug}  ${r.type} · ${r.status}${r.phase ? ` · ${r.phase}` : ''} — ${r.question}`).join('\n') || `no case in ${HOME}`)
+    const w = workspaces(HOME), up = parents(HOME)
+    const rows = listCases(HOME).map(slug => { const p = readNote(path.join(HOME, slug, 'Case.md')).props; return { slug, type: p.type, status: p.status, phase: p.phase, question: p.question, parent: up.get(slug), workspace: workspaceOf(HOME, slug, w, up) } })
+      .filter(r => !opt.workspace || r.workspace === opt.workspace)
+    out(rows, rows.map(r => `${r.slug}  ${r.type} · ${r.status}${r.phase ? ` · ${r.phase}` : ''}${r.parent ? ` · under ${r.parent}` : ''} · [${r.workspace}] — ${r.question}`).join('\n') || `no case in ${HOME}`)
+  },
+  // workspaces [list | new <name> | use <slug> | rename <slug> <name> | remove <slug> | move <case> <slug>]
+  workspaces: () => {
+    const [sub = 'list', a, ...rest] = args
+    if (sub === 'new') { const r = newWorkspace(HOME, [a, ...rest].join(' ')); return out(r, `workspace ${r.slug} made, now the current one: new cases join it`) }
+    if (sub === 'use') { const r = useWorkspace(HOME, a); return out(r, `current workspace: ${a}`) }
+    if (sub === 'rename') { const r = renameWorkspace(HOME, a, rest.join(' ')); return out(r, `workspace ${a} renamed « ${rest.join(' ')} »`) }
+    if (sub === 'remove') { const r = removeWorkspace(HOME, a); return out(r, `workspace ${a} removed; ${r.moved.length} case${r.moved.length === 1 ? '' : 's'} back in the default workspace`) }
+    if (sub === 'move') { const r = moveCase(HOME, a, rest[0]); return out(r, `${r.cases.join(', ')} moved to ${r.workspace}${r.root !== a ? ` (the whole investigation of ${r.root})` : ''}`) }
+    if (sub !== 'list') fail('workspaces [list | new <name> | use <slug> | rename <slug> <name> | remove <slug> | move <case> <slug>]')
+    const w = workspaces(HOME), up = parents(HOME), count = s => listCases(HOME).filter(c => !up.get(c) && workspaceOf(HOME, c, w, up) === s).length
+    const rows = w.list.map(x => ({ ...x, current: x.slug === w.current, investigations: count(x.slug) }))
+    out({ current: w.current, list: rows }, rows.map(x => `${x.current ? '*' : ' '} ${x.slug}  ${x.name} · ${x.investigations} investigation${x.investigations === 1 ? '' : 's'}`).join('\n'))
   },
   status: () => {
     const d = dir()
