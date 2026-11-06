@@ -3,6 +3,7 @@ import { itemOf } from "@engine/prompt.js"
 
 import { api } from "@/lib/api"
 import { addToStored, type Item } from "@/lib/basket"
+import { t } from "@/lib/i18n"
 import { caseHref, go } from "@/lib/route"
 
 // Refresh: the engine's steps run here (a local edit), the toast sums up what changed; the agent's steps go to the
@@ -13,7 +14,7 @@ export async function runRefresh(slug: string, add?: (i: Item) => void, agentOnl
     const item = itemOf("[refresh]")
     if (add) add(item)
     else addToStored({ slug }, [item])
-    toast.success("Refresh added to the case's prompt", { description: "This type's engine.js runs only through the Agent, who reads it first.", action: add ? undefined : { label: "Open case", onClick: () => go(caseHref(slug)) } })
+    toast.success(t("Refresh added to the case's prompt"), { description: t("This type's engine.js runs only through the Agent, who reads it first."), action: add ? undefined : { label: t("Open case"), onClick: () => go(caseHref(slug)) } })
     return
   }
   try {
@@ -22,14 +23,14 @@ export async function runRefresh(slug: string, add?: (i: Item) => void, agentOnl
     const items = r.agent.map(a => itemOf(a.prompt))
     if (add) items.forEach(add)
     else addToStored({ slug }, items)
-    toast.success(`${n("added")} added, ${n("removed")} removed, ${n("changed")} changed`, {
+    toast.success(t("{added} added, {removed} removed, {changed} changed", { added: n("added"), removed: n("removed"), changed: n("changed") }), {
       description: [
-        items.length ? `${items.length} agent step${items.length > 1 ? "s" : ""} added to the case's prompt` : real.length ? undefined : "First collection: the next Refresh compares with it",
-        r.skipped?.length ? `Noisy, left for the agent (it needs your yes): ${r.skipped.join(", ")}` : undefined,
+        items.length ? t(items.length > 1 ? "{n} agent steps added to the case's prompt" : "{n} agent step added to the case's prompt", { n: items.length }) : real.length ? undefined : t("First collection: the next Refresh compares with it"),
+        r.skipped?.length ? t("Noisy, left for the agent (it needs your yes): {list}", { list: r.skipped.join(", ") }) : undefined,
       ].filter(Boolean).join(". ") || undefined,
-      action: add ? undefined : { label: "Open case", onClick: () => go(caseHref(slug)) },
+      action: add ? undefined : { label: t("Open case"), onClick: () => go(caseHref(slug)) },
     })
   } catch (e) {
-    toast.error("Refresh failed", { description: (e as Error).message })
+    toast.error(t("Refresh failed"), { description: (e as Error).message })
   }
 }

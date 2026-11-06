@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Icon } from "@/components/icon"
 import { kindOf } from "@/components/shared-entities"
 import type { CaseIndex, NoteMeta } from "@/lib/api"
+import { t } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 const ROOT = ["Case.md", "Report.md", "Leads.md", "Journal.md"]
@@ -24,14 +25,14 @@ export function BrainTree({ index, open, fresh, onOpen }: { index: CaseIndex; op
         className={cn("flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-sm outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50", indent && "pl-6", open === path && "bg-muted font-medium")}>
         <Icon name={icon} className="size-3.5 shrink-0" style={color ? { color } : undefined} aria-hidden />
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {fresh.has(path) && <span className="size-1.5 shrink-0 rounded-full bg-sky-500" aria-label="new" />}
+        {fresh.has(path) && <span className="size-1.5 shrink-0 rounded-full bg-sky-500" aria-label={t("new")} />}
       </button>
     </li>
   )
   const label = (n: NoteMeta) => (n.folder === "Entities" ? String(n.props.value ?? n.title) : n.title)
   const icon = (n: NoteMeta) => (n.folder === "Entities" ? kindOf(String(n.props.kind)).icon : n.folder === "Hypotheses" ? HYP_ICON[String(n.props.status)] ?? "lightbulb" : n.folder === "Sources" ? "file-text" : "search")
   return (
-    <nav aria-label="Notes" className="flex flex-col gap-3">
+    <nav aria-label={t("Notes")} className="flex flex-col gap-3">
       <ul>{root.map(p => item(p, p.replace(/\.md$/, ""), ROOT_ICON[p] ?? "file-text"))}</ul>
       {[...FOLDERS.map(([f, i]) => [f, i, notes.filter(n => n.folder === f)] as const), ["Evidence", "image", null] as const].map(([f, i, list]) => {
         const count = list ? list.length : evidence.length
@@ -43,7 +44,7 @@ export function BrainTree({ index, open, fresh, onOpen }: { index: CaseIndex; op
               <ChevronRightIcon className={cn("size-3.5 transition-transform", !fold && "rotate-90")} />
               <Icon name={i} className="size-3.5" aria-hidden />{f}
               <span className="ml-auto tabular-nums">{count}</span>
-              {fold && freshIn && <span className="size-1.5 rounded-full bg-sky-500" aria-label="new notes inside" />}
+              {fold && freshIn && <span className="size-1.5 rounded-full bg-sky-500" aria-label={t("new notes inside")} />}
             </button>
             {!fold && (
               <ul>

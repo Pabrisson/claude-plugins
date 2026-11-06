@@ -41,5 +41,22 @@
     { "id": "bodacc", "by": "engine", "run": "bodacc", "noun": ["BODACC notice", "BODACC notices"], "watch": true },
     { "id": "officers", "by": "engine", "run": "officers", "noun": ["officer's other company", "officers' other companies"], "watch": true }
   ],
-  "requires": { "bins": [], "packs": [], "keys": [] }
+  "requires": { "bins": [], "packs": [], "keys": [] },
+  "fr": {
+    "Company (France)": "Entreprise française",
+    "A French company from its name, SIREN or SIRET: its registry identity, its establishments on a map, its officers and their other companies, its BODACC legal notices (changes, insolvency proceedings, strike-off, filed accounts)": "Une entreprise française à partir de son nom, de son SIREN ou de son SIRET : son identité au registre, ses établissements sur une carte, ses dirigeants et leurs autres sociétés, ses annonces légales au BODACC (modifications, procédures collectives, radiation, comptes déposés)",
+    "Legitimate interest — public registry data": "Intérêt légitime — données publiques du registre",
+    "Company name, SIREN or SIRET": "Nom de l'entreprise, SIREN ou SIRET",
+    "Identity": "Identité",
+    "the registry's answer for the SIREN matches what the input or the parent case read (name, address, legal notice), and BODACC agrees": "la réponse du registre pour le SIREN correspond à ce que l'entrée ou l'enquête parente a lu (nom, adresse, mentions légales), et le BODACC concorde",
+    "one registry answer matches, a field differs (name, address) or nothing else confirms it": "une réponse du registre correspond, un champ diffère (nom, adresse) ou rien d'autre ne la confirme",
+    "only a name matches: several companies could be meant": "seul un nom correspond : plusieurs entreprises pourraient être visées",
+    "Officers' network": "Réseau des dirigeants",
+    "same name and same month of birth in the registry": "même nom et même mois de naissance au registre",
+    "same name and same year of birth, the month unknown on one side": "même nom et même année de naissance, le mois inconnu d'un côté",
+    "same name only: a namesake is possible": "même nom seulement : un homonyme est possible",
+    "Frame": "Cadre", "Collect": "Collecte", "Process": "Traitement", "Analyse": "Analyse", "Red team": "Red team", "Conclude": "Conclusion", "Leads": "Pistes",
+    "Officers": "Dirigeants", "Establishments": "Établissements", "Other companies": "Autres sociétés",
+    "Find the official website": "Trouver le site officiel", "Check this officer's other companies": "Vérifier les autres sociétés de ce dirigeant"
+  }
 }

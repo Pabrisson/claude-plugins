@@ -1,5 +1,6 @@
 import { Icon } from "@/components/icon"
 import { Badge } from "@/components/ui/badge"
+import { t } from "@/lib/i18n"
 import { TONE, type Tone } from "@/lib/tones"
 import { cn } from "@/lib/utils"
 
@@ -21,14 +22,15 @@ export function StatusBadge({ status, className }: { status: string | null | und
   return (
     <Badge className={cn("gap-1", TONE[s.tone], className)}>
       {status === "running" ? <LiveDot /> : <Icon name={s.icon} aria-hidden />}
-      {s.label}
+      {t(s.label)}
     </Badge>
   )
 }
-export function ConfidenceBadge({ value, className, prefix = "" }: { value: string; className?: string; prefix?: string }) {
+// named: « Confidence High » (« Confiance élevée »), else the level alone
+export function ConfidenceBadge({ value, className, named }: { value: string; className?: string; named?: boolean }) {
   const c = CONFIDENCE[value]
   if (!c) return null
-  return <Badge className={cn("gap-1", TONE[c.tone], className)}><Icon name={c.icon} aria-hidden />{prefix}{c.label}</Badge>
+  return <Badge className={cn("gap-1", TONE[c.tone], className)}><Icon name={c.icon} aria-hidden />{t(named ? `Confidence ${c.label}` : c.label)}</Badge>
 }
 // the case is live (an event less than a minute old): a dot that pulses
 export function LiveDot({ className }: { className?: string }) {

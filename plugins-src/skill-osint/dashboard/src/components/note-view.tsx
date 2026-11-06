@@ -7,6 +7,7 @@ import { kindOf } from "@/components/shared-entities"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, fileUrl, type CaseIndex, type Note } from "@/lib/api"
 import { slugOf } from "@/lib/format"
+import { t } from "@/lib/i18n"
 
 const IMAGE = /\.(jpe?g|png|webp|gif|avif|svg)$/i
 type Open = (path: string, anchor?: string | null) => void
@@ -23,7 +24,7 @@ function Source({ url }: { url: string }) {
 function PropValue({ v, slug, files, onOpen }: { v: unknown; slug: string; files: string[]; onOpen: Open }): ReactNode {
   if (v == null || v === "") return <span className="text-muted-foreground">—</span>
   if (Array.isArray(v)) return v.length ? <span className="flex flex-col gap-0.5">{v.map((x, i) => <span key={i}><PropValue v={x} slug={slug} files={files} onOpen={onOpen} /></span>)}</span> : <span className="text-muted-foreground">—</span>
-  if (typeof v === "boolean") return v ? "Yes" : "No"
+  if (typeof v === "boolean") return v ? t("Yes") : t("No")
   if (typeof v === "object") return <code className="text-xs">{JSON.stringify(v)}</code>
   const s = String(v)
   if (s.includes("[[")) return <Markdown text={s} slug={slug} files={files} onOpen={onOpen} inline />
@@ -90,7 +91,7 @@ export function NoteView({ slug, path, anchor, index, pulse, onOpen, extra }: {
         {ev && <p className="font-mono text-xs break-all text-muted-foreground">{ev.id} · SHA-256 {ev.sha256}</p>}
         {IMAGE.test(path) ? <Zoom src={fileUrl(slug, path)} alt={path} />
           : /\.(html?|json|txt|md|csv|xml)$/i.test(path) ? <Source url={fileUrl(slug, path)} />
-          : <a href={fileUrl(slug, path)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">Open the file<ExternalLinkIcon className="size-3.5" /></a>}
+          : <a href={fileUrl(slug, path)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline">{t("Open the file")}<ExternalLinkIcon className="size-3.5" /></a>}
       </div>
     )
   }
@@ -109,7 +110,7 @@ export function NoteView({ slug, path, anchor, index, pulse, onOpen, extra }: {
       <h1 className="-mt-2 text-2xl font-semibold tracking-tight break-words">{title}</h1>
       {props.length > 0 && (
         <table className="w-full text-sm">
-          <caption className="sr-only">Properties</caption>
+          <caption className="sr-only">{t("Properties")}</caption>
           <tbody>
             {props.map(([k, v]) => (
               <tr key={k} className="border-b border-border/60 last:border-0">

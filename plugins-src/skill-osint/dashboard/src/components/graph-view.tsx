@@ -6,6 +6,7 @@ import { Chips } from "@/components/chips"
 import { kindOf } from "@/components/shared-entities"
 import { Button } from "@/components/ui/button"
 import type { CaseIndex } from "@/lib/api"
+import { t } from "@/lib/i18n"
 import { caseHref, go } from "@/lib/route"
 import { fit, usePanZoom } from "@/lib/pan-zoom"
 
@@ -156,18 +157,18 @@ export function GraphView({ index }: { index: CaseIndex }) {
   const legend = groups.map(gid => {
     if (gid.startsWith("kind:")) { const k = kindOf(gid.slice(5)); return { value: gid, label: k.label, icon: k.icon, count: data.ns.filter(n => n.group === gid).length } }
     const f = FOLDER[gid] ?? FOLDER[""]
-    return { value: gid, label: f.label, icon: f.icon, count: data.ns.filter(n => n.group === gid).length }
+    return { value: gid, label: t(f.label), icon: f.icon, count: data.ns.filter(n => n.group === gid).length }
   })
   return (
     <div className="flex h-full min-h-[70vh] flex-col gap-3 py-4 lg:min-h-0">
       <div className="flex flex-wrap items-center gap-2">
-        <Chips multiple size="xs" label="Shown in the graph" value={groups.filter(x => !hidden.includes(x))} onChange={v => setHidden(groups.filter(x => !v.includes(x)))} options={legend} />
+        <Chips multiple size="xs" label={t("Shown in the graph")} value={groups.filter(x => !hidden.includes(x))} onChange={v => setHidden(groups.filter(x => !v.includes(x)))} options={legend} />
         <span className="flex-1" />
-        <Button variant="ghost" size="xs" onClick={fitView}><ScanIcon data-icon="inline-start" />Fit</Button>
+        <Button variant="ghost" size="xs" onClick={fitView}><ScanIcon data-icon="inline-start" />{t("Fit")}</Button>
       </div>
-      <div ref={wrap} className="relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl bg-muted/30 ring-1 ring-foreground/10" role="img" aria-label={`Graph of ${data.ns.length} notes and ${data.es.length} links`}>
+      <div ref={wrap} className="relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl bg-muted/30 ring-1 ring-foreground/10" role="img" aria-label={t("Graph of {n} notes and {m} links", { n: data.ns.length, m: data.es.length })}>
         <canvas ref={cv} className="absolute inset-0" />
-        <p className="pointer-events-none absolute bottom-2 left-3 text-xs text-muted-foreground">Wheel to zoom · drag to move · click a node to open it</p>
+        <p className="pointer-events-none absolute bottom-2 left-3 text-xs text-muted-foreground">{t("Wheel to zoom · drag to move · click a node to open it")}</p>
       </div>
     </div>
   )

@@ -6,12 +6,13 @@ import { Icon } from "@/components/icon"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { api, type Input as InputDef } from "@/lib/api"
+import { locale, t } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 const MAX = 2e9
-const nf = new Intl.NumberFormat("en", { maximumFractionDigits: 1 })
-const size = (n: number) => (n >= 1e6 ? `${nf.format(n / 1e6)} MB` : `${nf.format(n / 1e3)} KB`)
-const plain = (accept?: string) => (accept?.startsWith("video/") ? "Videos" : accept?.startsWith("image/") ? "Images" : (accept ?? "Any file"))
+const nf = (n: number) => new Intl.NumberFormat(locale(), { maximumFractionDigits: 1 }).format(n)
+const size = (n: number) => (n >= 1e6 ? t("{n} MB", { n: nf(n / 1e6) }) : t("{n} KB", { n: nf(n / 1e3) }))
+const plain = (accept?: string) => (accept?.startsWith("video/") ? t("Videos") : accept?.startsWith("image/") ? t("Images") : (accept ?? t("Any file")))
 const BROWSER_IMAGE = /\.(jpe?g|png|webp|gif|avif|bmp)$/i
 type Sent = { file: File; path: string; preview: string | null }
 
@@ -31,8 +32,8 @@ export function FileField({ input, value, onChange, onBusy, error }: { input: In
   async function take(file: File | undefined) {
     if (!file) return
     setMsg(null)
-    if (input.accept && !accepts(input.accept, file.name)) return setMsg(`${file.name} is not ${input.accept}`)
-    if (file.size > MAX) return setMsg("Files over 2 GB: give this one to the agent by its path")
+    if (input.accept && !accepts(input.accept, file.name)) return setMsg(t("{name} is not {accept}", { name: file.name, accept: input.accept }))
+    if (file.size > MAX) return setMsg(t("Files over 2 GB: give this one to the agent by its path"))
     abort.current?.abort()
     const ctl = (abort.current = new AbortController())
     setSent(null); setShare(0); onBusy(true)
@@ -47,14 +48,14 @@ export function FileField({ input, value, onChange, onBusy, error }: { input: In
   const shown = msg ?? error
   return (
     <div className="flex flex-col gap-2">
-      {input.link && <Chips label={`${input.label}: file or link`} size="xs" value={mode} onChange={m => switchTo(m as "upload" | "link")} options={[{ value: "upload", label: "File", icon: "upload" }, { value: "link", label: "Link", icon: "link" }]} />}
+      {input.link && <Chips label={t("{label}: file or link", { label: input.label })} size="xs" value={mode} onChange={m => switchTo(m as "upload" | "link")} options={[{ value: "upload", label: t("File"), icon: "upload" }, { value: "link", label: t("Link"), icon: "link" }]} />}
       {mode === "link" ? (
         <Input id={id} type="url" value={link} placeholder="https://…" autoComplete="off" spellCheck={false} aria-invalid={!!shown || undefined} aria-describedby={shown ? describe : undefined}
-          onChange={e => { const v = e.target.value.trim(); setLink(e.target.value); if (v && !isUrl(v)) { setMsg("A link starts with https://"); onChange(undefined) } else { setMsg(null); onChange(v || undefined) } }} />
+          onChange={e => { const v = e.target.value.trim(); setLink(e.target.value); if (v && !isUrl(v)) { setMsg(t("A link starts with https://")); onChange(undefined) } else { setMsg(null); onChange(v || undefined) } }} />
       ) : share != null ? (
         <div className="flex flex-col gap-2 rounded-xl border border-dashed p-4" role="status">
           <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-[width]" style={{ width: `${Math.round(share * 100)}%` }} /></div>
-          <div className="flex items-center justify-between text-sm"><span>Uploading {Math.round(share * 100)} %</span><Button type="button" variant="ghost" size="sm" onClick={drop}>Cancel</Button></div>
+          <div className="flex items-center justify-between text-sm"><span>{t("Uploading {n} %", { n: Math.round(share * 100) })}</span><Button type="button" variant="ghost" size="sm" onClick={drop}>{t("Cancel")}</Button></div>
         </div>
       ) : sent ? (
         <div className="flex items-center gap-3 rounded-xl p-2 ring-1 ring-foreground/10">
@@ -62,8 +63,8 @@ export function FileField({ input, value, onChange, onBusy, error }: { input: In
             {sent.preview ? <img src={sent.preview} alt="" className="size-full object-cover" /> : <Icon name={sent.file.type.startsWith("video/") || /\.(mov|mp4|mkv|webm|avi|m4v|3gp)$/i.test(sent.file.name) ? "file-video" : "file-image"} className="size-5" aria-hidden />}
           </span>
           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{sent.file.name}</span><span className="text-xs text-muted-foreground">{size(sent.file.size)}</span></span>
-          <Button type="button" variant="outline" size="sm" onClick={() => picker.current?.click()}>Replace</Button>
-          <Button type="button" variant="ghost" size="sm" onClick={drop}>Remove</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => picker.current?.click()}>{t("Replace")}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={drop}>{t("Remove")}</Button>
         </div>
       ) : (
         <div role="button" tabIndex={0} aria-describedby={shown ? describe : undefined}
@@ -73,7 +74,7 @@ export function FileField({ input, value, onChange, onBusy, error }: { input: In
           onDrop={e => { e.preventDefault(); setOver(false); take(e.dataTransfer.files[0]) }}
           className={cn("flex cursor-pointer flex-col items-center gap-1 rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50", over && "ring-2 ring-primary", shown && "border-destructive")}>
           <Icon name={kind} className="size-6" aria-hidden />
-          <span className="font-medium text-foreground">Drop a file here or choose one</span>
+          <span className="font-medium text-foreground">{t("Drop a file here or choose one")}</span>
           <span className="text-xs">{plain(input.accept)}</span>
         </div>
       )}

@@ -4,12 +4,13 @@ import { useEffect, useState } from "react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Table as T, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api, type CaseIndex, type View } from "@/lib/api"
+import { t } from "@/lib/i18n"
 import { caseHref } from "@/lib/route"
 
 type Row = Record<string, unknown> & { __path?: string }
 const cell = (v: unknown): string => (Array.isArray(v) ? v.map(cell).join(", ") : v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v))
 // a column name for a person: first_seen → First seen
-const head = (c: string) => (c === "value" ? "Value" : c.replace(/_/g, " ").replace(/^./, x => x.toUpperCase()))
+const head = (c: string) => (c === "value" ? t("Value") : c.replace(/_/g, " ").replace(/^./, x => x.toUpperCase()))
 
 // A table of the case: the entities of one kind that match `where`, or the rows a type wrote to a view
 // (.osint/views/<view>.json); the manifest's columns, sortable, with a filter
@@ -30,9 +31,9 @@ export function TableWidget({ index, view, pulse }: { index: CaseIndex; view: Vi
       <div className="flex items-center gap-3">
         <InputGroup className="max-w-xs">
           <InputGroupAddon><SearchIcon /></InputGroupAddon>
-          <InputGroupInput type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Filter" aria-label="Filter the rows" />
+          <InputGroupInput type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={t("Filter")} aria-label={t("Filter the rows")} />
         </InputGroup>
-        <span className="text-sm text-muted-foreground tabular-nums" role="status">{shown.length === rows.length ? `${rows.length} rows` : `${shown.length} of ${rows.length} rows`}</span>
+        <span className="text-sm text-muted-foreground tabular-nums" role="status">{shown.length === rows.length ? t(rows.length === 1 ? "{n} row" : "{n} rows", { n: rows.length }) : t(rows.length === 1 ? "{shown} of {n} row" : "{shown} of {n} rows", { shown: shown.length, n: rows.length })}</span>
       </div>
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <T>
@@ -48,7 +49,7 @@ export function TableWidget({ index, view, pulse }: { index: CaseIndex; view: Vi
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!shown.length && <TableRow><TableCell colSpan={cols.length} className="py-8 text-center text-muted-foreground">{rows.length ? "No row matches." : "Nothing here yet."}</TableCell></TableRow>}
+            {!shown.length && <TableRow><TableCell colSpan={cols.length} className="py-8 text-center text-muted-foreground">{rows.length ? t("No row matches.") : t("Nothing here yet.")}</TableCell></TableRow>}
             {shown.map((r, i) => (
               <TableRow key={r.__path ?? i}>
                 {cols.map(c => {

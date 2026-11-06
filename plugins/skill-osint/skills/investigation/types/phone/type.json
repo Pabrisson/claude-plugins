@@ -37,5 +37,21 @@
     { "id": "libphonenumber", "label": "libphonenumber metadata (Apache-2.0)" },
     { "id": "arcep-majnum", "label": "ARCEP numbering register (MAJNUM)" },
     { "id": "arcep-operators", "label": "ARCEP operators (identifiants CE)" }
-  ] }
+  ] },
+  "fr": {
+    "Phone number": "Téléphone",
+    "A phone number: its E.164 form, country and line type (libphonenumber), who holds its block in France (ARCEP), its mentions on the web. Never a call, a text or a messaging app lookup": "Un numéro de téléphone : sa forme E.164, son pays et son type de ligne (libphonenumber), qui détient sa tranche en France (ARCEP), ses mentions sur le web. Jamais d'appel, de SMS ni de recherche dans une messagerie",
+    "Country of a number written without its country code (ISO code)": "Pays d'un numéro écrit sans son indicatif (code ISO)",
+    "Owner": "Titulaire",
+    "two independent sources tie the number to the same holder (the holder's own page and a registry, or two unrelated pages)": "deux sources indépendantes relient le numéro au même titulaire (la page du titulaire et un registre, ou deux pages sans lien)",
+    "one source ties the number to a holder and nothing contradicts it": "une source relie le numéro à un titulaire et rien ne le contredit",
+    "inferred from the area, the block holder or a single directory entry": "déduit de la zone, du détenteur de la tranche ou d'une seule entrée d'annuaire",
+    "Line": "Ligne",
+    "the line type and the country read in the numbering plan and, in the French plan, the block read in the ARCEP's register": "le type de ligne et le pays lus dans le plan de numérotation et, pour le plan français, la tranche lue dans le registre de l'ARCEP",
+    "the line type read in the numbering plan, the block holder unknown": "le type de ligne lu dans le plan de numérotation, le détenteur de la tranche inconnu",
+    "the number fits no range of its country's plan, or only its length was checked": "le numéro n'entre dans aucune tranche du plan de son pays, ou seule sa longueur a été vérifiée",
+    "Frame": "Cadre", "Collect": "Collecte", "Web mentions": "Mentions sur le web", "Process": "Traitement", "Analyse": "Analyse", "Red team": "Red team",
+    "Conclude": "Conclusion", "Leads": "Pistes", "Mentions": "Mentions", "Writings": "Écritures",
+    "Search every writing and the directories": "Chercher chaque écriture et les annuaires"
+  }
 }

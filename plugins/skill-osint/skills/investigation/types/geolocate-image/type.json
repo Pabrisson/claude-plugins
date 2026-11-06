@@ -50,5 +50,24 @@
     ],
     "packs": [{ "id": "geoint", "optional": false, "off": "geolocate-image cannot run" }],
     "keys": [{ "id": "MAPILLARY_TOKEN", "optional": true, "off": "Mapillary panoramas skipped, KartaView, Panoramax and the others still swept", "configure": "/plugin configure skill-osint@pabrisson, or MAPILLARY_TOKEN" }]
+  },
+  "fr": {
+    "Geolocate an image": "Géolocalisation d'image",
+    "Where a photo, a video or a Street View capture was taken: GeoINT's method and local models (metadata, OCR, world prior, detections, camera, reverse search, street-level sweeps), one answer with its radius": "Où une photo, une vidéo ou une capture Street View a été prise : la méthode et les modèles locaux de GeoINT (métadonnées, OCR, a priori mondial, détections, caméra, recherche inversée, balayages au niveau de la rue), une réponse avec son rayon",
+    "Source": "Source", "Image": "Image", "Video": "Vidéo", "Street View capture": "Capture Street View", "Video (a file or a link)": "Vidéo (un fichier ou un lien)",
+    "Speed": "Vitesse", "Quick": "Rapide", "Deep": "Approfondie",
+    "Claim to test (a caption, a place someone gave)": "Affirmation à tester (une légende, un lieu donné par quelqu'un)", "Taken in Évora, July 2024": "Prise à Évora, juillet 2024",
+    "Country": "Pays", "read text/plates/phone, or a confirmed anchor": "texte, plaques ou téléphone lus, ou un point d'ancrage confirmé",
+    "several independent visual clues agree": "plusieurs indices visuels indépendants concordent", "gut or a single clue": "intuition ou un seul indice",
+    "Region / city": "Région / ville", "regional code, named place, or reference sheets that clearly separate": "code régional, lieu nommé, ou fiches de référence qui tranchent nettement",
+    "consistent clues, alternatives unchecked": "indices cohérents, alternatives non vérifiées", "hunch": "pressentiment",
+    "Street": "Rue", "ground-level match on ≥2 unique features": "correspondance au sol sur ≥2 éléments uniques",
+    "layout fits + 1 feature": "la disposition colle + 1 élément", "satellite layout only": "disposition vue par satellite seulement",
+    "Building / camera point": "Bâtiment / point de prise de vue", "two independent constraints + ≥3-feature match": "deux contraintes indépendantes + correspondance sur ≥3 éléments",
+    "one of the two": "l'une des deux", "estimate": "estimation",
+    "Archive": "Archivage", "Gut call": "Première intuition", "Recon": "Reconnaissance", "Read and search": "Lecture et recherche",
+    "Region": "Région", "Pinpoint": "Localisation précise", "Verify": "Vérification", "Answer": "Réponse",
+    "Check on the ground": "Vérifier sur le terrain", "When was it taken": "Dater la prise de vue",
+    "Find other images of the place": "Trouver d'autres images du lieu", "Identify this building": "Identifier ce bâtiment"
   }
 }

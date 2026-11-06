@@ -33,5 +33,20 @@
   ],
   "pivots": ["person"],
   "refresh": [{ "id": "profile", "by": "engine", "run": "consolidate --children", "noisy": false, "sends_image": false, "paid": false, "watch": true, "noun": ["identifier", "identifiers"] }],
-  "requires": { "bins": [], "packs": [], "keys": [] }
+  "requires": { "bins": [], "packs": [], "keys": [] },
+  "fr": {
+    "Person": "Personne",
+    "A person, from a name and the identifiers already known: one child case proposed per username, email, phone, domain or employer (a town is kept, never searched), the findings consolidated in Profile.md, each identifier weighed as the subject's or another person's. A purpose and a legal basis first; never sensitive data, never a minor, never to find, contact or follow a private person": "Une personne, à partir d'un nom et des identifiants déjà connus : une enquête enfant proposée par pseudo, email, téléphone, domaine ou employeur (une ville est gardée, jamais recherchée), les résultats consolidés dans Profile.md, chaque identifiant pesé comme celui du sujet ou d'une autre personne. D'abord un but et une base légale ; jamais de données sensibles, jamais un mineur, jamais pour retrouver, contacter ou suivre un particulier",
+    "Full name": "Nom complet", "Identifiers already known, one per line": "Identifiants déjà connus, un par ligne",
+    "username: durand.bakery\njeanne@durand-bakery.example\n+33 6 39 98 12 34\nemployer: Boulangerie Durand\ncity: Exempleville": "pseudo : durand.bakery\njeanne@durand-bakery.example\n+33 6 39 98 12 34\nemployeur : Boulangerie Durand\nville : Exempleville",
+    "Usernames, emails, phone numbers, domains, the employer and the city. Start a line with username:, email:, phone:, domain:, employer: or city: when it could be read two ways. Never a street address.": "Pseudos, emails, numéros de téléphone, domaines, l'employeur et la ville. Commencez une ligne par pseudo :, email :, téléphone :, domaine :, employeur : ou ville : quand elle peut se lire de deux façons. Jamais une adresse postale.",
+    "Identity": "Identité",
+    "each identifier kept is tied to the subject by two independent links (profiles that cite each other, a registry record, the same unique email or phone)": "chaque identifiant retenu est relié au sujet par deux liens indépendants (des profils qui se citent, une fiche de registre, le même email ou téléphone unique)",
+    "one link for each identifier kept, the rest consistent (name, town, dates)": "un lien pour chaque identifiant retenu, le reste cohérent (nom, ville, dates)",
+    "the name only: a namesake is not ruled out": "le nom seulement : un homonyme n'est pas exclu",
+    "Frame": "Cadre", "Plan": "Plan", "Child cases": "Enquêtes enfants", "Consolidate": "Consolidation", "Analyse": "Analyse", "Red team": "Red team",
+    "Conclude": "Conclusion", "Leads": "Pistes", "Identifiers": "Identifiants", "Candidates": "Candidats",
+    "Consolidate the child cases": "Consolider les enquêtes enfants", "Weigh whose identifiers they are": "Peser à qui sont les identifiants",
+    "Open a company case on this employer": "Ouvrir une enquête entreprise sur cet employeur"
+  }
 }

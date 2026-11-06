@@ -1,12 +1,13 @@
 import { Icon } from "@/components/icon"
 import { fileUrl, type CaseIndex, type OsintEvent } from "@/lib/api"
 import { clock, EVENT_ICON, who } from "@/lib/format"
+import { t } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 const plain = (s: string) => s.replace(/!?\[\[([^\]|]*?)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (_, t, a) => a ?? t).replace(/\s*\^[\w-]+$/, "").replace(/^\s*(?:[-*+]|\d+\.)\s+(?:\[.\]\s+)?/, "")
 const BARE: Record<string, string> = { "hyp.rank": "ranked the hypotheses again", "case.new": "created the case", "phase.end": "phase done" }
 export const eventText = (e: OsintEvent) =>
-  !e.text && BARE[e.kind] ? BARE[e.kind] : e.kind === "note.write" ? (e.by === "vault" ? e.text ?? `edited ${e.path}` : `wrote ${e.path}`) : e.kind === "progress" && e.of ? `${e.text ?? "progress"} (${e.n}/${e.of})` : e.text ?? e.kind
+  !e.text && BARE[e.kind] ? t(BARE[e.kind]) : e.kind === "note.write" ? (e.by === "vault" ? e.text ?? t("edited {path}", { path: e.path ?? "" }) : t("wrote {path}", { path: e.path ?? "" })) : e.kind === "progress" && e.of ? `${e.text ?? t("progress")} (${e.n}/${e.of})` : e.text ?? e.kind
 
 // Right of the note: who links to it (with the line), what it links to, and the case's live activity
 export function SidePanel({ index, path, events, onOpen }: { index: CaseIndex; path: string | null; events: OsintEvent[]; onOpen: (p: string, anchor?: string | null) => void }) {
@@ -19,8 +20,8 @@ export function SidePanel({ index, path, events, onOpen }: { index: CaseIndex; p
     <div className="flex flex-col gap-5 text-sm">
       {path && (
         <section aria-labelledby="bl">
-          <h2 id="bl" className="mb-1.5 flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"><Icon name="link-2" className="size-3.5" />Backlinks <span className="tabular-nums">{back.length}</span></h2>
-          {!back.length ? <p className="text-xs text-muted-foreground">No note links here.</p> : (
+          <h2 id="bl" className="mb-1.5 flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"><Icon name="link-2" className="size-3.5" />{t("Backlinks")} <span className="tabular-nums">{back.length}</span></h2>
+          {!back.length ? <p className="text-xs text-muted-foreground">{t("No note links here.")}</p> : (
             <ul className="flex flex-col gap-1">
               {back.map((b, i) => (
                 <li key={i}>
@@ -36,15 +37,15 @@ export function SidePanel({ index, path, events, onOpen }: { index: CaseIndex; p
       )}
       {path && out.length > 0 && (
         <section aria-labelledby="ol">
-          <h2 id="ol" className="mb-1.5 flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"><Icon name="arrow-up-right" className="size-3.5" />Links <span className="tabular-nums">{out.length}</span></h2>
+          <h2 id="ol" className="mb-1.5 flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"><Icon name="arrow-up-right" className="size-3.5" />{t("Links")} <span className="tabular-nums">{out.length}</span></h2>
           <ul className="flex flex-col">
             {out.map(p => <li key={p}><button type="button" onClick={() => onOpen(p)} className="w-full truncate rounded-md px-2 py-1 text-left hover:bg-muted" title={p}>{title(p)}</button></li>)}
           </ul>
         </section>
       )}
       <section aria-labelledby="ac" className="min-h-0">
-        <h2 id="ac" className="mb-1.5 flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"><Icon name="activity" className="size-3.5" />Activity</h2>
-        {!feed.length && <p className="text-xs text-muted-foreground">Nothing yet: the agent's and the engine's steps show here as they happen.</p>}
+        <h2 id="ac" className="mb-1.5 flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"><Icon name="activity" className="size-3.5" />{t("Activity")}</h2>
+        {!feed.length && <p className="text-xs text-muted-foreground">{t("Nothing yet: the agent's and the engine's steps show here as they happen.")}</p>}
         <ol className="flex flex-col gap-1" aria-live="off">
           {feed.slice(0, 120).map((e, i) => {
             const fail = e.kind === "fail", pdf = e.kind === "export" && !!e.path, open = e.kind === "note.write" && e.path && !e.deleted

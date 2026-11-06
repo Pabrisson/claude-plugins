@@ -39,5 +39,20 @@
     "bins": [{ "id": "uv", "optional": true, "off": "account-probe (Holehe, after the user's yes) is off; every other step runs" }],
     "packs": [], "keys": [],
     "datasets": [{ "id": "disposable-domains", "label": "disposable email domains" }]
+  },
+  "fr": {
+    "Email": "Adresse email", "Email address": "Adresse email", "name@example.org": "nom@example.org",
+    "An email address: its provider, a disposable domain, a public Gravatar profile, the names of the breaches it appears in; sign-up probes only after the user's yes, never the mail server": "Une adresse email : son fournisseur, un domaine jetable, un profil Gravatar public, le nom des fuites de données où elle apparaît ; les tests d'inscription seulement avec votre accord, jamais le serveur de mail",
+    "Owner": "Propriétaire",
+    "two independent links name the same owner (a verified Gravatar account, a page the owner runs that publishes the address, a registry)": "deux liens indépendants nomment le même propriétaire (un compte Gravatar vérifié, une page tenue par le propriétaire qui publie l'adresse, un registre)",
+    "one public profile or page names the owner, nothing contradicts it": "un profil ou une page publique nomme le propriétaire, rien ne le contredit",
+    "the local part or the domain only": "la partie locale ou le domaine seulement",
+    "In use": "En service",
+    "the domain accepts mail and a recent sign is read (a profile edited this year, the address on a live page)": "le domaine accepte le courrier et un signe récent est lu (un profil modifié cette année, l'adresse sur une page en ligne)",
+    "the domain accepts mail and older signs agree (breaches, a profile, sign-up hits)": "le domaine accepte le courrier et des signes plus anciens concordent (fuites, un profil, inscriptions trouvées)",
+    "the domain accepts mail, nothing else": "le domaine accepte le courrier, rien d'autre",
+    "Frame": "Cadre", "Collect": "Collecte", "Process": "Traitement", "Analyse": "Analyse", "Red team": "Red team", "Conclude": "Conclusion", "Leads": "Pistes",
+    "Accounts": "Comptes", "Breaches": "Fuites de données", "Mail DNS": "DNS mail",
+    "Probe sign-up forms (Holehe)": "Tester les formulaires d'inscription (Holehe)"
   }
 }

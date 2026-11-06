@@ -52,5 +52,28 @@
     ],
     "packs": [{ "id": "geoint", "optional": true, "short": "no direct upload", "off": "no direct Yandex/Baidu upload for verify-media; the tunnel's links still work" }],
     "keys": []
+  },
+  "fr": {
+    "Verify an image or a video": "Vérification de média",
+    "Where an image or a video first appeared, whether what is said about it holds, and the signs of editing or generation: first sightings dated on a timeline, metadata, C2PA, reverse search": "Où une image ou une vidéo est apparue en premier, si ce qu'on en dit tient, et les signes de retouche ou de génération : premières apparitions datées sur une chronologie, métadonnées, C2PA, recherche inversée",
+    "Media": "Média", "Image": "Image", "Video": "Vidéo", "Image (a file or a link)": "Image (un fichier ou un lien)", "Video (a file or a link)": "Vidéo (un fichier ou un lien)",
+    "Claim to test (date, place, event)": "Affirmation à tester (date, lieu, événement)",
+    "The Temple of Diana in Mérida during the storm of 3 March 2025": "Le temple de Diane à Mérida pendant l'orage du 3 mars 2025",
+    "Origin (first appearance)": "Origine (première apparition)",
+    "the earliest dated copy is read and archived, and every engine and the archives found nothing earlier": "la plus ancienne copie datée est lue et archivée, et ni les moteurs ni les archives n'ont rien trouvé de plus ancien",
+    "an early dated copy, some engines or archives unchecked": "une copie ancienne datée, certains moteurs ou archives non consultés",
+    "a single page, or a date read from metadata only": "une seule page, ou une date lue dans les métadonnées seulement",
+    "Claim": "Affirmation",
+    "a contradiction read or computed (another place identified, an earlier copy, the weather or the sun of that day), or every part of the claim checked and consistent": "une contradiction lue ou calculée (un autre lieu identifié, une copie plus ancienne, la météo ou le soleil de ce jour-là), ou chaque partie de l'affirmation vérifiée et cohérente",
+    "consistent clues, the place or the date unchecked": "des indices cohérents, le lieu ou la date non vérifiés", "only the caption and the page that carries it": "seulement la légende et la page qui la porte",
+    "Integrity": "Intégrité",
+    "a signed and valid C2PA manifest of the original says how it was made": "un manifeste C2PA signé et valide de l'original dit comment il a été fait",
+    "metadata, the embedded thumbnail and a close look at hands, text and shadows agree": "les métadonnées, la miniature intégrée et un examen attentif des mains, du texte et des ombres concordent",
+    "a single sign, or a stripped file with nothing to read": "un seul signe, ou un fichier nettoyé sans rien à lire",
+    "signs of editing or generation are clues, never a verdict: only a signed and valid C2PA manifest of the original goes above medium": "les signes de retouche ou de génération sont des indices, jamais un verdict : seul un manifeste C2PA signé et valide de l'original permet de dépasser la confiance moyenne",
+    "Frame": "Cadre", "Archive": "Archivage", "Metadata": "Métadonnées", "Reverse search": "Recherche inversée", "First seen": "Première apparition",
+    "Test the claim": "Test de l'affirmation", "Red team": "Red team", "Answer": "Réponse", "Claim and alternatives": "Affirmation et alternatives",
+    "Reverse search the key frames": "Lancer la recherche inversée des images clés", "Search X, Telegram, TikTok and YouTube": "Chercher sur X, Telegram, TikTok et YouTube",
+    "When was it taken (sun, weather)": "Dater la prise de vue (soleil, météo)"
   }
 }

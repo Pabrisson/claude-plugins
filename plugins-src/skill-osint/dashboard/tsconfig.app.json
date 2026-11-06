@@ -8,6 +8,7 @@
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
     "allowJs": true,
+    "resolveJsonModule": true,
 
     /* Bundler mode */
     "moduleResolution": "bundler",

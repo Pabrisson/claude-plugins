@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { toast } from "sonner"
 import { formatPrompt } from "@engine/prompt.js"
 
+import { t } from "@/lib/i18n"
+
 export type Item = { tag: string; text: string }
 export type Scope = { slug: string } | { all: true }
 type Basket = { items: Item[]; scope: Scope; add: (i: Item) => void; remove: (i: number) => void; clear: () => void; copy: () => Promise<void> }
@@ -29,7 +31,7 @@ export function BasketProvider({ scope, children }: { scope: Scope; children: Re
   const clear = useCallback(() => setItems(() => []), [setItems])
   const copy = useCallback(async () => {
     await navigator.clipboard.writeText(formatPrompt(scope, items))
-    toast.success("Prompt copied: paste it to the agent")
+    toast.success(t("Prompt copied: paste it to the agent"))
     setItems(() => [])
   }, [scope, items, setItems])
   const value = useMemo(() => ({ items, scope, add, remove, clear, copy }), [items, scope, add, remove, clear, copy])

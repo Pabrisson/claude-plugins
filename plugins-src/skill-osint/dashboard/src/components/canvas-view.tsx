@@ -6,6 +6,7 @@ import { kindOf } from "@/components/shared-entities"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { fileUrl, type CaseIndex } from "@/lib/api"
+import { t } from "@/lib/i18n"
 import { fit, usePanZoom } from "@/lib/pan-zoom"
 import { caseHref, go } from "@/lib/route"
 
@@ -36,19 +37,19 @@ export function CanvasView({ index, pulse }: { index: CaseIndex; pulse: { path: 
   }
   useLayoutEffect(() => { if (!fitted.current && canvas && canvas !== "none") { fitted.current = true; fitView() } })
   if (canvas === "none" || (canvas && !canvas.nodes.length)) return (
-    <Empty className="my-4 border border-dashed"><EmptyHeader><EmptyTitle>No canvas yet</EmptyTitle><EmptyDescription>Graph.canvas fills as the case records entities and their relations.</EmptyDescription></EmptyHeader></Empty>
+    <Empty className="my-4 border border-dashed"><EmptyHeader><EmptyTitle>{t("No canvas yet")}</EmptyTitle><EmptyDescription>{t("Graph.canvas fills as the case records entities and their relations.")}</EmptyDescription></EmptyHeader></Empty>
   )
   const byId = new Map((canvas?.nodes ?? []).map(x => [x.id, x]))
   const note = (f?: string) => index.notes.find(x => x.path === f)
   return (
     <div className="flex h-full min-h-[70vh] flex-col gap-3 py-4 lg:min-h-0">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon name="lock" className="size-3.5" aria-hidden />Read only: edit it in Obsidian (Graph.canvas)
+        <Icon name="lock" className="size-3.5" aria-hidden />{t("Read only: edit it in Obsidian (Graph.canvas)")}
         <span className="flex-1" />
-        <Button variant="ghost" size="xs" onClick={fitView}><ScanIcon data-icon="inline-start" />Fit</Button>
+        <Button variant="ghost" size="xs" onClick={fitView}><ScanIcon data-icon="inline-start" />{t("Fit")}</Button>
       </div>
       <div ref={wrap} className="relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl bg-muted/30 ring-1 ring-foreground/10">
-        <svg className="absolute inset-0 size-full" role="img" aria-label={`Canvas of ${canvas?.nodes.length ?? 0} cards`}>
+        <svg className="absolute inset-0 size-full" role="img" aria-label={t("Canvas of {n} cards", { n: canvas?.nodes.length ?? 0 })}>
           <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.k})`}>
             {canvas?.edges.map(e => {
               const a = byId.get(e.fromNode), b = byId.get(e.toNode)
@@ -72,7 +73,7 @@ export function CanvasView({ index, pulse }: { index: CaseIndex; pulse: { path: 
               const open = () => { if (c.type === "file" && c.file) go(caseHref(index.slug, "brain", c.file)) }
               return (
                 <g key={c.id} transform={`translate(${c.x} ${c.y})`} data-card={c.type === "file" ? "" : undefined} onClick={open} className={c.type === "file" ? "cursor-pointer" : undefined}
-                  role={c.type === "file" ? "link" : undefined} tabIndex={c.type === "file" ? 0 : undefined} aria-label={c.type === "file" ? `Open ${title}` : undefined} onKeyDown={e => { if (e.key === "Enter") open() }}>
+                  role={c.type === "file" ? "link" : undefined} tabIndex={c.type === "file" ? 0 : undefined} aria-label={c.type === "file" ? t("Open {title}", { title }) : undefined} onKeyDown={e => { if (e.key === "Enter") open() }}>
                   <rect width={c.width} height={c.height} rx={10} className="fill-card stroke-border hover:stroke-ring" strokeWidth={1.5} />
                   {c.type === "file" ? (
                     <>
@@ -89,7 +90,7 @@ export function CanvasView({ index, pulse }: { index: CaseIndex; pulse: { path: 
             })}
           </g>
         </svg>
-        <p className="pointer-events-none absolute bottom-2 left-3 text-xs text-muted-foreground">Wheel to zoom · drag to move · click a card to open its note</p>
+        <p className="pointer-events-none absolute bottom-2 left-3 text-xs text-muted-foreground">{t("Wheel to zoom · drag to move · click a card to open its note")}</p>
       </div>
     </div>
   )

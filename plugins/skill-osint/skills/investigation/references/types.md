@@ -86,6 +86,7 @@ type, and is versioned with the cases (the skill's `.gitignore` keeps it).
 | `pivots` | the entity kinds a case of this type can start from: every case shows « New <label> case on <value> » on such an entity |
 | `refresh` | the steps refresh runs again (below) |
 | `requires` | what the machine needs (below) |
+| `fr` | optional, the dashboard's French for the shown words (`label`, `description`, `placeholder`, `help`, `why`, `legal_basis`, criteria), keyed by the English text: `{ "Depth": "Profondeur" }`; missing → English |
 
 **Inputs**: `{ "id", "kind", "label", "required"?, "placeholder"?, "default"?, "when"? }`, `kind` one of `text`
 (`multiline` optional), `url`, `file` (`accept`), `select`, `chips` (both with `options: [{ "value", "label", "icon" }]`,

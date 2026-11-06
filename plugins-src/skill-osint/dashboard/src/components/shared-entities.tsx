@@ -5,10 +5,12 @@ import { Icon } from "@/components/icon"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { SharedEntity } from "@/lib/api"
+import { t } from "@/lib/i18n"
 import { caseHref } from "@/lib/route"
 import { cn } from "@/lib/utils"
 
-export const kindOf = (k: string) => (KINDS as Record<string, { icon: string; color: string; label: string }>)[k] ?? { icon: "circle", color: "var(--muted-foreground)", label: k }
+// called at render: the label in the dashboard's language
+export const kindOf = (k: string) => { const m = (KINDS as Record<string, { icon: string; color: string; label: string }>)[k]; return m ? { ...m, label: t(m.label) } : { icon: "circle", color: "var(--muted-foreground)", label: k } }
 
 // The entities found in two cases or more: a click on one keeps the cards of its cases; its case chips open the
 // entity's note in that case.
@@ -16,7 +18,7 @@ export function SharedEntities({ list, titles, active, onPick }: { list: SharedE
   if (!list) return <div className="flex flex-col gap-2">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14" />)}</div>
   if (!list.length) return (
     <Empty className="border border-dashed p-6">
-      <EmptyHeader><EmptyTitle className="text-sm">Nothing shared yet</EmptyTitle><EmptyDescription>An entity found in two cases shows here.</EmptyDescription></EmptyHeader>
+      <EmptyHeader><EmptyTitle className="text-sm">{t("Nothing shared yet")}</EmptyTitle><EmptyDescription>{t("An entity found in two cases shows here.")}</EmptyDescription></EmptyHeader>
     </Empty>
   )
   return (
@@ -25,7 +27,7 @@ export function SharedEntities({ list, titles, active, onPick }: { list: SharedE
         const k = kindOf(e.kind)
         return (
           <li key={e.key} className={cn("rounded-lg p-2 transition-colors hover:bg-muted/60", active === e.key && "bg-muted")}>
-            <button type="button" onClick={() => onPick(e)} className="flex w-full min-w-0 items-center gap-2 rounded-md text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" title={`Show the cases of ${e.value}`} aria-pressed={active === e.key}>
+            <button type="button" onClick={() => onPick(e)} className="flex w-full min-w-0 items-center gap-2 rounded-md text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" title={t("Show the cases of {value}", { value: e.value })} aria-pressed={active === e.key}>
               <span className="grid size-6 shrink-0 place-items-center rounded-md" style={{ background: `color-mix(in oklch, ${k.color} 18%, transparent)`, color: k.color }}><Icon name={k.icon} className="size-3.5" aria-hidden /></span>
               <span className="min-w-0 flex-1 truncate font-medium">{e.value}</span>
               <span className="sr-only">{k.label}</span>

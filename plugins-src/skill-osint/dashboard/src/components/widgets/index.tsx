@@ -8,6 +8,7 @@ import { Sources } from "@/components/widgets/sources"
 import { TableWidget } from "@/components/widgets/table"
 import { Timeline } from "@/components/widgets/timeline"
 import type { CaseIndex, Manifest, View } from "@/lib/api"
+import { t } from "@/lib/i18n"
 
 export type WidgetProps = { slug: string; index: CaseIndex; view: View & { view?: string }; manifest: Manifest; pulse: number }
 // the widgets a type's views may name (spec § 3.4); map, evidence and calibration come with geolocate-image
@@ -22,5 +23,5 @@ export const WIDGETS: Record<string, (p: WidgetProps) => ReactElement> = {
 }
 export function Widget(p: WidgetProps) {
   const W = WIDGETS[p.view.widget]
-  return W ? <W {...p} /> : <p className="py-10 text-center text-sm text-muted-foreground">This widget ({p.view.widget}) comes with a later version of the dashboard.</p>
+  return W ? <W {...p} /> : <p className="py-10 text-center text-sm text-muted-foreground">{t("This widget ({widget}) comes with a later version of the dashboard.", { widget: p.view.widget })}</p>
 }

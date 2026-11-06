@@ -25,18 +25,20 @@ import { slugOf, useNow } from "@/lib/format"
 import { runRefresh } from "@/lib/refresh"
 import { caseHref, go } from "@/lib/route"
 import { useCase } from "@/lib/use-case"
+import { getLang, own, t, type Lang } from "@/lib/i18n"
 
-let typesP: Promise<Manifest[]> | null = null
+// fetched once per language (the labels come translated)
+const typesP: Partial<Record<Lang, Promise<Manifest[]>>> = {}
 export function useTypes() {
   const [types, setTypes] = useState<Manifest[] | null>(null)
-  useEffect(() => { (typesP ??= api.types().catch(() => [])).then(setTypes) }, [])
+  useEffect(() => { (typesP[getLang()] ??= api.types().catch(() => [])).then(setTypes) }, [])
   return types
 }
 export const WIDGET_ICON: Record<string, string> = { hypotheses: "scale", sources: "library", timeline: "calendar-range", table: "table", map: "map", evidence: "images", calibration: "target" }
 // a view's tab: its widget, with « -<label> » when the widget comes back (table-subdomains, table-dns)
 export function viewTabs(m: Manifest | undefined) {
   const views = m?.views ?? [], n = (w: string) => views.filter(v => v.widget === w).length
-  return views.map(v => ({ id: n(v.widget) > 1 ? `${v.widget}-${slugOf(v.label ?? v.widget)}` : v.widget, view: v, icon: v.icon ?? WIDGET_ICON[v.widget] ?? "layout-grid", label: v.label ?? v.widget[0].toUpperCase() + v.widget.slice(1) }))
+  return views.map(v => ({ id: n(v.widget) > 1 ? `${v.widget}-${slugOf(v.label ?? v.widget)}` : v.widget, view: v, icon: v.icon ?? WIDGET_ICON[v.widget] ?? "layout-grid", label: v.label ? own(m, v.label) : t(v.widget[0].toUpperCase() + v.widget.slice(1)) }))
 }
 export type ViewTab = { id: string; view: View; icon: string; label: string }
 
@@ -65,25 +67,25 @@ export function CasePage({ slug, tab, note }: { slug: string; tab: string; note:
     <>
       <TopBar />
       <Empty className="m-6 border border-dashed">
-        <EmptyHeader><EmptyTitle>No case {slug}</EmptyTitle><EmptyDescription>{error}</EmptyDescription></EmptyHeader>
-        <Button asChild variant="outline"><a href="#/">All cases</a></Button>
+        <EmptyHeader><EmptyTitle>{t("No case {slug}", { slug })}</EmptyTitle><EmptyDescription>{error}</EmptyDescription></EmptyHeader>
+        <Button asChild variant="outline"><a href="#/">{t("All cases")}</a></Button>
       </Empty>
     </>
   )
   if (!index || !types) return <><TopBar /><div className="mx-auto flex max-w-[1600px] flex-col gap-4 p-4"><Skeleton className="h-20" /><Skeleton className="h-[60vh]" /></div></>
-  const tabs = [{ id: "brain", icon: "brain", label: "Brain" }, { id: "graph", icon: "share-2", label: "Graph" }, { id: "canvas", icon: "layout-dashboard", label: "Canvas" }, ...(m ? viewTabs(m) : [])]
+  const tabs = [{ id: "brain", icon: "brain", label: t("Brain") }, { id: "graph", icon: "share-2", label: t("Graph") }, { id: "canvas", icon: "layout-dashboard", label: t("Canvas") }, ...(m ? viewTabs(m) : [])]
   const current = tabs.find(t => t.id === tab) ? tab : "brain"
   return (
     <div className="flex flex-col lg:h-dvh">
       <TopBar>
         <Button variant="outline" size="sm" className="ml-2 hidden w-56 justify-start text-muted-foreground md:inline-flex" onClick={() => setPalette(true)}>
-          <SearchIcon data-icon="inline-start" />Search this case<kbd className="ml-auto inline-flex items-center gap-0.5 font-mono text-[10px]"><CommandIcon className="size-3" />K</kbd>
+          <SearchIcon data-icon="inline-start" />{t("Search this case")}<kbd className="ml-auto inline-flex items-center gap-0.5 font-mono text-[10px]"><CommandIcon className="size-3" />K</kbd>
         </Button>
       </TopBar>
       <div className="border-b">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 px-4 py-3">
           <CaseHeader index={index} m={m} color={typeColor(index.type, types)} now={now} onRefresh={refresh} refreshing={refreshing} onNext={() => setNext(true)} />
-          <Chips label="Views" size="xs" value={current} onChange={t => go(caseHref(slug, t, t === "brain" ? note ?? undefined : undefined))} options={tabs.map(t => ({ value: t.id, label: t.label, icon: t.icon }))} />
+          <Chips label={t("Views")} size="xs" value={current} onChange={t => go(caseHref(slug, t, t === "brain" ? note ?? undefined : undefined))} options={tabs.map(t => ({ value: t.id, label: t.label, icon: t.icon }))} />
         </div>
       </div>
       <div className="mx-auto w-full max-w-[1600px] px-4 lg:min-h-0 lg:flex-1">
@@ -91,7 +93,7 @@ export function CasePage({ slug, tab, note }: { slug: string; tab: string; note:
           <div className="grid grid-cols-[minmax(0,1fr)] lg:h-full lg:grid-cols-[15rem_minmax(0,1fr)_20rem]">
             <aside className="hidden overflow-y-auto py-4 pr-3 lg:block"><BrainTree index={index} open={path} fresh={fresh} onOpen={p => openNote(p)} /></aside>
             <div data-note-scroller className="min-w-0 py-4 lg:overflow-y-auto lg:border-x lg:px-6">
-              <Button variant="outline" size="sm" className="mb-3 lg:hidden" onClick={() => setTree(true)}><PanelLeftIcon data-icon="inline-start" />Notes</Button>
+              <Button variant="outline" size="sm" className="mb-3 lg:hidden" onClick={() => setTree(true)}><PanelLeftIcon data-icon="inline-start" />{t("Notes")}</Button>
               <NoteView key={path} slug={slug} path={path} anchor={anchor} index={index} pulse={notePulse} onOpen={openNote}
                 extra={n => (path.startsWith("Entities/") && n.props.kind ? <PivotButtons entity={{ kind: String(n.props.kind), value: String(n.props.value ?? ""), path, props: n.props }} manifest={m} types={types} /> : null)} />
             </div>
@@ -103,7 +105,7 @@ export function CasePage({ slug, tab, note }: { slug: string; tab: string; note:
       </div>
       <Sheet open={tree} onOpenChange={setTree}>
         <SheetContent side="left" className="w-72">
-          <SheetHeader><SheetTitle>Notes</SheetTitle></SheetHeader>
+          <SheetHeader><SheetTitle>{t("Notes")}</SheetTitle></SheetHeader>
           <div className="overflow-y-auto px-3 pb-4"><BrainTree index={index} open={path} fresh={fresh} onOpen={p => openNote(p)} /></div>
         </SheetContent>
       </Sheet>

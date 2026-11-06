@@ -14,6 +14,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { arrowImage, cssColor, loadStyle, ROLES, roleColor } from "@/components/widgets/map-style"
 import { api, type CaseIndex, type MapProps, type MapView, type Raster } from "@/lib/api"
+import { t } from "@/lib/i18n"
 import { caseHref, go } from "@/lib/route"
 
 // MapLibre looks for its worker next to its own module, which the bundle does not keep: Vite ships it as an asset
@@ -119,15 +120,15 @@ export function MapWidget({ index, pulse }: { index: CaseIndex; pulse: number })
       const p = f.properties as unknown as MapProps & { heading?: number }, { slug: s, index: ix } = latest.current, kind = p.kind === "truth" ? "truth" : p.role
       const root = document.createElement("div"); root.className = "flex flex-col gap-1 text-sm text-foreground"
       const add = (tag: string, text: string, cls = "") => { const n = document.createElement(tag); n.textContent = text; n.className = cls; root.append(n); return n }
-      add("strong", p.label || ROLES[p.role]?.label || p.role)
-      add("span", `${ROLES[kind]?.label ?? (kind === "truth" ? "True location" : p.role)}${p.kind && p.kind !== "truth" ? ` · ${p.kind}` : ""}`, "text-xs text-muted-foreground")
+      add("strong", p.label || (ROLES[p.role] ? t(ROLES[p.role].label) : p.role))
+      add("span", `${ROLES[kind] ? t(ROLES[kind].label) : kind === "truth" ? t("True location") : p.role}${p.kind && p.kind !== "truth" ? ` · ${p.kind}` : ""}`, "text-xs text-muted-foreground")
       if (p.date) add("span", p.date, "text-xs")
       if (p.radius_m) add("span", `± ${p.radius_m} m`, "text-xs")
-      if (p.heading != null) add("span", `bearing ${p.heading}°`, "text-xs")
-      if (p.url) { const a = add("a", "Open", "text-xs underline") as HTMLAnchorElement; a.href = p.url; a.target = "_blank"; a.rel = "noreferrer" }
+      if (p.heading != null) add("span", t("bearing {h}°", { h: p.heading }), "text-xs")
+      if (p.url) { const a = add("a", t("Open"), "text-xs underline") as HTMLAnchorElement; a.href = p.url; a.target = "_blank"; a.rel = "noreferrer" }
       if (p.ref) {
         const path = /^[A-Z]\d+$/.test(p.ref) ? ix.notes.find(n => n.props.id === p.ref)?.path : resolveNote(ix.files, p.ref) ?? p.ref
-        if (path) { const b = add("button", "Open note", "w-fit text-xs underline"); b.setAttribute("type", "button"); b.onclick = () => go(caseHref(s, "brain", path)) }
+        if (path) { const b = add("button", t("Open note"), "w-fit text-xs underline"); b.setAttribute("type", "button"); b.onclick = () => go(caseHref(s, "brain", path)) }
       }
       pop.setLngLat(e.lngLat).setDOMContent(root).addTo(m)
     }
@@ -167,22 +168,22 @@ export function MapWidget({ index, pulse }: { index: CaseIndex; pulse: number })
   return (
     <div className="flex flex-col gap-3 py-4">
       <div className="flex flex-wrap items-center gap-2">
-        {roles.length > 0 && <Chips multiple label="Map roles" value={visible} onChange={toggle} options={roles.map(r => ({ value: r, label: ROLES[r].label, icon: ROLES[r].icon, count: counts[r] }))} />}
+        {roles.length > 0 && <Chips multiple label={t("Map roles")} value={visible} onChange={toggle} options={roles.map(r => ({ value: r, label: t(ROLES[r].label), icon: ROLES[r].icon, count: counts[r] }))} />}
         <div className="ml-auto flex items-center gap-2">
           {rasters.length > 0 && (
             <Select value={raster?.id ?? "map"} onValueChange={chooseBg}>
-              <SelectTrigger size="sm" data-testid="map-background" aria-label="Background"><LayersIcon aria-hidden /><SelectValue /></SelectTrigger>
-              <SelectContent><SelectGroup>{[{ id: "map", label: "Map" } as Raster, ...rasters].map(r => <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>)}</SelectGroup></SelectContent>
+              <SelectTrigger size="sm" data-testid="map-background" aria-label={t("Background")}><LayersIcon aria-hidden /><SelectValue /></SelectTrigger>
+              <SelectContent><SelectGroup>{[{ id: "map", label: t("Map") } as Raster, ...rasters].map(r => <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>)}</SelectGroup></SelectContent>
             </Select>
           )}
-          <Button type="button" variant="outline" size="sm" onClick={() => fit()} disabled={!feats.length}><MaximizeIcon data-icon="inline-start" />Fit</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => fit()} disabled={!feats.length}><MaximizeIcon data-icon="inline-start" />{t("Fit")}</Button>
         </div>
       </div>
       <div className="relative">
         <div ref={box} data-testid="case-map" className="h-[min(70vh,640px)] w-full overflow-hidden rounded-xl ring-1 ring-foreground/10" />
         {!feats.length && (
           <Empty className="absolute inset-0 border-0 bg-background/70 backdrop-blur-[1px]">
-            <EmptyHeader><EmptyMedia variant="icon"><MapPinnedIcon /></EmptyMedia><EmptyTitle>No location yet</EmptyTitle><EmptyDescription>Candidates, sight lines and panoramas appear here as the case goes.</EmptyDescription></EmptyHeader>
+            <EmptyHeader><EmptyMedia variant="icon"><MapPinnedIcon /></EmptyMedia><EmptyTitle>{t("No location yet")}</EmptyTitle><EmptyDescription>{t("Candidates, sight lines and panoramas appear here as the case goes.")}</EmptyDescription></EmptyHeader>
           </Empty>
         )}
       </div>

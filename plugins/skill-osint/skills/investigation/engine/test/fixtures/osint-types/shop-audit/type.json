@@ -26,5 +26,15 @@
   ],
   "pivots": ["domain"],
   "refresh": [{ "id": "checks", "by": "engine", "run": "collect", "noisy": false, "sends_image": false, "paid": false, "watch": false, "noun": ["check", "checks"] }],
-  "requires": { "bins": [], "packs": [], "keys": [] }
+  "requires": { "bins": [], "packs": [], "keys": [] },
+  "fr": {
+    "Shop audit": "Audit de boutique",
+    "An online shop before an order: who sells, how to reach them, the terms of sale, the consumer mediator, read once on the shop's own pages": "Une boutique en ligne avant une commande : qui vend, comment le joindre, les conditions générales de vente, le médiateur de la consommation, lus une fois sur les pages de la boutique",
+    "Shop domain or URL": "Domaine ou URL de la boutique", "Seller": "Vendeur",
+    "the legal notice names the seller with a SIREN that passes its check, a way to reach them, the terms of sale and the consumer mediator": "les mentions légales nomment le vendeur avec un SIREN valide, un moyen de le joindre, les conditions générales de vente et le médiateur de la consommation",
+    "the seller is named with a SIREN, but the terms of sale or the consumer mediator are not found": "le vendeur est nommé avec un SIREN, mais les conditions générales de vente ou le médiateur de la consommation sont introuvables",
+    "only the home page names the shop": "seule la page d'accueil nomme la boutique",
+    "Frame": "Cadre", "Collect": "Collecte", "Analyse": "Analyse", "Red team": "Red team", "Conclude": "Conclusion", "Leads": "Pistes",
+    "Checks": "Vérifications", "Read the terms of sale": "Lire les conditions générales de vente"
+  }
 }

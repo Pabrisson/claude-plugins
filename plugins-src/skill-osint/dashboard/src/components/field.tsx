@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import type { Input as InputDef } from "@/lib/api"
+import { t } from "@/lib/i18n"
 
 export type Value = string | string[] | boolean | undefined
 // One field of a case type's form, drawn from its manifest entry: text (or a text area), url, select, chips (one or
 // several), toggle, file (its drop zone sends the file at once); its help under it, its error under it.
 export function InputField({ input: i, value, onChange, error, onBusy }: { input: InputDef; value: Value; onChange: (v: Value) => void; error?: string | null; onBusy?: (b: boolean) => void }) {
-  const id = `in-${i.id}`, label = `${i.label}${i.required || i.default !== undefined || i.kind === "chips" ? "" : " (optional)"}`
+  const id = `in-${i.id}`, label = i.required || i.default !== undefined || i.kind === "chips" ? i.label : t("{label} (optional)", { label: i.label })
   const help = i.help && <FieldDescription id={`${id}-help`}>{i.help}</FieldDescription>
   const err = error && <FieldError>{error}</FieldError>
   if (i.kind === "toggle") return (
@@ -29,9 +30,9 @@ export function InputField({ input: i, value, onChange, error, onBusy }: { input
         <div className="flex flex-wrap items-center justify-between gap-2">
           <FieldLabel htmlFor={id}>{label}</FieldLabel>
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground tabular-nums" role="status">{((value as string[] | undefined) ?? []).length} of {(i.options ?? []).length}</span>
-            <Button type="button" variant="ghost" size="xs" onClick={() => onChange((i.options ?? []).map(o => o.value))}><CheckCheckIcon data-icon="inline-start" />All</Button>
-            <Button type="button" variant="ghost" size="xs" onClick={() => onChange([])}><EraserIcon data-icon="inline-start" />None</Button>
+            <span className="text-xs text-muted-foreground tabular-nums" role="status">{t("{n} of {total}", { n: ((value as string[] | undefined) ?? []).length, total: (i.options ?? []).length })}</span>
+            <Button type="button" variant="ghost" size="xs" onClick={() => onChange((i.options ?? []).map(o => o.value))}><CheckCheckIcon data-icon="inline-start" />{t("All")}</Button>
+            <Button type="button" variant="ghost" size="xs" onClick={() => onChange([])}><EraserIcon data-icon="inline-start" />{t("None")}</Button>
           </div>
         </div>
       ) : <FieldLabel htmlFor={id}>{label}</FieldLabel>}
@@ -43,7 +44,7 @@ export function InputField({ input: i, value, onChange, error, onBusy }: { input
           : <Chips label={i.label} options={i.options ?? []} value={(value as string | undefined) ?? null} onChange={onChange} />
       ) : i.kind === "select" ? (
         <Select value={(value as string | undefined) ?? ""} onValueChange={onChange}>
-          <SelectTrigger id={id} className="w-full" aria-invalid={!!error || undefined}><SelectValue placeholder="Choose…" /></SelectTrigger>
+          <SelectTrigger id={id} className="w-full" aria-invalid={!!error || undefined}><SelectValue placeholder={t("Choose…")} /></SelectTrigger>
           <SelectContent><SelectGroup>{(i.options ?? []).map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectGroup></SelectContent>
         </Select>
       ) : i.kind === "text" && i.multiline ? (

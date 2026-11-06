@@ -46,5 +46,22 @@
     { "id": "host", "by": "engine", "run": "collect --only host", "noun": ["hosting record", "hosting records"], "watch": true },
     { "id": "home", "by": "engine", "noisy": true, "run": "collect --only home", "watch": false, "noun": ["home page item", "home page items"] }
   ],
-  "requires": { "bins": [], "packs": [], "keys": [] }
+  "requires": { "bins": [], "packs": [], "keys": [] },
+  "fr": {
+    "Domain": "Domaine",
+    "A domain or a website: registration, DNS, certificates, archived history, hosting, shared trackers, one read of the home page": "Un domaine ou un site web : enregistrement, DNS, certificats, historique archivé, hébergement, traqueurs partagés, une lecture de la page d'accueil",
+    "Domain or URL": "Domaine ou URL", "Depth": "Profondeur", "Quick": "Rapide", "Standard": "Standard", "Resolve every subdomain": "Résoudre chaque sous-domaine",
+    "Owner": "Propriétaire",
+    "a legal identifier read on the site (SIREN, company name) that a registry confirms, or the registrant read in RDAP": "un identifiant légal lu sur le site (SIREN, raison sociale) qu'un registre confirme, ou le titulaire lu dans RDAP",
+    "one read source names the owner, nothing contradicts it": "une source lue nomme le propriétaire, rien ne la contredit",
+    "inferred from hosting, trackers or style only": "déduit de l'hébergement, des traqueurs ou du style seulement",
+    "Infrastructure": "Infrastructure",
+    "DNS and RDAP read today agree": "le DNS et le RDAP lus aujourd'hui concordent",
+    "one of them, or data older than a month": "l'un des deux, ou des données de plus d'un mois",
+    "inferred from a single header or record": "déduite d'un seul en-tête ou enregistrement",
+    "Frame": "Cadre", "Collect": "Collecte", "Process": "Traitement", "Analyse": "Analyse", "Red team": "Red team", "Conclude": "Conclusion", "Leads": "Pistes",
+    "Subdomains": "Sous-domaines", "DNS": "DNS",
+    "Read the legal notice": "Lire les mentions légales", "Read past home pages": "Lire les anciennes pages d'accueil",
+    "Find other sites with this tracker": "Trouver d'autres sites avec ce traqueur"
+  }
 }

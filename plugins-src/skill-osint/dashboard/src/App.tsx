@@ -10,11 +10,12 @@ import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ServerStopped } from "@/components/watch-settings"
 import { BasketProvider, type Scope } from "@/lib/basket"
+import { useLang } from "@/lib/i18n"
 import { useRoute } from "@/lib/route"
 import { STOPPED, stopped } from "@/lib/use-events"
 
 export default function App() {
-  const route = useRoute()
+  const route = useRoute(), lang = useLang()
   // « Stop server » (Settings): the whole page says so, and nothing calls the server again
   const [off, setOff] = useState(stopped)
   useEffect(() => { const f = () => setOff(true); addEventListener(STOPPED, f); return () => removeEventListener(STOPPED, f) }, [])
@@ -24,7 +25,8 @@ export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
       <TooltipProvider>
-        <BasketProvider scope={scope}>
+        {/* a new language draws every page again */}
+        <BasketProvider key={lang} scope={scope}>
           {route.page === "case" ? <CasePage key={route.slug} slug={route.slug} tab={route.tab} note={route.note} /> : route.page === "new" ? <NewCase type={route.type} /> : route.page === "settings" ? <Settings /> : <Home />}
           <BasketBar />
         </BasketProvider>

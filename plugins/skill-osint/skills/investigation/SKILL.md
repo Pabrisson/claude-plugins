@@ -9,7 +9,7 @@ allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/osint.mjs" *), Bash(node ${
 
 A case is an Obsidian vault (notes the user can edit, a Journal, a canvas graph) plus `.osint/` (what the engine computes). The engine is `node "${CLAUDE_SKILL_DIR}/engine/osint.mjs"` (quote the path: spaces, Windows backslashes), called `osint.mjs` below. It runs on macOS, Linux and Windows, and this skill works with any agent: use your own question tool for choices (AskUserQuestion in Claude Code, else numbered options), web search, page reading, a browser and sub-agents when you have them.
 
-Everything lives in the current folder (`$OSINT_DIR` overrides it), one folder per case; commands on a case take `-p <slug>`. Talk to the user in their language, write the cases' content in the session's language (`--lang`), keep code and technical files in English (the dashboard is in English). Never commit for the user.
+Everything lives in the current folder (`$OSINT_DIR` overrides it), one folder per case; commands on a case take `-p <slug>`. Talk to the user in their language, write the cases' content in the session's language (`--lang`), keep code and technical files in English (the dashboard is in English, French in its Settings). Never commit for the user.
 
 ## Before anything
 

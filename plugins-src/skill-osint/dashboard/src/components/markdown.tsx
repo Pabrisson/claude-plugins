@@ -7,6 +7,7 @@ import { Icon } from "@/components/icon"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { api, fileUrl } from "@/lib/api"
 import { slugOf } from "@/lib/format"
+import { t } from "@/lib/i18n"
 import { caseHref } from "@/lib/route"
 import { cn } from "@/lib/utils"
 
@@ -43,22 +44,22 @@ export function Markdown({ text, slug, files, onOpen, depth = 0, inline, classNa
     a({ href = "", children }) {
       // [](#^j042): the anchor of a block (the Markdown parser encodes the caret)
       if (/^#(\^|%5E)/i.test(href) && !textOf(children)) return <span id={`block-${href.replace(/^#(\^|%5E)/i, "")}`} />
-      const t = parseTarget(href)
-      if (t?.kind === "obsidian") {
-        const path = t.target ? resolveNote(files, t.target) : null
-        if (!path && t.target) return <span className="text-muted-foreground underline decoration-dotted" title="No such note in this case">{children}</span>
-        return <a href={caseHref(slug, "brain", `${path ?? ""}${t.anchor ? `#${t.anchor}` : ""}`)} onClick={e => { e.preventDefault(); onOpen(path ?? "", t.anchor) }} className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{children}</a>
+      const tg = parseTarget(href)
+      if (tg?.kind === "obsidian") {
+        const path = tg.target ? resolveNote(files, tg.target) : null
+        if (!path && tg.target) return <span className="text-muted-foreground underline decoration-dotted" title={t("No such note in this case")}>{children}</span>
+        return <a href={caseHref(slug, "brain", `${path ?? ""}${tg.anchor ? `#${tg.anchor}` : ""}`)} onClick={e => { e.preventDefault(); onOpen(path ?? "", tg.anchor) }} className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{children}</a>
       }
       const vault = /^obsidian:\/\/open\?vault=([^&]+)/.exec(href)?.[1]
-      if (vault) return <span className="inline-flex items-center gap-1"><a href={caseHref(decodeURIComponent(vault))} className="text-primary underline underline-offset-2">{children}</a><a href={href} title="Open in Obsidian" className="text-muted-foreground hover:text-foreground"><Icon name="gem" className="size-3" /></a></span>
+      if (vault) return <span className="inline-flex items-center gap-1"><a href={caseHref(decodeURIComponent(vault))} className="text-primary underline underline-offset-2">{children}</a><a href={href} title={t("Open in Obsidian")} className="text-muted-foreground hover:text-foreground"><Icon name="gem" className="size-3" /></a></span>
       return <a href={href} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">{children}<Icon name="external-link" className="ml-0.5 inline size-3 align-baseline opacity-60" aria-hidden /></a>
     },
     img({ src: s = "", alt }) {
-      const t = parseTarget(String(s))
+      const tg = parseTarget(String(s))
       // an image from the web is never fetched by the dashboard (it would contact its host, maybe the target): a link
-      if (t?.kind !== "embed") return <a href={String(s)} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2"><Icon name="image" className="mr-1 inline size-3.5 align-text-bottom" aria-hidden />{alt || String(s)}</a>
-      const path = resolveNote(files, t.target)
-      if (!path) return <span className="text-muted-foreground">![[{t.target}]] not found</span>
+      if (tg?.kind !== "embed") return <a href={String(s)} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2"><Icon name="image" className="mr-1 inline size-3.5 align-text-bottom" aria-hidden />{alt || String(s)}</a>
+      const path = resolveNote(files, tg.target)
+      if (!path) return <span className="text-muted-foreground">{t("{embed} not found", { embed: `![[${tg.target}]]` })}</span>
       if (IMAGE.test(path)) return <Zoom src={fileUrl(slug, path)} alt={alt ?? path} />
       if (path.endsWith(".md") && depth < 1) return <Embed slug={slug} path={path} files={files} onOpen={onOpen} />
       return <a href={caseHref(slug, "brain", path)} onClick={e => { e.preventDefault(); onOpen(path) }} className="text-primary underline">{path}</a>
@@ -102,7 +103,7 @@ export function Zoom({ src, alt, children }: { src: string; alt: string; childre
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="cursor-zoom-in rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label={`Show ${alt} full size`}>
+      <button type="button" onClick={() => setOpen(true)} className="cursor-zoom-in rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label={t("Show {alt} full size", { alt })}>
         {children ?? <img src={src} alt={alt} loading="lazy" className="max-h-96 rounded-md" />}
       </button>
       <Dialog open={open} onOpenChange={setOpen}>

@@ -19,6 +19,7 @@ import { api, type CaseSummary, type Manifest, type SharedEntity } from "@/lib/a
 import { useBasket } from "@/lib/basket"
 import { typeColor } from "@/lib/colors"
 import { useMedia, useNow } from "@/lib/format"
+import { t } from "@/lib/i18n"
 import { useHomeEvents } from "@/lib/use-events"
 
 type Filters = { types: string[]; statuses: string[]; q: string; shared: boolean }
@@ -73,24 +74,24 @@ export function Home() {
         <main className="flex min-w-0 flex-1 flex-col gap-5">
           <div className="flex flex-wrap items-end gap-3">
             <div className="mr-auto">
-              <h1 className="text-xl font-semibold tracking-tight">Investigations</h1>
-              <p className="text-sm text-muted-foreground">{cases ? `${cases.length} case${cases.length === 1 ? "" : "s"}, live` : "Loading…"}</p>
+              <h1 className="text-xl font-semibold tracking-tight">{t("Investigations")}</h1>
+              <p className="text-sm text-muted-foreground">{cases ? t(cases.length === 1 ? "{n} case, live" : "{n} cases, live", { n: cases.length }) : t("Loading…")}</p>
             </div>
             <AskAgent />
             <Button variant="outline" size="sm" onClick={() => (wide ? setF(x => ({ ...x, shared: !x.shared })) : setSheet(true))} aria-expanded={wide ? f.shared : sheet}>
-              {f.shared && wide ? <PanelRightCloseIcon data-icon="inline-start" /> : <PanelRightOpenIcon data-icon="inline-start" />}Shared entities
+              {f.shared && wide ? <PanelRightCloseIcon data-icon="inline-start" /> : <PanelRightOpenIcon data-icon="inline-start" />}{t("Shared entities")}
               {shared && shared.length > 0 && <Badge variant="secondary" className="ml-1 tabular-nums">{shared.length}</Badge>}
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Chips multiple label="Case types" value={f.types} onChange={v => setF(x => ({ ...x, types: v }))}
+            <Chips multiple label={t("Case types")} value={f.types} onChange={v => setF(x => ({ ...x, types: v }))}
               options={typeIds.map(id => { const t = types.find(x => x.id === id); return { value: id, label: t?.label ?? id, icon: t?.icon ?? "circle-help", count: count("type", id) } })} />
-            <Chips multiple label="Statuses" value={f.statuses} onChange={v => setF(x => ({ ...x, statuses: v }))}
-              options={Object.entries(STATUS).map(([value, s]) => ({ value, label: s.label, icon: s.icon, count: count("status", value) }))} />
+            <Chips multiple label={t("Statuses")} value={f.statuses} onChange={v => setF(x => ({ ...x, statuses: v }))}
+              options={Object.entries(STATUS).map(([value, s]) => ({ value, label: t(s.label), icon: s.icon, count: count("status", value) }))} />
             {only && (
               <Badge variant="secondary" className="h-7 gap-1.5 pr-1 pl-2.5">
-                <Icon name="filter" aria-hidden />Filtered by {only.value}
-                <Button variant="ghost" size="icon-xs" className="rounded-full" aria-label="Clear the entity filter" onClick={() => setOnly(null)}><XIcon /></Button>
+                <Icon name="filter" aria-hidden />{t("Filtered by {value}", { value: only.value })}
+                <Button variant="ghost" size="icon-xs" className="rounded-full" aria-label={t("Clear the entity filter")} onClick={() => setOnly(null)}><XIcon /></Button>
               </Badge>
             )}
           </div>
@@ -100,13 +101,13 @@ export function Home() {
             <Empty className="border border-dashed">
               <EmptyHeader>
                 <EmptyMedia variant="icon"><Icon name="scan-search" /></EmptyMedia>
-                <EmptyTitle>No case yet</EmptyTitle>
-                <EmptyDescription>A case starts from a domain, an image, a username… The agent then works on it live, here and in Obsidian.</EmptyDescription>
+                <EmptyTitle>{t("No case yet")}</EmptyTitle>
+                <EmptyDescription>{t("A case starts from a domain, an image, a username… The agent then works on it live, here and in Obsidian.")}</EmptyDescription>
               </EmptyHeader>
-              <EmptyContent><Button asChild><a href="#/new"><PlusIcon data-icon="inline-start" />New case</a></Button></EmptyContent>
+              <EmptyContent><Button asChild><a href="#/new"><PlusIcon data-icon="inline-start" />{t("New case")}</a></Button></EmptyContent>
             </Empty>
           )}
-          {cases && cases.length > 0 && !shown.length && <p className="py-10 text-center text-sm text-muted-foreground">No case matches these filters.</p>}
+          {cases && cases.length > 0 && !shown.length && <p className="py-10 text-center text-sm text-muted-foreground">{t("No case matches these filters.")}</p>}
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {shown.map(c => <CaseCard key={c.slug} summary={c} type={types.find(t => t.id === c.type)} color={typeColor(c.type, types)} home={home} titles={titles} now={now} />)}
           </div>
@@ -114,8 +115,8 @@ export function Home() {
         {wide && f.shared && (
           <aside className="sticky top-20 flex max-h-[calc(100dvh-6rem)] w-80 shrink-0 flex-col gap-3 self-start">
             <div>
-              <h2 className="text-sm font-semibold">Shared entities</h2>
-              <p className="text-xs text-muted-foreground">Found in two cases or more. A click keeps their cases.</p>
+              <h2 className="text-sm font-semibold">{t("Shared entities")}</h2>
+              <p className="text-xs text-muted-foreground">{t("Found in two cases or more. A click keeps their cases.")}</p>
             </div>
             <div className="-mx-2 overflow-y-auto px-2">{panel}</div>
           </aside>
@@ -124,7 +125,7 @@ export function Home() {
       {!wide && (
         <Sheet open={sheet} onOpenChange={setSheet}>
           <SheetContent className="w-[22rem]">
-            <SheetHeader><SheetTitle>Shared entities</SheetTitle><SheetDescription>Found in two cases or more. A click keeps their cases.</SheetDescription></SheetHeader>
+            <SheetHeader><SheetTitle>{t("Shared entities")}</SheetTitle><SheetDescription>{t("Found in two cases or more. A click keeps their cases.")}</SheetDescription></SheetHeader>
             <div className="overflow-y-auto px-4 pb-4">{panel}</div>
           </SheetContent>
         </Sheet>
@@ -137,16 +138,16 @@ export function Home() {
 export function AskAgent({ size = "sm" }: { size?: "sm" | "default" }) {
   const { add, scope } = useBasket()
   const [open, setOpen] = useState(false), [text, setText] = useState("")
-  const placeholder = "slug" in scope ? "What should the agent check in this case?" : "Which cases share a hosting provider?"
-  const submit = () => { if (!text.trim()) return; add({ tag: "question", text: text.trim() }); toast.success("Added to the prompt"); setText(""); setOpen(false) }
+  const placeholder = "slug" in scope ? t("What should the agent check in this case?") : t("Which cases share a hosting provider?")
+  const submit = () => { if (!text.trim()) return; add({ tag: "question", text: text.trim() }); toast.success(t("Added to the prompt")); setText(""); setOpen(false) }
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button variant="outline" size={size}><MessageSquarePlusIcon data-icon="inline-start" />Ask Agent</Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button variant="outline" size={size}><MessageSquarePlusIcon data-icon="inline-start" />{t("Ask Agent")}</Button></PopoverTrigger>
       <PopoverContent align="end" className="w-80">
-        <PopoverHeader><PopoverTitle>Ask the agent</PopoverTitle><PopoverDescription>{"slug" in scope ? "The question joins this case's prompt." : "The question joins the prompt about all cases."}</PopoverDescription></PopoverHeader>
+        <PopoverHeader><PopoverTitle>{t("Ask the agent")}</PopoverTitle><PopoverDescription>{"slug" in scope ? t("The question joins this case's prompt.") : t("The question joins the prompt about all cases.")}</PopoverDescription></PopoverHeader>
         <Textarea value={text} onChange={e => setText(e.target.value)} placeholder={placeholder} rows={4} autoFocus
           onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit() }} />
-        <Button onClick={submit} disabled={!text.trim()}><PlusIcon data-icon="inline-start" />Add to prompt</Button>
+        <Button onClick={submit} disabled={!text.trim()}><PlusIcon data-icon="inline-start" />{t("Add to prompt")}</Button>
       </PopoverContent>
     </Popover>
   )

@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, fileUrl, type CaseSummary, type Manifest } from "@/lib/api"
 import { tint } from "@/lib/colors"
+import { t } from "@/lib/i18n"
 import { ago, isLive, when, who } from "@/lib/format"
 import { runRefresh } from "@/lib/refresh"
 import { caseHref } from "@/lib/route"
@@ -23,14 +24,15 @@ import { cn } from "@/lib/utils"
 
 // A case on the home page: its type's tile, title, status and confidence, the live activity line, the thumbnail, the
 // counts, its parent and children, « N new », Refresh, and a menu (Obsidian, delete). The card's title is the link;
-// the color lives in the tile and the badges, never in a band on an edge.
+// the color lives in the tile and the badges, never in a band on an edge. The thumbnail is a fixed tile beside the
+// answer and the footer sits at the bottom: the cards of a row line up, with an image or without.
 export function CaseCard({ summary: c, type, color, home, titles, now }: { summary: CaseSummary; type: Manifest | undefined; color: string; home: string; titles: Record<string, string>; now: number }) {
   const [busy, setBusy] = useState(false), [ask, setAsk] = useState(false)
   const obsidian = useObsidian()
-  const live = isLive(c.last, now)
+  const live = isLive(c.last, now), phase = type?.phases.find(p => p.id === c.phase)?.label
   const refresh = async () => { setBusy(true); await runRefresh(c.slug, undefined, type?.private); setBusy(false) }
-  const remove = () => api.remove(c.slug).then(() => toast.success(`${c.title} moved to .trash`), e => toast.error("Not deleted", { description: (e as Error).message }))
-  const activity = c.last && (c.last.kind === "note.write" && c.last.by === "vault" ? `edited ${c.last.path}` : c.last.text ?? c.last.kind)
+  const remove = () => api.remove(c.slug).then(() => toast.success(t("{title} moved to .trash", { title: c.title })), e => toast.error(t("Not deleted"), { description: (e as Error).message }))
+  const activity = c.last && (c.last.kind === "note.write" && c.last.by === "vault" ? t("edited {path}", { path: c.last.path ?? "" }) : c.last.text ?? c.last.kind)
   return (
     <Card size="sm" className="relative transition-colors hover:bg-muted/40 has-[a.stretched:focus-visible]:ring-3 has-[a.stretched:focus-visible]:ring-ring/50">
       <CardHeader className="gap-x-3 has-data-[slot=card-action]:grid-cols-[auto_1fr_auto]">
@@ -46,57 +48,61 @@ export function CaseCard({ summary: c, type, color, home, titles, now }: { summa
         <CardAction className="relative z-10 col-start-3 flex items-center gap-1">
           {c.watch && (
             <Tooltip>
-              <TooltipTrigger asChild><Badge variant="outline" className="gap-1"><Icon name="eye" aria-hidden />Watched · {c.watch.every}</Badge></TooltipTrigger>
-              <TooltipContent>Next pass {when(c.watch.next, now)}</TooltipContent>
+              <TooltipTrigger asChild><Badge variant="outline" className="gap-1"><Icon name="eye" aria-hidden />{t("Watched · {every}", { every: c.watch.every })}</Badge></TooltipTrigger>
+              <TooltipContent>{t("Next pass {when}", { when: when(c.watch.next, now) })}</TooltipContent>
             </Tooltip>
           )}
           {c.new > 0 && (
             <Badge className={cn("gap-1", TONE.sky)} role="status" aria-atomic="true">
-              <span className="size-1.5 rounded-full bg-current" aria-hidden />{c.new} new
+              <span className="size-1.5 rounded-full bg-current" aria-hidden />{t("{n} new", { n: c.new })}
             </Badge>
           )}
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={`More for ${c.title}`}><EllipsisIcon /></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={t("More for {title}", { title: c.title })}><EllipsisIcon /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
-                <DropdownMenuItem onSelect={() => obsidian.open(caseDirOf(home, c.slug))}><Icon name="gem" />Open in Obsidian</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => obsidian.open(caseDirOf(home, c.slug))}><Icon name="gem" />{t("Open in Obsidian")}</DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem variant="destructive" onSelect={() => setAsk(true)}><Trash2Icon />Delete case</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onSelect={() => setAsk(true)}><Trash2Icon />{t("Delete case")}</DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <StatusBadge status={c.status} />
-          {type?.private && <PrivateBadge id={type.id} className="relative z-10" />}
-          {c.confidence && <ConfidenceBadge value={c.confidence} prefix="Confidence " />}
-          {c.phase && c.status !== "done" && <Badge variant="outline" className="capitalize">{c.phase}</Badge>}
+        <div className="flex gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <StatusBadge status={c.status} />
+              {type?.private && <PrivateBadge id={type.id} className="relative z-10" />}
+              {c.confidence && <ConfidenceBadge value={c.confidence} named />}
+              {c.phase && c.status !== "done" && <Badge variant="outline" className={phase ? undefined : "capitalize"}>{phase ?? c.phase}</Badge>}
+            </div>
+            {c.answer && <p className="line-clamp-3 text-sm">{c.answer}</p>}
+          </div>
+          {c.thumb && <img src={fileUrl(c.slug, c.thumb)} alt="" loading="lazy" className="aspect-[4/3] w-24 shrink-0 self-start rounded-md object-cover ring-1 ring-foreground/10 sm:w-28" />}
         </div>
-        {c.answer && <p className="line-clamp-2 text-sm">{c.answer}</p>}
-        {c.thumb && <img src={fileUrl(c.slug, c.thumb)} alt="" loading="lazy" className="aspect-video w-full rounded-md object-cover" />}
         <p className={cn("flex min-w-0 items-center gap-2 text-xs text-muted-foreground", live && "text-foreground")}>
           {live ? <LiveDot className="text-sky-500" /> : <Icon name="activity" className="size-3.5 shrink-0" aria-hidden />}
           {c.last ? (
-            <span className="min-w-0 truncate"><span className="font-medium">{who(c.last)}:</span> {activity}</span>
-          ) : <span>No activity yet</span>}
+            <span className="min-w-0 truncate"><span className="font-medium">{t("{who}:", { who: who(c.last) })}</span> {activity}</span>
+          ) : <span>{t("No activity yet")}</span>}
           {c.last && <span className="ml-auto shrink-0 tabular-nums">{ago(c.last.t, now)}</span>}
         </p>
       </CardContent>
-      <CardFooter className="relative z-10 flex-wrap gap-x-3 gap-y-2 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1" title="Entities"><Icon name="boxes" className="size-3.5" aria-hidden />{c.counts.entities}<span className="sr-only">entities</span></span>
-        <span className="flex items-center gap-1" title="Sources"><Icon name="file-text" className="size-3.5" aria-hidden />{c.counts.sources}<span className="sr-only">sources</span></span>
-        <span className="flex items-center gap-1" title="Open leads"><Icon name="signpost" className="size-3.5" aria-hidden />{c.counts.leads_open}<span className="sr-only">open leads</span></span>
+      <CardFooter className="relative z-10 mt-auto flex-wrap gap-x-3 gap-y-2 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1" title={t("Entities")}><Icon name="boxes" className="size-3.5" aria-hidden />{c.counts.entities}<span className="sr-only">{t("entities")}</span></span>
+        <span className="flex items-center gap-1" title={t("Sources")}><Icon name="file-text" className="size-3.5" aria-hidden />{c.counts.sources}<span className="sr-only">{t("sources")}</span></span>
+        <span className="flex items-center gap-1" title={t("Open leads")}><Icon name="signpost" className="size-3.5" aria-hidden />{c.counts.leads_open}<span className="sr-only">{t("open leads")}</span></span>
         {c.parent && (
-          <a href={caseHref(c.parent)} className="inline-flex h-6 max-w-40 items-center gap-1 rounded-full border px-2 hover:bg-muted" title="Parent case">
+          <a href={caseHref(c.parent)} className="inline-flex h-6 max-w-40 items-center gap-1 rounded-full border px-2 hover:bg-muted" title={t("Parent case")}>
             <CornerLeftUpIcon className="size-3.5 shrink-0" /><span className="truncate">{titles[c.parent] ?? c.parent}</span>
           </a>
         )}
         {c.children.map(k => (
-          <a key={k} href={caseHref(k)} className="inline-flex h-6 max-w-40 items-center gap-1 rounded-full border px-2 hover:bg-muted" title="Child case">
+          <a key={k} href={caseHref(k)} className="inline-flex h-6 max-w-40 items-center gap-1 rounded-full border px-2 hover:bg-muted" title={t("Child case")}>
             <CornerDownRightIcon className="size-3.5 shrink-0" /><span className="truncate">{titles[k] ?? k}</span>
           </a>
         ))}
@@ -105,10 +111,10 @@ export function CaseCard({ summary: c, type, color, home, titles, now }: { summa
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="outline" size="xs" onClick={refresh} disabled={busy}>
-                {busy ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}Refresh
+                {busy ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}{t("Refresh")}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{type.private ? "This type's engine.js runs only through the Agent: adds a refresh to the case's prompt" : "Run the engine's collection again and show what changed; the agent's steps go to the case's prompt"}</TooltipContent>
+            <TooltipContent>{type.private ? t("This type's engine.js runs only through the Agent: adds a refresh to the case's prompt") : t("Run the engine's collection again and show what changed; the agent's steps go to the case's prompt")}</TooltipContent>
           </Tooltip>
         )}
       </CardFooter>
@@ -116,12 +122,12 @@ export function CaseCard({ summary: c, type, color, home, titles, now }: { summa
       <AlertDialog open={ask} onOpenChange={setAsk}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {c.title}?</AlertDialogTitle>
-            <AlertDialogDescription>The case moves to .trash in the cases folder.</AlertDialogDescription>
+            <AlertDialogTitle>{t("Delete {title}?", { title: c.title })}</AlertDialogTitle>
+            <AlertDialogDescription>{t("The case moves to .trash in the cases folder.")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={remove}>Delete case</AlertDialogAction>
+            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={remove}>{t("Delete case")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -42,5 +42,19 @@
     { "id": "tor-exits", "label": "tor exit list" }, { "id": "aws-ranges", "label": "aws ip ranges" },
     { "id": "gcp-ranges", "label": "google cloud ip ranges" }, { "id": "cloudflare-v4", "label": "cloudflare ipv4 ranges" },
     { "id": "cloudflare-v6", "label": "cloudflare ipv6 ranges" }
-  ] }
+  ] },
+  "fr": {
+    "IP address": "Adresse IP", "203.0.113.7 or 2001:db8::7": "203.0.113.7 ou 2001:db8::7",
+    "An IPv4 or IPv6 address: who holds and announces it, its reverse name, a coarse location, what Shodan saw, a Tor exit or a published cloud range — from registries and published lists, never from the address itself": "Une adresse IPv4 ou IPv6 : qui la détient et l'annonce, son nom inverse, une localisation approximative, ce que Shodan a vu, une sortie Tor ou une plage cloud publiée — d'après les registres et les listes publiées, jamais auprès de l'adresse elle-même",
+    "Operator": "Opérateur",
+    "the registry's holder and the AS that announces the prefix agree, or a list the operator publishes (cloud ranges, Tor exits) names it": "le titulaire au registre et l'AS qui annonce le préfixe concordent, ou une liste publiée par l'opérateur (plages cloud, sorties Tor) le nomme",
+    "one registry names it and nothing contradicts it": "un registre le nomme et rien ne le contredit",
+    "inferred from hostnames, a reverse name or Shodan's tags only": "déduit des noms d'hôte, d'un nom inverse ou des étiquettes de Shodan seulement",
+    "Location": "Localisation",
+    "a country only, read in a list the operator publishes (a cloud region) and consistent with the geolocation database": "un pays seulement, lu dans une liste publiée par l'opérateur (une région cloud) et cohérent avec la base de géolocalisation",
+    "a country on which the geolocation database and the registry agree": "un pays sur lequel la base de géolocalisation et le registre concordent",
+    "the geolocation database alone, or any city": "la base de géolocalisation seule, ou toute ville",
+    "Frame": "Cadre", "Collect": "Collecte", "Process": "Traitement", "Analyse": "Analyse", "Red team": "Red team", "Conclude": "Conclusion", "Leads": "Pistes",
+    "Ports and names": "Ports et noms", "Hostnames": "Noms d'hôte", "Search the web for this address": "Chercher cette adresse sur le web"
+  }
 }

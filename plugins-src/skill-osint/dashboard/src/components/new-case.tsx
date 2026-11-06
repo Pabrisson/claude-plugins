@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { api, type Doctor, type Manifest } from "@/lib/api"
 import { tint, typeColor } from "@/lib/colors"
+import { t } from "@/lib/i18n"
 import { caseHref, go } from "@/lib/route"
 import { TONE } from "@/lib/tones"
 import { cn } from "@/lib/utils"
@@ -40,24 +41,24 @@ export function NewCase({ type }: { type: string | null }) {
       <TopBar />
       <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon-sm" asChild><a href={type ? "#/new" : "#/"} aria-label={type ? "Choose another type" : "All cases"}><ArrowLeftIcon /></a></Button>
+          <Button variant="ghost" size="icon-sm" asChild><a href={type ? "#/new" : "#/"} aria-label={type ? t("Choose another type") : t("All cases")}><ArrowLeftIcon /></a></Button>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">New case{m ? `: ${m.label}` : ""}</h1>
-            <p className="text-sm text-muted-foreground">{m ? m.description : "What does the case start from?"}</p>
+            <h1 className="text-xl font-semibold tracking-tight">{m ? t("New case: {type}", { type: m.label }) : t("New case")}</h1>
+            <p className="text-sm text-muted-foreground">{m ? m.description : t("What does the case start from?")}</p>
           </div>
         </div>
         {!types ? <Skeleton className="h-40 rounded-xl" /> : m ? <CaseForm key={m.id} m={m} color={typeColor(m.id, types)} /> : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {types.map(t => {
-              const d = doctor?.types.find(x => x.id === t.id && !x.refused), ready = d?.ready !== false
+            {types.map(ty => {
+              const d = doctor?.types.find(x => x.id === ty.id && !x.refused), ready = d?.ready !== false
               return (
-                <button key={t.id} type="button" disabled={!ready} onClick={() => go(`#/new/${t.id}`)}
+                <button key={ty.id} type="button" disabled={!ready} onClick={() => go(`#/new/${ty.id}`)}
                   className="flex items-start gap-3 rounded-xl p-4 text-left ring-1 ring-foreground/10 transition-colors outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-lg" style={{ background: tint(typeColor(t.id, types)), color: typeColor(t.id, types) }}><Icon name={t.icon} className="size-5" aria-hidden /></span>
+                  <span className="grid size-10 shrink-0 place-items-center rounded-lg" style={{ background: tint(typeColor(ty.id, types)), color: typeColor(ty.id, types) }}><Icon name={ty.icon} className="size-5" aria-hidden /></span>
                   <span className="flex min-w-0 flex-col gap-1">
-                    <span className="flex items-center gap-2 font-medium">{t.label}{t.private && <PrivateBadge id={t.id} />}</span>
-                    <span className="text-sm text-muted-foreground">{t.description}</span>
-                    {d && !d.ready && <Badge className={cn("mt-1", TONE.amber)}>Needs {d.missing.join(", ")}</Badge>}
+                    <span className="flex items-center gap-2 font-medium">{ty.label}{ty.private && <PrivateBadge id={ty.id} />}</span>
+                    <span className="text-sm text-muted-foreground">{ty.description}</span>
+                    {d && !d.ready && <Badge className={cn("mt-1", TONE.amber)}>{t("Needs {list}", { list: d.missing.join(", ") })}</Badge>}
                   </span>
                 </button>
               )
@@ -86,11 +87,11 @@ function CaseForm({ m, color }: { m: Manifest; color: string }) {
   // only the fields shown, and only those given: what the engine receives
   const inputs = useMemo(() => Object.fromEntries(visible.filter(i => values[i.id] != null && values[i.id] !== "").map(i => [i.id, values[i.id]])), [visible, values])
   const check = checkInputs(m, inputs)
-  const fieldError = (id: string) => (check.error && touched[id] && new RegExp(`(?:input |--in )${id}\\b`).test(check.error) ? (/^--in \S+?: at least one/.test(check.error) ? "Choose at least one" : check.error.replace(/^--in \S+?: /, "")) : null)
+  const fieldError = (id: string) => (check.error && touched[id] && new RegExp(`(?:input |--in )${id}\\b`).test(check.error) ? (/^--in \S+?: at least one/.test(check.error) ? t("Choose at least one") : check.error.replace(/^--in \S+?: /, "")) : null)
   const missing = [
     ...visible.filter(i => i.required && inputs[i.id] == null).map(i => i.label),
-    !question.trim() && "the question", !purpose.trim() && "the purpose",
-    person && !basis && "the legal basis", fImage && !image && "whether the image may leave", fNoisy && !noisy && "the noisy actions",
+    !question.trim() && t("the question"), !purpose.trim() && t("the purpose"),
+    person && !basis && t("the legal basis"), fImage && !image && t("whether the image may leave"), fNoisy && !noisy && t("the noisy actions"),
   ].filter(Boolean) as string[]
   const ready = !missing.length && !check.error && !busy && !Object.values(uploading).some(Boolean)
 
@@ -113,13 +114,13 @@ function CaseForm({ m, color }: { m: Manifest; color: string }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><CircleCheckIcon className="size-5 text-emerald-600 dark:text-emerald-400" />Case created</CardTitle>
-          <CardDescription>The case folder is ready. Paste this prompt to the agent to start the investigation.</CardDescription>
+          <CardTitle className="flex items-center gap-2"><CircleCheckIcon className="size-5 text-emerald-600 dark:text-emerald-400" />{t("Case created")}</CardTitle>
+          <CardDescription>{t("The case folder is ready. Paste this prompt to the agent to start the investigation.")}</CardDescription>
         </CardHeader>
         <CardContent><pre className="rounded-md bg-muted px-3 py-2 font-mono text-sm">{prompt}</pre></CardContent>
         <CardFooter className="gap-2">
-          <Button onClick={() => copyText(prompt, "Prompt copied: paste it to the agent")}><CopyIcon data-icon="inline-start" />Copy prompt</Button>
-          <Button variant="outline" asChild><a href={caseHref(slug)}><FolderOpenIcon data-icon="inline-start" />Open case</a></Button>
+          <Button onClick={() => copyText(prompt, t("Prompt copied: paste it to the agent"))}><CopyIcon data-icon="inline-start" />{t("Copy prompt")}</Button>
+          <Button variant="outline" asChild><a href={caseHref(slug)}><FolderOpenIcon data-icon="inline-start" />{t("Open case")}</a></Button>
         </CardFooter>
       </Card>
     )
@@ -136,27 +137,27 @@ function CaseForm({ m, color }: { m: Manifest; color: string }) {
         </FieldGroup>
       </FieldSet>
       <FieldSet>
-        <FieldLegend>Frame</FieldLegend>
-        <FieldDescription>What the case must answer, and within which limits. The agent keeps to it.</FieldDescription>
+        <FieldLegend>{t("Frame")}</FieldLegend>
+        <FieldDescription>{t("What the case must answer, and within which limits. The agent keeps to it.")}</FieldDescription>
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="question">Question</FieldLabel>
-            <Textarea id="question" value={question} onChange={e => setQuestion(e.target.value)} rows={2} placeholder="Who runs this website?" />
+            <FieldLabel htmlFor="question">{t("Question")}</FieldLabel>
+            <Textarea id="question" value={question} onChange={e => setQuestion(e.target.value)} rows={2} placeholder={t("Who runs this website?")} />
           </Field>
           <Field>
-            <FieldLabel htmlFor="purpose">Purpose{fPerson?.purpose && <span aria-hidden> *</span>}</FieldLabel>
-            <Input id="purpose" value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="Check a seller before a large order" aria-required={fPerson?.purpose || undefined} aria-describedby={fPerson?.purpose ? "purpose-help" : undefined} />
-            {fPerson?.purpose && <FieldDescription id="purpose-help">Each identifier is weighed against it.</FieldDescription>}
+            <FieldLabel htmlFor="purpose">{t("Purpose")}{fPerson?.purpose && <span aria-hidden> *</span>}</FieldLabel>
+            <Input id="purpose" value={purpose} onChange={e => setPurpose(e.target.value)} placeholder={t("Check a seller before a large order")} aria-required={fPerson?.purpose || undefined} aria-describedby={fPerson?.purpose ? "purpose-help" : undefined} />
+            {fPerson?.purpose && <FieldDescription id="purpose-help">{t("Each identifier is weighed against it.")}</FieldDescription>}
           </Field>
           <Field>
-            <FieldLabel htmlFor="scope">Scope (optional)</FieldLabel>
-            <Input id="scope" value={scope} onChange={e => setScope(e.target.value)} placeholder="Public sources only, the last five years" />
+            <FieldLabel htmlFor="scope">{t("Scope (optional)")}</FieldLabel>
+            <Input id="scope" value={scope} onChange={e => setScope(e.target.value)} placeholder={t("Public sources only, the last five years")} />
           </Field>
           {fPerson && (
             <Field orientation="horizontal">
               <FieldContent>
-                <FieldLabel htmlFor="person">Subject is a person</FieldLabel>
-                <FieldDescription>{fPerson.always ? "Always, for this type of case." : "A person's data needs a legal basis (GDPR)."}</FieldDescription>
+                <FieldLabel htmlFor="person">{t("Subject is a person")}</FieldLabel>
+                <FieldDescription>{fPerson.always ? t("Always, for this type of case.") : t("A person's data needs a legal basis (GDPR).")}</FieldDescription>
               </FieldContent>
               <Switch id="person" checked={person} disabled={!!fPerson.always} onCheckedChange={setPerson} />
             </Field>
@@ -164,43 +165,43 @@ function CaseForm({ m, color }: { m: Manifest; color: string }) {
           {fPerson && person && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel htmlFor="basis">Legal basis</FieldLabel>
+                <FieldLabel htmlFor="basis">{t("Legal basis")}</FieldLabel>
                 <Select value={basis} onValueChange={setBasis}>
-                  <SelectTrigger id="basis" className="w-full"><SelectValue placeholder="Choose…" /></SelectTrigger>
-                  <SelectContent><SelectGroup>{LEGAL_BASES.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectGroup></SelectContent>
+                  <SelectTrigger id="basis" className="w-full"><SelectValue placeholder={t("Choose…")} /></SelectTrigger>
+                  <SelectContent><SelectGroup>{LEGAL_BASES.map(b => <SelectItem key={b} value={b}>{t(b)}</SelectItem>)}</SelectGroup></SelectContent>
                 </Select>
               </Field>
               <Field>
-                <FieldLabel htmlFor="precision">Details (optional)</FieldLabel>
-                <Input id="precision" value={precision} onChange={e => setPrecision(e.target.value)} placeholder="public registry data" />
+                <FieldLabel htmlFor="precision">{t("Details (optional)")}</FieldLabel>
+                <Input id="precision" value={precision} onChange={e => setPrecision(e.target.value)} placeholder={t("public registry data")} />
               </Field>
             </div>
           )}
           {fImage && (
             <Field>
-              <FieldLabel>Image may leave this machine</FieldLabel>
-              <Chips label="Image may leave this machine" value={image} onChange={setImage} options={[{ value: "yes", label: "Yes", icon: "upload" }, { value: "no", label: "No", icon: "hard-drive" }]} />
-              <FieldDescription>Reverse image search sends it to search engines. No default: choose.</FieldDescription>
+              <FieldLabel>{t("Image may leave this machine")}</FieldLabel>
+              <Chips label={t("Image may leave this machine")} value={image} onChange={setImage} options={[{ value: "yes", label: t("Yes"), icon: "upload" }, { value: "no", label: t("No"), icon: "hard-drive" }]} />
+              <FieldDescription>{t("Reverse image search sends it to search engines. No default: choose.")}</FieldDescription>
             </Field>
           )}
           {fNoisy && (
             <Field>
-              <FieldLabel>Noisy actions</FieldLabel>
-              <Chips label="Noisy actions" value={noisy} onChange={setNoisy} options={[{ value: "ask", label: "Ask", icon: "hand" }, { value: "never", label: "Never", icon: "ban" }]} />
-              <FieldDescription>An action the target could notice (a sign-up probe…): the agent asks you first, or never runs it. No default: choose.</FieldDescription>
+              <FieldLabel>{t("Noisy actions")}</FieldLabel>
+              <Chips label={t("Noisy actions")} value={noisy} onChange={setNoisy} options={[{ value: "ask", label: t("Ask"), icon: "hand" }, { value: "never", label: t("Never"), icon: "ban" }]} />
+              <FieldDescription>{t("An action the target could notice (a sign-up probe…): the agent asks you first, or never runs it. No default: choose.")}</FieldDescription>
             </Field>
           )}
         </FieldGroup>
       </FieldSet>
       <FieldSet>
-        <FieldLegend>Case</FieldLegend>
+        <FieldLegend>{t("Case")}</FieldLegend>
         <FieldGroup className="grid gap-4 sm:grid-cols-2">
           <Field>
-            <FieldLabel htmlFor="title">Title (optional)</FieldLabel>
-            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Named after the input" />
+            <FieldLabel htmlFor="title">{t("Title (optional)")}</FieldLabel>
+            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} placeholder={t("Named after the input")} />
           </Field>
           <Field>
-            <FieldLabel htmlFor="lang">Language of the notes</FieldLabel>
+            <FieldLabel htmlFor="lang">{t("Language of the notes")}</FieldLabel>
             <Select value={lang} onValueChange={setLang}>
               <SelectTrigger id="lang" className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent><SelectGroup><SelectItem value="en">English</SelectItem><SelectItem value="fr">Français</SelectItem></SelectGroup></SelectContent>
@@ -210,8 +211,8 @@ function CaseForm({ m, color }: { m: Manifest; color: string }) {
       </FieldSet>
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={!ready}>{busy ? <Spinner data-icon="inline-start" /> : <PlusIcon data-icon="inline-start" />}Create case</Button>
-          {missing.length > 0 && <span className="text-sm text-muted-foreground">Still needed: {missing.join(", ")}</span>}
+          <Button type="submit" disabled={!ready}>{busy ? <Spinner data-icon="inline-start" /> : <PlusIcon data-icon="inline-start" />}{t("Create case")}</Button>
+          {missing.length > 0 && <span className="text-sm text-muted-foreground">{t("Still needed: {list}", { list: missing.join(", ") })}</span>}
         </div>
         {error && <p role="alert" className="text-sm whitespace-pre-wrap text-destructive">{error}</p>}
       </div>

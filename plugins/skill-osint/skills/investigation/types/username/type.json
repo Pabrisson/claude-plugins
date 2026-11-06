@@ -59,5 +59,19 @@
     "bins": [{ "id": "uv", "optional": true, "off": "Also run Maigret is off; WhatsMyName still runs" }],
     "packs": [], "keys": [],
     "datasets": [{ "id": "wmn", "label": "whatsmyname data" }]
+  },
+  "fr": {
+    "Username": "Pseudo",
+    "A username: the public accounts that carry it on WhatsMyName's sites (Maigret's too, as an option), candidate accounts and not identities, then each profile read once": "Un pseudo : les comptes publics qui le portent sur les sites de WhatsMyName (ceux de Maigret aussi, en option), des comptes candidats et non des identités, puis chaque profil lu une fois",
+    "Username or profile URL": "Pseudo ou URL du profil", "WhatsMyName categories": "Catégories WhatsMyName",
+    "Archived": "Archivés", "Art": "Art", "Blog": "Blog", "Business": "Affaires", "Coding": "Code", "Dating": "Rencontres", "Finance": "Finance",
+    "Gaming": "Jeux vidéo", "Health": "Santé", "Hobby": "Loisirs", "Images": "Images", "Misc": "Divers", "Music": "Musique", "News": "Actualités",
+    "Political": "Politique", "Search": "Recherche", "Shopping": "Achats", "Social": "Réseaux sociaux", "Tech": "Tech", "Video": "Vidéo", "NSFW": "NSFW",
+    "Also run Maigret (needs uv, a few minutes)": "Lancer aussi Maigret (demande uv, quelques minutes)",
+    "Same person": "Même personne",
+    "two independent links: profiles that cite each other, the same avatar checked full size, the same unique email": "deux liens indépendants : des profils qui se citent, le même avatar vérifié en taille réelle, le même email unique",
+    "name, bio and avatar consistent": "nom, bio et avatar cohérents", "the same username only": "le même pseudo seulement",
+    "Frame": "Cadre", "Collect": "Collecte", "Process": "Traitement", "Analyse": "Analyse", "Red team": "Red team", "Conclude": "Conclusion", "Leads": "Pistes",
+    "Accounts": "Comptes", "Read this profile": "Lire ce profil", "Compare the avatars": "Comparer les avatars", "Run Maigret too": "Lancer aussi Maigret"
   }
 }

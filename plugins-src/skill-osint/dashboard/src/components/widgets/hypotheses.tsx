@@ -7,6 +7,7 @@ import { Markdown } from "@/components/markdown"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { CaseIndex, Manifest, NoteMeta } from "@/lib/api"
+import { t } from "@/lib/i18n"
 import { caseHref, go } from "@/lib/route"
 import { TONE, type Tone } from "@/lib/tones"
 import { cn } from "@/lib/utils"
@@ -29,15 +30,15 @@ export function Hypotheses({ index, manifest }: { index: CaseIndex; manifest: Ma
   const clue = (id: string) => index.notes.find(n => n.folder === "Clues" && n.props.id === id)
   const levels = [...manifest.levels.map(l => l.id).filter(l => a.ranked[l]), ...Object.keys(a.ranked).filter(l => !manifest.levels.some(x => x.id === l))]
   const onOpen = (p: string, anchor?: string | null) => open(slug, `${p}${anchor ? `#${anchor}` : ""}`)
-  if (!levels.length) return <p className="py-10 text-center text-sm text-muted-foreground">No hypothesis yet: they come with the analysis.</p>
+  if (!levels.length) return <p className="py-10 text-center text-sm text-muted-foreground">{t("No hypothesis yet: they come with the analysis.")}</p>
   return (
     <div className="flex flex-col gap-4 py-4">
-      <Chips label="Hypotheses view" size="xs" value={mode} onChange={setMode} options={[{ value: "shares", label: "Shares", icon: "bar-chart-3" }, { value: "ach", label: "ACH", icon: "grid-3x3" }]} />
+      <Chips label={t("Hypotheses view")} size="xs" value={mode} onChange={setMode} options={[{ value: "shares", label: t("Shares"), icon: "bar-chart-3" }, { value: "ach", label: "ACH", icon: "grid-3x3" }]} />
       {mode === "shares" ? levels.map(level => (
         <section key={level} className="flex flex-col gap-2" aria-labelledby={`lv-${level}`}>
           <h2 id={`lv-${level}`} className="flex items-center gap-2 text-sm font-semibold">
             {manifest.levels.find(l => l.id === level)?.label ?? level}
-            {a.frontier === level && <Badge title="The finest level that still has two or more active hypotheses (the levels are not a hierarchy: the answer can be read at any of them)" className={cn("gap-1", TONE.violet)}><Icon name="target" aria-hidden />Frontier</Badge>}
+            {a.frontier === level && <Badge title={t("The finest level that still has two or more active hypotheses (the levels are not a hierarchy: the answer can be read at any of them)")} className={cn("gap-1", TONE.violet)}><Icon name="target" aria-hidden />{t("Frontier")}</Badge>}
           </h2>
           <ul className="flex flex-col divide-y rounded-xl ring-1 ring-foreground/10">
             {a.ranked[level].map(r => {
@@ -48,13 +49,13 @@ export function Hypotheses({ index, manifest }: { index: CaseIndex; manifest: Ma
                     <button type="button" onClick={() => n && open(slug, n.path)} className="min-w-0 flex-1 truncate text-left font-medium hover:underline">
                       <span className="mr-1.5 font-mono text-xs text-muted-foreground">{r.id}</span>{n?.title ?? r.id}
                     </button>
-                    <Badge className={cn("gap-1", TONE[st.tone])}><Icon name={st.icon} aria-hidden />{st.label}</Badge>
-                    <span className="flex w-40 items-center gap-2" aria-label={`Share ${pct(r.share)}`}>
+                    <Badge className={cn("gap-1", TONE[st.tone])}><Icon name={st.icon} aria-hidden />{t(st.label)}</Badge>
+                    <span className="flex w-40 items-center gap-2" aria-label={t("Share {pct}", { pct: pct(r.share) })}>
                       <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: pct(r.share) }} /></span>
                       <span className="w-10 text-right text-xs tabular-nums">{pct(r.share)}</span>
                     </span>
                   </div>
-                  {n?.props.refute_if != null && <p className="text-xs"><span className="text-muted-foreground">Refuted if: </span>{String(n.props.refute_if)}</p>}
+                  {n?.props.refute_if != null && <p className="text-xs"><span className="text-muted-foreground">{t("Refuted if: ")}</span>{String(n.props.refute_if)}</p>}
                   {r.status === "excluded" && n?.props.reason != null && (
                     <p className="flex gap-1.5 rounded-md bg-muted/60 px-2 py-1.5 text-xs"><Icon name="circle-slash" className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                       <span><Markdown text={String(n.props.reason)} slug={slug} files={index.files} onOpen={onOpen} inline /></span></p>
@@ -73,18 +74,18 @@ function Ach({ index, levels, hyp, clue }: { index: CaseIndex; levels: string[];
   const slug = index.slug, a = index.analysis
   const cols = levels.flatMap(l => a.ranked[l].map(r => ({ ...r, level: l })).sort((x, y) => x.id.localeCompare(y.id)))
   const rows = [...new Set(a.cells.map(c => c.clue))].sort()
-  if (!rows.length) return <p className="py-10 text-center text-sm text-muted-foreground">No clue weighed yet: the matrix fills as the agent weighs the clues (hyp lr).</p>
+  if (!rows.length) return <p className="py-10 text-center text-sm text-muted-foreground">{t("No clue weighed yet: the matrix fills as the agent weighs the clues (hyp lr).")}</p>
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <table className="w-full border-collapse text-sm">
-          <caption className="sr-only">Analysis of competing hypotheses: each clue against each hypothesis</caption>
+          <caption className="sr-only">{t("Analysis of competing hypotheses: each clue against each hypothesis")}</caption>
           <thead>
             <tr className="border-b">
-              <th scope="col" className="p-2 text-left font-medium text-muted-foreground">Clue</th>
+              <th scope="col" className="p-2 text-left font-medium text-muted-foreground">{t("Clue")}</th>
               {cols.map(h => (
                 <th key={h.id} scope="col" className={cn("min-w-20 p-2 text-center font-medium", h.status === "excluded" && "opacity-40")}>
-                  <Tooltip><TooltipTrigger asChild><button type="button" onClick={() => { const n = hyp(h.id); if (n) open(slug, n.path) }} className="font-mono hover:underline">{h.id}</button></TooltipTrigger><TooltipContent>{hyp(h.id)?.title} · {h.level} · {h.status}</TooltipContent></Tooltip>
+                  <Tooltip><TooltipTrigger asChild><button type="button" onClick={() => { const n = hyp(h.id); if (n) open(slug, n.path) }} className="font-mono hover:underline">{h.id}</button></TooltipTrigger><TooltipContent>{hyp(h.id)?.title} · {h.level} · {HYP_STATUS[h.status] ? t(HYP_STATUS[h.status].label).toLowerCase() : h.status}</TooltipContent></Tooltip>
                 </th>
               ))}
             </tr>
@@ -106,12 +107,12 @@ function Ach({ index, levels, hyp, clue }: { index: CaseIndex; levels: string[];
                       <td key={h.id} className={cn("p-1", h.status === "excluded" && "opacity-40")}>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button" onClick={() => c.journal && open(slug, `Journal.md#^${c.journal}`)} aria-label={`${CNI[k].label}, likelihood ratio ${c.lr}: ${c.why}`}
+                            <button type="button" onClick={() => c.journal && open(slug, `Journal.md#^${c.journal}`)} aria-label={t("{label}, likelihood ratio {lr}: {why}", { label: t(CNI[k].label), lr: c.lr, why: c.why })}
                               className="flex h-9 w-full items-center justify-center gap-1 rounded-md text-xs font-medium tabular-nums" style={{ background: `color-mix(in oklch, var(${CNI[k].v}) 22%, transparent)` }}>
                               <span className="size-2 rounded-full" style={{ background: `var(${CNI[k].v})` }} aria-hidden />{k} ×{c.lr}
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent className="max-w-72">{c.why}{c.journal && <span className="block opacity-70">Journal {c.journal} · click to open</span>}</TooltipContent>
+                          <TooltipContent className="max-w-72">{c.why}{c.journal && <span className="block opacity-70">{t("Journal {id} · click to open", { id: c.journal })}</span>}</TooltipContent>
                         </Tooltip>
                       </td>
                     )
@@ -123,8 +124,8 @@ function Ach({ index, levels, hyp, clue }: { index: CaseIndex; levels: string[];
         </table>
       </div>
       <p className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        {Object.entries(CNI).map(([k, c]) => <span key={k} className="flex items-center gap-1"><span className="size-2 rounded-full" style={{ background: `var(${c.v})` }} />{k} {c.label}</span>)}
-        <span>· ×LR: the likelihood ratio, capped by what the clue rests on · a greyed column is excluded</span>
+        {Object.entries(CNI).map(([k, c]) => <span key={k} className="flex items-center gap-1"><span className="size-2 rounded-full" style={{ background: `var(${c.v})` }} />{k} {t(c.label)}</span>)}
+        <span>{t("· ×LR: the likelihood ratio, capped by what the clue rests on · a greyed column is excluded")}</span>
       </p>
     </div>
   )

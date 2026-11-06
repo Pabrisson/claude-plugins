@@ -41,8 +41,8 @@ A watched case gets its refresh again on a period, by itself: the dashboard serv
   `?journal=1` for the appendix); the user prints it or saves it as PDF from their own browser. Do not retry.
 - Exit 1 (the browser failed, or did not finish within `OSINT_PDF_TIMEOUT`, 120 s by default): the failure is in the
   Journal; give the print view the same way; another browser can be tried with `OSINT_BROWSER=<path>`.
-- The dashboard's « Export PDF » runs the same command itself, and « Print view » opens the same page: neither sends
-  a prompt to the agent.
+- The dashboard's « Export ▾ » menu on a case: « Export PDF » runs the same command itself, « Print view » opens the
+  same page, « Open in Obsidian » the case's vault: none sends a prompt to the agent.
 
 ## Next actions
 

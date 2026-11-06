@@ -8,6 +8,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FakeSwitch } from "@/components/fake-switch"
 import { api, type AppState } from "@/lib/api"
+import { t } from "@/lib/i18n"
 import { TONE } from "@/lib/tones"
 
 const NONE: AppState = { home: "", version: "", developer: false, fake: false, fake_available: false, fake_url: null, busy: false }
@@ -40,8 +41,8 @@ export function TopBar({ search, children }: { search?: { value: string; onChang
         </a>
         {fake && (
           <Tooltip>
-            <TooltipTrigger asChild><Badge className={TONE.amber}>Fake APIs</Badge></TooltipTrigger>
-            <TooltipContent>Every service answers from the tests' recorded fixtures: fictitious data, nothing leaves this machine. Switch them off in the bar or in Settings › Development.</TooltipContent>
+            <TooltipTrigger asChild><Badge className={TONE.amber}>{t("Fake APIs")}</Badge></TooltipTrigger>
+            <TooltipContent>{t("Every service answers from the tests' recorded fixtures: fictitious data, nothing leaves this machine. Switch them off in the bar or in Settings › Development.")}</TooltipContent>
           </Tooltip>
         )}
         {developer && fake_available && <FakeSwitch />}
@@ -50,13 +51,13 @@ export function TopBar({ search, children }: { search?: { value: string; onChang
         {search && (
           <InputGroup className="w-40 sm:w-64">
             <InputGroupAddon><SearchIcon /></InputGroupAddon>
-            <InputGroupInput type="search" value={search.value} onChange={e => search.onChange(e.target.value)} placeholder={search.placeholder ?? "Search cases"} aria-label={search.placeholder ?? "Search cases"} />
+            <InputGroupInput type="search" value={search.value} onChange={e => search.onChange(e.target.value)} placeholder={search.placeholder ?? t("Search cases")} aria-label={search.placeholder ?? t("Search cases")} />
           </InputGroup>
         )}
-        <Button size="sm" asChild><a href="#/new"><PlusIcon data-icon="inline-start" /><span className="max-sm:sr-only">New case</span></a></Button>
+        <Button size="sm" asChild><a href="#/new"><PlusIcon data-icon="inline-start" /><span className="max-sm:sr-only">{t("New case")}</span></a></Button>
         <Tooltip>
-          <TooltipTrigger asChild><Button variant="ghost" size="icon-sm" asChild><a href="#/settings" aria-label="Settings"><SettingsIcon /></a></Button></TooltipTrigger>
-          <TooltipContent>Settings</TooltipContent>
+          <TooltipTrigger asChild><Button variant="ghost" size="icon-sm" asChild><a href="#/settings" aria-label={t("Settings")}><SettingsIcon /></a></Button></TooltipTrigger>
+          <TooltipContent>{t("Settings")}</TooltipContent>
         </Tooltip>
         <ThemeButton />
       </div>
@@ -67,7 +68,7 @@ export function TopBar({ search, children }: { search?: { value: string; onChang
 
 export function ThemeButton() {
   const { resolvedTheme, setTheme } = useTheme()
-  const label = resolvedTheme === "dark" ? "Light theme" : "Dark theme"
+  const label = resolvedTheme === "dark" ? t("Light theme") : t("Dark theme")
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -94,8 +95,8 @@ function StaleBar() {
   if (!stale) return null
   return (
     <div role="status" className="flex items-center justify-center gap-3 bg-primary px-3 py-1.5 text-sm text-primary-foreground">
-      <RefreshCwIcon className="size-4" />A new version of the dashboard is ready.
-      <Button size="xs" variant="secondary" onClick={() => location.reload()}>Reload</Button>
+      <RefreshCwIcon className="size-4" />{t("A new version of the dashboard is ready.")}
+      <Button size="xs" variant="secondary" onClick={() => location.reload()}>{t("Reload")}</Button>
     </div>
   )
 }

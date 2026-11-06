@@ -1,6 +1,7 @@
 import { Icon } from "@/components/icon"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { t } from "@/lib/i18n"
 import { TONE } from "@/lib/tones"
 import { cn } from "@/lib/utils"
 
@@ -9,9 +10,9 @@ export function PrivateBadge({ id, className }: { id: string; className?: string
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge variant="outline" className={cn("gap-1", className)}><Icon name="lock-keyhole" className="size-3" aria-hidden />Private</Badge>
+        <Badge variant="outline" className={cn("gap-1", className)}><Icon name="lock-keyhole" className="size-3" aria-hidden />{t("Private")}</Badge>
       </TooltipTrigger>
-      <TooltipContent>A case type of this cases folder (.osint-types/{id}). Its engine.js runs with the engine's rights.</TooltipContent>
+      <TooltipContent>{t("A case type of this cases folder (.osint-types/{id}). Its engine.js runs with the engine's rights.", { id })}</TooltipContent>
     </Tooltip>
   )
 }
@@ -21,9 +22,9 @@ export function TypeMissingBadge({ id, className }: { id: string; className?: st
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge variant="outline" className={cn("gap-1 border-amber-500/50", TONE.amber, className)}><Icon name="triangle-alert" className="size-3" aria-hidden />Type missing</Badge>
+        <Badge variant="outline" className={cn("gap-1 border-amber-500/50", TONE.amber, className)}><Icon name="triangle-alert" className="size-3" aria-hidden />{t("Type missing")}</Badge>
       </TooltipTrigger>
-      <TooltipContent>The case type {id} is not loaded: Settings › Types says why.</TooltipContent>
+      <TooltipContent>{t("The case type {id} is not loaded: Settings › Types says why.", { id })}</TooltipContent>
     </Tooltip>
   )
 }

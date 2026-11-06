@@ -1,5 +1,7 @@
 import type { Feature, LineString, Point } from "geojson"
 
+import { localize } from "@/lib/i18n"
+
 export type Props = Record<string, unknown>
 export type OsintEvent = { t: string; kind: string; by: "engine" | "agent" | "vault" | "dashboard" | "watch"; phase?: string; text?: string; n?: number; of?: number; path?: string; id?: string; journal?: string; data?: Record<string, unknown>; deleted?: boolean }
 export type Link = { target: string; path: string | null; anchor: string | null; embed: boolean }
@@ -48,7 +50,7 @@ export type Option = { value: string; label: string; icon: string }
 export type Input = { id: string; kind: "text" | "url" | "file" | "select" | "chips" | "toggle"; label: string; required?: boolean; placeholder?: string; default?: string | boolean | string[]; options?: Option[]; when?: Record<string, string | string[] | boolean>; multiline?: boolean; multiple?: boolean; help?: string; accept?: string; link?: boolean }
 export type View = { widget: string; label?: string; icon?: string; kind?: string; where?: Props; columns?: string[]; view?: string }
 export type Action = { id: string; label: string; icon: string; target: string; prompt: string; noisy: boolean; minutes: number }
-export type Manifest = { id: string; label: string; icon: string; description: string; frame: (string | { id: string; always?: boolean; legal_basis?: string; purpose?: boolean })[]; inputs: Input[]; levels: { id: string; label: string; criteria: Record<string, string> }[]; phases: { id: string; label: string }[]; views: View[]; actions: Action[]; pivots: (string | { kind: string; has: string })[]; private: boolean }
+export type Manifest = { id: string; label: string; icon: string; description: string; frame: (string | { id: string; always?: boolean; legal_basis?: string; purpose?: boolean })[]; inputs: Input[]; levels: { id: string; label: string; criteria: Record<string, string> }[]; phases: { id: string; label: string }[]; views: View[]; actions: Action[]; pivots: (string | { kind: string; has: string })[]; private: boolean; fr?: Record<string, string> }
 export type Note = { path: string; props: Props; body: string; mtime: string }
 export type SharedEntity = { key: string; kind: string; value: string; cases: { slug: string; path: string }[] }
 export type DoctorLine = { status: "ok" | "MISSING" | "missing" | "info" | "warning"; name: string; text: string; fix?: string }
@@ -67,7 +69,8 @@ export const api = {
   // developer mode (Settings › Development) and the Fake APIs switch; each answers with the new state
   developer: (on: boolean) => post("/api/developer", { on }).then(r => json<AppState>(r)),
   fake: (on: boolean) => post("/api/fake", { on }).then(r => json<AppState>(r)),
-  types: () => fetch("/api/types").then(r => json<Manifest[]>(r)),
+  // in the dashboard's language (each type's "fr" block)
+  types: () => fetch("/api/types").then(r => json<Manifest[]>(r)).then(ms => ms.map(localize)),
   cases: () => fetch("/api/cases").then(r => json<CaseSummary[]>(r)),
   case: (slug: string) => fetch(`/api/cases/${slug}`).then(r => json<CaseIndex>(r)),
   note: (slug: string, path: string) => fetch(`/api/cases/${slug}/note?path=${encodeURIComponent(path)}`).then(r => json<Note>(r)),
