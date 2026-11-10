@@ -107,9 +107,13 @@ function ratioOf(job: Job, file: string | null) {
   return (file && MEASURED.get(file)) || parseRatio(job.params?.aspect_ratio) || (k === "audio" ? 2.4 : k === "image" ? 1 : k === "other" ? 1.6 : 16 / 9)
 }
 
-// the results' row height: tiles keep their ratio and share each row's width, growing at most by a third
+// the results' row height: tiles keep their ratio and share each row's width, growing at most by a third;
+// a portrait one stands a quarter taller, or it would be too narrow to see (and for its buttons)
 const ROW = 200
-const tileSize = (r: number) => ({ flexGrow: r, flexBasis: r * ROW, maxWidth: r * ROW * 1.35 })
+const tileSize = (r: number) => {
+  const h = r < 1 ? ROW * 1.25 : ROW
+  return { flexGrow: r, flexBasis: r * h, maxWidth: r * h * 1.35 }
+}
 
 function day(iso: string) {
   const d = new Date(iso), now = new Date()
@@ -275,7 +279,7 @@ function Tile({
         {job.outputs.length > 1 && <span className="pointer-events-none absolute top-2 left-2 rounded-md bg-black/60 px-1.5 text-xs text-white">+{job.outputs.length - 1}</span>}
         {job.favorite && <StarIcon className="pointer-events-none absolute top-2 right-2 size-4 fill-current text-cost drop-shadow transition-opacity group-focus-within:opacity-0 group-hover:opacity-0" aria-label="Favorite" />}
         {/* stays shown while one of its menus is open (the menu sits outside the tile) */}
-        <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100">
+        <div className="pointer-events-none absolute inset-x-2 top-2 flex flex-wrap justify-end gap-1 opacity-0 *:pointer-events-auto transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100">
           <Tip label={job.favorite ? "Unfavorite" : "Favorite"}>
             <button type="button" aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"} onClick={() => api.media(job.id, "favorite")} className={overlayButton}>
               <StarIcon className={cn("size-4", job.favorite && "fill-current text-cost")} />
@@ -314,7 +318,7 @@ function Tile({
             </button>
           </Tip>
         </div>
-        <div className="absolute bottom-2 left-2 flex gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+        <div className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-wrap-reverse gap-1 opacity-0 *:pointer-events-auto transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
           {[
             // an imported file has nothing to remix
             ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", job, file ?? "") }]),
@@ -339,7 +343,7 @@ function Tile({
         </div>
       </div>
       <figcaption className="flex items-baseline justify-between gap-2 px-0.5 text-xs">
-        <span className="min-w-0 truncate">
+        <span className="min-w-0 truncate" title={`${job.label} · ${job.name}`}>
           <span className="font-medium">{job.label}</span>{" "}
           <span className="text-muted-foreground">· {job.name}{job.by === "agent" ? " · by Agent" : ""}</span>
         </span>
