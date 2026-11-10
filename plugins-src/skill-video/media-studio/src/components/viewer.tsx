@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react"
-import { AudioLinesIcon, CaptionsIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClapperboardIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, FileAudioIcon, FolderKanbanIcon, PianoIcon, StarIcon, Trash2Icon, UserRoundPlusIcon } from "lucide-react"
+import { AudioLinesIcon, CaptionsIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClapperboardIcon, Columns2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, FileAudioIcon, FolderKanbanIcon, PauseIcon, PianoIcon, PlayIcon, StarIcon, Trash2Icon, UserRoundPlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
+import { Slider } from "@/components/ui/slider"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job, type Line, type Shot, type Spec } from "@/lib/api"
 import { jsonParts } from "@/lib/text"
@@ -15,7 +16,8 @@ import { Label } from "@/components/chips"
 import { Thumb, Workspaces } from "@/components/inputs"
 import { ModelLogo } from "@/components/model-logo"
 import { BRIDGES, costOf, DeleteDialog, HINTS, REMIX, SEND, sendToEdit, SONG, type Bridge, FINAL, isDraft } from "@/components/results"
-import { CompareDialog } from "@/components/compare"
+import { CompareDialog, secs } from "@/components/compare"
+import { useZoom, ZoomBadge } from "@/components/zoom"
 
 // the settings a result was made with, in words
 const PARAMS: Record<string, [string, (v: unknown) => string]> = {
@@ -84,21 +86,54 @@ export function Viewer({
   const i = jobs.findIndex((j) => j.id === id)
   const job = i >= 0 ? jobs[i] : null
   const go = (d: number) => jobs[i + d] && onId(jobs[i + d].id)
+  // + − 0: the shown media's zoom (in Body)
+  const zoomKey = useRef<((k: string) => boolean) | null>(null)
+  const onZoomKey = (f: (k: string) => boolean) => {
+    zoomKey.current = f
+  }
   return (
     <Dialog open={!!job} onOpenChange={(o) => !o && onId(null)}>
       {job && (
         <DialogContent
           className="flex h-[min(900px,calc(100vh-2rem))] w-[calc(100vw-2rem)] max-w-none gap-0 overflow-hidden p-0 sm:max-w-[min(1440px,calc(100vw-2rem))]"
           onKeyDown={(e) => {
-            if ((e.target as HTMLElement).closest("video, audio, input, textarea")) return
+            const target = e.target as HTMLElement
+            if (target.closest("input, textarea") || zoomKey.current?.(e.key) || target.closest("video, audio")) return
             if (e.key === "ArrowLeft") go(-1)
             if (e.key === "ArrowRight") go(1)
           }}
         >
-          <Body key={job.id} job={job} jobs={jobs} home={home} per1000={per1000} prev={i > 0 ? () => go(-1) : null} next={i < jobs.length - 1 ? () => go(1) : null} onBridge={(b, f) => (onId(null), onBridge(b, job, f))} onClose={() => onId(null)} />
+          <Body key={job.id} job={job} jobs={jobs} home={home} per1000={per1000} prev={i > 0 ? () => go(-1) : null} next={i < jobs.length - 1 ? () => go(1) : null} onBridge={(b, f) => (onId(null), onBridge(b, job, f))} onClose={() => onId(null)} onZoomKey={onZoomKey} />
         </DialogContent>
       )}
     </Dialog>
+  )
+}
+
+// a zoomed video's playback: play or pause, where it is, a seek bar
+function Transport({ video }: { video: HTMLVideoElement }) {
+  const el = useRef(video)
+  const read = (v: HTMLVideoElement) => ({ paused: v.paused, time: v.currentTime, length: v.duration || 0 })
+  const [at, setAt] = useState(() => read(video))
+  useEffect(() => {
+    const on = () => setAt(read(video))
+    const events = ["timeupdate", "play", "pause", "durationchange", "seeked"]
+    for (const ev of events) video.addEventListener(ev, on)
+    return () => {
+      for (const ev of events) video.removeEventListener(ev, on)
+    }
+  }, [video])
+  const paused = at.paused
+  return (
+    <div className="absolute inset-x-6 bottom-3 flex items-center gap-3 rounded-full bg-black/60 py-1 pr-4 pl-1 ring-1 ring-white/15 backdrop-blur-sm">
+      <Button variant="ghost" size="icon-sm" aria-label={paused ? t("Play") : t("Pause")} onClick={() => (paused ? video.play().catch(() => {}) : video.pause())} className="rounded-full text-white hover:bg-white/15 hover:text-white">
+        {paused ? <PlayIcon /> : <PauseIcon />}
+      </Button>
+      <span className="text-xs whitespace-nowrap text-white/80 tabular-nums">
+        {secs(at.time)} / {secs(at.length)}
+      </span>
+      <Slider value={[at.time]} max={at.length || 1} step={0.01} onValueChange={([v]) => (el.current.currentTime = v)} aria-label={t("Position")} className="flex-1" />
+    </div>
   )
 }
 
@@ -116,6 +151,7 @@ function Body({
   next,
   onBridge,
   onClose,
+  onZoomKey,
 }: {
   job: Job
   jobs: Job[]
@@ -125,6 +161,7 @@ function Body({
   next: (() => void) | null
   onBridge: (b: Bridge, file: string) => void
   onClose: () => void
+  onZoomKey: (f: (k: string) => boolean) => void
 }) {
   const [out, setOut] = useState(0)
   const [confirm, setConfirm] = useState(false)
@@ -139,6 +176,11 @@ function Body({
   const facts = (file && known[file]) || {}
   const setFacts = (patch: (typeof known)[string]) => file && setKnown((all) => ({ ...all, [file]: { ...all[file], ...patch } }))
   const k = file ? mediaKind(file) : null
+  // an image or a video zooms on the wheel; zoomed, a video's own controls give way to a bar that stays its size
+  const [stage, setStage] = useState<HTMLElement | null>(null)
+  const zoom = useZoom(file ?? "", stage)
+  useEffect(() => onZoomKey(zoom.key))
+  const [video, setVideo] = useState<HTMLVideoElement | null>(null)
   // a song's cover beside its take (Suno: cover-1 for out-1), a text file read as it is (lyrics, captions, notes)
   const name = job.outputs[out] ?? "", cover = job.outputs.find((o) => mediaKind(o) === "image" && o.replace(/^cover-/, "").split(".")[0] === name.replace(/^out-/, "").split(".")[0] && /^cover-/.test(o))
   const [text, setText] = useState<string | null>(null)
@@ -225,10 +267,11 @@ function Body({
       <div className="relative flex min-w-0 flex-1 flex-col bg-black">
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-2 p-3">
           {(prev || next) && (
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/80 tabular-nums ring-1 ring-white/15 backdrop-blur-sm">
+            <span className="rounded-full bg-black/60 px-2.5 py-1 text-xs text-white/80 tabular-nums ring-1 ring-white/15 backdrop-blur-sm">
               {jobs.indexOf(job) + 1} / {jobs.length}
             </span>
           )}
+          {zoom.zoomed && <ZoomBadge zoom={zoom} />}
           <span className="flex-1" />
           {file && !failed && (
             <span className="pointer-events-auto flex gap-1.5">
@@ -243,24 +286,35 @@ function Body({
             </span>
           )}
         </div>
-        <div className="flex min-h-0 flex-1 items-center justify-center p-6 pt-14">
+        <div
+          ref={setStage}
+          data-zoom={(!failed && (k === "image" || (k === "video" && !facts.unplayable))) || undefined}
+          onPointerDown={zoom.down}
+          onPointerMove={zoom.move}
+          onPointerUp={zoom.up}
+          onPointerCancel={zoom.up}
+          onDoubleClick={zoom.double}
+          className={cn("relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6 pt-14", zoom.zoomed && "cursor-grab touch-none select-none active:cursor-grabbing")}
+        >
           {failed ? (
             <p className="max-w-md text-center text-sm text-destructive">{plain(job.error ?? t("Failed"))}</p>
           ) : k === "image" ? (
-            <img src={fileUrl(file!)} alt={job.prompt} onLoad={(e) => setFacts({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} className="max-h-full max-w-full rounded-lg object-contain" />
+            <img src={fileUrl(file!)} alt={job.prompt} draggable={false} style={zoom.style} onLoad={(e) => setFacts({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} className="max-h-full max-w-full rounded-lg object-contain" />
           ) : k === "video" && facts.unplayable ? (
             <p className="max-w-sm text-center text-sm text-white/70">
               {t("The browser cannot show this {ext} file (ProRes keeps the transparency for editing software). Download it, or pick the other result to preview it.", { ext: ext ?? "" })}
             </p>
           ) : k === "video" ? (
             <video
+              ref={setVideo}
               src={fileUrl(file!)}
-              controls
+              controls={!zoom.zoomed}
               autoPlay
               loop
               playsInline
               onLoadedMetadata={(e) => setFacts({ w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight, length: e.currentTarget.duration })}
               onError={() => setFacts({ unplayable: true })}
+              style={zoom.style}
               className="max-h-full max-w-full rounded-lg bg-[repeating-conic-gradient(#222_0_25%,#2c2c2c_0_50%)] bg-size-[24px_24px]"
             />
           ) : k === "other" ? (
@@ -273,6 +327,7 @@ function Body({
               <audio src={fileUrl(file!)} controls autoPlay onLoadedMetadata={(e) => setFacts({ length: e.currentTarget.duration })} className="w-full" />
             </div>
           ) : null}
+          {zoom.zoomed && k === "video" && video && <Transport video={video} />}
         </div>
         {job.outputs.length > 1 && (
           <div className="flex justify-center gap-2 pb-4">

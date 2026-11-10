@@ -12,13 +12,14 @@ import { Chips } from "@/components/chips"
 import { Listen, Thumb, upload } from "@/components/inputs"
 import { costOf } from "@/components/results"
 import { own, t } from "@/lib/i18n"
+import { useZoom, ZoomBadge } from "@/components/zoom"
 
 type Side = "a" | "b"
 // a file on one side: what it is, made with what, for how much
 type Item = { path: string; title: string; detail: string; cost?: string; text?: string }
 
 const SIDES: Side[] = ["a", "b"]
-const secs = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`
+export const secs = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`
 
 // two files of one medium, A against B: B is the user's pick, the result's input or the result before it suggested
 export function CompareDialog({
@@ -69,6 +70,9 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
   const [sound, setSound] = useState<Side>("a")
   const [dims, setDims] = useState<Record<Side, string>>({ a: "", b: "" })
   const overlay = kind !== "audio" && mode === "slider" && !picking && !!sides.b
+  // one zoom for A and B, the same spot on both; kept on a swap
+  const [stage, setStage] = useState<HTMLElement | null>(null)
+  const zoom = useZoom(`${mode}|${[sides.a?.path, sides.b?.path].sort()}`, stage)
 
   // the clips play as one: the longer leads, the other follows it and waits on its last frame when shorter
   const el = useRef<Record<Side, HTMLMediaElement | null>>({ a: null, b: null })
@@ -136,11 +140,11 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
       el.current[s] = m
     }
     if (kind === "image")
-      return <img src={fileUrl(it.path)} alt={it.title} draggable={false} onLoad={(e) => {
+      return <img src={fileUrl(it.path)} alt={it.title} draggable={false} style={zoom.style} onLoad={(e) => {
             const size = `${e.currentTarget.naturalWidth}×${e.currentTarget.naturalHeight}`
             setDims((d) => ({ ...d, [s]: size }))
           }} className="size-full object-contain" />
-    if (kind === "video") return <video ref={ref} src={fileUrl(it.path)} muted={sound !== s} playsInline preload="auto" onLoadedMetadata={loaded} className="size-full object-contain" />
+    if (kind === "video") return <video ref={ref} src={fileUrl(it.path)} muted={sound !== s} playsInline preload="auto" onLoadedMetadata={loaded} style={zoom.style} className="size-full object-contain" />
     return (
       <>
         <audio ref={ref} src={fileUrl(it.path)} muted={sound !== s} preload="auto" onLoadedMetadata={loaded} />
@@ -158,7 +162,8 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
     )
   }
 
-  // the slider: B shows right of the line, A left of it; drag anywhere, or ← → once focused
+  // the slider: B shows right of the line, A left of it; drag anywhere (zoomed: the line's handle, the rest moves the
+  // media), or ← → once focused
   const drag = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!overlay || (e.type === "pointermove" && !e.buttons)) return
     if (e.type === "pointerdown") e.currentTarget.setPointerCapture(e.pointerId)
@@ -173,6 +178,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
         // the viewer behind walks its list on ← →: not from here
         e.stopPropagation()
         const target = e.target as HTMLElement
+        if (!target.closest("input, textarea") && zoom.key(e.key)) return
         if (!timed || target.closest("input, textarea, [role=slider]")) return
         if (e.key === " " && !target.closest("button")) {
           e.preventDefault()
@@ -191,11 +197,20 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
         </Button>
       </div>
 
-      <div className={cn("relative flex min-h-0 flex-1 bg-black", overlay && "cursor-ew-resize touch-none select-none")} onPointerDown={drag} onPointerMove={drag}>
+      <div
+        ref={setStage}
+        className={cn("relative flex min-h-0 flex-1 overflow-hidden bg-black", zoom.zoomed ? "cursor-grab touch-none select-none active:cursor-grabbing" : overlay && "cursor-ew-resize touch-none select-none")}
+        onPointerDown={(e) => zoom.down(e) || drag(e)}
+        onPointerMove={(e) => zoom.move(e) || drag(e)}
+        onPointerUp={zoom.up}
+        onPointerCancel={zoom.up}
+        onDoubleClick={zoom.double}
+      >
         {SIDES.map((s) => (
           <div
             key={s}
-            className={cn("flex min-w-0 flex-1 items-center justify-center p-4", overlay ? "absolute inset-0" : "relative", !overlay && s === "b" && "border-l border-white/10")}
+            data-zoom={(kind !== "audio" && picking !== s && !!sides[s]) || undefined}
+            className={cn("flex min-w-0 flex-1 items-center justify-center overflow-hidden p-4", overlay ? "absolute inset-0" : "relative", !overlay && s === "b" && "border-l border-white/10")}
             style={overlay && s === "b" ? { clipPath: `inset(0 0 0 ${split}%)` } : undefined}
           >
             {picking === s || !sides[s] ? (
@@ -234,7 +249,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
                 e.preventDefault()
                 setSplit((x) => Math.min(100, Math.max(0, x + (e.key === "ArrowLeft" ? -5 : 5))))
               }}
-              className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_8px_rgba(0,0,0,0.6)] outline-none focus-visible:ring-3 focus-visible:ring-ring/70"
+              className="absolute inset-y-0 w-0.5 -translate-x-1/2 cursor-ew-resize bg-white shadow-[0_0_8px_rgba(0,0,0,0.6)] outline-none before:absolute before:inset-y-0 before:-inset-x-3 focus-visible:ring-3 focus-visible:ring-ring/70"
               style={{ left: `${split}%` }}
             >
               <span className="absolute top-1/2 left-1/2 grid size-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-black shadow-lg">
@@ -243,6 +258,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
             </div>
           </>
         )}
+        {zoom.zoomed && <ZoomBadge zoom={zoom} className="absolute bottom-3 left-1/2 -translate-x-1/2" />}
       </div>
 
       <div className="flex flex-col gap-3 border-t px-5 py-3">
