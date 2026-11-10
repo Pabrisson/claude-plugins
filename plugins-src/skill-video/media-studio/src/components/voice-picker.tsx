@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, fileUrl, plain, type Element, type Model, type Voice } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Label } from "@/components/chips"
 import { Listen } from "@/components/inputs"
+import { locale, t } from "@/lib/i18n"
 
 // the voice lists of Voice (a speech model's own voices, the Library's) and Change voice (the Library's and ElevenLabs'):
 // one searchable list, each voice with its circle to listen to its sample, and the ElevenLabs voices filtered on their
@@ -41,7 +42,7 @@ function useFilters() {
   return [f, set] as const
 }
 
-const NAMES = new Intl.DisplayNames(["en"], { type: "language" })
+const NAMES = new Intl.DisplayNames([locale()], { type: "language" })
 const langName = (code: string) => {
   try {
     return NAMES.of(code) ?? code
@@ -57,7 +58,7 @@ const sample = (v: Voice | undefined, lang: string) => (v && ((lang && v.preview
 const titleOf = (v: Voice) => v.name.split(/\s-\s/)[0]
 function noteOf(v: Voice) {
   const l = labelsOf(v), line = v.name.split(/\s-\s/)[1]
-  return [line, [l.gender, l.age && words(l.age).toLowerCase(), l.accent].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || (v.category === "cloned" ? "cloned" : v.category ? "ElevenLabs" : "")
+  return [line, [l.gender, l.age && words(l.age).toLowerCase(), l.accent].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || (v.category === "cloned" ? t("cloned") : v.category ? "ElevenLabs" : "")
 }
 const LABELS = ["gender", "age", "accent", "descriptive", "use_case"] as const
 function passes(r: Row, f: Filters) {
@@ -84,14 +85,14 @@ const useful = (options: Map<string, number>, total: number) => options.size > 1
 
 function FilterSelect({ label, value, options, total, name = words, onChange }: { label: string; value: string; options: Map<string, number>; total: number; name?: (v: string) => string; onChange: (v: string) => void }) {
   if (!useful(options, total)) return null
-  const list = [...options].sort((a, b) => b[1] - a[1] || name(a[0]).localeCompare(name(b[0])))
+  const list = [...options].sort((a, b) => b[1] - a[1] || name(a[0]).localeCompare(name(b[0]), locale()))
   return (
     <Select value={value || "any"} onValueChange={(v) => onChange(v === "any" ? "" : v)}>
-      <SelectTrigger size="sm" className={cn("h-7! w-auto gap-1 px-2 text-xs", value && "border-space/50 text-space")} aria-label={label}>
+      <SelectTrigger size="sm" className={cn("h-7! w-auto gap-1 px-2 text-xs", value && "border-space/50 text-space")} aria-label={t(label)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="max-h-72">
-        <SelectItem value="any">Any {label.toLowerCase()}</SelectItem>
+        <SelectItem value="any">{t(`Any ${label.toLowerCase()}`)}</SelectItem>
         {list.map(([v, n]) => (
           <SelectItem key={v} value={v}>
             {name(v)} <span className="text-muted-foreground tabular-nums">{n}</span>
@@ -105,7 +106,7 @@ function FilterSelect({ label, value, options, total, name = words, onChange }: 
 function FilterChips({ label, value, options, total, onChange }: { label: string; value: string; options: Map<string, number>; total: number; onChange: (v: string) => void }) {
   if (!useful(options, total)) return null
   return (
-    <div className="flex flex-wrap gap-1" role="group" aria-label={label}>
+    <div className="flex flex-wrap gap-1" role="group" aria-label={t(label)}>
       {[...options].sort((a, b) => b[1] - a[1]).map(([v]) => (
         <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(value === v ? "" : v)} className={cn(CHIP, "inline-flex items-center gap-1.5 px-2 py-0 text-xs", value === v ? CHIP_ON : CHIP_OFF)}>
           {label === "Age" ? <CakeIcon className="size-3.5" /> : v === "male" ? <MarsIcon className="size-3.5" /> : v === "female" ? <VenusIcon className="size-3.5" /> : <UserIcon className="size-3.5" />}
@@ -145,7 +146,7 @@ function VoiceList({ label, hint, rows, value, onChange, placeholder, status, fo
   const put = (k: keyof Filters) => (v: string) => setF({ ...f, [k]: v })
   // the headings in the rows' order; the ElevenLabs one says the language its samples are in
   const groups = [...new Set(shown.map((r) => r.group ?? ""))].map((g) => ({
-    heading: g === "ElevenLabs" && f.language && labelled ? `ElevenLabs · samples in ${langName(f.language)}` : g,
+    heading: g === "ElevenLabs" && f.language && labelled ? t("ElevenLabs · samples in {language}", { language: langName(f.language) }) : g,
     list: shown.filter((r) => (r.group ?? "") === g),
   }))
   return (
@@ -155,7 +156,7 @@ function VoiceList({ label, hint, rows, value, onChange, placeholder, status, fo
         <PopoverTrigger asChild>
           <button
             type="button"
-            aria-label={`${label}: ${current?.title ?? "none"}. Change it`}
+            aria-label={t("{label}: {name}. Change it", { label, name: current?.title ?? t("none") })}
             className="flex min-h-12 w-full min-w-0 items-center gap-2.5 rounded-lg border border-input px-2 py-1.5 text-left shadow-xs transition-colors outline-none hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:border-space/60 dark:bg-input/30 dark:hover:bg-input/50"
           >
             {current?.image && <img src={fileUrl(current.image)} alt="" className="size-9 shrink-0 rounded-md object-cover" />}
@@ -171,7 +172,7 @@ function VoiceList({ label, hint, rows, value, onChange, placeholder, status, fo
         {/* beside the composer, like the tool and model pickers: the screen's height, moved up to stay on it */}
         <PopoverContent side="right" align="start" sideOffset={24} collisionPadding={12} className="flex max-h-[min(680px,calc(100vh-1.5rem))] w-[26rem] flex-col p-0">
           <Command loop className="min-h-0 flex-1">
-            {rows.length > 6 && <CommandInput placeholder="Search voices" aria-label="Search voices" />}
+            {rows.length > 6 && <CommandInput placeholder={t("Search voices")} aria-label={t("Search voices")} />}
             {labelled && (
               <div className="flex flex-col gap-1.5 border-b p-2">
                 <div className="flex flex-wrap items-center gap-1">
@@ -185,14 +186,14 @@ function VoiceList({ label, hint, rows, value, onChange, placeholder, status, fo
                   <FilterChips label="Age" value={f.age} options={c.age} total={total} onChange={put("age")} />
                   {on && (
                     <button type="button" onClick={() => setF(NONE)} className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                      <XIcon className="size-3" /> Clear
+                      <XIcon className="size-3" /> {t("Clear")}
                     </button>
                   )}
                 </div>
               </div>
             )}
             <CommandList className="max-h-none min-h-0 flex-1">
-              <CommandEmpty className="px-4 py-6 text-center text-sm text-muted-foreground">{status ?? (on ? "No voice with these filters." : "No voice matches.")}</CommandEmpty>
+              <CommandEmpty className="px-4 py-6 text-center text-sm text-muted-foreground">{status ?? (on ? t("No voice with these filters.") : t("No voice matches."))}</CommandEmpty>
               {groups.map((g) => (
                 <CommandGroup key={g.heading || "voices"} heading={g.heading || undefined}>
                   {g.list.map((r) => (
@@ -233,7 +234,7 @@ function useElevenVoices(enabled: boolean) {
 // an ElevenLabs voice (Change voice's new one, Voice's and a dialogue's lines on an ElevenLabs model): the Library's
 // voices (one not on ElevenLabs yet goes there when the job runs) and the ElevenLabs voices (its default ones and the
 // account's own). Its value is a voice id, or @name for a Library voice
-export function VoicePicker({ enabled, value, onChange, library, label = "New voice", placeholder = "Pick the new voice", hint }: { enabled: boolean; value?: string; onChange: (v: string) => void; library: Element[]; label?: string; placeholder?: string; hint?: string }) {
+export function VoicePicker({ enabled, value, onChange, library, label = t("New voice"), placeholder = t("Pick the new voice"), hint }: { enabled: boolean; value?: string; onChange: (v: string) => void; library: Element[]; label?: string; placeholder?: string; hint?: string }) {
   const { voices, error } = useElevenVoices(enabled)
   if (!enabled) return null
   const ours = library.filter((e) => e.type === "voice" && e.files.length)
@@ -241,9 +242,9 @@ export function VoicePicker({ enabled, value, onChange, library, label = "New vo
     ...ours.map((e) => ({
       value: e.voice_id ?? `@${e.name}`,
       title: `@${e.name}`,
-      note: [e.words, e.voice_id ? "" : "goes to ElevenLabs at first use (paid plan)"].filter(Boolean).join(" · ") || `${e.files.length} clip${e.files.length > 1 ? "s" : ""}`,
+      note: [e.words, e.voice_id ? "" : t("goes to ElevenLabs at first use (paid plan)")].filter(Boolean).join(" · ") || t(e.files.length > 1 ? "{n} clips" : "{n} clip", { n: e.files.length }),
       file: e.files[0],
-      group: "Your voices",
+      group: t("Your voices"),
     })),
     // a Library voice already on the account is listed once, under its @name
     ...(voices ?? []).filter((v) => !ours.some((e) => e.voice_id === v.voice_id)).map((v) => ({ value: v.voice_id, title: titleOf(v), note: noteOf(v), voice: v, group: ours.length ? "ElevenLabs" : undefined })),
@@ -251,19 +252,18 @@ export function VoicePicker({ enabled, value, onChange, library, label = "New vo
   return (
     <VoiceList
       label={label}
-      hint={hint ?? (ours.length ? `${ours.length} of yours, ${voices?.length ?? "…"} on ElevenLabs` : "ElevenLabs' and your own")}
+      hint={hint ?? (ours.length ? t("{n} of yours, {total} on ElevenLabs", { n: ours.length, total: voices?.length ?? "…" }) : t("ElevenLabs' and your own"))}
       rows={rows}
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      status={error ?? (voices ? undefined : "Loading the voices…")}
+      status={error ?? (voices ? undefined : t("Loading the voices…"))}
       footer={
         <>
-          {ours.length ? "A voice of your own" : "No voice of your own yet"}: 1 to 3 clean clips in{" "}
-          <a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">
-            Library › Elements
-          </a>
-          .
+          {(() => {
+            const [a, b] = (ours.length ? t("A voice of your own: 1 to 3 clean clips in {link}.") : t("No voice of your own yet: 1 to 3 clean clips in {link}.")).split("{link}")
+            return <>{a}<a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">{t("Library › Elements")}</a>{b}</>
+          })()}
         </>
       }
     />
@@ -293,7 +293,7 @@ function minimax(name: string): Voice {
 
 // a speech model's own voices: ElevenLabs' with their line, labels and samples (the engine's voice_info), Gemini's and
 // MiniMax's with what their makers say of them (no sample), filtered; the Library's voices stay in their own field
-export function ModelVoices({ model, voices, info, value, onChange, label = "Voice", placeholder = "Pick a voice" }: { model: string; voices: string[]; info?: Model["params"]["voice_info"]; value: string; onChange: (v: string) => void; label?: string; placeholder?: string }) {
+export function ModelVoices({ model, voices, info, value, onChange, label = t("Voice"), placeholder = t("Pick a voice") }: { model: string; voices: string[]; info?: Model["params"]["voice_info"]; value: string; onChange: (v: string) => void; label?: string; placeholder?: string }) {
   const rows: Row[] = voices.map((name) => {
     const v: Voice | undefined = info?.[name] ? { voice_id: name, ...info[name] } : model.startsWith("google/") && GEMINI[name]
       ? { voice_id: name, name: `${name} - ${GEMINI[name]}`, labels: { descriptive: GEMINI[name].toLowerCase() } }
@@ -302,42 +302,41 @@ export function ModelVoices({ model, voices, info, value, onChange, label = "Voi
         : undefined
     return v ? { value: name, title: titleOf(v), note: noteOf(v), voice: v } : { value: name, title: name, note: "" }
   })
-  return <VoiceList label={label} hint={label === "Voice" ? `${voices.length} voices of this model` : undefined} rows={rows} value={value} onChange={onChange} placeholder={placeholder} />
+  return <VoiceList label={label} hint={label === t("Voice") ? t("{n} voices of this model", { n: voices.length }) : undefined} rows={rows} value={value} onChange={onChange} placeholder={placeholder} />
 }
 
 // Voice's own field for the Library's voices: one picked sends its clips to be cloned and says how it sounds; « The
 // model's voices » leaves the choice to the list below
 // a song's singer: the Library's singers, each with its picture (its song's cover) and its clip to listen to; one Suno
 // has not heard yet is shown, not picked (its phrase is sung from its card). Its value is @name, or "" for Suno's own
-export function SingerPicker({ singers, value, onChange, label = "Singer" }: { singers: Element[]; value: string; onChange: (v: string) => void; label?: string }) {
+export function SingerPicker({ singers, value, onChange, label = t("Singer") }: { singers: Element[]; value: string; onChange: (v: string) => void; label?: string }) {
   const ready = (e: Element) => !!(e.suno?.persona_id || e.suno?.voice_id)
   const rows: Row[] = [
-    { value: "", title: "Suno's own", note: "No singer of yours" },
+    { value: "", title: t("Suno's own"), note: t("No singer of yours") },
     ...singers.map((e) => ({
       value: `@${e.name}`,
       title: `@${e.name}`,
-      note: [e.words, !ready(e) ? "needs its phrase: sing it in its card" : e.suno?.persona_id ? "from a song" : "your own voice"].filter(Boolean).join(" · "),
+      note: [e.words, !ready(e) ? t("needs its phrase: sing it in its card") : e.suno?.persona_id ? t("from a song") : t("your own voice")].filter(Boolean).join(" · "),
       disabled: !ready(e),
       file: e.files[0],
       image: e.cover ?? undefined,
-      group: ready(e) ? "Ready" : "Needs its phrase",
+      group: ready(e) ? t("Ready") : t("Needs its phrase"),
     })),
   ]
   return (
     <VoiceList
       label={label}
-      hint={singers.length ? `${singers.filter(ready).length} of ${singers.length} ready` : undefined}
+      hint={singers.length ? t("{n} of {total} ready", { n: singers.filter(ready).length, total: singers.length }) : undefined}
       rows={rows}
       value={value}
       onChange={onChange}
-      placeholder="Suno's own"
+      placeholder={t("Suno's own")}
       footer={
         <>
-          {singers.length ? "Another singer" : "No singer yet"}: Audio › Create › Singer makes one, or add your own voice in{" "}
-          <a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">
-            Library › Elements
-          </a>
-          .
+          {(() => {
+            const [a, b] = (singers.length ? t("Another singer: Audio › Create › Singer makes one, or add your own voice in {link}.") : t("No singer yet: Audio › Create › Singer makes one, or add your own voice in {link}.")).split("{link}")
+            return <>{a}<a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">{t("Library › Elements")}</a>{b}</>
+          })()}
         </>
       }
     />
@@ -348,17 +347,20 @@ export function LibraryVoices({ voices, value, onChange }: { voices: Element[]; 
   if (!voices.length)
     return (
       <div>
-        <Label hint="cloned from its clips">Your voices</Label>
+        <Label hint={t("cloned from its clips")}>{t("Your voices")}</Label>
         <p className="text-xs text-muted-foreground">
-          No voice in the Library yet: a Voice element is 1 to 3 clean clips. <a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">Make one</a>, or use the model's voices below.
+          {(() => {
+            const [a, b] = t("No voice in the Library yet: a Voice element is 1 to 3 clean clips. {link}, or use the model's voices below.").split("{link}")
+            return <>{a}<a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">{t("Make one")}</a>{b}</>
+          })()}
         </p>
       </div>
     )
   const rows: Row[] = [
-    { value: "-", title: "The model's voices", note: "A preset voice, or clips to clone below", group: "Models" },
-    ...voices.map((v) => ({ value: v.name, title: `@${v.name}`, note: v.words || `${v.files.length} clip${v.files.length > 1 ? "s" : ""}`, file: v.files[0], group: "Your voices" })),
+    { value: "-", title: t("The model's voices"), note: t("A preset voice, or clips to clone below"), group: t("Models") },
+    ...voices.map((v) => ({ value: v.name, title: `@${v.name}`, note: v.words || t(v.files.length > 1 ? "{n} clips" : "{n} clip", { n: v.files.length }), file: v.files[0], group: t("Your voices") })),
   ]
-  return <VoiceList label="Your voices" hint={`cloned from its clips · ${voices.length} in the Library`} rows={rows} value={value ?? "-"} onChange={(v) => onChange(v === "-" ? null : v)} placeholder="The model's voices" />
+  return <VoiceList label={t("Your voices")} hint={t("cloned from its clips · {n} in the Library", { n: voices.length })} rows={rows} value={value ?? "-"} onChange={(v) => onChange(v === "-" ? null : v)} placeholder={t("The model's voices")} />
 }
 
 // a character's own voice: a voice of the Library, heard when it speaks in a video (Kling 4.0 on Kie)
@@ -366,15 +368,18 @@ export function OwnVoice({ voices, value, onChange }: { voices: Element[]; value
   if (!voices.length)
     return (
       <div>
-        <Label hint="heard when it speaks in a video">Its voice</Label>
+        <Label hint={t("heard when it speaks in a video")}>{t("Its voice")}</Label>
         <p className="text-xs text-muted-foreground">
-          No voice in the Library yet: a Voice element is 1 to 3 clean clips of someone speaking. <a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">Make one</a>.
+          {(() => {
+            const [a, b] = t("No voice in the Library yet: a Voice element is 1 to 3 clean clips of someone speaking. {link}.").split("{link}")
+            return <>{a}<a href="#library/elements" className="underline underline-offset-2 hover:text-foreground">{t("Make one")}</a>{b}</>
+          })()}
         </p>
       </div>
     )
   const rows: Row[] = [
-    { value: "-", title: "No voice of its own", note: "The model gives it one", group: "None" },
-    ...voices.map((v) => ({ value: v.name, title: `@${v.name}`, note: v.words || `${v.files.length} clip${v.files.length > 1 ? "s" : ""}`, file: v.files[0], group: "Your voices" })),
+    { value: "-", title: t("No voice of its own"), note: t("The model gives it one"), group: t("None") },
+    ...voices.map((v) => ({ value: v.name, title: `@${v.name}`, note: v.words || t(v.files.length > 1 ? "{n} clips" : "{n} clip", { n: v.files.length }), file: v.files[0], group: t("Your voices") })),
   ]
-  return <VoiceList label="Its voice" hint="heard when it speaks in a video (Kling 4.0, Kling 3.0: a clip of 5 to 30 s)" rows={rows} value={value ?? "-"} onChange={(v) => onChange(v === "-" ? null : v)} placeholder="No voice of its own" />
+  return <VoiceList label={t("Its voice")} hint={t("heard when it speaks in a video (Kling 4.0, Kling 3.0: a clip of 5 to 30 s)")} rows={rows} value={value ?? "-"} onChange={(v) => onChange(v === "-" ? null : v)} placeholder={t("No voice of its own")} />
 }

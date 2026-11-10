@@ -10,61 +10,63 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, coverOf, elapsed, fileUrl, inputPath, mediaKind, money, outputPath, plain, type Job } from "@/lib/api"
 import { textPreview } from "@/lib/text"
+import { locale, own, t } from "@/lib/i18n"
 import { Viewer } from "@/components/viewer"
 import { Workspaces } from "@/components/inputs"
 
 // timeline: laid on the current workspace's timeline; shot: shown there, where it already is
 export type Bridge = "remix" | "animate" | "extend" | "upscale" | "avatar" | "s2v" | "extend-music" | "cover" | "stems" | "element" | "timeline" | "shot" | "final"
 
-// what a result leads to, by its medium: the next tool with it as input, or the current workspace's timeline
-const TIMELINE = { b: "timeline" as const, label: "Add to timeline", icon: ListVideoIcon }
+// what a result leads to, by its medium: the next tool with it as input, or the current workspace's timeline (the
+// labels in the dashboard's language: HINTS and the comparisons below take them as they are)
+const TIMELINE = { b: "timeline" as const, label: t("Add to timeline"), icon: ListVideoIcon }
 export const BRIDGES: Record<string, { b: Bridge; label: string; icon: LucideIcon }[]> = {
   image: [
-    { b: "animate", label: "Animate", icon: PlayIcon },
-    { b: "element", label: "Make an element", icon: BookmarkPlusIcon },
+    { b: "animate", label: t("Animate"), icon: PlayIcon },
+    { b: "element", label: t("Make an element"), icon: BookmarkPlusIcon },
     TIMELINE,
   ],
   video: [
-    { b: "extend", label: "Extend", icon: FastForwardIcon },
-    { b: "upscale", label: "Upscale", icon: MaximizeIcon },
+    { b: "extend", label: t("Extend"), icon: FastForwardIcon },
+    { b: "upscale", label: t("Upscale"), icon: MaximizeIcon },
     TIMELINE,
   ],
   audio: [
-    { b: "avatar", label: "Talking avatar", icon: MessageCircleIcon },
-    { b: "s2v", label: "Speech to video", icon: AudioWaveformIcon },
-    { b: "element", label: "Make a voice", icon: BookmarkPlusIcon },
+    { b: "avatar", label: t("Talking avatar"), icon: MessageCircleIcon },
+    { b: "s2v", label: t("Speech to video"), icon: AudioWaveformIcon },
+    { b: "element", label: t("Make a voice"), icon: BookmarkPlusIcon },
     TIMELINE,
   ],
 }
 // a song's own next steps (Kie: Suno's tools take any sound, Stems only the songs Suno made)
 export const SONG: { b: Bridge; label: string; icon: LucideIcon; suno?: boolean }[] = [
-  { b: "extend-music", label: "Extend music", icon: ArrowRightToLineIcon },
-  { b: "cover", label: "Cover", icon: Disc3Icon },
-  { b: "stems", label: "Stems", icon: LayersIcon, suno: true },
+  { b: "extend-music", label: t("Extend music"), icon: ArrowRightToLineIcon },
+  { b: "cover", label: t("Cover"), icon: Disc3Icon },
+  { b: "stems", label: t("Stems"), icon: LayersIcon, suno: true },
 ]
 // an action a page adds to its tiles (a workspace's « Remove from workspace »)
 // an action on a tile's hover bar: run at once, or a menu of choices to pick from first (Move to workspace)
 export type Extra = { label: string; icon: LucideIcon } & ({ run: (job: Job) => void } | { menu: { key: string; label: string; run: (job: Job) => void }[] })
-export const REMIX = { label: "Remix", icon: RefreshCwIcon }
+export const REMIX = { label: t("Remix"), icon: RefreshCwIcon }
 // a Seedance 2.5 draft (Kie): its final, made from it in 1080p within 7 days
-export const FINAL = { label: "Make the final", icon: SparklesIcon }
+export const FINAL = { label: t("Make the final"), icon: SparklesIcon }
 export const isDraft = (j: Job) => j.status === "done" && j.provider === "kie" && (j.params?.options as Record<string, unknown> | undefined)?.draft === true && Date.now() - Date.parse(j.created) < 7 * 864e5
-export const SEND = { label: "Send to edit", icon: ScissorsIcon }
+export const SEND = { label: t("Send to edit"), icon: ScissorsIcon }
 // what each next step does, under its name (a tile's bubble, the viewer's list)
 export const HINTS: Record<string, string> = {
-  Remix: "Same settings, open in the composer",
-  Animate: "Make it a video",
-  "Make an element": "Keep it in the Library",
-  "Make a voice": "Keep it in the Library",
-  Extend: "Continue the shot",
-  Upscale: "Sharper and larger",
-  "Talking avatar": "A face speaks it",
-  "Speech to video": "An image speaks or sings it",
-  "Extend music": "It goes on, in its style",
-  Cover: "The same melody, another style",
-  Stems: "Its voice and instruments apart",
-  "Send to edit": "A rush in video-editor",
-  "Add to timeline": "After the last shot of the current workspace",
+  [t("Remix")]: t("Same settings, open in the composer"),
+  [t("Animate")]: t("Make it a video"),
+  [t("Make an element")]: t("Keep it in the Library"),
+  [t("Make a voice")]: t("Keep it in the Library"),
+  [t("Extend")]: t("Continue the shot"),
+  [t("Upscale")]: t("Sharper and larger"),
+  [t("Talking avatar")]: t("A face speaks it"),
+  [t("Speech to video")]: t("An image speaks or sings it"),
+  [t("Extend music")]: t("It goes on, in its style"),
+  [t("Cover")]: t("The same melody, another style"),
+  [t("Stems")]: t("Its voice and instruments apart"),
+  [t("Send to edit")]: t("A rush in video-editor"),
+  [t("Add to timeline")]: t("After the last shot of the current workspace"),
 }
 
 // a tile button's bubble: its name, and under it what it does when there is a hint; nothing in it to click, so it closes
@@ -86,14 +88,13 @@ export const firstOutput = (home: string, job: Job) => (job.outputs[0] ? outputP
 
 // what a result cost, as its caption shows it
 export function costOf(job: Job, per1000: number | null) {
-  return job.provider === "local" ? "free"
-    : job.status === "failed" ? `${money(job.actual ?? 0, job.estimate.unit, per1000)}, failed`
-    : `${money(job.actual ?? job.estimate.amount, job.estimate.unit, per1000)}${job.actual_known ? "" : " (est.)"}`
+  const cost = money(job.status === "failed" ? (job.actual ?? 0) : (job.actual ?? job.estimate.amount), job.estimate.unit, per1000)
+  return job.provider === "local" ? t("free") : job.status === "failed" ? t("{cost}, failed", { cost }) : job.actual_known ? cost : t("{cost} (est.)", { cost })
 }
 
 export function sendToEdit(file: string) {
   const text = `/skill-video:video-editor Use ${file}: make a new video with it, or add it as B-roll to one of my projects. Ask me which.`
-  navigator.clipboard.writeText(text).then(() => toast.success("Prompt copied", { description: "Paste it in your agent to edit with it." }))
+  navigator.clipboard.writeText(text).then(() => toast.success(t("Prompt copied"), { description: t("Paste it in your agent to edit with it.") }))
 }
 
 // a result's shape: what its file turned out to be (measured once a session), else the ratio it asked for, else its medium's usual
@@ -117,9 +118,9 @@ const tileSize = (r: number) => {
 
 function day(iso: string) {
   const d = new Date(iso), now = new Date()
-  if (d.toDateString() === now.toDateString()) return "Today"
-  if (d.toDateString() === new Date(now.getTime() - 864e5).toDateString()) return "Yesterday"
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) })
+  if (d.toDateString() === now.toDateString()) return t("Today")
+  if (d.toDateString() === new Date(now.getTime() - 864e5).toDateString()) return t("Yesterday")
+  return d.toLocaleDateString(locale(), { weekday: "short", month: "short", day: "numeric", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) })
 }
 
 // a generation on its way, where its result will land: its shape, how long so far, its estimate
@@ -128,18 +129,18 @@ function Pending({ job, home, per1000 }: { job: Job; home: string; per1000: numb
   const first = Object.values(job.inputs ?? {}).flat().find((f) => mediaKind(f) === "image")
   return (
     <figure className="flex min-w-0 flex-col gap-1.5" style={tileSize(r)} aria-busy="true">
-      <div className="relative overflow-hidden rounded-xl ring-1 ring-space/30" style={{ aspectRatio: r }} title={`${job.note ?? ""} It keeps going if you close the page.`.trim()}>
+      <div className="relative overflow-hidden rounded-xl ring-1 ring-space/30" style={{ aspectRatio: r }} title={`${job.note ?? ""} ${t("It keeps going if you close the page.")}`.trim()}>
         {first && <img src={fileUrl(inputPath(home, job, first))} alt="" className="absolute inset-0 size-full object-cover opacity-25 blur-md" />}
         <Skeleton className="absolute inset-0 rounded-none bg-space/12" />
         <div className="relative flex size-full flex-col items-center justify-center gap-1.5 p-3 text-center">
           <LoaderCircleIcon className="size-5 animate-spin text-space" aria-hidden />
-          <span className="text-sm font-medium">{job.status === "queued" ? "Waiting to start" : job.after && job.note?.startsWith("waiting") ? "Waiting for the first sheet" : "Generating"}</span>
+          <span className="text-sm font-medium">{job.status === "queued" ? t("Waiting to start") : job.after && job.note?.startsWith("waiting") ? t("Waiting for the first sheet") : t("Generating")}</span>
           {job.started && <span className="text-xs text-muted-foreground tabular-nums">{elapsed(job.started)}</span>}
         </div>
       </div>
       <figcaption className="flex items-baseline justify-between gap-2 px-0.5 text-xs">
         <span className="min-w-0 truncate">
-          <span className="font-medium">{job.label}</span> <span className="text-muted-foreground">· {job.name}</span>
+          <span className="font-medium">{own(job.label)}</span> <span className="text-muted-foreground">· {job.name}</span>
         </span>
         {job.provider !== "local" && <span className="font-semibold whitespace-nowrap text-cost tabular-nums">≈ {money(job.estimate.amount, job.estimate.unit, per1000)}</span>}
       </figcaption>
@@ -163,7 +164,7 @@ function AudioFace({ job, file }: { job: Job; file: string }) {
       <audio ref={audio} src={fileUrl(file)} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
       <button
         type="button"
-        aria-label={playing ? "Pause" : "Play"}
+        aria-label={playing ? t("Pause") : t("Play")}
         onClick={() => (playing ? audio.current?.pause() : audio.current?.play())}
         className="absolute top-1/2 left-4 z-10 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-aud text-background shadow-lg transition-transform hover:scale-105"
       >
@@ -249,7 +250,7 @@ function Tile({
         {failed ? (
           <div className="flex size-full flex-col items-center justify-center gap-2 bg-destructive/10 p-4 text-center text-xs text-destructive">
             <TriangleAlertIcon className="size-5" aria-hidden />
-            <span className="line-clamp-3">{plain(job.error ?? "Failed")}</span>
+            <span className="line-clamp-3">{plain(job.error ?? t("Failed"))}</span>
           </div>
         ) : k === "image" ? (
           <img
@@ -273,15 +274,15 @@ function Tile({
         ) : k === "other" ? (
           <TextFace file={file!} />
         ) : null}
-        <button type="button" onClick={onOpen} aria-label={`Open ${job.label}`} className="absolute inset-0 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/70 focus-visible:ring-inset" />
+        <button type="button" onClick={onOpen} aria-label={t("Open {label}", { label: own(job.label) })} className="absolute inset-0 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/70 focus-visible:ring-inset" />
         {k === "audio" && !failed && <AudioFace job={job} file={file!} />}
         {k === "video" && <PlayIcon className="pointer-events-none absolute bottom-2 left-2 size-4 text-white drop-shadow transition-opacity group-hover:opacity-0" aria-hidden />}
         {job.outputs.length > 1 && <span className="pointer-events-none absolute top-2 left-2 rounded-md bg-black/60 px-1.5 text-xs text-white">+{job.outputs.length - 1}</span>}
-        {job.favorite && <StarIcon className="pointer-events-none absolute top-2 right-2 size-4 fill-current text-cost drop-shadow transition-opacity group-focus-within:opacity-0 group-hover:opacity-0" aria-label="Favorite" />}
+        {job.favorite && <StarIcon className="pointer-events-none absolute top-2 right-2 size-4 fill-current text-cost drop-shadow transition-opacity group-focus-within:opacity-0 group-hover:opacity-0" aria-label={t("Favorite")} />}
         {/* stays shown while one of its menus is open (the menu sits outside the tile) */}
         <div className="pointer-events-none absolute inset-x-2 top-2 flex flex-wrap justify-end gap-1 opacity-0 *:pointer-events-auto transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100">
-          <Tip label={job.favorite ? "Unfavorite" : "Favorite"}>
-            <button type="button" aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"} onClick={() => api.media(job.id, "favorite")} className={overlayButton}>
+          <Tip label={job.favorite ? t("Unfavorite") : t("Favorite")}>
+            <button type="button" aria-label={job.favorite ? t("Remove from favorites") : t("Add to favorites")} onClick={() => api.media(job.id, "favorite")} className={overlayButton}>
               <StarIcon className={cn("size-4", job.favorite && "fill-current text-cost")} />
             </button>
           </Tip>
@@ -312,8 +313,8 @@ function Tile({
               </Tip>
             )
           )}
-          <Tip label="Delete">
-            <button type="button" aria-label="Delete" onClick={() => setConfirm(true)} className={overlayButton}>
+          <Tip label={t("Delete")}>
+            <button type="button" aria-label={t("Delete")} onClick={() => setConfirm(true)} className={overlayButton}>
               <Trash2Icon className="size-4" />
             </button>
           </Tip>
@@ -327,8 +328,8 @@ function Tile({
             ...(failed ? [] : [{ ...SEND, run: () => sendToEdit(file!) }]),
           ].map((a) =>
             a.label === TIMELINE.label && shot ? (
-              <Tip key={a.label} label={`${shot} on the timeline: show it`}>
-                <button type="button" aria-label={`${shot} on the timeline: show it`} onClick={() => onBridge("shot", job, file!)} className={cn(overlayButton, "w-auto min-w-7 px-1.5 text-xs font-semibold tabular-nums")}>
+              <Tip key={a.label} label={t("{shot} on the timeline: show it", { shot })}>
+                <button type="button" aria-label={t("{shot} on the timeline: show it", { shot })} onClick={() => onBridge("shot", job, file!)} className={cn(overlayButton, "w-auto min-w-7 px-1.5 text-xs font-semibold tabular-nums")}>
                   {shot}
                 </button>
               </Tip>
@@ -343,9 +344,9 @@ function Tile({
         </div>
       </div>
       <figcaption className="flex items-baseline justify-between gap-2 px-0.5 text-xs">
-        <span className="min-w-0 truncate" title={`${job.label} · ${job.name}`}>
-          <span className="font-medium">{job.label}</span>{" "}
-          <span className="text-muted-foreground">· {job.name}{job.by === "agent" ? " · by Agent" : ""}</span>
+        <span className="min-w-0 truncate" title={`${own(job.label)} · ${job.name}`}>
+          <span className="font-medium">{own(job.label)}</span>{" "}
+          <span className="text-muted-foreground">· {job.name}{job.by === "agent" ? ` · ${t("by Agent")}` : ""}</span>
         </span>
         <span className={cn("font-semibold whitespace-nowrap tabular-nums", job.provider === "local" || failed ? "text-muted-foreground" : "text-cost")}>{costOf(job, per1000)}</span>
       </figcaption>
@@ -358,10 +359,10 @@ export function DeleteDialog({ job, open, onOpenChange, onDeleted }: { job: Job;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle>Delete this {job.kind}?</DialogTitle>
-        <DialogDescription>It moves to the folder's .trash, where you can still get it back. Its cost stays in Credits.</DialogDescription>
+        <DialogTitle>{({ image: t("Delete this image?"), video: t("Delete this video?"), audio: t("Delete this audio?") } as Record<string, string>)[job.kind] ?? t("Delete this {kind}?", { kind: job.kind })}</DialogTitle>
+        <DialogDescription>{t("It moves to the folder's .trash, where you can still get it back. Its cost stays in Credits.")}</DialogDescription>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("Cancel")}</Button>
           <Button
             variant="destructive"
             onClick={() => {
@@ -369,7 +370,7 @@ export function DeleteDialog({ job, open, onOpenChange, onDeleted }: { job: Job;
               api.media(job.id, "delete").then(onDeleted, (e) => toast.error(plain(e.message)))
             }}
           >
-            Delete
+            {t("Delete")}
           </Button>
         </div>
       </DialogContent>

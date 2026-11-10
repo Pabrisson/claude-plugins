@@ -10,6 +10,8 @@ import { CompareDialog } from "@/components/compare"
 import { ModelPicker, type Priced } from "@/components/model-picker"
 import { modelsFor } from "@/components/composer"
 import { ImageSource } from "@/components/keyframes"
+import { secs } from "@/components/cut"
+import { t } from "@/lib/i18n"
 
 // the image model that makes a keyframe unless another is picked (the engine's own default)
 const KEYFRAME_MODEL = "bytedance-seed/seedream-5-0-flash"
@@ -35,7 +37,7 @@ export function KeyframePanel({
   onSet: (k: { path: string; at: number } | null) => void
   onModel: (id: string) => void
 }) {
-  const [t, setT] = useState(at ?? 0)
+  const [time, setTime] = useState(at ?? 0)
   const [length, setLength] = useState(0)
   const [frame, setFrame] = useState<string>()
   const [price, setPrice] = useState<string | null>(null)
@@ -43,7 +45,7 @@ export function KeyframePanel({
   const asked = useRef(0)
   // the first step: the video tool's spec at that time, without a keyframe (the engine makes the image job)
   const inputs = Object.fromEntries(Object.entries(spec.inputs).filter(([k]) => k !== "keyframe"))
-  const step: Spec = { ...spec, inputs, params: { ...spec.params, frame: t }, batch: undefined }
+  const step: Spec = { ...spec, inputs, params: { ...spec.params, frame: time }, batch: undefined }
   const stepKey = JSON.stringify(step)
 
   // the image models that can make it: those of the image tool the recipe names (Custom edit otherwise), the default
@@ -72,9 +74,9 @@ export function KeyframePanel({
   useEffect(() => {
     if (!video) return
     const n = ++asked.current
-    const wait = setTimeout(() => api.frame(video, false, t).then(({ path }) => n === asked.current && setFrame(fileUrl(path)), () => {}), 250)
+    const wait = setTimeout(() => api.frame(video, false, time).then(({ path }) => n === asked.current && setFrame(fileUrl(path)), () => {}), 250)
     return () => clearTimeout(wait)
-  }, [video, t])
+  }, [video, time])
   // what the keyframe costs
   useEffect(() => {
     if (!video) return
@@ -88,8 +90,8 @@ export function KeyframePanel({
   const [starting, setStarting] = useState(false)
   const busy = starting || (!!job && running?.status !== "done" && running?.status !== "failed")
   useEffect(() => {
-    if (running?.status === "done") onSet({ path: outputPath(state.home, running, running.outputs[0]), at: t })
-    else if (running?.status === "failed") toast.error(plain(running.error ?? "The keyframe failed"))
+    if (running?.status === "done") onSet({ path: outputPath(state.home, running, running.outputs[0]), at: time })
+    else if (running?.status === "failed") toast.error(plain(running.error ?? t("The keyframe failed")))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running?.status])
 
@@ -97,11 +99,11 @@ export function KeyframePanel({
     setStarting(true)
     try {
       setJob((await api.generate(step, confirm)).id)
-      toast.success("Keyframe started", { description: "It shows here once made; Apply to the shot then carries it through." })
+      toast.success(t("Keyframe started"), { description: t("It shows here once made; Apply to the shot then carries it through.") })
     } catch (e) {
       const err = e as Error & { status?: number; body?: { shown: string } }
       if (err.status === 409 && err.body) {
-        if (window.confirm(`The keyframe costs ${err.body.shown}. Make it?`)) return make(true)
+        if (window.confirm(t("The keyframe costs {price}. Make it?", { price: err.body.shown }))) return make(true)
       } else toast.error(plain(err.message))
     } finally {
       setStarting(false)
@@ -112,25 +114,25 @@ export function KeyframePanel({
   const made = keyframe ? state.media.find((j) => j.outputs.some((o) => outputPath(state.home, j, o) === keyframe)) : undefined
   const [comparing, setComparing] = useState(false)
 
-  const verb = tool.id.endsWith("swap") ? "Swap on the frame" : "Edit the frame"
+  const verb = tool.id.endsWith("swap") ? t("Swap on the frame") : t("Edit the frame")
   return (
     <div>
-      <Label hint={keyframe ? `at ${(at ?? 0).toFixed(1)} s: Apply to the shot carries it through` : "the change made on one frame first"}>Keyframe</Label>
+      <Label hint={keyframe ? t("at {time} s: Apply to the shot carries it through", { time: secs(at ?? 0) }) : t("the change made on one frame first")}>{t("Keyframe")}</Label>
       <div className="flex flex-col gap-2 rounded-xl border p-2">
         <div className="relative overflow-hidden rounded-lg bg-muted">
-          {(keyframe || frame) && <img src={keyframe ? fileUrl(keyframe) : frame} alt={keyframe ? "The keyframe" : `The frame at ${t.toFixed(1)} s`} className="w-full" />}
+          {(keyframe || frame) && <img src={keyframe ? fileUrl(keyframe) : frame} alt={keyframe ? t("The keyframe") : t("The frame at {time} s", { time: secs(time) })} className="w-full" />}
           {keyframe && made && (
             <Button variant="secondary" size="sm" className="absolute top-2 left-2 bg-black/45 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-black/60" onClick={() => setComparing(true)}>
-              <Columns2Icon data-icon="inline-start" /> Compare
+              <Columns2Icon data-icon="inline-start" /> {t("Compare")}
             </Button>
           )}
           {busy && (
-            <div role="status" aria-label="Making the keyframe" className="absolute inset-0 grid place-items-center bg-black/55">
+            <div role="status" aria-label={t("Making the keyframe")} className="absolute inset-0 grid place-items-center bg-black/55">
               <LoaderCircleIcon className="size-8 animate-spin text-white" />
             </div>
           )}
           {keyframe && (
-            <Button size="icon-xs" variant="secondary" className="absolute top-2 right-2" aria-label="Remove the keyframe" title="Remove the keyframe" onClick={() => onSet(null)}>
+            <Button size="icon-xs" variant="secondary" className="absolute top-2 right-2" aria-label={t("Remove the keyframe")} title={t("Remove the keyframe")} onClick={() => onSet(null)}>
               <XIcon />
             </Button>
           )}
@@ -138,32 +140,32 @@ export function KeyframePanel({
         {!keyframe && video && (
           <div className="flex items-center gap-3 px-1">
             <video src={fileUrl(video)} preload="metadata" hidden onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setLength(e.currentTarget.duration)} />
-            <Slider className="flex-1" min={0} max={Math.max(0.1, length - 0.1)} step={0.1} value={[t]} disabled={!length || busy} onValueChange={([v]) => setT(v)} aria-label="The frame to edit" />
-            <span className="w-12 text-right text-sm tabular-nums">{t.toFixed(1)} s</span>
+            <Slider className="flex-1" min={0} max={Math.max(0.1, length - 0.1)} step={0.1} value={[time]} disabled={!length || busy} onValueChange={([v]) => setTime(v)} aria-label={t("The frame to edit")} />
+            <span className="w-12 text-right text-sm tabular-nums">{secs(time)} s</span>
           </div>
         )}
         {keyframe && made && <CompareDialog open={comparing} onOpenChange={setComparing} origin={made} file={keyframe} jobs={state.media} home={state.home} per1000={per1000(state)} ready />}
         {recommended.length > 0 && (
-          <ModelPicker kind="image" label="Keyframe model" recommended={recommended} others={others} value={chosen} onChange={(id) => id && onModel(id)} prices={prices.list} onOpen={priceModels} />
+          <ModelPicker kind="image" label={t("Keyframe model")} recommended={recommended} others={others} value={chosen} onChange={(id) => id && onModel(id)} prices={prices.list} onOpen={priceModels} />
         )}
         {!video ? (
-          <p className="px-1 text-xs text-muted-foreground">Add the video first.</p>
+          <p className="px-1 text-xs text-muted-foreground">{t("Add the video first.")}</p>
         ) : (
           <div className="flex gap-2">
             <Button variant={keyframe ? "outline" : "secondary"} className="min-w-0 flex-1" disabled={busy} onClick={() => (keyframe && onSet(null), make())}>
               {keyframe ? (
                 <>
-                  <RefreshCwIcon /> Redo the keyframe
+                  <RefreshCwIcon /> {t("Redo the keyframe")}
                 </>
               ) : (
-                <span className="truncate">{`${verb}${price ? ` · ${price}` : ""}`}</span>
+                <span className="truncate">{`${verb}${price ? ` · ${t(price)}` : ""}`}</span>
               )}
             </Button>
             {/* or the user's own keyframe, at the slider's time: from the computer or the library */}
-            <ImageSource media={state.media} home={state.home} frames={false} side="bottom" onAdd={([path]) => onSet({ path, at: keyframe ? (at ?? 0) : t })}>
+            <ImageSource media={state.media} home={state.home} frames={false} side="bottom" onAdd={([path]) => onSet({ path, at: keyframe ? (at ?? 0) : time })}>
               {(loading) => (
-                <Button variant="outline" disabled={busy || loading} title={`Your own keyframe, at ${(keyframe ? (at ?? 0) : t).toFixed(1)} s: from your computer or the library`}>
-                  {loading ? <LoaderCircleIcon className="animate-spin" /> : <ImagePlusIcon />} Your image
+                <Button variant="outline" disabled={busy || loading} title={t("Your own keyframe, at {time} s: from your computer or the library", { time: secs(keyframe ? (at ?? 0) : time) })}>
+                  {loading ? <LoaderCircleIcon className="animate-spin" /> : <ImagePlusIcon />} {t("Your image")}
                 </Button>
               )}
             </ImageSource>

@@ -2506,6 +2506,8 @@ async function handle(req, res) {
       media: mediaList(), drafts, styles: savedStyles(), elements: elementList(), plans: PLANS,
       workspaces: (jobs => workspaceList().map(w => ({ ...w, linked: linkedElements(w.slug, jobs) })))(allJobs()), month: Object.fromEntries(['openrouter', 'kie', 'elevenlabs'].map(x => [x, spentThisMonth(readLedger(HOME), x)])) })
   }
+  // the catalogs' words in French, keyed by their English (tools/fr.json), for a dashboard in French
+  if (p === '/api/fr') return sendFile(req, res, path.join(ENGINE, 'tools/fr.json'))
   // the tools with the active router's model lists
   if (p === '/api/tools') return reply(res, 200, Object.fromEntries(Object.entries(TOOLS).map(([k, list]) => [k, list.filter(t => !t.routers || t.routers.includes(active())).map(t => ({ ...t, ...toolModels(t) }))])))
   // Settings' « Update the list »: the active router's catalog read now, what it adds

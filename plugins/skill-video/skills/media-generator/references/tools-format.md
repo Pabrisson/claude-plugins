@@ -1,7 +1,11 @@
 # The tool catalogs
 
 `engine/tools/image.json`, `video.json` and `audio.json` list the tools. The dashboard's tool picker and the agent read
-the same files: a new tool is a new entry, nothing else to code.
+the same files: a new tool is a new entry, nothing else to code but its French. The dashboard has a French option: every
+word it shows of a tool (its `label`, `group`, `description`, a field's or an option's `label`, `placeholder`, `note`,
+`section`, `hint`, a preset's, a `why` line, the same in a style list and in a model's `options`) has its French in
+`engine/tools/fr.json`, keyed by the English as written. The values, templates and phrases stay English (they go to
+the models). `npm test` in the dashboard's sources (`plugins-src/skill-video/media-studio`) lists a word without it.
 
 ```json
 {

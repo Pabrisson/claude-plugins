@@ -43,6 +43,7 @@ import { api, fileUrl, isLocal, plain, STRIP, stripUrl, waveUrl, type Clip, type
 import { cuts, duplicate, edit, endOf, fits, FPS, inside, isStill, lay, layOnNewTrack, lenOf, mainOf, marks, move, nearest, numbers, offers, place, RATIOS, remove, settle, split, totalOf, trackKind, trackName, uid, voiceUnder, withTracks, type Shot } from "@/lib/timeline"
 import { LibraryList, type Pick } from "@/components/inputs"
 import { ToolIcon } from "@/components/chips"
+import { locale, own, t } from "@/lib/i18n"
 
 // what the timeline asks the composer for: a tool on a clip (edit it, start from its frame; ratio, the edit's format),
 // Extend after or before it, a Remix of it, a freeze frame of it at the playhead, or a voice at the playhead on a track
@@ -66,6 +67,8 @@ const SNAP = 8
 // a ruler label every 72 px or more
 const tickStep = (px: number) => [0.5, 1, 2, 5, 10, 15, 30, 60].find((s) => s * px >= 72) ?? 120
 const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`
+// a length in seconds as the dashboard's language writes it (12.5, 12,5)
+const fixed = (n: number, d: number) => n.toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d })
 const mark = (s: number) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`)
 // px a second, the whole edit in a width
 const fitFor = (w: number, total: number) => Math.min(240, Math.max(4, (w - LABEL - 40) / Math.max(total + 2, 20)))
@@ -144,8 +147,8 @@ export function useTimelines(workspaces: Workspace[] | undefined) {
           if (err.status === 409 && err.body?.timeline) {
             const theirs = err.body.timeline
             setOwn((o) => ({ ...o, [slug]: { now: theirs, past: [], next: [], rev: theirs.rev, dirty: false } }))
-            toast.info("The timeline changed in another window", { description: "Here is its latest version." })
-          } else toast.error("The timeline was not saved", { description: plain(err.message) })
+            toast.info(t("The timeline changed in another window"), { description: t("Here is its latest version.") })
+          } else toast.error(t("The timeline was not saved"), { description: plain(err.message) })
         }
       })
   }, [])
@@ -165,7 +168,7 @@ export function useTimelines(workspaces: Workspace[] | undefined) {
 // the timeline tab: the bin (side) and the preview above, the track table across the whole width under them, its
 // height dragged from the bar between
 export function TimelineEditor({
-  timeline: t,
+  timeline: tl,
   onChange,
   onUndo,
   onRedo,
@@ -197,7 +200,7 @@ export function TimelineEditor({
   // a tool, a freeze frame or a voice, laid by its clip or at the playhead once done
   onAsk: (a: Ask) => void
 }) {
-  const focused = focus ? t.clips.find((c) => c.path === focus) : undefined
+  const focused = focus ? tl.clips.find((c) => c.path === focus) : undefined
   const [time, setTime] = useState(focused?.at ?? 0)
   const [playing, setPlaying] = useState(false)
   const [sel, setSel] = useState<string | null>(focused?.id ?? null)
@@ -207,13 +210,13 @@ export function TimelineEditor({
   const [auto, setAuto] = useState<string | null>(null)
   // the tracks' height: all of them and the buttons under them, until dragged
   const [pulled, setPulled] = useState<number | null>(null)
-  const fitted = CHROME + t.tracks.reduce((h, tr) => h + rowOf(t, tr.id) + 1, 0)
+  const fitted = CHROME + tl.tracks.reduce((h, tr) => h + rowOf(tl, tr.id) + 1, 0)
   const height = Math.min(pulled ?? fitted, Math.max(180, window.innerHeight - 220))
   const [swapping, setSwapping] = useState(false)
   const [width, setWidth] = useState(1000)
   const lanes = useRef<HTMLDivElement>(null)
   const screen = useRef<HTMLDivElement>(null)
-  const total = totalOf(t)
+  const total = totalOf(tl)
   // the preview fullscreen (F, the button, Esc to leave); the keys keep working there
   const [full, setFull] = useState(false)
   useEffect(() => {
@@ -267,14 +270,14 @@ export function TimelineEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const shown = preview ?? t
-  const selected = t.clips.find((c) => c.id === sel)
-  const kindOf = (c: Clip) => t.tracks.find((x) => x.id === c.track)?.kind ?? "video"
+  const shown = preview ?? tl
+  const selected = tl.clips.find((c) => c.id === sel)
+  const kindOf = (c: Clip) => tl.tracks.find((x) => x.id === c.track)?.kind ?? "video"
   const job = (c: Clip) => jobs.find((j) => j.id === c.job)
-  const name = (c: Clip) => job(c)?.label ?? c.file
+  const name = (c: Clip) => own(job(c)?.label) ?? c.file
   const meta = (c: Clip) => job(c)?.meta?.[c.file]
   const nums = numbers(shown)
-  const ratio = t.ratio ?? auto ?? "16:9"
+  const ratio = tl.ratio ?? auto ?? "16:9"
 
   // the playback clock: from where the playhead is (the start again at the end), until the end
   useEffect(() => {
@@ -293,7 +296,7 @@ export function TimelineEditor({
   }, [playing])
 
   const jump = (dir: number) => {
-    const all = marks(t)
+    const all = marks(tl)
     const to = dir < 0 ? all.filter((m) => m < time - 0.01).at(-1) : all.find((m) => m > time + 0.01)
     if (to != null) setTime(Math.min(total, to))
   }
@@ -306,7 +309,7 @@ export function TimelineEditor({
       return other ? move(x, c.id, c.track, dir > 0 ? endOf(other) : other.at - lenOf(c)) : x
     })
   const retrack = (c: Clip, dir: number) => {
-    const same = t.tracks.filter((x) => x.kind === kindOf(c)), to = same[same.findIndex((x) => x.id === c.track) + dir]
+    const same = tl.tracks.filter((x) => x.kind === kindOf(c)), to = same[same.findIndex((x) => x.id === c.track) + dir]
     if (to) onChange((x) => move(x, c.id, to.id, c.at))
   }
   // the keys, anywhere in the editor but a field
@@ -341,7 +344,7 @@ export function TimelineEditor({
     e.stopPropagation()
     const release = holdSelection()
     setSel(c.id)
-    const base = t, x0 = e.clientX, main = mainOf(base)
+    const base = tl, x0 = e.clientX, main = mainOf(base)
     const edges = [0, time, ...base.clips.filter((o) => o.id !== c.id).flatMap((o) => [o.at, endOf(o)])]
     const near = (x: number) => edges.find((y) => Math.abs(y - x) * px < SNAP)
     const before = Math.max(0, ...base.clips.filter((o) => o.track === c.track && o.id !== c.id && endOf(o) <= c.at + 1e-3).map(endOf))
@@ -407,8 +410,8 @@ export function TimelineEditor({
     e.preventDefault()
     e.dataTransfer.dropEffect = "copy"
     const at = Math.max(0, (e.clientX - e.currentTarget.getBoundingClientRect().left - (track === null ? LABEL : 0)) / px)
-    const fits = track && t.tracks.find((x) => x.id === track)?.kind === trackKind(dragged.path)
-    setPreview(track === null ? layOnNewTrack(t, dragged, dragged.dur, at, GHOST) : lay(t, dragged, dragged.dur, fits ? track : undefined, at, GHOST))
+    const fits = track && tl.tracks.find((x) => x.id === track)?.kind === trackKind(dragged.path)
+    setPreview(track === null ? layOnNewTrack(tl, dragged, dragged.dur, at, GHOST) : lay(tl, dragged, dragged.dur, fits ? track : undefined, at, GHOST))
   }
   const land = (e: React.DragEvent) => {
     if (!preview || !dragged) return
@@ -453,25 +456,25 @@ export function TimelineEditor({
   // they make of it, each list grouped as the tool picker groups them
   function generate(c: Clip): Generate {
     const kind = kindOf(c), still = isStill(c.path), video = kind === "video" && !still, at = inside(c, time) ? time : null
-    const voice = voiceUnder(t, c, time)
+    const voice = voiceUnder(tl, c, time)
     const top: Entry[] = [
       ...(video
         ? [
-            { label: "Extend after", icon: <FastForwardIcon />, note: "a new shot", run: () => onAsk({ how: "after", clip: c, time }) },
-            { label: "Extend before", icon: <RewindIcon />, note: "a new shot", run: () => onAsk({ how: "before", clip: c, time }) },
+            { label: t("Extend after"), icon: <FastForwardIcon />, note: t("a new shot"), run: () => onAsk({ how: "after", clip: c, time }) },
+            { label: t("Extend before"), icon: <RewindIcon />, note: t("a new shot"), run: () => onAsk({ how: "before", clip: c, time }) },
           ]
         : []),
-      ...(video && at != null ? [{ label: `Freeze frame at ${at.toFixed(1)} s`, icon: <SnowflakeIcon />, note: "free", run: () => onAsk({ how: "freeze", clip: c, time }) }] : []),
-      ...(misfit(c) ? [{ label: `Fit to ${ratio}`, icon: <RatioIcon />, note: still ? "Expand" : "Reframe, free", run: () => fit(c) }] : []),
+      ...(video && at != null ? [{ label: t("Freeze frame at {s} s", { s: fixed(at, 1) }), icon: <SnowflakeIcon />, note: t("free"), run: () => onAsk({ how: "freeze", clip: c, time }) }] : []),
+      ...(misfit(c) ? [{ label: t("Fit to {ratio}", { ratio }), icon: <RatioIcon />, note: still ? own("Expand") : t("{tool}, free", { tool: own("Reframe") }), run: () => fit(c) }] : []),
     ]
     const title = (o: "edit" | "frame") =>
-      o === "edit" ? (kind === "audio" ? "Edit this sound" : still ? "Edit this image" : "Edit this shot") : still ? "Animate this image" : at != null ? `From the frame at ${at.toFixed(1)} s` : "Next shot from its last frame"
+      o === "edit" ? (kind === "audio" ? t("Edit this sound") : still ? t("Edit this image") : t("Edit this shot")) : still ? t("Animate this image") : at != null ? t("From the frame at {s} s", { s: fixed(at, 1) }) : t("Next shot from its last frame")
     const subs = offers(tools, c, kind)
       .filter((o) => o.items.length)
       .map((o) => {
         const groups: [string, Entry[]][] = []
         for (const { kind: k, tool: x } of o.items) {
-          const e = { label: x.label, icon: <ToolIcon name={x.icon} />, note: x.id === "talking-avatar" && voice ? "says the voice under it" : isLocal(x) ? "free" : undefined, run: () => onAsk({ how: o.title, kind: k, tool: x.id, clip: c, time, ratio }) }
+          const e = { label: own(x.label), icon: <ToolIcon name={x.icon} />, note: x.id === "talking-avatar" && voice ? t("says the voice under it") : isLocal(x) ? t("free") : undefined, run: () => onAsk({ how: o.title, kind: k, tool: x.id, clip: c, time, ratio }) }
           const g = groups.find(([name]) => name === x.group)
           if (g) g[1].push(e)
           else groups.push([x.group, [e]])
@@ -484,7 +487,7 @@ export function TimelineEditor({
   const bridges = tools.video.filter((x) => ["first_frame", "last_frame"].every((k) => x.inputs.some((i) => i.key === k && i.kind === "image")))
   // a voice at the playhead: on the first audio track free there, else on a new one
   const voiceHere = () => {
-    const free = t.tracks.find((tr) => tr.kind === "audio" && !t.clips.some((c) => c.track === tr.id && time < endOf(c) && time + 0.1 > c.at))
+    const free = tl.tracks.find((tr) => tr.kind === "audio" && !tl.clips.some((c) => c.track === tr.id && time < endOf(c) && time + 0.1 > c.at))
     onAsk({ how: "voice", track: free?.id ?? `a${uid()}`, time })
   }
   return (
@@ -493,82 +496,82 @@ export function TimelineEditor({
         {side}
         <section className="flex min-h-0 min-w-0 flex-col gap-2 bg-canvas px-6 pt-4 pb-2">
           {header}
-          <Preview t={t} time={time} playing={playing} ratio={ratio} onAuto={setAuto} number={numbers(t)} screen={screen} />
+          <Preview t={tl} time={time} playing={playing} ratio={ratio} onAuto={setAuto} number={numbers(tl)} screen={screen} />
           <div className="flex items-center justify-center gap-1.5">
-            <Button size="icon-sm" variant="ghost" aria-label="Previous cut" title="Previous cut (↑)" onClick={() => jump(-1)} disabled={!total}>
+            <Button size="icon-sm" variant="ghost" aria-label={t("Previous cut")} title={t("Previous cut (↑)")} onClick={() => jump(-1)} disabled={!total}>
               <SkipBackIcon />
             </Button>
-            <Button size="icon" variant="secondary" className="rounded-full" aria-label={playing ? "Pause" : "Play"} title="Play or pause (Space)" onClick={() => setPlaying((p) => !p)} disabled={!total}>
+            <Button size="icon" variant="secondary" className="rounded-full" aria-label={playing ? t("Pause") : t("Play")} title={t("Play or pause (Space)")} onClick={() => setPlaying((p) => !p)} disabled={!total}>
               {playing ? <PauseIcon /> : <PlayIcon className="translate-x-px" />}
             </Button>
-            <Button size="icon-sm" variant="ghost" aria-label="Next cut" title="Next cut (↓)" onClick={() => jump(1)} disabled={!total}>
+            <Button size="icon-sm" variant="ghost" aria-label={t("Next cut")} title={t("Next cut (↓)")} onClick={() => jump(1)} disabled={!total}>
               <SkipForwardIcon />
             </Button>
             <span className="ml-2 font-mono text-sm whitespace-nowrap tabular-nums">
               {clock(time)} <span className="text-muted-foreground">/ {clock(total)}</span>
             </span>
-            <Select value={t.ratio ?? "auto"} onValueChange={(v) => onChange((x) => ({ ...x, ratio: v === "auto" ? null : v }))}>
-              <SelectTrigger size="sm" aria-label="Format">
+            <Select value={tl.ratio ?? "auto"} onValueChange={(v) => onChange((x) => ({ ...x, ratio: v === "auto" ? null : v }))}>
+              <SelectTrigger size="sm" aria-label={t("Format")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">Auto ({auto ?? "16:9"})</SelectItem>
+                <SelectItem value="auto">{t("Auto ({ratio})", { ratio: auto ?? "16:9" })}</SelectItem>
                 {Object.keys(RATIOS).map((r) => (
                   <SelectItem key={r} value={r}>{r}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button size="icon-sm" variant="ghost" aria-label={full ? "Leave full screen" : "Full screen"} title="Full screen (F)" onClick={(e) => (e.currentTarget.blur(), fullscreen())}>
+            <Button size="icon-sm" variant="ghost" aria-label={full ? t("Leave full screen") : t("Full screen")} title={t("Full screen (F)")} onClick={(e) => (e.currentTarget.blur(), fullscreen())}>
               {full ? <MinimizeIcon /> : <MaximizeIcon />}
             </Button>
           </div>
         </section>
       </div>
 
-      <div role="separator" aria-orientation="horizontal" aria-label="Drag to resize the tracks" title="Drag to resize the tracks, double-click to fit them" onPointerDown={resize} onDoubleClick={() => setPulled(null)} className="group/bar flex cursor-row-resize touch-none items-center justify-center border-t bg-background hover:bg-muted">
+      <div role="separator" aria-orientation="horizontal" aria-label={t("Drag to resize the tracks")} title={t("Drag to resize the tracks, double-click to fit them")} onPointerDown={resize} onDoubleClick={() => setPulled(null)} className="group/bar flex cursor-row-resize touch-none items-center justify-center border-t bg-background hover:bg-muted">
         <span className="h-1 w-10 rounded-full bg-border transition-colors group-hover/bar:bg-foreground/40" />
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-col bg-background">
         <div className="flex min-h-11 flex-wrap items-center gap-1 border-b px-3 py-1">
-          <Button size="sm" variant="ghost" disabled={!act} onClick={act?.split} title="Split the clip at the playhead (S)">
-            <ScissorsIcon data-icon="inline-start" /> Split
+          <Button size="sm" variant="ghost" disabled={!act} onClick={act?.split} title={t("Split the clip at the playhead (S)")}>
+            <ScissorsIcon data-icon="inline-start" /> {t("Split")}
           </Button>
-          <Button size="sm" variant="ghost" disabled={!act} onClick={act?.duplicate} title="Duplicate the clip (⌘D)">
-            <CopyPlusIcon data-icon="inline-start" /> Duplicate
+          <Button size="sm" variant="ghost" disabled={!act} onClick={act?.duplicate} title={t("Duplicate the clip (⌘D)")}>
+            <CopyPlusIcon data-icon="inline-start" /> {t("Duplicate")}
           </Button>
-          <Button size="icon-sm" variant="ghost" disabled={!act} aria-label="Delete the clip" title="Delete the clip (Delete)" onClick={act?.remove}>
+          <Button size="icon-sm" variant="ghost" disabled={!act} aria-label={t("Delete the clip")} title={t("Delete the clip (Delete)")} onClick={act?.remove}>
             <Trash2Icon />
           </Button>
-          <Button size="sm" variant="ghost" onClick={voiceHere} title="Audio › Voice: the voice is laid at the playhead once done">
-            <MicIcon data-icon="inline-start" /> Voice here
+          <Button size="sm" variant="ghost" onClick={voiceHere} title={t("Audio › Voice: the voice is laid at the playhead once done")}>
+            <MicIcon data-icon="inline-start" /> {t("Voice here")}
           </Button>
           {selected && act && (
             <span className="flex min-w-0 items-center gap-1.5 border-l pl-3">
               {nums[selected.id] && <span className="rounded bg-vid/15 px-1.5 text-xs font-semibold text-vid tabular-nums">#{nums[selected.id]}</span>}
               <span className="max-w-48 truncate text-sm font-medium" title={selected.file}>{name(selected)}</span>
-              <span className="text-xs text-muted-foreground tabular-nums">{lenOf(selected).toFixed(1)} s</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{fixed(lenOf(selected), 1)} s</span>
               {!isStill(selected.path) && (
-                <span className="flex items-center gap-1.5 pl-1" title="Its sound's volume">
+                <span className="flex items-center gap-1.5 pl-1" title={t("Its sound's volume")}>
                   <Volume2Icon className="size-3.5 text-muted-foreground" aria-hidden />
-                  <Slider className="w-20" min={0} max={100} step={5} value={[Math.round((selected.volume ?? 1) * 100)]} onValueChange={([v]) => onChange((x) => ({ ...x, clips: x.clips.map((o) => (o.id === selected.id ? { ...o, volume: v / 100 } : o)) }))} aria-label="Volume" />
+                  <Slider className="w-20" min={0} max={100} step={5} value={[Math.round((selected.volume ?? 1) * 100)]} onValueChange={([v]) => onChange((x) => ({ ...x, clips: x.clips.map((o) => (o.id === selected.id ? { ...o, volume: v / 100 } : o)) }))} aria-label={t("Volume")} />
                   <span className="w-10 text-xs whitespace-nowrap text-muted-foreground tabular-nums">{Math.round((selected.volume ?? 1) * 100)} %</span>
                 </span>
               )}
               <Popover open={swapping} onOpenChange={setSwapping}>
                 <PopoverTrigger asChild>
-                  <Button size="sm" variant="ghost" title="Another result in its place, at the same time and length">
-                    <ReplaceIcon data-icon="inline-start" /> Swap take
+                  <Button size="sm" variant="ghost" title={t("Another result in its place, at the same time and length")}>
+                    <ReplaceIcon data-icon="inline-start" /> {t("Swap take")}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col gap-0 p-0">
-                  <LibraryList title={`In place of ${name(selected)}`} items={items.filter((i) => trackKind(i.path) === kindOf(selected))} picked={[selected.path]} onPick={(p) => swap(selected, p)} />
+                  <LibraryList title={t("In place of {name}", { name: name(selected) })} items={items.filter((i) => trackKind(i.path) === kindOf(selected))} picked={[selected.path]} onPick={(p) => swap(selected, p)} />
                 </PopoverContent>
               </Popover>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="ghost" title="A tool on this clip: the result is laid by it once done">
-                    <SparklesIcon data-icon="inline-start" /> Generate
+                  <Button size="sm" variant="ghost" title={t("A tool on this clip: the result is laid by it once done")}>
+                    <SparklesIcon data-icon="inline-start" /> {t("Generate")}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-56">
@@ -576,42 +579,42 @@ export function TimelineEditor({
                 </DropdownMenuContent>
               </DropdownMenu>
               {act.remix && (
-                <Button size="sm" variant="ghost" onClick={act.remix} title="The same settings in the composer: the result takes its place">
-                  <RefreshCwIcon data-icon="inline-start" /> Remix
+                <Button size="sm" variant="ghost" onClick={act.remix} title={t("The same settings in the composer: the result takes its place")}>
+                  <RefreshCwIcon data-icon="inline-start" /> {t("Remix")}
                 </Button>
               )}
             </span>
           )}
           <span className="flex-1" />
-          <Button size="icon-sm" variant="ghost" aria-label="Undo" title="Undo (⌘Z)" disabled={!can.undo} onClick={onUndo}>
+          <Button size="icon-sm" variant="ghost" aria-label={t("Undo")} title={t("Undo (⌘Z)")} disabled={!can.undo} onClick={onUndo}>
             <UndoIcon />
           </Button>
-          <Button size="icon-sm" variant="ghost" aria-label="Redo" title="Redo (⇧⌘Z)" disabled={!can.redo} onClick={onRedo}>
+          <Button size="icon-sm" variant="ghost" aria-label={t("Redo")} title={t("Redo (⇧⌘Z)")} disabled={!can.redo} onClick={onRedo}>
             <RedoIcon />
           </Button>
-          <Button size="icon-sm" variant="ghost" aria-label="Zoom out" title="Zoom out (−, or ⌘ and the wheel)" onClick={() => setZoom(Math.max(2, px / 1.5))}>
+          <Button size="icon-sm" variant="ghost" aria-label={t("Zoom out")} title={t("Zoom out (−, or ⌘ and the wheel)")} onClick={() => setZoom(Math.max(2, px / 1.5))}>
             <MinusIcon />
           </Button>
-          <Slider className="w-24" min={2} max={240} step={1} value={[Math.round(px)]} onValueChange={([v]) => setZoom(v)} aria-label="Zoom" />
-          <Button size="icon-sm" variant="ghost" aria-label="Zoom in" title="Zoom in (+, or ⌘ and the wheel)" onClick={() => setZoom(Math.min(240, px * 1.5))}>
+          <Slider className="w-24" min={2} max={240} step={1} value={[Math.round(px)]} onValueChange={([v]) => setZoom(v)} aria-label={t("Zoom")} />
+          <Button size="icon-sm" variant="ghost" aria-label={t("Zoom in")} title={t("Zoom in (+, or ⌘ and the wheel)")} onClick={() => setZoom(Math.min(240, px * 1.5))}>
             <PlusIcon />
           </Button>
-          <Button size="xs" variant="ghost" onClick={() => setZoom(fitFor(width, total))} title="The whole edit in view">
-            Fit
+          <Button size="xs" variant="ghost" onClick={() => setZoom(fitFor(width, total))} title={t("The whole edit in view")}>
+            {t("Fit")}
           </Button>
         </div>
 
         <div
           ref={lanes}
           tabIndex={0}
-          aria-label="Timeline. Space plays, S splits the selected clip, Delete removes it, arrows move the playhead, up and down jump between cuts, Alt and arrows move the clip"
+          aria-label={t("Timeline. Space plays, S splits the selected clip, Delete removes it, arrows move the playhead, up and down jump between cuts, Alt and arrows move the clip")}
           className="relative min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
           onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setPreview(null)}
         >
           <div className="relative min-h-full" style={{ width: LABEL + extent * px }}>
             <div className="sticky top-0 z-20 flex h-7 border-b bg-background">
               <div className="sticky left-0 z-10 shrink-0 border-r bg-background" style={{ width: LABEL }} />
-              <div className="relative flex-1 cursor-ew-resize" onPointerDown={seek} title="Drag to move the playhead">
+              <div className="relative flex-1 cursor-ew-resize" onPointerDown={seek} title={t("Drag to move the playhead")}>
                 {Array.from({ length: Math.floor(extent / step) + 1 }, (_, i) => i * step).map((s) => (
                   <span key={s} className="absolute top-0 h-full border-l border-border pl-1 text-[11px] leading-7 text-muted-foreground tabular-nums select-none" style={{ left: s * px }}>
                     {mark(s)}
@@ -626,13 +629,13 @@ export function TimelineEditor({
                 <div key={tr.id} className={cn("flex border-b", main && "bg-muted/30")} style={{ height: rowOf(shown, tr.id) }}>
                   <div className="sticky left-0 z-10 flex shrink-0 items-center gap-1 border-r bg-background px-2" style={{ width: LABEL }}>
                     <span className={cn("grid h-6 min-w-8 place-items-center rounded-md px-1.5 text-xs font-semibold", tr.kind === "video" ? "bg-vid/15 text-vid" : "bg-aud/15 text-aud", tr.off && "opacity-50")}>{label}</span>
-                    {main && <span className="text-[11px] text-muted-foreground">main</span>}
+                    {main && <span className="text-[11px] text-muted-foreground">{t("main")}</span>}
                     <span className="flex-1" />
-                    <Button size="icon-xs" variant="ghost" aria-label={tr.kind === "video" ? (tr.off ? `Show ${label}` : `Hide ${label}`) : tr.off ? `Unmute ${label}` : `Mute ${label}`} aria-pressed={!!tr.off} onClick={() => onChange((x) => ({ ...x, tracks: x.tracks.map((o) => (o.id === tr.id ? { ...o, off: !o.off } : o)) }))}>
+                    <Button size="icon-xs" variant="ghost" aria-label={tr.kind === "video" ? (tr.off ? t("Show {label}", { label }) : t("Hide {label}", { label })) : tr.off ? t("Unmute {label}", { label }) : t("Mute {label}", { label })} aria-pressed={!!tr.off} onClick={() => onChange((x) => ({ ...x, tracks: x.tracks.map((o) => (o.id === tr.id ? { ...o, off: !o.off } : o)) }))}>
                       {tr.kind === "video" ? tr.off ? <EyeOffIcon /> : <EyeIcon /> : tr.off ? <VolumeXIcon /> : <Volume2Icon />}
                     </Button>
                     {shown.tracks.filter((x) => x.kind === tr.kind).length > 1 ? (
-                      <Button size="icon-xs" variant="ghost" aria-label={`Remove ${label}${mine.length ? " and its clips" : ""}`} title={`Remove ${label}${mine.length ? " and its clips" : ""}`} onClick={() => onChange((x) => ({ ...x, tracks: x.tracks.filter((o) => o.id !== tr.id), clips: x.clips.filter((c) => c.track !== tr.id) }))}>
+                      <Button size="icon-xs" variant="ghost" aria-label={mine.length ? t("Remove {label} and its clips", { label }) : t("Remove {label}", { label })} title={mine.length ? t("Remove {label} and its clips", { label }) : t("Remove {label}", { label })} onClick={() => onChange((x) => ({ ...x, tracks: x.tracks.filter((o) => o.id !== tr.id), clips: x.clips.filter((c) => c.track !== tr.id) }))}>
                         <XIcon />
                       </Button>
                     ) : (
@@ -642,7 +645,7 @@ export function TimelineEditor({
                   <div data-track={tr.id} className="relative flex-1" onPointerDown={seek} onDragOver={(e) => over(e, tr.id)} onDrop={land}>
                     {!mine.length && (
                       <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-muted-foreground">
-                        {main ? "The shots, end to end: drag them here from the bin, or « Add to timeline » on any result" : tr.kind === "video" ? "Over the main track: titles, inserts" : "A voice, music, a sound"}
+                        {main ? t("The shots, end to end: drag them here from the bin, or « Add to timeline » on any result") : tr.kind === "video" ? t("Over the main track: titles, inserts") : t("A voice, music, a sound")}
                       </span>
                     )}
                     {mine.map((c) => (
@@ -670,8 +673,8 @@ export function TimelineEditor({
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              aria-label={`Bridge shot between #${nums[a.id]} and #${nums[b.id]}`}
-                              title="Bridge shot: a video from the last frame before to the first frame after, laid in this cut"
+                              aria-label={t("Bridge shot between #{a} and #{b}", { a: nums[a.id], b: nums[b.id] })}
+                              title={t("Bridge shot: a video from the last frame before to the first frame after, laid in this cut")}
                               onPointerDown={(e) => e.stopPropagation()}
                               className="absolute bottom-0 z-10 grid size-5 -translate-x-1/2 translate-y-1/2 place-items-center rounded-full border bg-background text-space shadow-sm transition-colors hover:bg-space hover:text-space-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-space data-[state=open]:text-space-foreground"
                               style={{ left: endOf(a) * px }}
@@ -680,10 +683,10 @@ export function TimelineEditor({
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="center" className="min-w-56" onPointerDown={(e) => e.stopPropagation()}>
-                            <DropdownPrims.Label className="px-2 py-1 text-xs text-muted-foreground">Bridge shot from #{nums[a.id]} to #{nums[b.id]}</DropdownPrims.Label>
+                            <DropdownPrims.Label className="px-2 py-1 text-xs text-muted-foreground">{t("Bridge shot from #{a} to #{b}", { a: nums[a.id], b: nums[b.id] })}</DropdownPrims.Label>
                             {bridges.map((x) => (
                               <DropdownPrims.Item key={x.id} className={ITEM} onSelect={() => onBridge(a, b, tr.id, x.id)}>
-                                <ToolIcon name={x.icon} /> <span className="flex-1">{x.label}</span>
+                                <ToolIcon name={x.icon} /> <span className="flex-1">{own(x.label)}</span>
                               </DropdownPrims.Item>
                             ))}
                           </DropdownMenuContent>
@@ -696,12 +699,12 @@ export function TimelineEditor({
 
             <div className={cn("sticky left-0 flex items-center gap-1.5 px-2 py-1.5", preview && dragged && "bg-space/10")} style={{ width }} onDragOver={(e) => over(e, null)} onDrop={land}>
               <Button size="xs" variant="ghost" onClick={() => onChange((x) => ({ ...x, tracks: [{ id: `v${uid()}`, kind: "video" }, ...x.tracks] }))}>
-                <PlusIcon data-icon="inline-start" /> Video track
+                <PlusIcon data-icon="inline-start" /> {t("Video track")}
               </Button>
               <Button size="xs" variant="ghost" onClick={() => onChange((x) => ({ ...x, tracks: [...x.tracks, { id: `a${uid()}`, kind: "audio" }] }))}>
-                <PlusIcon data-icon="inline-start" /> Audio track
+                <PlusIcon data-icon="inline-start" /> {t("Audio track")}
               </Button>
-              <span className="text-xs text-muted-foreground">or drop a shot here for a new track</span>
+              <span className="text-xs text-muted-foreground">{t("or drop a shot here for a new track")}</span>
             </div>
 
             {snapAt != null && <div className="pointer-events-none absolute top-7 bottom-0 z-20 w-px bg-cost" style={{ left: LABEL + snapAt * px }} />}
@@ -756,7 +759,7 @@ function ClipBox({
       tabIndex={0}
       data-clip={c.id}
       aria-pressed={state === "selected"}
-      aria-label={`${number ? `Shot ${number}, ` : ""}${name}, ${c.at.toFixed(2)} to ${endOf(c).toFixed(2)} s`}
+      aria-label={number ? t("Shot {n}, {name}, {from} to {to} s", { n: number, name, from: fixed(c.at, 2), to: fixed(endOf(c), 2) }) : t("{name}, {from} to {to} s", { name, from: fixed(c.at, 2), to: fixed(endOf(c), 2) })}
       onPointerDown={(e) => onGrab(e, "move")}
       onFocus={onSelect}
       className={cn(
@@ -786,8 +789,8 @@ function ClipBox({
       {misfit && width > 56 && (
         <button
           type="button"
-          aria-label={`Fit to ${misfit.ratio}`}
-          title={`Not ${misfit.ratio}: fit it to the edit's format (${still ? "Expand" : "Reframe, free"})`}
+          aria-label={t("Fit to {ratio}", { ratio: misfit.ratio })}
+          title={t("Not {ratio}: fit it to the edit's format ({how})", { ratio: misfit.ratio, how: still ? own("Expand") : t("{tool}, free", { tool: own("Reframe") }) })}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={misfit.run}
           className="absolute top-1 right-2.5 grid size-4.5 place-items-center rounded bg-black/60 text-white transition-colors hover:bg-space hover:text-space-foreground"
@@ -834,7 +837,7 @@ function GenerateItems({ M, make }: { M: Prims; make: () => Generate }) {
               {s.groups.map(([group, list], i) => (
                 <Fragment key={group}>
                   {i > 0 && <M.Separator className={SEPARATOR} />}
-                  <M.Label className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">{group}</M.Label>
+                  <M.Label className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">{own(group)}</M.Label>
                   {list.map(item)}
                 </Fragment>
               ))}
@@ -848,10 +851,10 @@ function GenerateItems({ M, make }: { M: Prims; make: () => Generate }) {
 
 function ClipMenu({ actions, children }: { actions: { split: () => void; duplicate: () => void; swap: () => void; remix?: () => void; remove: () => void; generate: () => Generate }; children: React.ReactNode }) {
   const items = [
-    { label: "Split at the playhead", run: actions.split, icon: ScissorsIcon, key: "S" },
-    { label: "Duplicate", run: actions.duplicate, icon: CopyPlusIcon, key: "⌘D" },
-    { label: "Swap take…", run: actions.swap, icon: ReplaceIcon },
-    ...(actions.remix ? [{ label: "Remix", run: actions.remix, icon: RefreshCwIcon }] : []),
+    { label: t("Split at the playhead"), run: actions.split, icon: ScissorsIcon, key: "S" },
+    { label: t("Duplicate"), run: actions.duplicate, icon: CopyPlusIcon, key: "⌘D" },
+    { label: t("Swap take…"), run: actions.swap, icon: ReplaceIcon },
+    ...(actions.remix ? [{ label: t("Remix"), run: actions.remix, icon: RefreshCwIcon }] : []),
   ]
   return (
     <ContextMenu.Root>
@@ -869,7 +872,7 @@ function ClipMenu({ actions, children }: { actions: { split: () => void; duplica
           <GenerateItems M={ContextMenu} make={actions.generate} />
           <ContextMenu.Separator className={SEPARATOR} />
           <ContextMenu.Item className={cn(ITEM, "text-destructive focus:bg-destructive/10 focus:text-destructive")} onSelect={actions.remove}>
-            <Trash2Icon /> <span className="flex-1">Delete</span>
+            <Trash2Icon /> <span className="flex-1">{t("Delete")}</span>
             <span className="text-xs text-muted-foreground">⌫</span>
           </ContextMenu.Item>
         </ContextMenu.Content>
@@ -880,13 +883,13 @@ function ClipMenu({ actions, children }: { actions: { split: () => void; duplica
 
 // the frame at the playhead: the top clip of the video tracks there, every sound playing with it; the media stay
 // mounted, so a cut shows at once
-function Preview({ t, time, playing, ratio, onAuto, number, screen }: { t: Timeline; time: number; playing: boolean; ratio: string; onAuto: (r: string) => void; number: Record<string, number>; screen: React.RefObject<HTMLDivElement | null> }) {
+function Preview({ t: tl, time, playing, ratio, onAuto, number, screen }: { t: Timeline; time: number; playing: boolean; ratio: string; onAuto: (r: string) => void; number: Record<string, number>; screen: React.RefObject<HTMLDivElement | null> }) {
   const els = useRef(new Map<string, HTMLVideoElement | HTMLAudioElement | HTMLImageElement>())
-  const order = (c: Clip) => t.tracks.findIndex((x) => x.id === c.track)
-  const kind = (c: Clip) => t.tracks[order(c)]?.kind
-  const off = (c: Clip) => !!t.tracks[order(c)]?.off
+  const order = (c: Clip) => tl.tracks.findIndex((x) => x.id === c.track)
+  const kind = (c: Clip) => tl.tracks[order(c)]?.kind
+  const off = (c: Clip) => !!tl.tracks[order(c)]?.off
   const on = (c: Clip) => time >= c.at && time < endOf(c)
-  const pictures = t.clips.filter((c) => kind(c) === "video")
+  const pictures = tl.clips.filter((c) => kind(c) === "video")
   const top = pictures.filter((c) => on(c) && !off(c)).sort((a, b) => order(a) - order(b))[0]
   const first = pictures.filter((c) => !off(c)).sort((a, b) => a.at - b.at)[0]
 
@@ -901,7 +904,7 @@ function Preview({ t, time, playing, ratio, onAuto, number, screen }: { t: Timel
 
   // every medium in step with the playhead: playing while its clip is under it, else still on its frame
   useEffect(() => {
-    for (const c of t.clips) {
+    for (const c of tl.clips) {
       const m = els.current.get(c.id)
       if (!m || m instanceof HTMLImageElement) continue
       const want = c.in + (time - c.at)
@@ -929,11 +932,11 @@ function Preview({ t, time, playing, ratio, onAuto, number, screen }: { t: Timel
             <video key={c.id} ref={keep(c)} src={fileUrl(c.path)} data-together="timeline" preload="auto" playsInline onLoadedMetadata={measure} className={cn("absolute inset-0 size-full object-contain", c !== top && "invisible")} />
           )
         )}
-        {t.clips.filter((c) => kind(c) === "audio").map((c) => (
+        {tl.clips.filter((c) => kind(c) === "audio").map((c) => (
           <audio key={c.id} ref={keep(c)} src={fileUrl(c.path)} data-together="timeline" preload="auto" />
         ))}
         {top && number[top.id] && <span className="absolute top-2 left-2 rounded bg-black/60 px-1.5 text-xs font-semibold text-white tabular-nums">#{number[top.id]}</span>}
-        {!top && <span className="absolute inset-0 grid place-items-center p-4 text-center text-xs text-white/45">{t.clips.length ? "Nothing on the video tracks here" : "The edit plays here"}</span>}
+        {!top && <span className="absolute inset-0 grid place-items-center p-4 text-center text-xs text-white/45">{tl.clips.length ? t("Nothing on the video tracks here") : t("The edit plays here")}</span>}
       </div>
     </div>
   )

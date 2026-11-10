@@ -11,6 +11,7 @@ import { api, inWorkspace, mediaKind, money, outputPath, per1000, plain, spentIn
 import { Label } from "@/components/chips"
 import { ConfirmDelete } from "@/components/elements"
 import { Thumb } from "@/components/inputs"
+import { t } from "@/lib/i18n"
 
 // what a workspace's generations cost, in words
 export function costLine(s: State, slug: string) {
@@ -43,11 +44,11 @@ function NameDialog({ open, title, description, value = "", action, onClose, onS
             <DialogDescription className="mt-1">{description}</DialogDescription>
           </div>
           <div>
-            <Label>Name</Label>
-            <Input autoFocus value={name} maxLength={60} placeholder="Spring campaign" onChange={(e) => setName(e.target.value)} aria-label="Name" />
+            <Label>{t("Name")}</Label>
+            <Input autoFocus value={name} maxLength={60} placeholder={t("Spring campaign")} onChange={(e) => setName(e.target.value)} aria-label={t("Name")} />
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="button" variant="ghost" onClick={onClose}>{t("Cancel")}</Button>
             <Button type="submit" disabled={busy || !name.trim()}>{action}</Button>
           </div>
         </form>
@@ -61,11 +62,11 @@ export function NewWorkspaceDialog({ open, onClose, onChanged }: { open: boolean
     <NameDialog
       key={String(open)}
       open={open}
-      title="New workspace"
-      description="A project's media, Elements and timeline. It becomes the current one: what you generate next lands in it."
-      action="Create workspace"
+      title={t("New workspace")}
+      description={t("A project's media, Elements and timeline. It becomes the current one: what you generate next lands in it.")}
+      action={t("Create workspace")}
       onClose={onClose}
-      onSubmit={(name) => api.workspaces({ new: name }).then((r) => (onChanged(), toast.success(`${r.workspaces.find((w) => w.slug === r.current)?.name} is the current workspace`)))}
+      onSubmit={(name) => api.workspaces({ new: name }).then((r) => (onChanged(), toast.success(t("{name} is the current workspace", { name: r.workspaces.find((w) => w.slug === r.current)?.name ?? "" }))))}
     />
   )
 }
@@ -96,15 +97,16 @@ export function WorkspaceRows({
   const [renaming, setRenaming] = useState<Workspace | null>(null)
   const [removing, setRemoving] = useState<Workspace | null>(null)
   const changed = () => onChanged?.()
-  const rows = [...(all ? [{ slug: "all", name: "All workspaces" } as Workspace] : []), ...state.workspaces]
-  const n = (k: number) => `${k} ${unit}${k === 1 ? "" : "s"}`
+  const rows = [...(all ? [{ slug: "all", name: t("All workspaces") } as Workspace] : []), ...state.workspaces]
+  // how many: elements (the Library's), else items
+  const n = (k: number) => (unit === "element" ? (k === 1 ? t("{n} element", { n: k }) : t("{n} elements", { n: k })) : k === 1 ? t("{n} item", { n: k }) : t("{n} items", { n: k }))
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <Label>Workspaces</Label>
+        <Label>{t("Workspaces")}</Label>
         {manage && (
           <Button size="xs" variant="ghost" className="-mt-2" onClick={() => setMaking(true)}>
-            <PlusIcon data-icon="inline-start" /> New
+            <PlusIcon data-icon="inline-start" /> {t("New")}
           </Button>
         )}
       </div>
@@ -130,22 +132,22 @@ export function WorkspaceRows({
                     )}
                   </span>
                 </span>
-                {on && <CheckIcon className="size-4 shrink-0 text-foreground/70" aria-label={manage && w.slug !== "all" ? "Current" : "Shown"} />}
+                {on && <CheckIcon className="size-4 shrink-0 text-foreground/70" aria-label={manage && w.slug !== "all" ? t("Current") : t("Shown")} />}
               </button>
               {manage && w.slug !== "all" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="icon-xs" variant="ghost" aria-label={`${w.name}: rename or delete`} className="mr-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100">
+                    <Button size="icon-xs" variant="ghost" aria-label={t("{name}: rename or delete", { name: w.name })} className="mr-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100">
                       <EllipsisIcon />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onSelect={() => setRenaming(w)}>
-                      <PencilLineIcon /> Rename
+                      <PencilLineIcon /> {t("Rename")}
                     </DropdownMenuItem>
                     {w.slug !== "default" && (
                       <DropdownMenuItem variant="destructive" onSelect={() => setRemoving(w)}>
-                        <Trash2Icon /> Delete
+                        <Trash2Icon /> {t("Delete")}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -161,16 +163,16 @@ export function WorkspaceRows({
           <NameDialog
             key={renaming?.slug ?? ""}
             open={!!renaming}
-            title="Rename the workspace"
-            description="Its media, Elements and timeline stay as they are."
+            title={t("Rename the workspace")}
+            description={t("Its media, Elements and timeline stay as they are.")}
             value={renaming?.name}
-            action="Rename"
+            action={t("Rename")}
             onClose={() => setRenaming(null)}
             onSubmit={(name) => api.workspaces({ slug: renaming!.slug, name }).then(changed)}
           />
           <ConfirmDelete
-            what={`the workspace ${removing?.name ?? ""}`}
-            text="Its timeline goes. Its media and Elements stay in the Library."
+            what={t("the workspace {name}", { name: removing?.name ?? "" })}
+            text={t("Its timeline goes. Its media and Elements stay in the Library.")}
             open={!!removing}
             onCancel={() => setRemoving(null)}
             onConfirm={() => {

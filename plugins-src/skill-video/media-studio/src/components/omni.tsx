@@ -8,10 +8,11 @@ import { Label } from "@/components/chips"
 import { ElementField } from "@/components/element-field"
 import { Listen } from "@/components/inputs"
 import { cited, ELEMENT_TYPES, heard, type Field, type Mentionable, type Model } from "@/lib/api"
+import { t } from "@/lib/i18n"
 
 // a voice of one's own (a file) by the name the words cite it with: the one typed, else its file's
 export const voiceName = (file: string, typed?: string) => (typed || file.split(/[\\/]/).pop()!.replace(/^\d+-/, "").replace(/\.\w+$/, "")).replace(/[^\w]/g, "_").slice(0, 20)
-const ELEMENTS: Field = { key: "elements", label: "Elements", type: "element", multiple: true, types: ELEMENT_TYPES.map((t) => t.type).filter((t) => !heard(t)) }
+const ELEMENTS: Field = { key: "elements", label: t("Elements"), type: "element", multiple: true, types: ELEMENT_TYPES.map((t) => t.type).filter((t) => !heard(t)) }
 // a name out of the words, once each, with the space after it
 const drop = (text: string, name: string) => text.replace(new RegExp(`@${name}(?![\\w-])\\s?`, "g"), "")
 
@@ -43,26 +44,26 @@ export function OmniRefs({ mp, inputs, voiceNames, intent, items, onIntent, onVo
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <Label hint={mp.materials ? <span className={cn("tabular-nums", over && "font-medium text-destructive")}>{total} / {mp.materials} in all</span> : "what the words can cite"}>References</Label>
+        <Label hint={mp.materials ? <span className={cn("tabular-nums", over && "font-medium text-destructive")}>{t("{n} / {max} in all", { n: total, max: mp.materials })}</span> : t("what the words can cite")}>{t("References")}</Label>
         {tags.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
-            {tags.map((t) => {
-              const used = new RegExp(`${t}(?![\\w-])`).test(intent)
+            {tags.map((tg) => {
+              const used = new RegExp(`${tg}(?![\\w-])`).test(intent)
               return (
                 <button
-                  key={t}
+                  key={tg}
                   type="button"
-                  onClick={() => cite(t)}
-                  title={used ? `${t} is in your words` : `Cite ${t} in your words`}
+                  onClick={() => cite(tg)}
+                  title={used ? t("{tag} is in your words", { tag: tg }) : t("Cite {tag} in your words", { tag: tg })}
                   className={cn("rounded-md border px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:bg-muted hover:text-foreground", used ? "border-space/40 text-foreground" : "text-muted-foreground")}
                 >
-                  {t}
+                  {tg}
                 </button>
               )
             })}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">Images, videos, sounds and voices added above, and the Elements below, show here: a click cites one in your words.</p>
+          <p className="text-xs text-muted-foreground">{t("Images, videos, sounds and voices added above, and the Elements below, show here: a click cites one in your words.")}</p>
         )}
       </div>
       {!!mp.elements && (
@@ -80,7 +81,7 @@ export function OmniRefs({ mp, inputs, voiceNames, intent, items, onIntent, onVo
       )}
       {voices.length > 0 && (
         <div>
-          <Label hint="the name your words cite each by">Your voices</Label>
+          <Label hint={t("the name your words cite each by")}>{t("Your voices")}</Label>
           <div className="flex flex-col gap-1.5">
             {voices.map((f, i) => (
               <div key={f} className="flex items-center gap-2">
@@ -88,7 +89,7 @@ export function OmniRefs({ mp, inputs, voiceNames, intent, items, onIntent, onVo
                 <span className="font-mono text-sm text-muted-foreground">@</span>
                 <Input
                   value={voiceNames[i] ?? names[i]}
-                  aria-label={`Voice ${i + 1}: its name`}
+                  aria-label={t("Voice {n}: its name", { n: i + 1 })}
                   className="h-8 flex-1 font-mono text-sm"
                   onChange={(e) => onVoiceNames(voices.map((_, k) => (k === i ? e.target.value.replace(/[^\w]/g, "_").slice(0, 20) : (voiceNames[k] ?? names[k]))))}
                 />
@@ -109,8 +110,8 @@ export function LinesEditor({ lines, onChange, characters, voices }: { lines: Sp
   const add = () => onChange([...lines, { who: lines.at(-2)?.who ?? (characters[0] ? `@${characters[0].name}` : undefined), voice: lines.at(-2)?.voice, text: "" }])
   if (!lines.length)
     return (
-      <Button variant="outline" size="sm" className="self-start" onClick={add} title="Who says what in the video: the lips follow the words">
-        <PlusIcon data-icon="inline-start" /> Add spoken lines
+      <Button variant="outline" size="sm" className="self-start" onClick={add} title={t("Who says what in the video: the lips follow the words")}>
+        <PlusIcon data-icon="inline-start" /> {t("Add spoken lines")}
       </Button>
     )
   const pick = (value: string | undefined, onPick: (v: string | undefined) => void, label: string, none: string, groups: [string, string[]][]) => (
@@ -135,21 +136,21 @@ export function LinesEditor({ lines, onChange, characters, voices }: { lines: Sp
   )
   return (
     <div className="flex flex-col gap-2">
-      <Label hint="the lips follow them">Spoken lines</Label>
+      <Label hint={t("the lips follow them")}>{t("Spoken lines")}</Label>
       {lines.map((l, i) => (
         <div key={i} className="flex flex-col gap-2 rounded-lg border p-2.5">
           <div className="flex items-center gap-2">
-            {pick(l.who, (who) => set(i, { who }), `Line ${i + 1}: who speaks`, "A voice off screen", [["Characters", characters.map((c) => `@${c.name}`)]])}
-            {voices && pick(l.voice, (voice) => set(i, { voice }), `Line ${i + 1}: in which voice`, l.who ? "Its own voice" : "Any voice", [["Voices", voices]])}
-            <Button size="icon-xs" variant="ghost" aria-label={`Remove line ${i + 1}`} title="Remove this line" onClick={() => onChange(lines.filter((_, k) => k !== i))}>
+            {pick(l.who, (who) => set(i, { who }), t("Line {n}: who speaks", { n: i + 1 }), t("A voice off screen"), [[t("Characters"), characters.map((c) => `@${c.name}`)]])}
+            {voices && pick(l.voice, (voice) => set(i, { voice }), t("Line {n}: in which voice", { n: i + 1 }), l.who ? t("Its own voice") : t("Any voice"), [[t("Voices"), voices]])}
+            <Button size="icon-xs" variant="ghost" aria-label={t("Remove line {n}", { n: i + 1 })} title={t("Remove this line")} onClick={() => onChange(lines.filter((_, k) => k !== i))}>
               <XIcon />
             </Button>
           </div>
-          <Input value={l.text} placeholder="What is said" aria-label={`Line ${i + 1}: words`} className="h-8 text-sm" onChange={(e) => set(i, { text: e.target.value })} />
+          <Input value={l.text} placeholder={t("What is said")} aria-label={t("Line {n}: words", { n: i + 1 })} className="h-8 text-sm" onChange={(e) => set(i, { text: e.target.value })} />
         </div>
       ))}
       <Button variant="outline" size="sm" className="self-start" onClick={add}>
-        <PlusIcon data-icon="inline-start" /> Add a line
+        <PlusIcon data-icon="inline-start" /> {t("Add a line")}
       </Button>
     </div>
   )

@@ -12,14 +12,15 @@ import { Chips, Label } from "@/components/chips"
 import { ConfirmDelete, FilesEditor, type Use } from "@/components/elements"
 import { Main, Side } from "@/components/pages"
 import { FAMILIES, familyArt, GroupIcon, lastIn, StyleCard, StyleThumb, styleKey, type Preset } from "@/components/style-picker"
+import { own, t } from "@/lib/i18n"
 
 type Open = { preset: Preset } | { yours: string }
 const SOUND_FAMILIES = ["music", "voice", "sound"] as const
 // how a sound style reads, by its family: the placeholder of its words, what the agent is asked to write them
 const WORDS: Record<SoundFamily, { placeholder: string; parts: string }> = {
-  music: { placeholder: "warm analog synths, breathy female vocals, 90 BPM", parts: "genre, instruments, tempo, mood and vocals, an artist's sound described without their name" },
-  voice: { placeholder: "a calm narrator, slow and warm, gentle pauses", parts: "the delivery: pace, pitch, mood, how close to the microphone" },
-  sound: { placeholder: "dry close-miked foley, no music", parts: "its texture, its space, how real or stylized" },
+  music: { placeholder: t("warm analog synths, breathy female vocals, 90 BPM"), parts: "genre, instruments, tempo, mood and vocals, an artist's sound described without their name" },
+  voice: { placeholder: t("a calm narrator, slow and warm, gentle pauses"), parts: "the delivery: pace, pitch, mood, how close to the microphone" },
+  sound: { placeholder: t("dry close-miked foley, no music"), parts: "its texture, its space, how real or stylized" },
 }
 
 // the Library's styles, visual (a look, from images) or sound (in words, for music, a voice or a sound effect): the
@@ -36,7 +37,7 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
   const ofFamily = presets.filter((p) => !family || p.for === family)
   const groups = [...new Set(ofFamily.map((p) => p.group ?? ""))]
   const mine = source === "presets" || group ? [] : yours.filter((s) => (!family || s.for === family) && (!q || `${s.name} ${s.words}`.toLowerCase().includes(q)))
-  const theirs = source === "yours" ? [] : ofFamily.filter((p) => (!group || p.group === group) && (!q || `${p.label} ${p.note ?? ""} ${p.group ?? ""}`.toLowerCase().includes(q)))
+  const theirs = source === "yours" ? [] : ofFamily.filter((p) => (!group || p.group === group) && (!q || `${p.label} ${p.note ?? ""} ${p.group ?? ""} ${own(p.label)} ${own(p.note) ?? ""} ${own(p.group) ?? ""}`.toLowerCase().includes(q)))
   // a visual preset's card: the last image made in it; a sound's is painted, its last result heard in its dialog
   const thumb = (p: Preset) => (sound ? null : lastIn(p.value, p.label, "image", state.media, state.home))
   const heard = (value: string, label: string | undefined, f?: SoundFamily) => lastIn(value, label, "audio", state.media, state.home, styleKey(f))
@@ -50,32 +51,32 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
           <>
             {tabs}
             <Button variant="space" onClick={() => setCreating(true)}>
-              <PlusIcon /> New style
+              <PlusIcon /> {t("New style")}
             </Button>
             <div className="relative">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search styles" aria-label="Search styles" className="pl-8" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Search styles")} aria-label={t("Search styles")} className="pl-8" />
             </div>
           </>
         }
       >
         <div>
-          <Label>Show</Label>
+          <Label>{t("Show")}</Label>
           <Chips
             options={["all", "yours", "presets"] as const}
             value={source}
-            label={(s) => (s === "all" ? "All" : s === "yours" ? `Yours · ${yours.length}` : `Presets · ${presets.length}`)}
+            label={(s) => (s === "all" ? t("All") : s === "yours" ? t("Yours · {n}", { n: yours.length }) : t("Presets · {n}", { n: presets.length }))}
             icon={(s) => (s === "all" ? <LayoutGridIcon /> : s === "yours" ? <UserIcon /> : <SparklesIcon />)}
             onChange={(s) => (setSource(s), s === "yours" && setGroup(null))}
           />
         </div>
         {sound && (
           <div>
-            <Label>For</Label>
+            <Label>{t("For")}</Label>
             <Chips
               options={["all", ...SOUND_FAMILIES] as const}
               value={family ?? "all"}
-              label={(f) => (f === "all" ? "All" : FAMILIES[f].label)}
+              label={(f) => (f === "all" ? t("All") : FAMILIES[f].label)}
               icon={(f) => {
                 const Icon = f === "all" ? LayoutGridIcon : FAMILIES[f].icon
                 return <Icon />
@@ -85,7 +86,7 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
           </div>
         )}
         {source !== "yours" && (
-          <nav aria-label="Groups" className="-mx-1 flex flex-col gap-0.5">
+          <nav aria-label={t("Groups")} className="-mx-1 flex flex-col gap-0.5">
             {[null, ...groups].map((g) => (
               <button
                 key={g ?? "all"}
@@ -98,7 +99,7 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
                 )}
               >
                 <GroupIcon group={g} className="size-4 shrink-0" />
-                <span className="flex-1">{g ?? "Every group"}</span>
+                <span className="flex-1">{own(g) ?? t("Every group")}</span>
                 <span className="text-xs tabular-nums">{g ? ofFamily.filter((p) => p.group === g).length : ofFamily.length}</span>
               </button>
             ))}
@@ -106,14 +107,14 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
         )}
         <p className="text-xs leading-relaxed text-muted-foreground">
           {sound
-            ? "A sound style is how it sounds: a genre and its instruments, a voice's delivery, a sound's texture. Use one in Music, Cover, Extend, Voice, Sound effect… Yours are a few words of your own."
-            : "A style is a look: medium, palette, line and texture, never what is in the picture. Use one in Restyle or Custom. Yours are made from 1 to 5 images that share the look."}
+            ? t("A sound style is how it sounds: a genre and its instruments, a voice's delivery, a sound's texture. Use one in Music, Cover, Extend, Voice, Sound effect… Yours are a few words of your own.")
+            : t("A style is a look: medium, palette, line and texture, never what is in the picture. Use one in Restyle or Custom. Yours are made from 1 to 5 images that share the look.")}
         </p>
       </Side>
-      <Main title={sound ? "Sound styles" : "Visual styles"} aside={<span className="text-sm text-muted-foreground">{mine.length + theirs.length} styles</span>}>
+      <Main title={sound ? t("Sound styles") : t("Visual styles")} aside={<span className="text-sm text-muted-foreground">{t("{n} styles", { n: mine.length + theirs.length })}</span>}>
         {source !== "presets" && !group && (
-          <section className="flex flex-col gap-3" aria-label="Yours">
-            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Yours</h3>
+          <section className="flex flex-col gap-3" aria-label={t("Yours")}>
+            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{t("Yours")}</h3>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3.5">
               {mine.map((s) => (
                 <StyleCard
@@ -121,7 +122,7 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
                   radio={false}
                   on={false}
                   title={s.name}
-                  note={s.for ? `${FAMILIES[s.for].label} · ${s.words}` : s.words || `${s.files.length} image${s.files.length > 1 ? "s" : ""}`}
+                  note={s.for ? `${FAMILIES[s.for].label} · ${s.words}` : s.words || t(s.files.length > 1 ? "{n} images" : "{n} image", { n: s.files.length })}
                   onPick={() => setOpen({ yours: s.name })}
                   thumb={<StyleThumb file={s.files[0] ?? null} preset={s.for ? familyArt(s) : undefined} className="absolute inset-0" />}
                 />
@@ -133,8 +134,8 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
                   className="flex aspect-video flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed text-sm text-muted-foreground transition-colors outline-none hover:border-space/50 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <PlusIcon className="size-5" />
-                  New style
-                  <span className="px-6 text-center text-xs">{sound ? "A few words of how it sounds" : "From 1 to 5 images of the look"}</span>
+                  {t("New style")}
+                  <span className="px-6 text-center text-xs">{sound ? t("A few words of how it sounds") : t("From 1 to 5 images of the look")}</span>
                 </button>
               )}
             </div>
@@ -143,20 +144,20 @@ export function StylesTab({ tabs, state, presets, sound = false, engine, onUse, 
         {(group ? [group] : groups).map((g) => {
           const list = theirs.filter((p) => (p.group ?? "") === g), f = familyOf(g)
           return list.length ? (
-            <section key={g} className="flex flex-col gap-3" aria-label={g}>
+            <section key={g} className="flex flex-col gap-3" aria-label={own(g)}>
               <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                 <GroupIcon group={g} className="size-3.5" />
-                {f && !family ? `${FAMILIES[f].label} · ${g}` : g}
+                {f && !family ? `${FAMILIES[f].label} · ${own(g)}` : own(g)}
               </h3>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3.5">
                 {list.map((p) => (
-                  <StyleCard key={p.value} radio={false} on={false} title={p.label} note={p.note} sample={sound ? p.preview : undefined} onPick={() => setOpen({ preset: p })} thumb={<StyleThumb file={thumb(p)} preset={p} className="absolute inset-0" />} />
+                  <StyleCard key={p.value} radio={false} on={false} title={own(p.label)} note={own(p.note)} sample={sound ? p.preview : undefined} onPick={() => setOpen({ preset: p })} thumb={<StyleThumb file={thumb(p)} preset={p} className="absolute inset-0" />} />
                 ))}
               </div>
             </section>
           ) : null
         })}
-        {!mine.length && !theirs.length && (source === "presets" || q) && <p className="py-8 text-center text-sm text-muted-foreground">No style matches.</p>}
+        {!mine.length && !theirs.length && (source === "presets" || q) && <p className="py-8 text-center text-sm text-muted-foreground">{t("No style matches.")}</p>}
       </Main>
       {open && "preset" in open && (
         <PresetDialog preset={open.preset} file={thumb(open.preset)} heard={sound ? heard(open.preset.value, open.preset.label, open.preset.for) : null} onClose={() => setOpen(null)} onUse={onUse} />
@@ -174,38 +175,38 @@ function UseButtons({ value, family, onUse, onClose }: { value: string; family?:
     return (
       <>
         <Button variant="space" onClick={() => go("audio", "music")}>
-          <MusicIcon /> Make music
+          <MusicIcon /> {t("Make music")}
         </Button>
         <Button variant="outline" onClick={() => go("audio", "cover")}>
-          <Disc3Icon /> Cover a song
+          <Disc3Icon /> {t("Cover a song")}
         </Button>
         <Button variant="outline" onClick={() => go("audio", "extend-music")}>
-          <ArrowRightToLineIcon /> Extend a song
+          <ArrowRightToLineIcon /> {t("Extend a song")}
         </Button>
       </>
     )
   if (family === "voice")
     return (
       <Button variant="space" onClick={() => go("audio", "voice")}>
-        <SpeechIcon /> Speak with it
+        <SpeechIcon /> {t("Speak with it")}
       </Button>
     )
   if (family === "sound")
     return (
       <Button variant="space" onClick={() => go("audio", "sound-effect")}>
-        <Volume2Icon /> Make a sound
+        <Volume2Icon /> {t("Make a sound")}
       </Button>
     )
   return (
     <>
       <Button variant="space" onClick={() => go("image", "restyle")}>
-        <PaintbrushIcon /> Restyle an image
+        <PaintbrushIcon /> {t("Restyle an image")}
       </Button>
       <Button variant="outline" onClick={() => go("video", "restyle")}>
-        <VideoIcon /> Restyle a video
+        <VideoIcon /> {t("Restyle a video")}
       </Button>
       <Button variant="outline" onClick={() => go("image", "free")}>
-        <ImageIcon /> Create with it
+        <ImageIcon /> {t("Create with it")}
       </Button>
     </>
   )
@@ -215,7 +216,7 @@ function UseButtons({ value, family, onUse, onClose }: { value: string; family?:
 function Heard({ file }: { file: string | null }) {
   return file ? (
     <div>
-      <Label hint="your last result in it">Heard</Label>
+      <Label hint={t("your last result in it")}>{t("Heard")}</Label>
       <audio controls preload="metadata" src={fileUrl(file)} className="w-full" />
     </div>
   ) : null
@@ -226,18 +227,18 @@ function PresetDialog({ preset, file, heard, onClose, onUse }: { preset: Preset;
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex flex-col gap-4 sm:max-w-[600px]">
         <div className="pr-8">
-          <DialogTitle>{preset.label}</DialogTitle>
+          <DialogTitle>{own(preset.label)}</DialogTitle>
           <DialogDescription className="mt-1">
             {preset.for && `${FAMILIES[preset.for].label} · `}
-            {preset.group} · {preset.note}
-            {file || preset.for || preset.preview ? "" : " · its card is painted from its palette until you make something in it"}
+            {own(preset.group)} · {own(preset.note)}
+            {file || preset.for || preset.preview ? "" : ` · ${t("its card is painted from its palette until you make something in it")}`}
           </DialogDescription>
         </div>
         <StyleThumb file={file} preset={preset} className={cn("w-full rounded-xl border", preset.for ? "aspect-[3/1]" : "aspect-video")} />
         <p className="rounded-lg border bg-muted/40 p-3 text-sm leading-relaxed text-muted-foreground">{preset.value}</p>
         {preset.for && preset.preview && (
           <div>
-            <Label hint="how it sounds">Sample</Label>
+            <Label hint={t("how it sounds")}>{t("Sample")}</Label>
             <audio controls preload="none" src={preset.preview} className="w-full" />
           </div>
         )}
@@ -269,7 +270,7 @@ function YourStyle({ style, state, heard, onClose, onUse, onChanged }: { style: 
         <div className="pr-8">
           <DialogTitle>{style.name}</DialogTitle>
           <DialogDescription className="mt-1">
-            {f ? `Your ${FAMILIES[f].label.toLowerCase()} style: its words go with the request as they are.` : "Your style: its images go with the request, the model takes their look, never their subject."}
+            {f ? t("Your {family} style: its words go with the request as they are.", { family: FAMILIES[f].label.toLowerCase() }) : t("Your style: its images go with the request, the model takes their look, never their subject.")}
           </DialogDescription>
         </div>
         {f ? (
@@ -281,16 +282,16 @@ function YourStyle({ style, state, heard, onClose, onUse, onChanged }: { style: 
         )}
         {f ? (
           <div>
-            <Label>How it sounds</Label>
+            <Label>{t("How it sounds")}</Label>
             <Textarea value={words} placeholder={WORDS[f].placeholder} onChange={(e) => setWords(e.target.value)} onBlur={() => words.trim() && words !== style.words && save({ words })} className="min-h-20 text-sm" />
           </div>
         ) : (
           <>
             <div>
-              <Label hint="optional, sent with it">The look in words</Label>
-              <Input value={words} placeholder="loose sumi ink washes, rice paper, one red accent" onChange={(e) => setWords(e.target.value)} onBlur={() => words !== style.words && save({ words })} />
+              <Label hint={t("optional, sent with it")}>{t("The look in words")}</Label>
+              <Input value={words} placeholder={t("loose sumi ink washes, rice paper, one red accent")} onChange={(e) => setWords(e.target.value)} onBlur={() => words !== style.words && save({ words })} />
             </div>
-            <FilesEditor files={style.files} kind="image" state={state} label="Images of the look" max={5} onAdd={(paths) => save({ paths })} onDrop={(x) => save({ drop: [x.split(/[\\/]/).pop()!] })} />
+            <FilesEditor files={style.files} kind="image" state={state} label={t("Images of the look")} max={5} onAdd={(paths) => save({ paths })} onDrop={(x) => save({ drop: [x.split(/[\\/]/).pop()!] })} />
           </>
         )}
         <Heard file={heard} />
@@ -298,7 +299,7 @@ function YourStyle({ style, state, heard, onClose, onUse, onChanged }: { style: 
           <UseButtons value={style.name} family={f} onUse={onUse} onClose={onClose} />
           <span className="flex-1" />
           <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setConfirm(true)}>
-            <Trash2Icon /> Delete
+            <Trash2Icon /> {t("Delete")}
           </Button>
         </div>
         <ConfirmDelete what={style.name} open={confirm} onCancel={() => setConfirm(false)} onConfirm={() => (setConfirm(false), onClose(), save({ remove: true }))} />
@@ -318,7 +319,7 @@ function NewStyle({ state, engine, sound, onClose, onSaved }: { state: State; en
     setBusy(true)
     try {
       await api.styles(sound ? { name, words, for: family } : { name, words: words || undefined, paths })
-      toast.success(`Style ${name} saved`, { description: sound ? "Pick it in a Style field." : "Use it in Restyle or Custom." })
+      toast.success(t("Style {name} saved", { name }), { description: sound ? t("Pick it in a Style field.") : t("Use it in Restyle or Custom.") })
       onSaved(name)
     } catch (e) {
       toast.error(plain((e as Error).message))
@@ -343,8 +344,8 @@ function NewStyle({ state, engine, sound, onClose, onSaved }: { state: State; en
           "Then tell me how to use it.",
         ]
     navigator.clipboard.writeText(text.join("\n")).then(
-      () => toast.success("Prompt copied", { description: "Paste it in your agent: the agent makes the style." }),
-      () => toast.error("The clipboard refused the copy")
+      () => toast.success(t("Prompt copied"), { description: t("Paste it in your agent: the agent makes the style.") }),
+      () => toast.error(t("The clipboard refused the copy"))
     )
   }
   const ready = sound ? !!words.trim() && !taken : paths.length > 0
@@ -352,22 +353,22 @@ function NewStyle({ state, engine, sound, onClose, onSaved }: { state: State; en
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-5 overflow-auto sm:max-w-[640px]">
         <div>
-          <DialogTitle>{sound ? "New sound style" : "New style"}</DialogTitle>
+          <DialogTitle>{sound ? t("New sound style") : t("New style")}</DialogTitle>
           <DialogDescription className="mt-1">
             {sound
-              ? "How something sounds, in a few words: a genre and its instruments, a voice's delivery, a sound's texture. It goes with the request as written."
-              : "A look taken from 1 to 5 images: a painting, a film frame, an illustration. The model copies the look, never what is in them."}
+              ? t("How something sounds, in a few words: a genre and its instruments, a voice's delivery, a sound's texture. It goes with the request as written.")
+              : t("A look taken from 1 to 5 images: a painting, a film frame, an illustration. The model copies the look, never what is in them.")}
           </DialogDescription>
         </div>
         {sound ? (
           <>
             <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
               <div>
-                <Label hint={taken ? "taken" : undefined}>Name</Label>
-                <Input value={name} placeholder="Brand-sound" onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))} />
+                <Label hint={taken ? t("taken") : undefined}>{t("Name")}</Label>
+                <Input value={name} placeholder={t("Brand-sound")} onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))} />
               </div>
               <div>
-                <Label>For</Label>
+                <Label>{t("For")}</Label>
                 <Chips
                   options={SOUND_FAMILIES}
                   value={family}
@@ -381,7 +382,7 @@ function NewStyle({ state, engine, sound, onClose, onSaved }: { state: State; en
               </div>
             </div>
             <div>
-              <Label>How it sounds</Label>
+              <Label>{t("How it sounds")}</Label>
               <Textarea value={words} placeholder={WORDS[family].placeholder} onChange={(e) => setWords(e.target.value)} className="min-h-20 text-sm" />
             </div>
           </>
@@ -389,25 +390,25 @@ function NewStyle({ state, engine, sound, onClose, onSaved }: { state: State; en
           <>
             <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
               <div>
-                <Label hint={taken ? "adds to it" : undefined}>Name</Label>
-                <Input value={name} placeholder="Ink-wash" onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))} />
+                <Label hint={taken ? t("adds to it") : undefined}>{t("Name")}</Label>
+                <Input value={name} placeholder={t("Ink-wash")} onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))} />
               </div>
               <div>
-                <Label hint="optional">The look in words</Label>
-                <Input value={words} placeholder="loose sumi ink washes, rice paper, one red accent" onChange={(e) => setWords(e.target.value)} />
+                <Label hint={t("optional")}>{t("The look in words")}</Label>
+                <Input value={words} placeholder={t("loose sumi ink washes, rice paper, one red accent")} onChange={(e) => setWords(e.target.value)} />
               </div>
             </div>
-            <FilesEditor files={paths} kind="image" state={state} label="Images of the look" max={5} onAdd={(more) => setPaths((p) => [...p, ...more.filter((m) => !p.includes(m))].slice(0, 5))} onDrop={(f) => setPaths((p) => p.filter((x) => x !== f))} />
+            <FilesEditor files={paths} kind="image" state={state} label={t("Images of the look")} max={5} onAdd={(more) => setPaths((p) => [...p, ...more.filter((m) => !p.includes(m))].slice(0, 5))} onDrop={(f) => setPaths((p) => p.filter((x) => x !== f))} />
           </>
         )}
         <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-          <Button variant="outline" onClick={askAgent} title="Copies a request for the agent: it writes the words and saves the style">
-            <SparklesIcon /> Ask Agent
+          <Button variant="outline" onClick={askAgent} title={t("Copies a request for the agent: it writes the words and saves the style")}>
+            <SparklesIcon /> {t("Ask Agent")}
           </Button>
           <span className="flex-1" />
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose}>{t("Cancel")}</Button>
           <Button variant="space" disabled={busy || !name || !ready} onClick={save}>
-            {!name ? "Name it" : sound ? (taken ? `${name} is taken` : !words.trim() ? "Say how it sounds" : "Save style") : !paths.length ? "Add an image" : taken ? `Add to ${name}` : "Save style"}
+            {!name ? t("Name it") : sound ? (taken ? t("{name} is taken", { name }) : !words.trim() ? t("Say how it sounds") : t("Save style")) : !paths.length ? t("Add an image") : taken ? t("Add to {name}", { name }) : t("Save style")}
           </Button>
         </div>
       </DialogContent>

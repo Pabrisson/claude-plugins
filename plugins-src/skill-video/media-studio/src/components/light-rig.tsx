@@ -5,6 +5,7 @@ import { cn } from "cn"
 import { Slider } from "@/components/ui/slider"
 import { opt, type Field, type Light } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label } from "@/components/chips"
+import { own, t } from "@/lib/i18n"
 
 // the lights a relight field places around the subject (Higgsfield's relight): a stage to drag them on, six quick
 // directions, their softness, brightness and color. The field's value stays words, so the CLI's --field light="…" and
@@ -13,20 +14,20 @@ type Mode = "preset" | "custom"
 type Rig = { mode: Mode; lights: Light[]; active: number }
 
 const QUICK = [
-  { label: "Top", az: 0, el: 80, icon: ArrowUpIcon },
-  { label: "Front", az: 0, el: 0, icon: CircleDotIcon },
-  { label: "Right", az: 90, el: 0, icon: ArrowRightIcon },
-  { label: "Left", az: -90, el: 0, icon: ArrowLeftIcon },
-  { label: "Back", az: 180, el: 0, icon: CircleDashedIcon },
-  { label: "Bottom", az: 0, el: -80, icon: ArrowDownIcon },
+  { label: t("Top"), az: 0, el: 80, icon: ArrowUpIcon },
+  { label: t("Front"), az: 0, el: 0, icon: CircleDotIcon },
+  { label: t("Right"), az: 90, el: 0, icon: ArrowRightIcon },
+  { label: t("Left"), az: -90, el: 0, icon: ArrowLeftIcon },
+  { label: t("Back"), az: 180, el: 0, icon: CircleDashedIcon },
+  { label: t("Bottom"), az: 0, el: -80, icon: ArrowDownIcon },
 ]
 const SWATCHES = [
-  { color: "#ff9329", label: "Candle" },
-  { color: "#ffc58f", label: "Tungsten" },
-  { color: "#ffffff", label: "Daylight" },
-  { color: "#c9e2ff", label: "Sky" },
-  { color: "#ff3fb4", label: "Magenta" },
-  { color: "#2fd6ff", label: "Cyan" },
+  { color: "#ff9329", label: t("Candle") },
+  { color: "#ffc58f", label: t("Tungsten") },
+  { color: "#ffffff", label: t("Daylight") },
+  { color: "#c9e2ff", label: t("Sky") },
+  { color: "#ff3fb4", label: t("Magenta") },
+  { color: "#2fd6ff", label: t("Cyan") },
 ]
 const LIGHT: Light = { az: -90, el: 0, color: "#ffffff", brightness: 50, diffuse: 75 }
 // the lights added after the first: a cool fill, then a rim from behind
@@ -46,6 +47,8 @@ function direction(az: number, el: number) {
   const side = ["the front", "the front-right", "the right", "behind on the right", "behind", "behind on the left", "the left", "the front-left"][Math.round((((az % 360) + 360) % 360) / 45) % 8]
   return `${side}${el > 20 ? " and above" : el < -20 ? " and below" : ", at eye level"}`
 }
+// the same, as shown: the prompt keeps the English, the dashboard shows each phrase from fr.json (listed there by hand)
+const whereShown = (az: number, el: number) => t(direction(az, el))
 
 // a color in words a model reads, with its hex: white, warm white, orange (#ffb15c)…
 export function colorWords(hex: string) {
@@ -187,7 +190,7 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
           className="grid grid-cols-2"
           options={["preset", "custom"] as const}
           value={rig.mode}
-          label={(m) => (m === "preset" ? "Preset" : "Custom")}
+          label={(m) => (m === "preset" ? t("Preset") : t("Custom"))}
           icon={(m) => (m === "preset" ? <LayoutTemplateIcon /> : <SlidersHorizontalIcon />)}
           onChange={(mode) => save({ ...rig, mode }, mode === "preset" ? (presets.find((p) => p.value === value)?.value ?? presets[0].value) : undefined)}
         />
@@ -205,7 +208,7 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
               className={cn("flex flex-col overflow-hidden rounded-lg border text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50", p.value === value ? "border-space ring-1 ring-space" : "hover:border-foreground/30")}
             >
               <span className="aspect-square bg-black/85 text-white">{p.rig && <Stage lights={p.rig} />}</span>
-              <span className={cn("truncate px-2 py-1.5 text-xs", p.value === value ? "font-medium text-space" : "text-muted-foreground")}>{p.label}</span>
+              <span className={cn("truncate px-2 py-1.5 text-xs", p.value === value ? "font-medium text-space" : "text-muted-foreground")}>{own(p.label)}</span>
             </button>
           ))}
         </div>
@@ -214,7 +217,7 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
       {rig.mode === "custom" && (
         <>
           <div>
-            <Label>Quick select</Label>
+            <Label>{t("Quick select")}</Label>
             <div className="grid grid-cols-3 gap-1.5">
               {QUICK.map((q) => (
                 <button key={q.label} type="button" aria-pressed={light.az === q.az && light.el === q.el} onClick={() => put({ az: q.az, el: q.el })} className={cn(CHIP, "inline-flex items-center justify-center gap-1.5 rounded-md", light.az === q.az && light.el === q.el ? CHIP_ON : CHIP_OFF)}>
@@ -229,7 +232,7 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
               ref={stage}
               role="application"
               tabIndex={0}
-              aria-label={`Light${rig.lights.length > 1 ? ` ${rig.active + 1}` : ""}: from ${direction(light.az, light.el)}. Drag, or use the arrow keys, to move it around the subject`}
+              aria-label={rig.lights.length > 1 ? t("Light {n}: from {where}. Drag, or use the arrow keys, to move it around the subject", { n: rig.active + 1, where: whereShown(light.az, light.el) }) : t("Light: from {where}. Drag, or use the arrow keys, to move it around the subject", { where: whereShown(light.az, light.el) })}
               className="mx-auto aspect-square w-full max-w-72 cursor-grab touch-none outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing"
               onPointerDown={down}
               onPointerMove={move}
@@ -243,13 +246,13 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
             >
               <Stage lights={rig.lights} active={rig.lights.length > 1 ? rig.active : undefined} />
             </div>
-            <span className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs text-white/60">Drag to move the light</span>
+            <span className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs text-white/60">{t("Drag to move the light")}</span>
             {(
               [
-                [ChevronLeftIcon, "Turn the light left", -15, 0, "left-1 top-1/2 -translate-y-1/2"],
-                [ChevronRightIcon, "Turn the light right", 15, 0, "right-1 top-1/2 -translate-y-1/2"],
-                [ChevronUpIcon, "Raise the light", 0, 15, "top-6 left-1/2 -translate-x-1/2"],
-                [ChevronDownIcon, "Lower the light", 0, -15, "bottom-1 left-1/2 -translate-x-1/2"],
+                [ChevronLeftIcon, t("Turn the light left"), -15, 0, "left-1 top-1/2 -translate-y-1/2"],
+                [ChevronRightIcon, t("Turn the light right"), 15, 0, "right-1 top-1/2 -translate-y-1/2"],
+                [ChevronUpIcon, t("Raise the light"), 0, 15, "top-6 left-1/2 -translate-x-1/2"],
+                [ChevronDownIcon, t("Lower the light"), 0, -15, "bottom-1 left-1/2 -translate-x-1/2"],
               ] as const
             ).map(([Icon, label, daz, del, at]) => (
               <button key={label} type="button" aria-label={label} title={label} onClick={() => nudge(daz, del)} className={cn("absolute grid size-8 place-items-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white", at)}>
@@ -258,7 +261,7 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
             ))}
           </div>
           <p className="-mt-2 text-center text-xs text-muted-foreground" aria-live="polite">
-            From {direction(light.az, light.el)}
+            {t("From {where}", { where: whereShown(light.az, light.el) })}
           </p>
 
           {max > 1 && (
@@ -267,10 +270,10 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
                 <span key={i} className={cn(CHIP, "flex items-center gap-1 py-0.5 pr-1", i === rig.active ? CHIP_ON : CHIP_OFF)}>
                   <button type="button" aria-pressed={i === rig.active} onClick={() => save({ ...rig, active: i })} className="inline-flex items-center gap-1.5 px-1">
                     <LightbulbIcon className="size-3.5" />
-                    Light {i + 1}
+                    {t("Light {n}", { n: i + 1 })}
                   </button>
                   {i > 0 && (
-                    <button type="button" aria-label={`Remove light ${i + 1}`} onClick={() => save({ ...rig, mode: "custom", active: 0, lights: rig.lights.filter((__, j) => j !== i) })} className="grid size-5 place-items-center rounded-full hover:bg-space/20">
+                    <button type="button" aria-label={t("Remove light {n}", { n: i + 1 })} onClick={() => save({ ...rig, mode: "custom", active: 0, lights: rig.lights.filter((__, j) => j !== i) })} className="grid size-5 place-items-center rounded-full hover:bg-space/20">
                       <XIcon className="size-3" />
                     </button>
                   )}
@@ -278,23 +281,23 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
               ))}
               {rig.lights.length < max && (
                 <button type="button" onClick={() => save({ ...rig, mode: "custom", lights: [...rig.lights, MORE[(rig.lights.length - 1) % MORE.length]], active: rig.lights.length })} className={cn(CHIP, CHIP_OFF, "flex items-center gap-1 border-dashed")}>
-                  <PlusIcon className="size-3.5" /> Add a light
+                  <PlusIcon className="size-3.5" /> {t("Add a light")}
                 </button>
               )}
             </div>
           )}
 
           {video ? (
-            <Level label="Diffuse" value={light.diffuse} onChange={(diffuse) => put({ diffuse })} />
+            <Level label={t("Diffuse")} value={light.diffuse} onChange={(diffuse) => put({ diffuse })} />
           ) : (
             <div>
-              <Label>Light</Label>
-              <Chips className="grid grid-cols-2" options={["soft", "hard"] as const} value={light.diffuse >= 50 ? "soft" : "hard"} label={(s) => (s === "soft" ? "Soft" : "Hard")} icon={(s) => (s === "soft" ? <CloudIcon /> : <SunIcon />)} onChange={(s) => put({ diffuse: s === "soft" ? 75 : 20 })} />
+              <Label>{t("Light")}</Label>
+              <Chips className="grid grid-cols-2" options={["soft", "hard"] as const} value={light.diffuse >= 50 ? "soft" : "hard"} label={(s) => (s === "soft" ? t("Soft") : t("Hard"))} icon={(s) => (s === "soft" ? <CloudIcon /> : <SunIcon />)} onChange={(s) => put({ diffuse: s === "soft" ? 75 : 20 })} />
             </div>
           )}
-          <Level label="Brightness" value={light.brightness} onChange={(brightness) => put({ brightness })} />
+          <Level label={t("Brightness")} value={light.brightness} onChange={(brightness) => put({ brightness })} />
           <div>
-            <Label hint={colorWords(light.color).replace(/ \(.*/, "")}>Color</Label>
+            <Label hint={t(colorWords(light.color).replace(/ \(.*/, ""))}>{t("Color")}</Label>
             <div className="flex flex-wrap items-center gap-2">
               {SWATCHES.map((s) => (
                 <button
@@ -311,7 +314,7 @@ export function LightRig({ field, fields, video, onChange }: { field: Field; fie
               <label className="relative ml-auto flex h-8 cursor-pointer items-center gap-2 rounded-md border px-2 text-sm text-muted-foreground tabular-nums hover:bg-muted">
                 <span className="size-4 rounded-full ring-1 ring-foreground/20" style={{ background: light.color }} />
                 {light.color}
-                <input type="color" value={light.color} onChange={(e) => put({ color: e.target.value })} aria-label="Pick any color" className="absolute inset-0 cursor-pointer opacity-0" />
+                <input type="color" value={light.color} onChange={(e) => put({ color: e.target.value })} aria-label={t("Pick any color")} className="absolute inset-0 cursor-pointer opacity-0" />
               </label>
             </div>
           </div>

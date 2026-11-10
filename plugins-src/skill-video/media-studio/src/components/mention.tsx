@@ -5,6 +5,7 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@
 import { InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { cited, ELEMENT_TYPES, fileUrl, heard, typeLabel, type Mentionable } from "@/lib/api"
+import { t } from "@/lib/i18n"
 
 // the picker's groups, in the Library's order (a voice is picked as Audio's voice)
 const GROUPS = ELEMENT_TYPES.filter((t) => !heard(t.type)).map((t) => ({ type: t.type, heading: t.plural }))
@@ -48,7 +49,7 @@ export function MentionTextarea({
     .filter((i) => `${i.name} ${i.words}`.toLowerCase().includes(q))
     .sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)))
   const groups = [
-    { type: "first", heading: firstLabel ? `In ${firstLabel}` : "First", items: found.filter((i) => first.includes(i.name)) },
+    { type: "first", heading: firstLabel ? t("In {name}", { name: firstLabel }) : t("First{heading}", { heading: "" }), items: found.filter((i) => first.includes(i.name)) },
     ...GROUPS.map((g) => ({ ...g, items: found.filter((i) => i.type === g.type && !first.includes(i.name)) })),
   ].filter((g) => g.items.length)
   const order = groups.flatMap((g) => g.items)
@@ -141,7 +142,7 @@ export function MentionTextarea({
               <Command shouldFilter={false} value={shown?.name ?? ""} onValueChange={setActive} className="rounded-none!">
                 <CommandList ref={list} className="max-h-80">
                   <CommandEmpty className="px-4 text-muted-foreground">
-                    {items.length ? `No element named “${at?.query}”.` : "No element yet: make your characters, outfits, objects and places in Library › Elements."}
+                    {items.length ? t("No element named “{query}”.", { query: at?.query ?? "" }) : t("No element yet: make your characters, outfits, objects and places in Library › Elements.")}
                   </CommandEmpty>
                   {groups.map((g) => (
                     <CommandGroup key={g.type} heading={g.heading}>
@@ -162,12 +163,12 @@ export function MentionTextarea({
               <Preview item={shown} />
             </div>
             <div className="flex items-center gap-3 border-t px-3 py-1.5 text-xs text-muted-foreground">
-              <span>↑↓ to pick</span>
-              <span>↵ or Tab to cite</span>
-              <span>Esc to close</span>
+              <span>{t("↑↓ to pick")}</span>
+              <span>{t("↵ or Tab to cite")}</span>
+              <span>{t("Esc to close")}</span>
               <span className="flex-1" />
               <a href="#library/elements" className="underline-offset-2 hover:text-foreground hover:underline" onMouseDown={(e) => e.preventDefault()}>
-                Library
+                {t("Library")}
               </a>
             </div>
           </PopoverContent>
@@ -176,7 +177,7 @@ export function MentionTextarea({
       {images > 0 && (
         <InputGroupAddon align="block-end" className="justify-end px-3 pt-0 pb-2 font-normal">
           <span className={cn("text-xs tabular-nums", blocked ? "text-destructive" : "text-muted-foreground")}>
-            {blocked ? "Not on this model" : `+${images} image${images > 1 ? "s" : ""} from the elements`}
+            {blocked ? t("Not on this model") : t(images > 1 ? "+{n} images from the elements" : "+{n} image from the elements", { n: images })}
           </span>
         </InputGroupAddon>
       )}
@@ -198,7 +199,7 @@ function Preview({ item }: { item?: Mentionable }) {
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">@{item.name}</div>
         <div className="text-xs text-muted-foreground">
-          {typeLabel(item.type)} · {item.files.length} image{item.files.length > 1 ? "s" : ""} sent
+          {typeLabel(item.type)} · {t(item.files.length > 1 ? "{n} images sent" : "{n} image sent", { n: item.files.length })}
         </div>
         {item.words && <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{item.words}</p>}
       </div>

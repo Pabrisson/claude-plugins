@@ -15,9 +15,10 @@ import { type Preset } from "@/components/style-picker"
 import { isRunning, type Bridge } from "@/components/results"
 import { ModelLogo } from "@/components/model-logo"
 import { Viewer } from "@/components/viewer"
+import { locale, own, t } from "@/lib/i18n"
 
 const KINDS: Kind[] = ["image", "video", "audio"]
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
+const KIND_NAME: Record<Kind, string> = { image: t("Image"), video: t("Video"), audio: t("Audio") }
 
 // a page's left column: its tabs and main action (head) stay put, its filters scroll under them; both keep the
 // scrollbar's room, so nothing moves when a long list brings it
@@ -46,13 +47,13 @@ export function Main({ title, aside, children }: { title: string; aside?: React.
 function WorkspaceFilter({ state, value, onChange }: { state: State; value: string; onChange: (v: string) => void }) {
   return (
     <div>
-      <Label>Workspace</Label>
+      <Label>{t("Workspace")}</Label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full" aria-label="Workspace">
+        <SelectTrigger className="w-full" aria-label={t("Workspace")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All workspaces</SelectItem>
+          <SelectItem value="all">{t("All workspaces")}</SelectItem>
           <SelectSeparator />
           {state.workspaces.map((w) => (
             <SelectItem key={w.slug} value={w.slug}>{w.name}</SelectItem>
@@ -69,7 +70,7 @@ function WorkspaceFilter({ state, value, onChange }: { state: State; value: stri
 // element » lands on it; the media are on the Workspace page (« All workspaces »)
 const TABS = ["elements", "styles", "sound-styles"] as const
 type Tab = (typeof TABS)[number]
-const TAB_NAMES: Record<Tab, [string, typeof ShapesIcon]> = { elements: ["Elements", ShapesIcon], styles: ["Visuals", PaletteIcon], "sound-styles": ["Sounds", AudioLinesIcon] }
+const TAB_NAMES: Record<Tab, [string, typeof ShapesIcon]> = { elements: [t("Elements"), ShapesIcon], styles: [t("Visuals"), PaletteIcon], "sound-styles": [t("Sounds"), AudioLinesIcon] }
 const tabOf = (): Tab => TABS.find((t) => window.location.hash === `#library/${t}`) ?? "elements"
 
 export function Library({
@@ -127,11 +128,11 @@ export function NoGenerations({ what }: { what: string }) {
         <EmptyMedia variant="icon">
           <SparklesIcon />
         </EmptyMedia>
-        <EmptyTitle>No generation yet</EmptyTitle>
+        <EmptyTitle>{t("No generation yet")}</EmptyTitle>
         <EmptyDescription>{what}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="flex-row justify-center">
-        {([["image", "Image", ImageIcon], ["video", "Video", VideoIcon], ["audio", "Audio", AudioLinesIcon]] as const).map(([hash, label, Icon]) => (
+        {([["image", t("Image"), ImageIcon], ["video", t("Video"), VideoIcon], ["audio", t("Audio"), AudioLinesIcon]] as const).map(([hash, label, Icon]) => (
           <Button key={hash} variant="outline" size="sm" asChild>
             <a href={`#${hash}`}>
               <Icon data-icon="inline-start" /> {label}
@@ -152,7 +153,7 @@ function Bars({ days, lines, series }: { days: string[]; lines: LedgerLine[]; se
   const per = days.map((d) => series.map((s) => sum(lines.filter((l) => l.at.startsWith(d) && l.kind === s.key))))
   const max = Math.max(...per.map((x) => x.reduce((a, b) => a + b, 0)), 0)
   return (
-    <div className="mt-3 flex h-28 items-end gap-[3px]" role="img" aria-label="Spend per day">
+    <div className="mt-3 flex h-28 items-end gap-[3px]" role="img" aria-label={t("Spend per day")}>
       {per.map((vals, i) => (
         <div key={days[i]} className="flex h-full flex-1 flex-col-reverse gap-px" title={`${days[i]}: ${vals.reduce((a, b) => a + b, 0).toFixed(2)}`}>
           {vals.map((v, j) => (v > 0 ? <div key={j} className="rounded-[2px]" style={{ height: `${(v / (max || 1)) * 100}%`, background: series[j].color }} /> : null))}
@@ -167,7 +168,7 @@ function Bars({ days, lines, series }: { days: string[]; lines: LedgerLine[]; se
 type Who = Router | "elevenlabs"
 const COLOR: Record<Kind, string> = { image: "var(--img)", video: "var(--vid)", audio: "var(--aud)" }
 const TOP_UP: Record<Who, string> = { kie: "https://kie.ai/billing", openrouter: "https://openrouter.ai/settings/credits", elevenlabs: "https://elevenlabs.io/app/subscription" }
-const ROUTER_OF: Record<string, string> = { ...ROUTER_NAME, local: "This machine", elevenlabs: "ElevenLabs" }
+const ROUTER_OF: Record<string, string> = { ...ROUTER_NAME, local: t("This machine"), elevenlabs: "ElevenLabs" }
 
 export function Credits({ state, balances, onBridge }: { state: State; balances: Balances | null; onBridge: (b: Bridge, job: Job, file: string) => void }) {
   const [open, setOpen] = useState<string | null>(null)
@@ -210,19 +211,19 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
     const b = r === "kie" ? kb : r === "elevenlabs" ? eb : ob
     const note = "text-sm font-normal text-muted-foreground"
     if (!state.keys[r] || b?.error === "no key")
-      return <span className={note}>No key: see <a href="#settings" className="underline underline-offset-2 hover:text-foreground">Settings</a></span>
-    if (!b || b.error) return <span className={note}>{b ? b.error : "Loading the balance…"}</span>
+      return <span className={note}>{t("No key: see")} <a href="#settings" className="underline underline-offset-2 hover:text-foreground">{t("Settings")}</a></span>
+    if (!b || b.error) return <span className={note}>{b ? b.error : t("Loading the balance…")}</span>
     if (r === "elevenlabs")
       return (
-        <span className="text-3xl font-semibold tabular-nums" title={eb?.limit ? `${(eb.left ?? 0).toLocaleString("en-US")} of ${eb.limit.toLocaleString("en-US")} credits this month` : undefined}>
-          {(eb?.left ?? 0).toLocaleString("en-US")} <span className={note}>credits left{usd ? ` · ${money(((eb?.left ?? 0) * usd) / 1000, "usd")}` : ""}{eb?.reset ? ` · renews ${new Date(eb.reset).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</span>
+        <span className="text-3xl font-semibold tabular-nums" title={eb?.limit ? t("{left} of {limit} credits this month", { left: (eb.left ?? 0).toLocaleString(locale()), limit: eb.limit.toLocaleString(locale()) }) : undefined}>
+          {(eb?.left ?? 0).toLocaleString(locale())} <span className={note}>{t("credits left")}{usd ? ` · ${money(((eb?.left ?? 0) * usd) / 1000, "usd")}` : ""}{eb?.reset ? ` · ${t("renews {date}", { date: new Date(eb.reset).toLocaleDateString(locale(), { month: "short", day: "numeric" }) })}` : ""}</span>
         </span>
       )
     const [left, words] =
-      r === "kie" ? [kb?.account_left ?? 0, `left · ${(kb?.credits ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} credits`]
-        : ob?.account_left != null ? [ob.account_left, "left"]
-        : ob?.key_left != null ? [ob.key_left, "left on this key"]
-        : [null, "no limit on this key"]
+      r === "kie" ? [kb?.account_left ?? 0, t("left · {n} credits", { n: (kb?.credits ?? 0).toLocaleString(locale(), { maximumFractionDigits: 2 }) })]
+        : ob?.account_left != null ? [ob.account_left, t("left")]
+        : ob?.key_left != null ? [ob.key_left, t("left on this key")]
+        : [null, t("no limit on this key")]
     return left == null ? <span className={note}>{words}</span> : <span className="text-3xl font-semibold tabular-nums">${left.toFixed(2)} <span className={note}>{words}</span></span>
   }
 
@@ -230,29 +231,33 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
     <>
       <Side>
         <div>
-          <Label>Period</Label>
-          <Chips options={["7d", "month", "all"] as const} value={period} label={(p) => ({ "7d": "7 days", month: "This month", all: "All" })[p]} icon={(p) => (p === "7d" ? <CalendarDaysIcon /> : p === "month" ? <CalendarRangeIcon /> : valueIcon(p))} onChange={setPeriod} />
+          <Label>{t("Period")}</Label>
+          <Chips options={["7d", "month", "all"] as const} value={period} label={(p) => ({ "7d": t("7 days"), month: t("This month"), all: t("All") })[p]} icon={(p) => (p === "7d" ? <CalendarDaysIcon /> : p === "month" ? <CalendarRangeIcon /> : valueIcon(p))} onChange={setPeriod} />
         </div>
         <div>
-          <Label>Provider</Label>
-          <Chips options={["all", "kie", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => (p === "all" ? "All" : ROUTER_OF[p])} icon={(p) => valueIcon(p)} onChange={setProvider} />
+          <Label>{t("Provider")}</Label>
+          <Chips options={["all", "kie", "openrouter", "elevenlabs"] as const} value={provider} label={(p) => (p === "all" ? t("All") : ROUTER_OF[p])} icon={(p) => valueIcon(p)} onChange={setProvider} />
         </div>
         <div>
-          <Label>Media</Label>
-          <MultiChips options={KINDS} value={kinds} label={cap} icon={(k) => valueIcon(k)} onChange={setKinds} />
+          <Label>{t("Media")}</Label>
+          <MultiChips options={KINDS} value={kinds} label={(k) => KIND_NAME[k]} icon={(k) => valueIcon(k)} onChange={setKinds} />
         </div>
         <div>
-          <Label>By</Label>
-          <MultiChips options={["dashboard", "agent"]} value={by} label={(b) => (b === "agent" ? "Agent" : "Dashboard")} icon={(b) => (b === "agent" ? <SparklesIcon /> : <LayoutDashboardIcon />)} onChange={setBy} />
+          <Label>{t("By")}</Label>
+          <MultiChips options={["dashboard", "agent"]} value={by} label={(b) => (b === "agent" ? t("Agent") : t("Dashboard"))} icon={(b) => (b === "agent" ? <SparklesIcon /> : <LayoutDashboardIcon />)} onChange={setBy} />
         </div>
         <WorkspaceFilter state={state} value={ws} onChange={setWs} />
         <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
           {noLimits
-            ? "No confirmation threshold and no monthly cap are set: every click on a paid button spends. Set them in Settings."
-            : `Limits: ${ROUTER_NAME[state.router]} ${active.threshold != null ? `asks above $${active.threshold}` : "never asks"}${active.cap != null ? `, caps at $${active.cap} a month` : ""}.`}
+            ? t("No confirmation threshold and no monthly cap are set: every click on a paid button spends. Set them in Settings.")
+            : active.threshold == null
+              ? t("Limits: {router} never asks, caps at {cap} a month.", { router: ROUTER_NAME[state.router], cap: `$${active.cap}` })
+              : active.cap == null
+                ? t("Limits: {router} asks above {threshold}.", { router: ROUTER_NAME[state.router], threshold: `$${active.threshold}` })
+                : t("Limits: {router} asks above {threshold}, caps at {cap} a month.", { router: ROUTER_NAME[state.router], threshold: `$${active.threshold}`, cap: `$${active.cap}` })}
         </p>
       </Side>
-      <Main title="Credits" aside={<span className="text-sm text-muted-foreground">{now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>}>
+      <Main title={t("Credits")} aside={<span className="text-sm text-muted-foreground">{now.toLocaleDateString(locale(), { month: "long", year: "numeric" })}</span>}>
         <div className="grid gap-3.5 lg:grid-cols-2 2xl:grid-cols-3">
           {routers.map((r) => {
             const mine = lines.filter((l) => l.provider === r), { cap: most, threshold } = limits[r] ?? { cap: null, threshold: null }, used = state.month[r] ?? 0
@@ -263,38 +268,38 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <ProviderIcon id={r} className="size-4 shrink-0" />
                   {ROUTER_OF[r]}
-                  {r === "elevenlabs" && <span className="text-xs">· straight, not a router</span>}
-                  {r === state.router && <Badge variant="secondary" className="ml-auto">Active</Badge>}
+                  {r === "elevenlabs" && <span className="text-xs">· {t("straight, not a router")}</span>}
+                  {r === state.router && <Badge variant="secondary" className="ml-auto">{t("Active")}</Badge>}
                 </div>
                 <div className="mt-1 flex min-h-9 items-baseline gap-3">
                   {balanceOf(r)}
                   <Button variant="ghost" size="xs" className="ml-auto text-muted-foreground" asChild>
                     <a href={TOP_UP[r]} target="_blank" rel="noreferrer">
-                      Top up <ArrowUpRightIcon data-icon="inline-end" />
+                      {t("Top up")} <ArrowUpRightIcon data-icon="inline-end" />
                     </a>
                   </Button>
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  <span className="font-semibold text-cost tabular-nums">{show(sum(mine))}</span> spent {period === "7d" ? "in 7 days" : period === "month" ? "this month" : "in all"}
+                  <span className="font-semibold text-cost tabular-nums">{show(sum(mine))}</span> {period === "7d" ? t("spent in 7 days") : period === "month" ? t("spent this month") : t("spent in all")}
                 </div>
                 <Bars days={days} lines={mine} series={KINDS.map((k) => ({ key: k, color: COLOR[k] }))} />
                 <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
                   {KINDS.map((k) => (
                     <span key={k} className="flex items-center gap-1.5">
                       <i className="size-2 rounded-[2px]" style={{ background: COLOR[k] }} />
-                      {cap(k)}
+                      {KIND_NAME[k]}
                     </span>
                   ))}
                 </div>
                 {/* its limits: this month's spend against the cap, else what asks first */}
                 {most != null ? (
-                  <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground" title={`${show(used)} of ${show(most)} spent this month`}>
-                    <span className="whitespace-nowrap">cap {show(most)}</span>
-                    <Progress value={Math.min(100, (100 * used) / most)} className={cn("flex-1", used >= most && "[&>div]:bg-destructive")} aria-label="Spent this month" />
+                  <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground" title={t("{spent} of {cap} spent this month", { spent: show(used), cap: show(most) })}>
+                    <span className="whitespace-nowrap">{t("cap {amount}", { amount: show(most) })}</span>
+                    <Progress value={Math.min(100, (100 * used) / most)} className={cn("flex-1", used >= most && "[&>div]:bg-destructive")} aria-label={t("Spent this month")} />
                     <span className="tabular-nums">{Math.round((100 * used) / most)} %</span>
                   </div>
                 ) : (
-                  <div className="mt-3 text-xs text-muted-foreground">{threshold != null ? `no cap · asks above ${show(threshold)}` : "no limit set"}</div>
+                  <div className="mt-3 text-xs text-muted-foreground">{threshold != null ? t("no cap · asks above {amount}", { amount: show(threshold) }) : t("no limit set")}</div>
                 )}
               </div>
             )
@@ -303,13 +308,13 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left text-muted-foreground">
-              <th className="p-2 font-medium">When</th>
-              <th className="p-2 font-medium">Action</th>
-              <th className="p-2 font-medium">Model</th>
-              <th className="p-2 font-medium">Router</th>
-              <th className="p-2 text-right font-medium">Estimated</th>
-              <th className="p-2 text-right font-medium">Actual</th>
-              <th className="p-2 font-medium">By</th>
+              <th className="p-2 font-medium">{t("When")}</th>
+              <th className="p-2 font-medium">{t("Action")}</th>
+              <th className="p-2 font-medium">{t("Model")}</th>
+              <th className="p-2 font-medium">{t("Router")}</th>
+              <th className="p-2 text-right font-medium">{t("Estimated")}</th>
+              <th className="p-2 text-right font-medium">{t("Actual")}</th>
+              <th className="p-2 font-medium">{t("By")}</th>
               <th className="p-2" />
             </tr>
           </thead>
@@ -318,9 +323,10 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
               <tr key={r.key} className="border-b transition-colors hover:bg-muted/40">
                 <td className="p-2 whitespace-nowrap">
                   {r.status === "running" && <span className="mr-1.5 inline-block size-1.5 rounded-full bg-highlight align-middle" />}
-                  {new Date(r.at).toLocaleString("en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {/* (English: day before month, 24 h) */}
+                  {new Date(r.at).toLocaleString(locale() === "en-US" ? "en-GB" : locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </td>
-                <td className="p-2 whitespace-nowrap">{r.label}</td>
+                <td className="p-2 whitespace-nowrap">{own(r.label)}</td>
                 <td className="max-w-64 p-2 text-muted-foreground" title={r.model}>
                   <span className="flex min-w-0 items-center gap-1.5">
                     <ModelLogo model={r.model} className="size-4 rounded-sm bg-transparent p-0" />
@@ -335,15 +341,15 @@ export function Credits({ state, balances, onBridge }: { state: State; balances:
                 </td>
                 <td className="p-2 text-right whitespace-nowrap tabular-nums">{money(r.estimate, r.unit, usd)}</td>
                 <td className={cn("p-2 text-right whitespace-nowrap tabular-nums", r.actual ? "font-semibold text-cost" : "text-muted-foreground")}>
-                  {r.status === "running" ? "running" : `${money(r.actual, r.unit, usd)}${r.status === "failed" ? ", failed" : r.known ? "" : " (est.)"}`}
+                  {r.status === "running" ? t("running") : r.status === "failed" ? t("{amount}, failed", { amount: money(r.actual, r.unit, usd) }) : r.known ? money(r.actual, r.unit, usd) : t("{amount} (est.)", { amount: money(r.actual, r.unit, usd) })}
                 </td>
-                <td className="p-2 text-xs text-muted-foreground">{r.by === "agent" ? "Agent" : "dashboard"}</td>
-                <td className="p-2 text-right">{r.job && <Button size="xs" variant="ghost" onClick={() => setOpen(r.job)}>View</Button>}</td>
+                <td className="p-2 text-xs text-muted-foreground">{r.by === "agent" ? t("Agent") : t("dashboard")}</td>
+                <td className="p-2 text-right">{r.job && <Button size="xs" variant="ghost" onClick={() => setOpen(r.job)}>{t("View")}</Button>}</td>
               </tr>
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-muted-foreground">{ledger.length ? "Nothing spent in this period." : <NoGenerations what="Each paid generation lands here with its estimate and its real cost, by you or by the agent." />}</td>
+                <td colSpan={8} className="p-6 text-center text-muted-foreground">{ledger.length ? t("Nothing spent in this period.") : <NoGenerations what={t("Each paid generation lands here with its estimate and its real cost, by you or by the agent.")} />}</td>
               </tr>
             )}
           </tbody>

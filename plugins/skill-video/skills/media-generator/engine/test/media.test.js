@@ -972,6 +972,9 @@ test('the agent fills the composer and submits it: checked first, the page answe
   const post = (p, body) => fetch(url + p, { method: 'POST', body: JSON.stringify(body) }).then(async r => ({ code: r.status, body: await r.json() }))
   const drafts = () => JSON.parse(fs.readFileSync(at('.cache', 'drafts.json'), 'utf8'))
   const until = async get => { for (let i = 0; i < 100; i++) { const v = get(); if (v) return v; await pause(100) } }
+  // the catalogs' French, for a page in French
+  const fr = await fetch(url + '/api/fr').then(r => r.json())
+  assert.deepEqual(fr, JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'tools', 'fr.json'), 'utf8')))
   // checked as an estimate is: a field the tool has not, a file of another kind, a References tool's prompt replaced
   const refused = await Promise.all([
     cliWith(e, 'draft', '--space', 'image', '--tool', 'character', '--field', 'whom=x'),

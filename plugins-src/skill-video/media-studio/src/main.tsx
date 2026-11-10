@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client"
 
 import "./index.css"
 import App from "./App.tsx"
+import { loadCatalog } from "./lib/i18n"
 
 // one sound at a time: a sound (or a video with its sound) that starts pauses the others; muted previews play on, and
 // the timeline's clips (data-together) play together
@@ -17,6 +18,8 @@ document.addEventListener(
   true
 )
 
+// the catalogs' French before the first render, when the page is in French
+await loadCatalog()
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

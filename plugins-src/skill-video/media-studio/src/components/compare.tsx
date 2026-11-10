@@ -11,6 +11,7 @@ import { fileUrl, inputPath, mediaKind, outputPath, plain, type Job } from "@/li
 import { Chips } from "@/components/chips"
 import { Listen, Thumb, upload } from "@/components/inputs"
 import { costOf } from "@/components/results"
+import { own, t } from "@/lib/i18n"
 
 type Side = "a" | "b"
 // a file on one side: what it is, made with what, for how much
@@ -51,17 +52,17 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
   const kind = mediaKind(file)
   const timed = kind !== "image"
   const inputs = Object.entries(origin.inputs ?? {})
-    .flatMap(([key, files]) => files.map((f) => ({ key, path: inputPath(home, origin, f), title: "Input", detail: `${key.replaceAll("_", " ")} of ${origin.label}` })))
+    .flatMap(([key, files]) => files.map((f) => ({ key, path: inputPath(home, origin, f), title: t("Input"), detail: t("{role} of {label}", { role: key.replaceAll("_", " "), label: own(origin.label) }) })))
     .filter((i) => mediaKind(i.path) === kind)
   const results: Item[] = jobs
     .filter((j) => j.status === "done")
-    .flatMap((j) => j.outputs.map((o) => ({ path: outputPath(home, j, o), title: j.label, detail: `${j.name}${j.by === "agent" ? " · by Agent" : ""}`, cost: costOf(j, per1000), text: j.prompt })))
+    .flatMap((j) => j.outputs.map((o) => ({ path: outputPath(home, j, o), title: own(j.label), detail: `${j.name}${j.by === "agent" ? ` · ${t("by Agent")}` : ""}`, cost: costOf(j, per1000), text: j.prompt })))
     .filter((r) => mediaKind(r.path) === kind)
   const at = results.findIndex((r) => r.path === file)
   const suggested = inputs.find((i) => i.key !== "sketch" && i.key !== "mask")?.path ?? results.find((r, n) => n > at && r.path !== file)?.path ?? results.find((r) => r.path !== file)?.path
 
   const first = ready ? ([...inputs, ...results].find((x) => x.path === suggested) ?? null) : null
-  const [sides, setSides] = useState<Record<Side, Item | null>>({ a: results[at] ?? { path: file, title: origin.label, detail: origin.name }, b: first })
+  const [sides, setSides] = useState<Record<Side, Item | null>>({ a: results[at] ?? { path: file, title: own(origin.label), detail: origin.name }, b: first })
   const [picking, setPicking] = useState<Side | null>(first ? null : "b")
   const [mode, setMode] = useState<"slider" | "side">("slider")
   const [split, setSplit] = useState(50)
@@ -72,7 +73,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
   // the clips play as one: the longer leads, the other follows it and waits on its last frame when shorter
   const el = useRef<Record<Side, HTMLMediaElement | null>>({ a: null, b: null })
   const [playing, setPlaying] = useState(false)
-  const [t, setT] = useState(0)
+  const [pos, setPos] = useState(0)
   const [dur, setDur] = useState(0)
   useEffect(() => {
     if (!playing) return
@@ -92,7 +93,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
           f.pause()
           f.currentTime = f.duration
         }
-        setT(m.currentTime)
+        setPos(m.currentTime)
       }
       raf = requestAnimationFrame(tick)
     }
@@ -108,7 +109,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
   }
   const seek = (v: number) => {
     for (const m of Object.values(el.current)) if (m) m.currentTime = Math.min(v, m.duration || v)
-    setT(v)
+    setPos(v)
   }
   const pick = (s: Side, item: Item) => {
     play(false)
@@ -118,7 +119,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
   }
   const swap = () => {
     play(false)
-    setT(0)
+    setPos(0)
     setSides((x) => ({ a: x.b, b: x.a }))
     setDims((d) => ({ a: d.b, b: d.a }))
     setSound((s) => (s === "a" ? "b" : "a"))
@@ -151,7 +152,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
         >
           <AudioLinesIcon className={cn("size-12", sound === s ? "text-aud" : "text-white/40")} aria-hidden />
           <p className="line-clamp-5 text-[15px] leading-snug">{it.text ? `“${it.text}”` : it.path.split(/[\\/]/).pop()}</p>
-          <span className="text-xs text-white/60">{sound === s ? "You hear this one" : `Click or press ${s.toUpperCase()} to hear this one`}</span>
+          <span className="text-xs text-white/60">{sound === s ? t("You hear this one") : t("Click or press {key} to hear this one", { key: s.toUpperCase() })}</span>
         </button>
       </>
     )
@@ -181,12 +182,12 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
       }}
     >
       <div className="flex items-center gap-3 border-b py-2.5 pr-14 pl-5">
-        <DialogTitle className="text-base font-semibold">Compare</DialogTitle>
-        <DialogDescription className="sr-only">Two {kind === "audio" ? "sounds" : `${kind}s`}, A against B.</DialogDescription>
+        <DialogTitle className="text-base font-semibold">{t("Compare")}</DialogTitle>
+        <DialogDescription className="sr-only">{({ image: t("Two images, A against B."), video: t("Two videos, A against B."), audio: t("Two sounds, A against B.") } as Record<string, string>)[kind] ?? t("Two files, A against B.")}</DialogDescription>
         <span className="flex-1" />
-        {kind !== "audio" && <Chips options={["slider", "side"] as const} value={mode} label={(m) => (m === "slider" ? "Slider" : "Side by side")} icon={(m) => (m === "slider" ? <SquareSplitHorizontalIcon /> : <Columns2Icon />)} onChange={setMode} />}
+        {kind !== "audio" && <Chips options={["slider", "side"] as const} value={mode} label={(m) => (m === "slider" ? t("Slider") : t("Side by side"))} icon={(m) => (m === "slider" ? <SquareSplitHorizontalIcon /> : <Columns2Icon />)} onChange={setMode} />}
         <Button variant="outline" size="sm" disabled={!sides.b || !!picking} onClick={swap}>
-          <ArrowLeftRightIcon data-icon="inline-start" /> Swap
+          <ArrowLeftRightIcon data-icon="inline-start" /> {t("Swap")}
         </Button>
       </div>
 
@@ -224,7 +225,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
             <div
               role="slider"
               tabIndex={0}
-              aria-label="A and B split"
+              aria-label={t("A and B split")}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(split)}
@@ -247,14 +248,14 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
       <div className="flex flex-col gap-3 border-t px-5 py-3">
         {timed && sides.a && sides.b && !picking && (
           <div className="flex items-center gap-3">
-            <Button size="icon" variant="secondary" aria-label={playing ? "Pause" : "Play"} onClick={() => play(!playing)}>
+            <Button size="icon" variant="secondary" aria-label={playing ? t("Pause") : t("Play")} onClick={() => play(!playing)}>
               {playing ? <PauseIcon /> : <PlayIcon />}
             </Button>
             <span className="w-24 text-xs text-muted-foreground tabular-nums">
-              {secs(t)} / {secs(dur)}
+              {secs(pos)} / {secs(dur)}
             </span>
-            <Slider value={[t]} max={dur || 1} step={0.01} onValueChange={([v]) => seek(v)} aria-label="Position" className="flex-1" />
-            <span className="text-xs text-muted-foreground">Sound</span>
+            <Slider value={[pos]} max={dur || 1} step={0.01} onValueChange={([v]) => seek(v)} aria-label={t("Position")} className="flex-1" />
+            <span className="text-xs text-muted-foreground">{t("Sound")}</span>
             <Chips options={SIDES} value={sound} label={(s) => s.toUpperCase()} icon={(s) => (s === sound ? <Volume2Icon /> : <VolumeXIcon />)} onChange={setSound} />
           </div>
         )}
@@ -273,12 +274,12 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
                     {dims[s] && <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">{dims[s]}</span>}
                     {picking !== s && (
                       <Button variant="ghost" size="xs" onClick={() => (play(false), setPicking(s))}>
-                        Change
+                        {t("Change")}
                       </Button>
                     )}
                   </>
                 ) : (
-                  <span className="text-muted-foreground">Choose B</span>
+                  <span className="text-muted-foreground">{t("Choose B")}</span>
                 )}
               </div>
             )
@@ -286,7 +287,7 @@ function Body({ origin, file, jobs, home, per1000, ready }: { origin: Job; file:
         </div>
         {timed && sides.b && !picking && (
           <p className="text-center text-xs text-muted-foreground">
-            <Kbd>Space</Kbd> play or pause · <Kbd>A</Kbd> <Kbd>B</Kbd> the sound you hear, at the same moment
+            <Kbd>Space</Kbd> {t("play or pause")} · <Kbd>A</Kbd> <Kbd>B</Kbd> {t("the sound you hear, at the same moment")}
           </p>
         )}
       </div>
@@ -323,24 +324,28 @@ function Picker({
   const file = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const groups = [
-    { label: "Inputs of this result", items: inputs.filter((i) => i.path !== other) },
-    { label: "Results", items: results.filter((i) => i.path !== other) },
+    { label: t("Inputs of this result"), items: inputs.filter((i) => i.path !== other) },
+    { label: t("Results"), items: results.filter((i) => i.path !== other) },
   ].filter((g) => g.items.length)
-  const noun = kind === "audio" ? "sound" : kind
+  // a sentence by medium (a text result: any file), its noun's gender changes in French
+  const by = (m: Record<"image" | "video" | "audio" | "other", string>) => m[kind as keyof typeof m] ?? m.other
+  const vs = { side: side === "a" ? "B" : "A" }
 
   return (
     <div className="flex size-full max-w-3xl flex-col overflow-hidden rounded-xl bg-background text-foreground">
       <div className="flex items-center gap-3 border-b px-4 py-3">
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold">Choose {side.toUpperCase()}</span>
-          <span className="block text-xs text-muted-foreground">Any {noun} to set against {side === "a" ? "B" : "A"}</span>
+          <span className="block font-semibold">{t("Choose {side}", { side: side.toUpperCase() })}</span>
+          <span className="block text-xs text-muted-foreground">
+            {by({ image: t("Any image to set against {side}", vs), video: t("Any video to set against {side}", vs), audio: t("Any sound to set against {side}", vs), other: t("Any file to set against {side}", vs) })}
+          </span>
         </span>
         <Button variant="outline" size="sm" disabled={busy} onClick={() => file.current?.click()}>
-          <FolderOpenIcon data-icon="inline-start" /> {busy ? "Sending…" : "From your computer…"}
+          <FolderOpenIcon data-icon="inline-start" /> {busy ? t("Sending…") : t("From your computer…")}
         </Button>
         {onCancel && (
           <Button variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
+            {t("Cancel")}
           </Button>
         )}
         <input
@@ -352,10 +357,10 @@ function Picker({
             const f = e.target.files?.[0]
             e.target.value = ""
             if (!f) return
-            if (mediaKind(f.name) !== kind) return toast.error(`${f.name} is not ${kind === "image" ? "an image" : `a ${noun}`}`)
+            if (mediaKind(f.name) !== kind) return toast.error(by({ image: t("{name} is not an image", { name: f.name }), video: t("{name} is not a video", { name: f.name }), audio: t("{name} is not a sound", { name: f.name }), other: t("{name} is not a text file", { name: f.name }) }))
             setBusy(true)
             try {
-              onPick({ path: await upload(f), title: f.name, detail: "from your computer" })
+              onPick({ path: await upload(f), title: f.name, detail: t("from your computer") })
             } catch (err) {
               toast.error(plain((err as Error).message))
             } finally {
@@ -365,7 +370,7 @@ function Picker({
         />
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
-        {!groups.length && <p className="py-10 text-center text-sm text-muted-foreground">No other {noun} here yet: take one from your computer.</p>}
+        {!groups.length && <p className="py-10 text-center text-sm text-muted-foreground">{by({ image: t("No other image here yet: take one from your computer."), video: t("No other video here yet: take one from your computer."), audio: t("No other sound here yet: take one from your computer."), other: t("No other file here yet: take one from your computer.") })}</p>}
         {groups.map((g) => (
           <section key={g.label} className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{g.label}</h3>
@@ -380,7 +385,7 @@ function Picker({
                       {i.cost && <span className="text-cost"> · {i.cost}</span>}
                     </span>
                   </button>
-                  {i.path === suggested && <Tag>Suggested</Tag>}
+                  {i.path === suggested && <Tag>{t("Suggested")}</Tag>}
                 </div>
               ))
             ) : (
@@ -395,7 +400,7 @@ function Picker({
                     >
                       <Thumb path={i.path} />
                       {kind === "video" && <PlayIcon className="absolute bottom-1.5 left-1.5 size-3.5 text-white drop-shadow" />}
-                      {i.path === suggested && <Tag className="absolute top-1.5 left-1.5">Suggested</Tag>}
+                      {i.path === suggested && <Tag className="absolute top-1.5 left-1.5">{t("Suggested")}</Tag>}
                     </span>
                     <span className="truncate text-xs">
                       <span className="font-medium">{i.title}</span> <span className="text-muted-foreground">· {i.detail}</span>

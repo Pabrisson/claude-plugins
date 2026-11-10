@@ -10,6 +10,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api, fileUrl, inputPath, mediaKind, outputPath, plain, when, type Job, type Line, type Shot, type Spec } from "@/lib/api"
 import { jsonParts } from "@/lib/text"
+import { locale, own, t } from "@/lib/i18n"
 import { Label } from "@/components/chips"
 import { Thumb, Workspaces } from "@/components/inputs"
 import { ModelLogo } from "@/components/model-logo"
@@ -18,44 +19,47 @@ import { CompareDialog } from "@/components/compare"
 
 // the settings a result was made with, in words
 const PARAMS: Record<string, [string, (v: unknown) => string]> = {
-  aspect_ratio: ["Ratio", String],
-  duration: ["Duration", (v) => `${v} s`],
-  resolution: ["Resolution", String],
-  quality: ["Quality", String],
-  n: ["Images", String],
-  sound: ["Sound", (v) => (v ? "on" : "off")],
-  voice: ["Voice", String],
-  seed: ["Seed", String],
-  mid_times: ["Middle frames at", (v) => (v as number[]).map((t) => `${t} s`).join(", ")],
-  draft_of: ["Final of the draft", String],
+  aspect_ratio: [t("Ratio"), String],
+  duration: [t("Duration"), (v) => `${v} s`],
+  resolution: [t("Resolution"), String],
+  quality: [t("Quality"), String],
+  n: [t("Images"), String],
+  sound: [t("Sound"), (v) => (v ? t("on") : t("off"))],
+  voice: [t("Voice"), String],
+  seed: [t("Seed"), String],
+  mid_times: [t("Middle frames at"), (v) => (v as number[]).map((x) => `${x} s`).join(", ")],
+  draft_of: [t("Final of the draft"), String],
 }
 // a model's option as the Settings list shows it: on / off, else its value
-const optionText = (v: unknown) => (v === true ? "on" : v === false ? "off" : String(v))
+const optionText = (v: unknown) => (v === true ? t("on") : v === false ? t("off") : String(v))
+// a key in words; shown as the catalogs' word of the same text where there is one (a field's « Voice », « Style »)
 const words = (k: string) => (k[0].toUpperCase() + k.slice(1)).replaceAll("_", " ")
 // an input's role, as the tools name them
-const ROLES: Record<string, string> = { sketch: "Painted", matte: "Mask (kept here)", first_frame: "First frame", last_frame: "Last frame", voice_clips: "Voice", sheet: "Sheet" }
+const ROLES: Record<string, string> = { sketch: t("Painted"), matte: t("Mask (kept here)"), first_frame: t("First frame"), last_frame: t("Last frame"), voice_clips: t("Voice"), sheet: t("Sheet") }
 // who made it: the router, ElevenLabs straight or this machine
-const MADE_BY: Record<string, string> = { kie: "Kie.ai", openrouter: "OpenRouter", local: "This machine", elevenlabs: "ElevenLabs" }
+const MADE_BY: Record<string, string> = { kie: "Kie.ai", openrouter: "OpenRouter", local: t("This machine"), elevenlabs: "ElevenLabs" }
 // a Suno song's extras (Kie), each a small job of its own: its WAV, its words with their times, a music video, a stem's
 // notes; a singer from it asks its name and where it sings alone
 const EXTRAS = [
-  { tool: "wav", label: "WAV", icon: FileAudioIcon, hint: "The song as a WAV file" },
-  { tool: "lyrics-timings", label: "Lyrics with timings", icon: CaptionsIcon, hint: "Each sung word with its time: captions" },
-  { tool: "music-video", label: "Music video", icon: ClapperboardIcon, hint: "An MP4 with its cover and a visualizer" },
+  { tool: "wav", label: "WAV", icon: FileAudioIcon, hint: t("The song as a WAV file") },
+  { tool: "lyrics-timings", label: t("Lyrics with timings"), icon: CaptionsIcon, hint: t("Each sung word with its time: captions") },
+  { tool: "music-video", label: t("Music video"), icon: ClapperboardIcon, hint: t("An MP4 with its cover and a visualizer") },
 ]
 async function runExtra(spec: Spec, label: string, confirm = false) {
   try {
     await api.generate(spec, confirm)
-    toast.success(`${label} started`, { description: "It lands in Audio's results." })
+    toast.success(t("{label} started", { label }), { description: t("It lands in Audio's results.") })
   } catch (e) {
     const err = e as Error & { status?: number; body?: { shown?: string } }
-    if (err.status === 409) toast(`${label}: ${err.body?.shown ?? "a cost"} to confirm`, { action: { label: "Go on", onClick: () => runExtra(spec, label, true) } })
+    if (err.status === 409) toast(t("{label}: {cost} to confirm", { label, cost: err.body?.shown ?? t("a cost") }), { action: { label: t("Go on"), onClick: () => runExtra(spec, label, true) } })
     else toast.error(plain(err.message))
   }
 }
 const extraSpec = (tool: string, file: string | string[], fields: Record<string, string> = {}): Spec => ({ kind: "audio", tool, prompt: "", fields, inputs: { clip: [file].flat() }, params: {} })
 
-const bytes = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`)
+// a number with one decimal, as the dashboard's language writes it
+const one = (n: number) => n.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const bytes = (n: number) => (n >= 1e6 ? t("{n} MB", { n: one(n / 1e6) }) : t("{n} KB", { n: Math.max(1, Math.round(n / 1e3)) }))
 const span = (a?: string, b?: string) => {
   const s = a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 1000) : NaN
   return Number.isFinite(s) && s >= 0 ? (s < 90 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`) : null
@@ -160,7 +164,7 @@ function Body({
   const [keeping, setKeeping] = useState<string | null>(null)
   const keep = (as: string) =>
     api.keepVoice(job.id, name, as).then(
-      (el) => (toast.success(`@${el.name} is in the Library`, { description: "A voice of your ElevenLabs account too: Voice, Change voice and the others take it." }), setKeeping(null)),
+      (el) => (toast.success(t("@{name} is in the Library", { name: el.name }), { description: t("A voice of your ElevenLabs account too: Voice, Change voice and the others take it.") }), setKeeping(null)),
       (e) => toast.error(plain(e.message))
     )
   // the tracks Kie turns into WAV (a song's takes, a Stems' tracks): All in WAV, priced by the engine
@@ -171,7 +175,7 @@ function Body({
     const all = wavKey.split("|")
     if (all.length < 2) return
     api.estimate(extraSpec("wav", all)).then(
-      (a) => setWavPrice([a.estimate.credits != null && `${a.estimate.credits} credits`, a.estimate.known ? a.shown : "unknown cost"].filter(Boolean).join(" · ")),
+      (a) => setWavPrice([a.estimate.credits != null && t("{n} credits", { n: a.estimate.credits }), a.estimate.known ? a.shown : t("unknown cost")].filter(Boolean).join(" · ")),
       () => setWavPrice(null)
     )
   }, [wavKey])
@@ -193,27 +197,27 @@ function Body({
   const made = span(job.started ?? job.created, job.finished)
   const actions = [
     ...(job.tool === "import" ? [] : [{ ...REMIX, run: () => onBridge("remix", failed ? "" : (file ?? "")) }]),
-    ...(isDraft(job) ? [{ ...FINAL, hint: "In 1080p, from this draft (Kie lists no price for it)", run: () => onBridge("final", file ?? "") }] : []),
+    ...(isDraft(job) ? [{ ...FINAL, hint: t("In 1080p, from this draft (Kie lists no price for it)"), run: () => onBridge("final", file ?? "") }] : []),
     // already on the current workspace's timeline: its place there instead of « Add to timeline »
     // Make a voice only on speech (a song makes a singer instead)
-    ...(failed || !k ? [] : (BRIDGES[k] ?? []).filter((x) => !(k === "audio" && x.b === "element" && !["voice", "change-voice", "isolate-voice", "translate", "import"].includes(job.tool))).map((x) => (x.b === "timeline" && ws.shots[file!] ? { ...x, label: `${ws.shots[file!]} on the timeline`, hint: "Show it in the timeline", run: () => onBridge("shot", file!) } : { ...x, run: () => onBridge(x.b, file!) }))),
+    ...(failed || !k ? [] : (BRIDGES[k] ?? []).filter((x) => !(k === "audio" && x.b === "element" && !["voice", "change-voice", "isolate-voice", "translate", "import"].includes(job.tool))).map((x) => (x.b === "timeline" && ws.shots[file!] ? { ...x, label: t("{shot} on the timeline", { shot: ws.shots[file!] }), hint: t("Show it in the timeline"), run: () => onBridge("shot", file!) } : { ...x, run: () => onBridge(x.b, file!) }))),
     ...(failed || !file ? [] : [{ ...SEND, run: () => sendToEdit(file) }]),
     // a sound's music tools (Kie), Stems on a song Suno made; a take's extras; a stem's notes
     ...(failed || k !== "audio" || job.provider !== "kie" ? [] : SONG.filter((x) => !x.suno || take).map((x) => ({ ...x, run: () => onBridge(x.b, file!) }))),
-    ...(failed || !take ? [] : [...EXTRAS.map((x) => ({ ...x, run: () => runExtra(extraSpec(x.tool, file!), x.label) })), { label: "Make a singer", icon: UserRoundPlusIcon, hint: "Its voice and style in the Library, for Music", run: openSinger }]),
-    ...(wavs.length < 2 ? [] : [{ label: "All in WAV", icon: FileAudioIcon, hint: `${wavs.length} tracks${wavPrice ? ` · ${wavPrice}` : ""}`, run: () => (runExtra(extraSpec("wav", wavs), "All in WAV"), onClose()) }]),
-    ...(failed || !voiceOnly ? [] : [{ label: "Make a singer", icon: UserRoundPlusIcon, hint: "This voice in the Library, for Music's Singer", run: openSinger }]),
-    ...(failed || !designed ? [] : [{ label: "Keep this voice", icon: UserRoundPlusIcon, hint: "In the Library and on your ElevenLabs account, free", run: () => setKeeping("") }]),
-    ...(failed || job.tool !== "stems" || job.provider !== "kie" || k !== "audio" ? [] : [{ label: "MIDI", icon: PianoIcon, hint: "This stem's notes", run: () => runExtra(extraSpec("midi", file!), "MIDI") }, { label: "WAV", icon: FileAudioIcon, hint: "This stem as a WAV file", run: () => runExtra(extraSpec("wav", file!), "WAV") }]),
+    ...(failed || !take ? [] : [...EXTRAS.map((x) => ({ ...x, run: () => runExtra(extraSpec(x.tool, file!), x.label) })), { label: t("Make a singer"), icon: UserRoundPlusIcon, hint: t("Its voice and style in the Library, for Music"), run: openSinger }]),
+    ...(wavs.length < 2 ? [] : [{ label: t("All in WAV"), icon: FileAudioIcon, hint: `${t("{n} tracks", { n: wavs.length })}${wavPrice ? ` · ${wavPrice}` : ""}`, run: () => (runExtra(extraSpec("wav", wavs), t("All in WAV")), onClose()) }]),
+    ...(failed || !voiceOnly ? [] : [{ label: t("Make a singer"), icon: UserRoundPlusIcon, hint: t("This voice in the Library, for Music's Singer"), run: openSinger }]),
+    ...(failed || !designed ? [] : [{ label: t("Keep this voice"), icon: UserRoundPlusIcon, hint: t("In the Library and on your ElevenLabs account, free"), run: () => setKeeping("") }]),
+    ...(failed || job.tool !== "stems" || job.provider !== "kie" || k !== "audio" ? [] : [{ label: "MIDI", icon: PianoIcon, hint: t("This stem's notes"), run: () => runExtra(extraSpec("midi", file!), "MIDI") }, { label: "WAV", icon: FileAudioIcon, hint: t("This stem as a WAV file"), run: () => runExtra(extraSpec("wav", file!), "WAV") }]),
   ]
   const ext = file?.split(".").pop()?.toUpperCase()
   const stats = [
-    { label: "Cost", value: costOf(job, per1000), cost: job.provider !== "local" && !failed },
-    { label: "Router", value: MADE_BY[job.provider] ?? job.provider },
-    facts.w ? { label: k === "video" ? "Frame" : "Size", value: `${facts.w} × ${facts.h}` } : null,
-    facts.length ? { label: "Length", value: `${facts.length.toFixed(1)} s` } : null,
-    ext ? { label: "File", value: `${ext}${facts.size ? ` · ${bytes(facts.size)}` : ""}` } : null,
-    made ? { label: "Made in", value: made } : null,
+    { label: t("Cost"), value: costOf(job, per1000), cost: job.provider !== "local" && !failed },
+    { label: t("Router"), value: MADE_BY[job.provider] ?? job.provider },
+    facts.w ? { label: k === "video" ? t("Frame") : t("Size"), value: `${facts.w} × ${facts.h}` } : null,
+    facts.length ? { label: t("Length"), value: `${one(facts.length)} s` } : null,
+    ext ? { label: t("File"), value: `${ext}${facts.size ? ` · ${bytes(facts.size)}` : ""}` } : null,
+    made ? { label: t("Made in"), value: made } : null,
   ].filter((x): x is { label: string; value: string; cost?: boolean } => !!x)
 
   return (
@@ -229,10 +233,10 @@ function Body({
           {file && !failed && (
             <span className="pointer-events-auto flex gap-1.5">
               <Button variant="secondary" size="sm" onClick={() => setComparing(true)} className="bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-white/20">
-                <Columns2Icon data-icon="inline-start" /> Compare
+                <Columns2Icon data-icon="inline-start" /> {t("Compare")}
               </Button>
               <Button variant="secondary" size="icon-sm" asChild className="bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-white/20">
-                <a href={fileUrl(file)} target="_blank" rel="noreferrer" aria-label="Open in a new tab" title="Open in a new tab">
+                <a href={fileUrl(file)} target="_blank" rel="noreferrer" aria-label={t("Open in a new tab")} title={t("Open in a new tab")}>
                   <ExternalLinkIcon />
                 </a>
               </Button>
@@ -241,12 +245,12 @@ function Body({
         </div>
         <div className="flex min-h-0 flex-1 items-center justify-center p-6 pt-14">
           {failed ? (
-            <p className="max-w-md text-center text-sm text-destructive">{plain(job.error ?? "Failed")}</p>
+            <p className="max-w-md text-center text-sm text-destructive">{plain(job.error ?? t("Failed"))}</p>
           ) : k === "image" ? (
             <img src={fileUrl(file!)} alt={job.prompt} onLoad={(e) => setFacts({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} className="max-h-full max-w-full rounded-lg object-contain" />
           ) : k === "video" && facts.unplayable ? (
             <p className="max-w-sm text-center text-sm text-white/70">
-              The browser cannot show this {ext} file (ProRes keeps the transparency for editing software). Download it, or pick the other result to preview it.
+              {t("The browser cannot show this {ext} file (ProRes keeps the transparency for editing software). Download it, or pick the other result to preview it.", { ext: ext ?? "" })}
             </p>
           ) : k === "video" ? (
             <video
@@ -276,7 +280,7 @@ function Body({
               <button
                 key={o}
                 type="button"
-                aria-label={`Result ${n + 1}: ${o}`}
+                aria-label={t("Result {n}: {file}", { n: n + 1, file: o })}
                 title={o}
                 aria-current={n === out}
                 onClick={() => setOut(n)}
@@ -288,12 +292,12 @@ function Body({
           </div>
         )}
         {prev && (
-          <Button variant="secondary" size="icon" aria-label="Previous" onClick={prev} className="absolute top-1/2 left-3 -translate-y-1/2 rounded-full bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-white/20">
+          <Button variant="secondary" size="icon" aria-label={t("Previous")} onClick={prev} className="absolute top-1/2 left-3 -translate-y-1/2 rounded-full bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-white/20">
             <ChevronLeftIcon />
           </Button>
         )}
         {next && (
-          <Button variant="secondary" size="icon" aria-label="Next" onClick={next} className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-white/20">
+          <Button variant="secondary" size="icon" aria-label={t("Next")} onClick={next} className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-sm hover:bg-white/20">
             <ChevronRightIcon />
           </Button>
         )}
@@ -304,7 +308,7 @@ function Body({
           <div className="flex items-start gap-3 pr-8">
             <ModelLogo model={job.model} lab={lab} className="size-10 rounded-lg p-2" />
             <div className="min-w-0">
-              <DialogTitle className="truncate text-base font-semibold">{job.label}</DialogTitle>
+              <DialogTitle className="truncate text-base font-semibold">{own(job.label)}</DialogTitle>
               <DialogDescription className="truncate" title={job.name}>
                 {model} · {lab}
               </DialogDescription>
@@ -312,15 +316,15 @@ function Body({
                 {when(job.created)}
                 <button
                   type="button"
-                  title="Copy this media's ID"
-                  aria-label={`Copy the ID ${job.id}`}
-                  onClick={() => navigator.clipboard.writeText(job.id).then(() => toast.success("ID copied", { description: job.id }))}
+                  title={t("Copy this media's ID")}
+                  aria-label={t("Copy the ID {id}", { id: job.id })}
+                  onClick={() => navigator.clipboard.writeText(job.id).then(() => toast.success(t("ID copied"), { description: job.id }))}
                   className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-foreground/80 transition-colors outline-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <span className="truncate">{job.id}</span>
                   <CopyIcon className="size-3 shrink-0" aria-hidden />
                 </button>
-                {job.by === "agent" && <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">by Agent</span>}
+                {job.by === "agent" && <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">{t("by Agent")}</span>}
               </p>
             </div>
           </div>
@@ -339,9 +343,9 @@ function Body({
           {job.prompt && (
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <Label>{job.kind === "audio" && k === "audio" ? "Text" : "Prompt"}</Label>
-                <Button variant="ghost" size="xs" className="-mt-2" onClick={() => navigator.clipboard.writeText(job.prompt).then(() => toast.success("Prompt copied"))}>
-                  <CopyIcon data-icon="inline-start" /> Copy
+                <Label>{job.kind === "audio" && k === "audio" ? t("Text") : t("Prompt")}</Label>
+                <Button variant="ghost" size="xs" className="-mt-2" onClick={() => navigator.clipboard.writeText(job.prompt).then(() => toast.success(t("Prompt copied")))}>
+                  <CopyIcon data-icon="inline-start" /> {t("Copy")}
                 </Button>
               </div>
               <p className="max-h-40 overflow-auto rounded-lg bg-muted/50 p-3 text-sm leading-relaxed whitespace-pre-wrap">{job.prompt}</p>
@@ -350,7 +354,7 @@ function Body({
 
           {shots && (
             <div>
-              <Label>Shots</Label>
+              <Label>{t("Shots")}</Label>
               <ol className="flex flex-col gap-1.5">
                 {shots.map((x, i) => (
                   <li key={i} className="rounded-lg bg-muted/50 px-3 py-2 text-sm leading-relaxed">
@@ -365,7 +369,7 @@ function Body({
           )}
           {lines && (
             <div>
-              <Label>Lines</Label>
+              <Label>{t("Lines")}</Label>
               <ol className="flex flex-col gap-1.5">
                 {lines.map((l, i) => (
                   <li key={i} className="rounded-lg bg-muted/50 px-3 py-2 text-sm leading-relaxed">
@@ -379,12 +383,12 @@ function Body({
 
           {(params.length > 0 || fields.length > 0 || options.length > 0) && (
             <div>
-              <Label>Settings</Label>
+              <Label>{t("Settings")}</Label>
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
                 {[
-                  ...params.map(([key, v]) => [PARAMS[key]?.[0] ?? words(key), PARAMS[key]?.[1](v) ?? String(v)]),
-                  ...options.map(([key, v]) => [words(key), optionText(v)]),
-                  ...fields.map(([key, v]) => [words(key), v]),
+                  ...params.map(([key, v]) => [PARAMS[key]?.[0] ?? own(words(key)), PARAMS[key]?.[1](v) ?? String(v)]),
+                  ...options.map(([key, v]) => [own(words(key)), optionText(v)]),
+                  ...fields.map(([key, v]) => [own(words(key)), v]),
                 ].map(([l, v]) => (
                   <div key={l} className="contents">
                     <dt className="text-muted-foreground">{l}</dt>
@@ -399,14 +403,14 @@ function Body({
 
           {inputs.length > 0 && (
             <div>
-              <Label>Inputs</Label>
+              <Label>{t("Inputs")}</Label>
               <div className="flex flex-wrap gap-2">
                 {inputs.map(({ key, f }) => (
                   <a key={f} href={fileUrl(inputPath(home, job, f))} target="_blank" rel="noreferrer" className="flex w-16 flex-col gap-1" title={f}>
                     <span className="size-16 overflow-hidden rounded-md border">
                       <Thumb path={inputPath(home, job, f)} />
                     </span>
-                    <span className="truncate text-center text-[11px] text-muted-foreground">{ROLES[key] ?? words(key)}</span>
+                    <span className="truncate text-center text-[11px] text-muted-foreground">{ROLES[key] ?? own(words(key))}</span>
                   </a>
                 ))}
               </div>
@@ -415,7 +419,7 @@ function Body({
 
           {actions.length > 0 && (
             <div>
-              <Label>Next</Label>
+              <Label>{t("Next")}</Label>
               <div className="flex flex-col gap-1">
                 {actions.map((a) => (
                   <button
@@ -441,16 +445,16 @@ function Body({
                           <FolderKanbanIcon className="size-4" aria-hidden />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">Add to workspace</span>
+                          <span className="block truncate text-sm font-medium">{t("Add to workspace")}</span>
                           <span className="block truncate text-xs text-muted-foreground">
-                            {job.workspaces?.length ? `In ${ws.list.filter((w) => job.workspaces!.includes(w.slug)).map((w) => w.name).join(", ")}` : "In no workspace"}
+                            {job.workspaces?.length ? t("In {names}", { names: ws.list.filter((w) => job.workspaces!.includes(w.slug)).map((w) => w.name).join(", ") }) : t("In no workspace")}
                           </span>
                         </span>
                         <ChevronRightIcon className="size-4 text-muted-foreground" aria-hidden />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="left" align="start" className="min-w-56">
-                      <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+                      <DropdownMenuLabel>{t("Workspaces")}</DropdownMenuLabel>
                       {ws.list.map((w) => {
                         const on = !!job.workspaces?.includes(w.slug)
                         return (
@@ -474,14 +478,14 @@ function Body({
               <div ref={block} className="flex flex-1 items-center overflow-hidden rounded-md bg-primary">
                 <Button className="flex-1 rounded-none shadow-none" asChild>
                   <a href={fileUrl(file)} download={file.split(/[\\/]/).pop()}>
-                    <DownloadIcon data-icon="inline-start" /> Download{job.outputs.length > 1 ? ` ${ext}` : ""}
+                    <DownloadIcon data-icon="inline-start" /> {job.outputs.length > 1 ? t("Download {ext}", { ext: ext ?? "" }) : t("Download")}
                   </a>
                 </Button>
                 {job.outputs.length > 1 && (
                   <DropdownMenu onOpenChange={(o) => o && setBlockWidth(block.current?.offsetWidth)}>
                     <span className="h-5 w-px bg-primary-foreground/20" aria-hidden />
                     <DropdownMenuTrigger asChild>
-                      <Button size="icon" aria-label="More downloads" className="w-9 rounded-none shadow-none">
+                      <Button size="icon" aria-label={t("More downloads")} className="w-9 rounded-none shadow-none">
                         <ChevronDownIcon />
                       </Button>
                     </DropdownMenuTrigger>
@@ -489,8 +493,8 @@ function Body({
                       <DropdownMenuItem asChild>
                         <a href={`/api/media/${job.id}/zip`} download>
                           <span className="flex flex-col">
-                            <span>Download all ({job.outputs.length})</span>
-                            <span className="text-xs text-muted-foreground">Every file of this result in a .zip</span>
+                            <span>{t("Download all ({n})", { n: job.outputs.length })}</span>
+                            <span className="text-xs text-muted-foreground">{t("Every file of this result in a .zip")}</span>
                           </span>
                         </a>
                       </DropdownMenuItem>
@@ -499,51 +503,55 @@ function Body({
                 )}
               </div>
             )}
-            <Button variant="outline" size="icon" aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"} title="Favorite" onClick={() => api.media(job.id, "favorite")}>
+            <Button variant="outline" size="icon" aria-label={job.favorite ? t("Remove from favorites") : t("Add to favorites")} title={t("Favorite")} onClick={() => api.media(job.id, "favorite")}>
               <StarIcon className={cn(job.favorite && "fill-current text-cost")} />
             </Button>
-            <Button variant="outline" size="icon" aria-label="Delete" title="Delete" onClick={() => setConfirm(true)}>
+            <Button variant="outline" size="icon" aria-label={t("Delete")} title={t("Delete")} onClick={() => setConfirm(true)}>
               <Trash2Icon />
             </Button>
           </div>
           {(prev || next) && (
             <p className="text-center text-xs text-muted-foreground">
-              <Kbd>←</Kbd> <Kbd>→</Kbd> to browse · <Kbd>Esc</Kbd> to close
+              <Kbd>←</Kbd> <Kbd>→</Kbd> {t("to browse")} · <Kbd>Esc</Kbd> {t("to close")}
             </p>
           )}
         </div>
         <DeleteDialog job={job} open={confirm} onOpenChange={setConfirm} onDeleted={onClose} />
         <Dialog open={!!singer} onOpenChange={(o) => !o && setSinger(null)}>
           <DialogContent className="sm:max-w-md">
-            <DialogTitle>Make a singer</DialogTitle>
-            <DialogDescription>Suno keeps this {voiceOnly ? "voice" : "song's voice and style"} as a singer of the Library: the Singer field of Music, Extend, Cover, Mashup and Replace section takes it. Free.</DialogDescription>
+            <DialogTitle>{t("Make a singer")}</DialogTitle>
+            <DialogDescription>
+              {voiceOnly
+                ? t("Suno keeps this voice as a singer of the Library: the Singer field of Music, Extend, Cover, Mashup and Replace section takes it. Free.")
+                : t("Suno keeps this song's voice and style as a singer of the Library: the Singer field of Music, Extend, Cover, Mashup and Replace section takes it. Free.")}
+            </DialogDescription>
             {singer && (
               <div className="flex flex-col gap-3">
                 <div>
-                  <Label>Name</Label>
+                  <Label>{t("Name")}</Label>
                   <Input value={singer.name} placeholder="Nova" onChange={(e) => setSinger({ ...singer, name: e.target.value.replace(/[^\w-]/g, "") })} />
                 </div>
                 <div>
-                  <Label>Described</Label>
-                  <Input value={singer.description} placeholder="a warm, breathy female pop voice" onChange={(e) => setSinger({ ...singer, description: e.target.value })} />
+                  <Label>{t("Described")}</Label>
+                  <Input value={singer.description} placeholder={t("a warm, breathy female pop voice")} onChange={(e) => setSinger({ ...singer, description: e.target.value })} />
                 </div>
                 <div>
-                  <Label hint="10 to 30 s where it sings, found for you">Sung from</Label>
+                  <Label hint={t("10 to 30 s where it sings, found for you")}>{t("Sung from")}</Label>
                   <div className="flex items-center gap-2">
-                    <Input className="w-24" inputMode="decimal" value={singer.start} placeholder="…" onChange={(e) => setSinger({ ...singer, start: e.target.value })} aria-label="From (s)" />
-                    <span className="text-sm text-muted-foreground">to</span>
-                    <Input className="w-24" inputMode="decimal" value={singer.end} placeholder="…" onChange={(e) => setSinger({ ...singer, end: e.target.value })} aria-label="To (s)" />
+                    <Input className="w-24" inputMode="decimal" value={singer.start} placeholder="…" onChange={(e) => setSinger({ ...singer, start: e.target.value })} aria-label={t("From (s)")} />
+                    <span className="text-sm text-muted-foreground">{t("to")}</span>
+                    <Input className="w-24" inputMode="decimal" value={singer.end} placeholder="…" onChange={(e) => setSinger({ ...singer, end: e.target.value })} aria-label={t("To (s)")} />
                   </div>
                   {/* that part, to hear before keeping it */}
                   {singer.start && singer.end && <audio key={`${singer.start}-${singer.end}`} controls src={`${fileUrl(file!)}#t=${singer.start},${singer.end}`} className="mt-2 h-9 w-full" />}
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setSinger(null)}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setSinger(null)}>{t("Cancel")}</Button>
                   <Button
                     disabled={!singer.name || !singer.description || !singer.start || !singer.end}
-                    onClick={() => (runExtra(extraSpec("singer", file!, singer), "Make a singer"), setSinger(null))}
+                    onClick={() => (runExtra(extraSpec("singer", file!, singer), t("Make a singer")), setSinger(null))}
                   >
-                    Make it
+                    {t("Make it")}
                   </Button>
                 </div>
               </div>
@@ -552,17 +560,17 @@ function Body({
         </Dialog>
         <Dialog open={keeping != null} onOpenChange={(o) => !o && setKeeping(null)}>
           <DialogContent className="sm:max-w-md">
-            <DialogTitle>Keep this voice</DialogTitle>
-            <DialogDescription>ElevenLabs keeps {name.replace(/\.mp3$/, "")} as a voice of your account, and the Library as a voice: Voice, Change voice, Remix a voice and the voices of your characters take it. Free.</DialogDescription>
+            <DialogTitle>{t("Keep this voice")}</DialogTitle>
+            <DialogDescription>{t("ElevenLabs keeps {name} as a voice of your account, and the Library as a voice: Voice, Change voice, Remix a voice and the voices of your characters take it. Free.", { name: name.replace(/\.mp3$/, "") })}</DialogDescription>
             {keeping != null && (
               <form className="flex flex-col gap-3" onSubmit={(e) => (e.preventDefault(), keeping && keep(keeping))}>
                 <div>
-                  <Label>Name</Label>
+                  <Label>{t("Name")}</Label>
                   <Input autoFocus value={keeping} placeholder="Claire" onChange={(e) => setKeeping(e.target.value.replace(/[^\w-]/g, ""))} />
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setKeeping(null)}>Cancel</Button>
-                  <Button type="submit" disabled={!keeping}>Keep it</Button>
+                  <Button type="button" variant="outline" onClick={() => setKeeping(null)}>{t("Cancel")}</Button>
+                  <Button type="submit" disabled={!keeping}>{t("Keep it")}</Button>
                 </div>
               </form>
             )}

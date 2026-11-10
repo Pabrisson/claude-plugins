@@ -5,21 +5,22 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { t } from "@/lib/i18n"
 
 // the review studio's drawing tools (video-editor's draw.tsx), over an image instead of a paused video
 type Tool = "pen" | "ellipse" | "arrow" | "rect"
 type Shape = { tool: Tool; color: string; points: [number, number][] }
 const TOOLS = [
-  { value: "pen", label: "Pencil", icon: PenLineIcon },
-  { value: "ellipse", label: "Ellipse", icon: CircleIcon },
-  { value: "arrow", label: "Arrow", icon: ArrowUpRightIcon },
-  { value: "rect", label: "Rectangle", icon: SquareIcon },
+  { value: "pen", label: t("Pencil"), icon: PenLineIcon },
+  { value: "ellipse", label: t("Ellipse"), icon: CircleIcon },
+  { value: "arrow", label: t("Arrow"), icon: ArrowUpRightIcon },
+  { value: "rect", label: t("Rectangle"), icon: SquareIcon },
 ] as const
 const COLORS = [
-  { value: "#ef4444", label: "Red" },
-  { value: "#eab308", label: "Yellow" },
-  { value: "#3b82f6", label: "Blue" },
-  { value: "#ffffff", label: "White" },
+  { value: "#ef4444", label: t("Red") },
+  { value: "#eab308", label: t("Yellow") },
+  { value: "#3b82f6", label: t("Blue") },
+  { value: "#ffffff", label: t("White") },
 ]
 
 function paint(ctx: CanvasRenderingContext2D, shapes: Shape[], w: number, h: number) {
@@ -98,8 +99,8 @@ export function SketchDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-[min(1100px,calc(100%-2rem))] sm:max-w-[min(1100px,calc(100%-2rem))]">
-        <DialogTitle>Mark the area</DialogTitle>
-        <DialogDescription>Draw over what should change. The marks are sent with the image, the model edits that area only.</DialogDescription>
+        <DialogTitle>{t("Mark the area")}</DialogTitle>
+        <DialogDescription>{t("Draw over what should change. The marks are sent with the image, the model edits that area only.")}</DialogDescription>
         <div className="flex flex-wrap items-center gap-1">
           <ToggleGroup type="single" value={tool} onValueChange={(v) => v && setTool(v as Tool)}>
             {TOOLS.map(({ value, label, icon: Icon }) => (
@@ -117,12 +118,12 @@ export function SketchDialog({
             ))}
           </ToggleGroup>
           <Separator orientation="vertical" className="mx-1 h-5" />
-          <Button variant="ghost" size="icon" aria-label="Undo" title="Undo" disabled={!shapes.length} onClick={() => setShapes((s) => s.slice(0, -1))}>
+          <Button variant="ghost" size="icon" aria-label={t("Undo")} title={t("Undo")} disabled={!shapes.length} onClick={() => setShapes((s) => s.slice(0, -1))}>
             <Undo2Icon />
           </Button>
         </div>
         <div className="relative mx-auto w-fit">
-          {src && <img ref={img} src={src} alt="To draw on" className="max-h-[65vh] max-w-full rounded-lg select-none" draggable={false} />}
+          {src && <img ref={img} src={src} alt={t("To draw on")} className="max-h-[65vh] max-w-full rounded-lg select-none" draggable={false} />}
           <canvas
             ref={canvas}
             className="absolute inset-0 size-full cursor-crosshair touch-none"
@@ -143,8 +144,8 @@ export function SketchDialog({
           />
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={!shapes.length}>Use this sketch</Button>
+          <Button variant="outline" onClick={onClose}>{t("Cancel")}</Button>
+          <Button onClick={save} disabled={!shapes.length}>{t("Use this sketch")}</Button>
         </div>
       </DialogContent>
     </Dialog>

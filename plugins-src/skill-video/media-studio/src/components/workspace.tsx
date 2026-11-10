@@ -27,6 +27,7 @@ import { Results, type Bridge } from "@/components/results"
 import { dragShot, lengthOf, TimelineEditor, type Ask, type useTimelines } from "@/components/timeline"
 import { NewWorkspaceDialog, WorkspaceRows } from "@/components/workspace-list"
 import { ToolFilter, toolKey } from "@/components/tool-filter"
+import { locale, own, t } from "@/lib/i18n"
 
 type Timelines = ReturnType<typeof useTimelines>
 const TABS = ["assets", "timeline"] as const
@@ -36,7 +37,9 @@ type Tab = (typeof TABS)[number]
 const tabOf = (): Tab => (window.location.hash.endsWith("/timeline") ? "timeline" : "assets")
 const allOf = () => window.location.hash === "#workspace/all"
 const KINDS: Kind[] = ["image", "video", "audio"]
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
+const MEDIA: Record<string, string> = { all: t("All"), image: t("Image"), video: t("Video"), audio: t("Audio"), text: t("Text") }
+// a length in seconds, one decimal
+const secs = (d: number) => `${d.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false })} s`
 
 // every result of the folder, to pick from
 export const allResults = (s: State): Pick[] => s.media.flatMap((j) => (j.status === "done" ? j.outputs.filter((o) => mediaKind(o) !== "other").map((o) => ({ path: outputPath(s.home, j, o), job: j })) : []))
@@ -52,14 +55,14 @@ export function WorkspaceMenu({ state, onChanged }: { state: State; onChanged: (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" title="The current workspace: what you generate lands in it" className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium transition-colors hover:bg-muted aria-expanded:bg-muted">
+          <button type="button" title={t("The current workspace: what you generate lands in it")} className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium transition-colors hover:bg-muted aria-expanded:bg-muted">
             <FolderKanbanIcon className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="max-w-48 truncate">{ws.name}</span>
             <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-56">
-          <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("Workspaces")}</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={ws.slug} onValueChange={(slug) => api.workspaces({ slug, use: true }).then(onChanged, (e) => toast.error(plain(e.message)))}>
             {state.workspaces.map((w) => (
               <DropdownMenuRadioItem key={w.slug} value={w.slug}>
@@ -69,10 +72,10 @@ export function WorkspaceMenu({ state, onChanged }: { state: State; onChanged: (
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setMaking(true)}>
-            <PlusIcon /> New workspace…
+            <PlusIcon /> {t("New workspace…")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => (window.location.hash = "workspace/all")}>
-            <FolderKanbanIcon /> All workspaces
+            <FolderKanbanIcon /> {t("All workspaces")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -92,20 +95,20 @@ function DownloadMenu({ ws, timeline, flush }: { ws: Workspace; timeline: Timeli
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
-          <DownloadIcon data-icon="inline-start" /> Download <ChevronDownIcon data-icon="inline-end" />
+          <DownloadIcon data-icon="inline-start" /> {t("Download")} <ChevronDownIcon data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuItem onSelect={() => download(`/api/workspaces/${ws.slug}/zip`)}>
           <span className="flex flex-col">
-            <span>Assets and elements</span>
-            <span className="text-xs text-muted-foreground">A .zip: images, videos, audio, elements</span>
+            <span>{t("Assets and elements")}</span>
+            <span className="text-xs text-muted-foreground">{t("A .zip: images, videos, audio, elements")}</span>
           </span>
         </DropdownMenuItem>
         <DropdownMenuItem disabled={!edited} onSelect={withEdit}>
           <span className="flex flex-col">
-            <span>With the edit</span>
-            <span className="text-xs text-muted-foreground">{edited ? "Plus the timeline and the edit in words" : "Lay shots on the timeline first"}</span>
+            <span>{t("With the edit")}</span>
+            <span className="text-xs text-muted-foreground">{edited ? t("Plus the timeline and the edit in words") : t("Lay shots on the timeline first")}</span>
           </span>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -120,16 +123,16 @@ function CopyEdit({ ws, timeline, flush }: { ws: Workspace; timeline: Timeline; 
     await flush()
     try {
       const { text } = await api.edit(ws.slug)
-      if (!text) return toast.error("The timeline is empty")
+      if (!text) return toast.error(t("The timeline is empty"))
       await navigator.clipboard.writeText(`/skill-video:video-editor ${text}`)
-      toast.success("Prompt copied", { description: "Paste it in your agent: video-editor makes the video on this edit." })
+      toast.success(t("Prompt copied"), { description: t("Paste it in your agent: video-editor makes the video on this edit.") })
     } catch (e) {
       toast.error(plain((e as Error).message))
     }
   }
   return (
-    <Button size="sm" disabled={!edited} onClick={copy} title={edited ? "Copies the exact edit for video-editor: every clip's times, file and sound" : "Lay shots on the timeline first"}>
-      <CopyIcon data-icon="inline-start" /> Copy prompt for video-editor
+    <Button size="sm" disabled={!edited} onClick={copy} title={edited ? t("Copies the exact edit for video-editor: every clip's times, file and sound") : t("Lay shots on the timeline first")}>
+      <CopyIcon data-icon="inline-start" /> {t("Copy prompt for video-editor")}
     </Button>
   )
 }
@@ -205,14 +208,14 @@ export function WorkspacePage({
       .workspaces({ slug: to.slug, add: [job.id] })
       .then(() => api.workspaces({ slug: ws.slug, drop: [job.id] }))
       .then(
-        () => toast.success(`Moved to ${to.name}`, timeline.clips.some((c) => c.job === job.id) ? { description: `It stays on ${ws.name}'s timeline.` } : undefined),
+        () => toast.success(t("Moved to {name}", { name: to.name }), timeline.clips.some((c) => c.job === job.id) ? { description: t("It stays on {name}'s timeline.", { name: ws.name }) } : undefined),
         (e) => toast.error(plain(e.message))
       )
       .finally(onChanged)
   const others = state.workspaces.filter((w) => w.slug !== ws.slug)
 
   const tabs = (
-    <Chips options={TABS} value={tab} label={(t) => ({ assets: "Assets", timeline: "Timeline" })[t]} icon={(t) => (t === "assets" ? <ImagesIcon /> : <ListVideoIcon />)} onChange={(t) => t !== tab && (window.location.hash = t === "assets" ? "workspace" : "workspace/timeline")} className="grid grid-cols-2" />
+    <Chips options={TABS} value={tab} label={(x) => ({ assets: t("Assets"), timeline: t("Timeline") })[x]} icon={(t) => (t === "assets" ? <ImagesIcon /> : <ListVideoIcon />)} onChange={(t) => t !== tab && (window.location.hash = t === "assets" ? "workspace" : "workspace/timeline")} className="grid grid-cols-2" />
   )
   const downloads = <DownloadMenu ws={ws} timeline={timeline} flush={timelines.flush} />
 
@@ -249,7 +252,7 @@ export function WorkspacePage({
                 {tabs}
                 <div className="relative">
                   <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={binQuery} onChange={(e) => setBinQuery(e.target.value)} placeholder="Search the bin" aria-label="Search the bin" className="pl-8" />
+                  <Input value={binQuery} onChange={(e) => setBinQuery(e.target.value)} placeholder={t("Search the bin")} aria-label={t("Search the bin")} className="pl-8" />
                 </div>
               </>
             }
@@ -268,40 +271,40 @@ export function WorkspacePage({
             {tabs}
             <div className="relative">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search prompts, tools, files" aria-label="Search the workspace" className="pl-8" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Search prompts, tools, files")} aria-label={t("Search the workspace")} className="pl-8" />
             </div>
           </>
         }
       >
         <WorkspaceRows state={state} value={all ? "all" : ws.slug} onPick={pick} count={(slug) => state.media.filter((j) => slug === "all" || inWorkspace(j, slug)).length} unit="item" all manage onChanged={onChanged} />
         <div>
-          <Label>Media</Label>
-          <Chips options={["all", ...KINDS, ...(texts ? (["text"] as const) : [])]} value={kind} label={(k) => (k === "all" ? "All" : cap(k))} icon={valueIcon} onChange={setKind} />
+          <Label>{t("Media")}</Label>
+          <Chips options={["all", ...KINDS, ...(texts ? (["text"] as const) : [])]} value={kind} label={(k) => MEDIA[k]} icon={valueIcon} onChange={setKind} />
         </div>
         <div>
-          <Label>Tool</Label>
+          <Label>{t("Tool")}</Label>
           <ToolFilter jobs={pool} value={tool} onChange={setTool} />
         </div>
         <div>
-          <Label>Provider</Label>
+          <Label>{t("Provider")}</Label>
           <Chips
             options={["all", "kie", "openrouter", "elevenlabs", "local"]}
             value={provider}
-            label={(p) => ({ all: "All", openrouter: "OpenRouter", kie: "Kie.ai", elevenlabs: "ElevenLabs", local: "Local" })[p] ?? p}
+            label={(p) => ({ all: t("All"), openrouter: "OpenRouter", kie: "Kie.ai", elevenlabs: "ElevenLabs", local: t("Local") })[p] ?? p}
             icon={valueIcon}
             onChange={setProvider}
           />
         </div>
         <div>
-          <Label>Show</Label>
-          <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? "Everything" : "Favorites")} icon={valueIcon} onChange={(f) => setFavorites(f === "favorites")} />
+          <Label>{t("Show")}</Label>
+          <Chips options={["all", "favorites"] as const} value={favorites ? "favorites" : "all"} label={(f) => (f === "all" ? t("Everything") : t("Favorites"))} icon={valueIcon} onChange={(f) => setFavorites(f === "favorites")} />
         </div>
       </Side>
       <Main
-        title={all ? "All workspaces" : ws.name}
+        title={all ? t("All workspaces") : ws.name}
         aside={
           all ? (
-            <span className="text-sm text-muted-foreground">{jobs.length} items</span>
+            <span className="text-sm text-muted-foreground">{jobs.length === 1 ? t("{n} item", { n: 1 }) : t("{n} items", { n: jobs.length })}</span>
           ) : (
             <span className="flex flex-wrap items-center justify-end gap-2">
               <AddFromLibrary ws={ws} results={results} onChanged={onChanged} />
@@ -319,30 +322,30 @@ export function WorkspacePage({
             all
               ? []
               : [
-                  ...(others.length ? [{ label: "Move to workspace", icon: FolderInputIcon, menu: others.map((w) => ({ key: w.slug, label: w.name, run: (j: Job) => moveTo(j, w) })) }] : []),
-                  { label: "Remove from workspace", icon: FolderMinusIcon, run: (j: Job) => api.workspaces({ slug: ws.slug, drop: [j.id] }).then(onChanged, (e) => toast.error(plain(e.message))) },
+                  ...(others.length ? [{ label: t("Move to workspace"), icon: FolderInputIcon, menu: others.map((w) => ({ key: w.slug, label: w.name, run: (j: Job) => moveTo(j, w) })) }] : []),
+                  { label: t("Remove from workspace"), icon: FolderMinusIcon, run: (j: Job) => api.workspaces({ slug: ws.slug, drop: [j.id] }).then(onChanged, (e) => toast.error(plain(e.message))) },
                 ]
           }
           empty={
             mine.length ? (
-              <p className="text-sm text-muted-foreground">No media matches these filters.</p>
+              <p className="text-sm text-muted-foreground">{t("No media matches these filters.")}</p>
             ) : all ? (
-              <NoGenerations what="What you make in Image, Video and Audio lands here, by you or by the agent; a file dropped on the page is imported here, free." />
+              <NoGenerations what={t("What you make in Image, Video and Audio lands here, by you or by the agent; a file dropped on the page is imported here, free.")} />
             ) : (
               <Empty className="border border-dashed">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <FolderKanbanIcon />
                   </EmptyMedia>
-                  <EmptyTitle>Nothing in {ws.name} yet</EmptyTitle>
-                  <EmptyDescription>What you or the agent generate while it is the current workspace lands here, and the files dropped on the page. Results already made join it by Add to workspace, above.</EmptyDescription>
+                  <EmptyTitle>{t("Nothing in {name} yet", { name: ws.name })}</EmptyTitle>
+                  <EmptyDescription>{t("What you or the agent generate while it is the current workspace lands here, and the files dropped on the page. Results already made join it by Add to workspace, above.")}</EmptyDescription>
                 </EmptyHeader>
                 {/* the three spaces to make its first media in, each in its space's color, with its icon */}
                 <EmptyContent className="max-w-none flex-row flex-wrap justify-center gap-2">
                   {(["image", "video", "audio"] as const).map((k) => (
                     <Button key={k} variant="outline" size="sm" asChild className={SPACE_BUTTON[k]}>
                       <a href={`#${k}`}>
-                        {valueIcon(k)} Generate {k}
+                        {valueIcon(k)} {{ image: t("Generate image"), video: t("Generate video"), audio: t("Generate audio") }[k]}
                       </a>
                     </Button>
                   ))}
@@ -369,12 +372,12 @@ function AddFromLibrary({ ws, results, onChanged }: { ws: Workspace; results: Pi
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm">
-          <PlusIcon data-icon="inline-start" /> Add to workspace
+          <PlusIcon data-icon="inline-start" /> {t("Add to workspace")}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col gap-0 p-0">
         <LibraryList
-          title={`Add to ${ws.name}`}
+          title={t("Add to {name}", { name: ws.name })}
           items={results}
           from="library"
           multiple
@@ -409,13 +412,13 @@ function Bin({ query, jobs, home, onAdd }: { query: string; jobs: Job[]; home: s
     dragShot({ path: i.path, job: i.job.id, dur: factsOf(i).dur })
   }
   const add = (i: Item) => (
-    <Button size="icon-xs" variant="secondary" aria-label={`Add ${i.job.label} to the timeline`} title="Add after the last shot" onClick={() => onAdd(i.job, i.path)} className="shrink-0">
+    <Button size="icon-xs" variant="secondary" aria-label={t("Add {label} to the timeline", { label: own(i.job.label) })} title={t("Add after the last shot")} onClick={() => onAdd(i.job, i.path)} className="shrink-0">
       <PlusIcon />
     </Button>
   )
   // a picture to drag: its place on the timeline, its format, quality and length
   const tile = (i: Item, video: boolean) => (
-    <div key={i.path} draggable onDragStart={drag(i)} onDragEnd={() => dragShot(null)} title={`${i.job.label} · ${when(i.job.created)}`} className={cn("group/bin relative cursor-grab overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/5 active:cursor-grabbing", video ? "aspect-video" : "aspect-square")}>
+    <div key={i.path} draggable onDragStart={drag(i)} onDragEnd={() => dragShot(null)} title={`${own(i.job.label)} · ${when(i.job.created)}`} className={cn("group/bin relative cursor-grab overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/5 active:cursor-grabbing", video ? "aspect-video" : "aspect-square")}>
       <Thumb path={i.path} />
       {shots[i.path] && <span className="absolute top-1 left-1 rounded bg-black/65 px-1 text-[11px] font-semibold text-white tabular-nums">{shots[i.path]}</span>}
       <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-linear-to-t from-black/75 to-transparent px-1.5 pt-4 pb-1 text-[10px] text-white tabular-nums">
@@ -427,38 +430,38 @@ function Bin({ query, jobs, home, onAdd }: { query: string; jobs: Job[]; home: s
   )
   const facts = (i: Item) => {
     const { w, h, dur } = factsOf(i)
-    return [w && h ? (ratioOf(w, h) === "other" ? `${w}×${h}` : ratioOf(w, h)) : "", w && h ? resOf(w, h) : "", dur ? `${dur.toFixed(1)} s` : ""].filter(Boolean).join(" · ")
+    return [w && h ? (ratioOf(w, h) === "other" ? `${w}×${h}` : ratioOf(w, h)) : "", w && h ? resOf(w, h) : "", dur ? secs(dur) : ""].filter(Boolean).join(" · ")
   }
   return (
     <>
       <FilterChips value={filters} onChange={setFilters} items={pool} />
       <div className="flex min-h-0 flex-col">
         <div className="mb-2 flex items-center gap-2">
-          <Label hint="drag onto a track, or +">Bin</Label>
+          <Label hint={t("drag onto a track, or +")}>{t("Bin")}</Label>
           <span className="flex-1" />
           {activeFilters(filters) > 0 && (
             <Button size="xs" variant="ghost" className="-mt-2" onClick={() => setFilters(NO_FILTERS)}>
-              Clear
+              {t("Clear")}
             </Button>
           )}
           <span className="-mt-2">
             <SortSelect value={sort} onChange={setSort} />
           </span>
         </div>
-        {!items.length && <p className="text-sm text-muted-foreground">{pool.length ? "Nothing matches these filters." : "Nothing in this workspace yet: generate while it is the current one, or add results from the Assets tab."}</p>}
+        {!items.length && <p className="text-sm text-muted-foreground">{pool.length ? t("Nothing matches these filters.") : t("Nothing in this workspace yet: generate while it is the current one, or add results from the Assets tab.")}</p>}
         <div className="flex flex-col gap-4">
           {videos.length > 0 && (
-            <Section title="Videos" count={videos.length} titled={titled}>
+            <Section title={t("Videos")} count={videos.length} titled={titled}>
               <div className="grid grid-cols-2 gap-2">{videos.map((i) => tile(i, true))}</div>
             </Section>
           )}
           {images.length > 0 && (
-            <Section title="Images" count={images.length} titled={titled}>
+            <Section title={t("Images")} count={images.length} titled={titled}>
               <div className="grid grid-cols-3 gap-2">{images.map((i) => tile(i, false))}</div>
             </Section>
           )}
           {sounds.length > 0 && (
-            <Section title="Audio" count={sounds.length} titled={titled}>
+            <Section title={t("Audio")} count={sounds.length} titled={titled}>
               <div className="flex flex-col gap-1.5">
                 {sounds.map((i) => (
                   <div key={i.path} draggable onDragStart={drag(i)} onDragEnd={() => dragShot(null)} className="flex cursor-grab items-center gap-2.5 rounded-lg border px-2 py-1.5 active:cursor-grabbing">
@@ -469,8 +472,8 @@ function Bin({ query, jobs, home, onAdd }: { query: string; jobs: Job[]; home: s
                       <span className="block truncate text-sm">{i.job.prompt || i.path.split(/[\\/]/).pop()}</span>
                       <span className="block text-xs text-muted-foreground">
                         {shots[i.path] ? `${shots[i.path]} · ` : ""}
-                        {i.job.label}
-                        {factsOf(i).dur ? ` · ${factsOf(i).dur!.toFixed(1)} s` : ""}
+                        {own(i.job.label)}
+                        {factsOf(i).dur ? ` · ${secs(factsOf(i).dur!)}` : ""}
                       </span>
                     </span>
                     {add(i)}

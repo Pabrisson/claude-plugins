@@ -10,6 +10,8 @@ import { Slider } from "@/components/ui/slider"
 import { api, fileUrl, mediaKind, outputPath, plain, type Job } from "@/lib/api"
 import { Label } from "@/components/chips"
 import { LibraryList, Thumb, upload, type Pick } from "@/components/inputs"
+import { secs } from "@/components/cut"
+import { t } from "@/lib/i18n"
 
 // the Library's results of one medium, as a picker lists them
 export const resultsOf = (media: Job[], home: string, kind: "image" | "video"): Pick[] =>
@@ -60,14 +62,14 @@ export function ImageSource({ media, home, multiple, picked = [], onAdd, onRemov
         <PopoverContent side={side} align="start" sideOffset={8} collisionPadding={12} className={cn("flex max-h-(--radix-popover-content-available-height) flex-col gap-0 p-0", view === "menu" ? "w-56" : "w-[min(460px,calc(100vw-2rem))]")}>
           {view === "menu" && (
             <div className="flex flex-col p-1">
-              <Item icon={MonitorUpIcon} onClick={() => (close(), file.current?.click())}>From your computer</Item>
-              <Item icon={FolderOpenIcon} onClick={() => setView("library")}>From the library</Item>
-              {frames && <Item icon={FilmIcon} onClick={() => setView("video")}>A frame of a video</Item>}
+              <Item icon={MonitorUpIcon} onClick={() => (close(), file.current?.click())}>{t("From your computer")}</Item>
+              <Item icon={FolderOpenIcon} onClick={() => setView("library")}>{t("From the library")}</Item>
+              {frames && <Item icon={FilmIcon} onClick={() => setView("video")}>{t("A frame of a video")}</Item>}
             </div>
           )}
           {view === "library" && (
             <LibraryList
-              title="Images from the library"
+              title={t("Images from the library")}
               items={resultsOf(media, home, "image")}
               picked={picked}
               multiple={multiple}
@@ -78,7 +80,7 @@ export function ImageSource({ media, home, multiple, picked = [], onAdd, onRemov
             (video ? (
               <FrameAt video={video} onBack={() => setVideo(undefined)} onAdd={(p) => (onAdd([p]), close())} />
             ) : (
-              <LibraryList title="A frame of which video?" items={resultsOf(media, home, "video")} picked={[]} onPick={setVideo} />
+              <LibraryList title={t("A frame of which video?")} items={resultsOf(media, home, "video")} picked={[]} onPick={setVideo} />
             ))}
         </PopoverContent>
       </Popover>
@@ -89,33 +91,33 @@ export function ImageSource({ media, home, multiple, picked = [], onAdd, onRemov
 
 // a frame of a video at the time the slider says, kept as an image
 function FrameAt({ video, onAdd, onBack }: { video: string; onAdd: (path: string) => void; onBack: () => void }) {
-  const [t, setT] = useState(0)
+  const [time, setTime] = useState(0)
   const [length, setLength] = useState(0)
   const [frame, setFrame] = useState<string>()
   const asked = useRef(0)
   useEffect(() => {
     const n = ++asked.current
-    const wait = setTimeout(() => api.frame(video, false, t).then(({ path }) => n === asked.current && setFrame(path), (e) => toast.error(plain(e.message))), 250)
+    const wait = setTimeout(() => api.frame(video, false, time).then(({ path }) => n === asked.current && setFrame(path), (e) => toast.error(plain(e.message))), 250)
     return () => clearTimeout(wait)
-  }, [video, t])
+  }, [video, time])
   return (
     <div className="flex flex-col gap-3 p-3">
       <div className="flex items-center gap-1.5">
-        <Button size="icon-xs" variant="ghost" aria-label="Another video" title="Another video" onClick={onBack}>
+        <Button size="icon-xs" variant="ghost" aria-label={t("Another video")} title={t("Another video")} onClick={onBack}>
           <ArrowLeftIcon />
         </Button>
-        <span className="text-sm font-semibold">A frame of the video</span>
+        <span className="text-sm font-semibold">{t("A frame of the video")}</span>
       </div>
       <div className="relative grid aspect-video place-items-center overflow-hidden rounded-lg bg-muted">
-        {frame ? <img src={fileUrl(frame)} alt={`The frame at ${t.toFixed(1)} s`} className="size-full object-contain" /> : <LoaderCircleIcon className="size-5 animate-spin text-muted-foreground" />}
+        {frame ? <img src={fileUrl(frame)} alt={t("The frame at {time} s", { time: secs(time) })} className="size-full object-contain" /> : <LoaderCircleIcon className="size-5 animate-spin text-muted-foreground" />}
       </div>
       <video src={fileUrl(video)} preload="metadata" hidden onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setLength(e.currentTarget.duration)} />
       <div className="flex items-center gap-3 px-1">
-        <Slider className="flex-1" min={0} max={Math.max(0.1, length - 0.1)} step={0.1} value={[t]} disabled={!length} onValueChange={([v]) => setT(v)} aria-label="The frame" />
-        <span className="w-12 text-right text-sm tabular-nums">{t.toFixed(1)} s</span>
+        <Slider className="flex-1" min={0} max={Math.max(0.1, length - 0.1)} step={0.1} value={[time]} disabled={!length} onValueChange={([v]) => setTime(v)} aria-label={t("The frame")} />
+        <span className="w-12 text-right text-sm tabular-nums">{secs(time)} s</span>
       </div>
       <Button disabled={!frame} onClick={() => frame && onAdd(frame)}>
-        Add this frame
+        {t("Add this frame")}
       </Button>
     </div>
   )
@@ -184,7 +186,7 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
       return save(s, times)
     }
     const fit = paths.slice(0, Math.max(0, Math.min(mf.max - mids.length, cap == null ? Infinity : cap - all)))
-    if (fit.length < paths.length) toast.warning(`${paths.length - fit.length} left out`, { description: cap != null ? `${cap} frames at most at ${seconds} s, first and last included.` : `${mf.max} middle frames at most.` })
+    if (fit.length < paths.length) toast.warning(t("{n} left out", { n: paths.length - fit.length }), { description: cap != null ? t("{cap} frames at most at {seconds} s, first and last included.", { cap, seconds }) : t("{max} middle frames at most.", { max: mf.max }) })
     s.splice(s.length - 1, 0, ...fit)
     save(s, [...times, ...fit.map(() => undefined)])
   }
@@ -211,7 +213,7 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
   }
 
   const tagOf = (at: number) => (at === 0 ? cite?.first_frame : at === seq.length - 1 ? cite?.last_frame : mf.cite?.replace("{n}", String(at)))
-  const nameOf = (at: number) => (at === 0 ? "First" : at === seq.length - 1 ? "Last" : `Frame ${at}`)
+  const nameOf = (at: number) => (at === 0 ? t("First") : t("Last"))
   const dropProps = (at: number | "add") => ({
     onDragOver: (e: React.DragEvent) => (e.preventDefault(), e.stopPropagation(), setOver(at)),
     onDragLeave: () => setOver(null),
@@ -235,13 +237,13 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
             onDragStart={(e) => (setDragged(at), (e.dataTransfer.effectAllowed = "move"))}
             onDragEnd={() => (setDragged(null), setOver(null))}
             {...dropProps(at)}
-            title="Drag it to another place"
+            title={t("Drag it to another place")}
             className={cn("group relative size-16 cursor-grab overflow-hidden rounded-lg border active:cursor-grabbing", over === at && "ring-2 ring-space", dragged === at && "opacity-40")}
           >
             <Thumb path={path} />
             <button
               type="button"
-              aria-label={`Remove ${nameOf(at).toLowerCase()}`}
+              aria-label={at === 0 ? t("Remove the first frame") : end ? t("Remove the last frame") : t("Remove frame {n}", { n: at })}
               onClick={() => remove(at)}
               className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             >
@@ -254,8 +256,8 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
               <button
                 type="button"
                 {...dropProps(at)}
-                aria-label={`Add the ${nameOf(at).toLowerCase()} frame`}
-                title="From your computer, the library or a frame of a video; or drop an image here"
+                aria-label={at === 0 ? t("Add the first frame") : t("Add the last frame")}
+                title={t("From your computer, the library or a frame of a video; or drop an image here")}
                 className={cn("grid size-16 place-items-center rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-space/60 hover:text-space", over === at && "border-space bg-space/10 text-space")}
               >
                 {loading || (busy && over === at) ? <LoaderCircleIcon className="size-4 animate-spin" /> : <PlusIcon className="size-4" />}
@@ -265,7 +267,7 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
         )}
         {/* its tag when the model cites its frames (a click puts it in the words), else its place */}
         {path && tag ? (
-          <button type="button" onClick={() => onCite(tag)} title={`Cite ${tag} in your words`} className="rounded px-1 font-mono text-[10px] leading-4 whitespace-nowrap text-muted-foreground hover:bg-muted hover:text-foreground">
+          <button type="button" onClick={() => onCite(tag)} title={t("Cite {tag} in your words", { tag })} className="rounded px-1 font-mono text-[10px] leading-4 whitespace-nowrap text-muted-foreground hover:bg-muted hover:text-foreground">
             {tag}
           </button>
         ) : (
@@ -277,7 +279,7 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
               inputMode="decimal"
               className="h-6 w-11 px-1.5 text-center text-[11px]"
               placeholder="s"
-              aria-label={`Frame ${at}: its time in seconds`}
+              aria-label={t("Frame {n}: its time in seconds", { n: at })}
               value={times[at - 1] ?? ""}
               onChange={(e) => {
                 const t = [...times]
@@ -298,11 +300,11 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
       <Label
         hint={
           <span className={cn("tabular-nums", cap != null && all > cap && "font-medium text-destructive")}>
-            {cap != null ? `${all} / ${cap} frames at ${seconds} s` : `${mids.length} / ${mf.max} middle frames`}
+            {cap != null ? t("{n} / {cap} frames at {seconds} s", { n: all, cap, seconds }) : t("{n} / {max} middle frames", { n: mids.length, max: mf.max })}
           </span>
         }
       >
-        Keyframes
+        {t("Keyframes")}
       </Label>
       <div className="flex items-start gap-1.5 overflow-x-auto pb-1">
         {tile(0)}
@@ -316,15 +318,15 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
                   <button
                     type="button"
                     {...dropProps("add")}
-                    aria-label="Add a middle frame"
-                    title="From your computer, the library or a frame of a video; or drop images here"
+                    aria-label={t("Add a middle frame")}
+                    title={t("From your computer, the library or a frame of a video; or drop images here")}
                     className={cn("grid size-16 place-items-center rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-space/60 hover:text-space", over === "add" && "border-space bg-space/10 text-space")}
                   >
                     {loading || (busy && over === "add") ? <LoaderCircleIcon className="size-4 animate-spin" /> : <PlusIcon className="size-4" />}
                   </button>
                 )}
               </ImageSource>
-              <span className="text-xs leading-4 text-muted-foreground">Middle</span>
+              <span className="text-xs leading-4 text-muted-foreground">{t("Middle")}</span>
             </div>
           </>
         )}
@@ -332,8 +334,8 @@ export function KeyframeStrip({ inputs, times = [], mf, cite, seconds, media, ho
         {tile(seq.length - 1)}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        {mf.timed ? "The video passes through each middle frame at its time." : "The video passes through each frame in this order."} Drag a frame to move it.
-        {cite && " Click a tag to cite it in your words."}
+        {mf.timed ? t("The video passes through each middle frame at its time.") : t("The video passes through each frame in this order.")} {t("Drag a frame to move it.")}
+        {cite && ` ${t("Click a tag to cite it in your words.")}`}
       </p>
     </div>
   )

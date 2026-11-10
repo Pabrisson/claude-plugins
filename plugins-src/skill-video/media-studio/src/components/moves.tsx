@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react"
+import { own, t } from "@/lib/i18n"
 
 // what a camera move does, drawn: a small icon (camera, subject, arrow) and a scene of three planes that the move
 // animates (a zoom grows them alike, a dolly or a truck moves the near plane more, an orbit slides them apart)
@@ -138,7 +139,7 @@ const plane = (animation?: string): CSSProperties => ({ animation, transformBox:
 export function MovePreview({ move }: { move: string }) {
   const m = MOVES[move] ?? {}
   return (
-    <svg viewBox="0 0 160 90" className="mv-scene block aspect-video w-full bg-muted" role="img" aria-label={`${move}, as an animation`}>
+    <svg viewBox="0 0 160 90" className="mv-scene block aspect-video w-full bg-muted" role="img" aria-label={t("{move}, as an animation", { move: own(move) })}>
       <style>{KEYFRAMES}</style>
       <g key={move} style={plane(m.all)}>
         <g style={plane(m.bg)}>

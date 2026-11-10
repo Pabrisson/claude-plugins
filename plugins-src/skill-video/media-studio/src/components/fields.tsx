@@ -10,6 +10,7 @@ import { opt, sentence, shown, type Field, type Tool } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Chips, Label, ToolIcon } from "@/components/chips"
 import { colorWords } from "@/components/light-rig"
 import { MoveIcon, MovePreview } from "@/components/moves"
+import { t, own } from "@/lib/i18n"
 
 // a multi field's value: its moves in order, joined the way the prompt says them
 const THEN = ", then "
@@ -50,12 +51,12 @@ export function FieldInput({ field: f, value, onChange, tile }: { field: Field; 
   if (f.type === "sheets") return <Sheets field={f} value={v} onChange={onChange} />
   return (
     <div>
-      <Label>{f.label}</Label>
+      <Label>{own(f.label)}</Label>
       {f.type === "choice" ? (
         <Chips options={(f.options ?? []).map((o) => opt(o).value)} value={v} onChange={onChange} label={(o) => shown(f, o)} icon={optionIcon(f)} />
       ) : f.type === "number" ? (
         <div className="flex items-center gap-3">
-          <Slider min={f.min ?? 0} max={f.max ?? 100} step={f.step ?? 1} value={[Number(v)]} onValueChange={([n]) => onChange(String(n))} aria-label={f.label} />
+          <Slider min={f.min ?? 0} max={f.max ?? 100} step={f.step ?? 1} value={[Number(v)]} onValueChange={([n]) => onChange(String(n))} aria-label={own(f.label)} />
           <span className="w-12 text-right text-sm tabular-nums">
             {v}
             {f.unit ?? ""}
@@ -63,11 +64,11 @@ export function FieldInput({ field: f, value, onChange, tile }: { field: Field; 
         </div>
       ) : f.type === "color" ? (
         <div className="flex items-center gap-2">
-          <input type="color" value={v || "#ffffff"} onChange={(e) => onChange(e.target.value)} aria-label={f.label} className="h-9 w-14 cursor-pointer rounded-md border bg-transparent" />
+          <input type="color" value={v || "#ffffff"} onChange={(e) => onChange(e.target.value)} aria-label={own(f.label)} className="h-9 w-14 cursor-pointer rounded-md border bg-transparent" />
           <span className="text-sm text-muted-foreground tabular-nums">{v}</span>
         </div>
       ) : (
-        <Input value={value ?? ""} placeholder={f.placeholder} onChange={(e) => onChange(e.target.value)} />
+        <Input value={value ?? ""} placeholder={own(f.placeholder)} onChange={(e) => onChange(e.target.value)} />
       )}
     </div>
   )
@@ -84,7 +85,7 @@ function Sheets({ field: f, value, onChange }: { field: Field; value: string; on
   const count = options.filter((o) => on.includes(o.label.toLowerCase())).length
   return (
     <div>
-      <Label hint={count > 1 ? `${count} images, the first sets the look` : count === 1 ? "1 image" : undefined}>{f.label}</Label>
+      <Label hint={count > 1 ? t("{n} images, the first sets the look", { n: count }) : count === 1 ? t("1 image") : undefined}>{own(f.label)}</Label>
       <div className="flex flex-col gap-1.5">
         {options.map((o) => {
           const picked = on.includes(o.label.toLowerCase())
@@ -104,8 +105,8 @@ function Sheets({ field: f, value, onChange }: { field: Field; value: string; on
                 <span className={cn("rounded-[3px] border-2", picked ? "border-space" : "border-muted-foreground/50")} style={{ width: w >= h ? 28 : (28 * w) / h, height: h >= w ? 28 : (28 * h) / w }} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className={cn("block truncate text-sm", picked && "font-medium text-space")}>{o.label}</span>
-                <span className="block truncate text-xs text-muted-foreground">{o.note}</span>
+                <span className={cn("block truncate text-sm", picked && "font-medium text-space")}>{own(o.label)}</span>
+                <span className="block truncate text-xs text-muted-foreground">{own(o.note)}</span>
               </span>
               <span className="text-xs text-muted-foreground tabular-nums">{o.ratio}</span>
             </button>
@@ -128,36 +129,37 @@ function RichSelect({ field: f, value, onChange, tile, hint }: { field: Field; v
     <button
       ref={anchor}
       type="button"
-      aria-label={`${f.label}: ${shown(f, value)}. Change it`}
+      aria-label={t("{label}: {value}. Change it", { label: own(f.label), value: shown(f, value) })}
       className={cn(
         "flex w-full min-w-0 flex-col items-start rounded-lg border border-input bg-transparent text-left shadow-xs transition-colors outline-none hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:border-space/60 dark:bg-input/30 dark:hover:bg-input/50",
         tile ? "gap-0.5 px-3 py-2" : "h-10 justify-center px-3"
       )}
     >
-      {tile && <span className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{f.label}</span>}
+      {tile && <span className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{own(f.label)}</span>}
       <span className={cn("w-full truncate text-sm font-medium", !value && "text-muted-foreground")}>{shown(f, value)}</span>
-      {tile && <span className="w-full truncate text-xs text-muted-foreground">{(value && current?.group) || current?.note || " "}</span>}
+      {tile && <span className="w-full truncate text-xs text-muted-foreground">{(value && own(current?.group)) || own(current?.note) || " "}</span>}
     </button>
   )
   return (
     <div className="min-w-0">
-      {!tile && <Label hint={hint}>{f.label}</Label>}
+      {!tile && <Label hint={hint}>{own(f.label)}</Label>}
       <Popover open={open} onOpenChange={(o) => (o && measure(), setOpen(o))}>
         <PopoverTrigger asChild>{button}</PopoverTrigger>
         <PopoverContent side="right" align="start" sideOffset={offset} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-80 flex-col p-0">
           <Command loop className="min-h-0 flex-1">
-            {options.length > 8 && <CommandInput placeholder={`Search ${f.label.toLowerCase()}`} aria-label={`Search ${f.label.toLowerCase()}`} />}
+            {options.length > 8 && <CommandInput placeholder={t("Search {what}", { what: own(f.label).toLowerCase() })} aria-label={t("Search {what}", { what: own(f.label).toLowerCase() })} />}
             <CommandList className="max-h-[min(480px,70vh)] min-h-0 flex-1">
-              <CommandEmpty>Nothing matches.</CommandEmpty>
+              <CommandEmpty>{t("Nothing matches.")}</CommandEmpty>
               {groups.map((g) => (
-                <CommandGroup key={g} heading={g || undefined}>
+                <CommandGroup key={g} heading={own(g) || undefined}>
                   {options
                     .filter((o) => (o.group ?? "") === g)
                     .map((o) => (
-                      <CommandItem key={o.value} value={`${o.label} ${o.note ?? ""}`} data-checked={o.value === value} onSelect={() => (onChange(o.value), setOpen(false))} className="py-2">
+                      // (searched in the words shown)
+                      <CommandItem key={o.value} value={`${own(o.label)} ${own(o.note) ?? ""}`} data-checked={o.value === value} onSelect={() => (onChange(o.value), setOpen(false))} className="py-2">
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">{sentence(o.label) || "Auto"}</span>
-                          {o.note && <span className="block truncate text-xs text-muted-foreground">{o.note}</span>}
+                          <span className="block truncate font-medium">{sentence(own(o.label)) || t("Auto")}</span>
+                          {o.note && <span className="block truncate text-xs text-muted-foreground">{own(o.note)}</span>}
                         </span>
                       </CommandItem>
                     ))}
@@ -184,14 +186,14 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
   const set = (list: string[]) => onChange(list.join(THEN))
   return (
     <div className="col-span-2">
-      <Label hint="several, in order">{f.label}</Label>
+      <Label hint={t("several, in order")}>{own(f.label)}</Label>
       <div className="flex flex-wrap items-center gap-1.5">
         {picked.map((m, i) => (
           <span key={`${m}-${i}`} className={cn(CHIP, CHIP_ON, "flex items-center gap-1.5 py-0.5 pr-1 pl-1")}>
             <span className="grid size-5 place-items-center rounded-full bg-space text-[11px] font-semibold text-space-foreground tabular-nums">{i + 1}</span>
             <MoveIcon move={m} className="size-4 shrink-0" />
-            {sentence(shown(f, m))}
-            <button type="button" aria-label={`Remove ${shown(f, m)}`} onClick={() => set(picked.filter((_, j) => j !== i))} className="grid size-5 place-items-center rounded-full hover:bg-space/20">
+            {shown(f, m)}
+            <button type="button" aria-label={t("Remove {what}", { what: shown(f, m) })} onClick={() => set(picked.filter((_, j) => j !== i))} className="grid size-5 place-items-center rounded-full hover:bg-space/20">
               <XIcon className="size-3" />
             </button>
           </span>
@@ -199,24 +201,25 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
         <Popover open={open} onOpenChange={(o) => (o && measure(), setOpen(o))}>
           <PopoverTrigger asChild>
             <button ref={anchor} type="button" className={cn(CHIP, CHIP_OFF, "flex items-center gap-1 border-dashed")}>
-              <PlusIcon className="size-3.5" /> {picked.length ? "Then" : "Add a move"}
+              <PlusIcon className="size-3.5" /> {picked.length ? t("Then") : t("Add a move")}
             </button>
           </PopoverTrigger>
           <PopoverContent side="right" align="start" sideOffset={offset} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(36rem,calc(100vw-2rem))] flex-row p-0">
             <Command loop value={active} onValueChange={setActive} className="min-h-0 w-80 flex-none">
-              <CommandInput placeholder="Search moves" aria-label="Search camera moves" />
+              <CommandInput placeholder={t("Search moves")} aria-label={t("Search camera moves")} />
               <CommandList className="max-h-[min(480px,70vh)] min-h-0 flex-1">
-                <CommandEmpty>No such move.</CommandEmpty>
+                <CommandEmpty>{t("No such move.")}</CommandEmpty>
                 {groups.map((g) => (
-                  <CommandGroup key={g} heading={g || undefined}>
+                  <CommandGroup key={g} heading={own(g) || undefined}>
                     {options
                       .filter((o) => (o.group ?? "") === g)
                       .map((o) => (
-                        <CommandItem key={o.value} value={o.label} onSelect={() => (set([...picked, o.value]), setOpen(false))} className="items-start">
+                        // (its value the English label, which the preview finds it by; searched in the words shown too)
+                        <CommandItem key={o.value} value={o.label} keywords={[own(o.label)]} onSelect={() => (set([...picked, o.value]), setOpen(false))} className="items-start">
                           <MoveIcon move={o.value} className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
                           <span className="min-w-0 flex-1">
-                            <span className="block">{sentence(o.label)}</span>
-                            {o.note && <span className="line-clamp-2 block text-xs text-muted-foreground">{o.note}</span>}
+                            <span className="block">{sentence(own(o.label))}</span>
+                            {o.note && <span className="line-clamp-2 block text-xs text-muted-foreground">{own(o.note)}</span>}
                           </span>
                           {picked.includes(o.value) && <span className="text-xs text-space tabular-nums">#{picked.indexOf(o.value) + 1}</span>}
                         </CommandItem>
@@ -232,9 +235,9 @@ function Moves({ field: f, value, onChange }: { field: Field; value: string; onC
                 </div>
                 <p className="flex items-center gap-1.5 text-sm font-medium">
                   <MoveIcon move={seen.value} className="size-4 shrink-0" />
-                  {sentence(seen.label)}
+                  {sentence(own(seen.label))}
                 </p>
-                {seen.note && <p className="text-xs text-muted-foreground">{seen.note}</p>}
+                {seen.note && <p className="text-xs text-muted-foreground">{own(seen.note)}</p>}
               </div>
             )}
           </PopoverContent>
@@ -254,14 +257,14 @@ export function Setups({ tool, fields, onPick }: { tool: Tool; fields: Record<st
   const on = presets.find((p) => Object.entries(all(p)).every(([k, v]) => value(k) === v))
   const field: Field = {
     key: "setup",
-    label: "Setup",
+    label: t("Setup"),
     type: "select",
-    options: [{ value: "", label: "Your own", note: "The fields below, as you set them" }, ...presets.map((p) => ({ value: p.label, label: p.label, group: p.group, note: p.note }))],
+    options: [{ value: "", label: t("Your own"), note: t("The fields below, as you set them") }, ...presets.map((p) => ({ value: p.label, label: p.label, group: p.group, note: p.note }))],
   }
   return (
     <RichSelect
       field={field}
-      hint="sets the whole rig at once"
+      hint={t("sets the whole rig at once")}
       value={on?.label ?? ""}
       onChange={(label) => {
         const p = presets.find((x) => x.label === label)
@@ -286,25 +289,25 @@ export function Recolors({ field: f, fields, onChange }: { field: Field; fields:
   const put = (i: number, patch: Partial<Row>) => save(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   return (
     <div>
-      <Label hint={`up to ${f.max ?? 3}`}>{f.label}</Label>
+      <Label hint={t("up to {n}", { n: f.max ?? 3 })}>{own(f.label)}</Label>
       <div className="flex flex-col gap-1.5">
         {rows.map((r, i) => (
           <div key={i} className="flex items-center gap-1.5">
-            <Input value={r.item} placeholder={["the jacket", "the car", "the walls"][i] ?? "the item"} aria-label={`Item ${i + 1}`} onChange={(e) => put(i, { item: e.target.value })} className="min-w-0 flex-1" />
-            <span className="shrink-0 text-xs text-muted-foreground">becomes</span>
+            <Input value={r.item} placeholder={[t("the jacket"), t("the car"), t("the walls")][i] ?? t("the item")} aria-label={t("Item {n}", { n: i + 1 })} onChange={(e) => put(i, { item: e.target.value })} className="min-w-0 flex-1" />
+            <span className="shrink-0 text-xs text-muted-foreground">{t("becomes")}</span>
             <label className="relative flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs text-muted-foreground tabular-nums hover:bg-muted">
               <span className="size-4 rounded-full ring-1 ring-foreground/20" style={{ background: r.color }} />
               {colorWords(r.color).replace(/ \(.*/, "")}
-              <input type="color" value={r.color} onChange={(e) => put(i, { color: e.target.value })} aria-label={`Color of item ${i + 1}`} className="absolute inset-0 cursor-pointer opacity-0" />
+              <input type="color" value={r.color} onChange={(e) => put(i, { color: e.target.value })} aria-label={t("Color of item {n}", { n: i + 1 })} className="absolute inset-0 cursor-pointer opacity-0" />
             </label>
-            <button type="button" aria-label={`Remove item ${i + 1}`} onClick={() => save(rows.filter((_, j) => j !== i))} className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+            <button type="button" aria-label={t("Remove item {n}", { n: i + 1 })} onClick={() => save(rows.filter((_, j) => j !== i))} className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
               <XIcon className="size-4" />
             </button>
           </div>
         ))}
         {rows.length < (f.max ?? 3) && (
           <button type="button" onClick={() => save([...rows, { item: "", color: ["#f5c518", "#e63946", "#2a9d8f"][rows.length] ?? "#ffffff" }])} className={cn(CHIP, CHIP_OFF, "flex w-fit items-center gap-1 border-dashed")}>
-            <PlusIcon className="size-3.5" /> {rows.length ? "Another item" : "Recolor an item"}
+            <PlusIcon className="size-3.5" /> {rows.length ? t("Another item") : t("Recolor an item")}
           </button>
         )}
       </div>

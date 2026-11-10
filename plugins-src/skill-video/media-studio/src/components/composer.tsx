@@ -64,6 +64,7 @@ import { ToolPicker } from "@/components/tool-picker"
 import { LibraryVoices, ModelVoices, SingerPicker, VoicePicker } from "@/components/voice-picker"
 import { AudioTags, DialogueEditor, ModelOptions, ShotsEditor } from "@/components/model-options"
 import { capsOf, ModelPicker, type Priced } from "@/components/model-picker"
+import { t, own, locale } from "@/lib/i18n"
 
 // what the composer of one space holds: kept per space, so switching spaces loses nothing
 export type Compose = {
@@ -132,11 +133,12 @@ const shownWhen = (tool: Tool, fields: Record<string, string>) => (when?: Record
   })
 
 // where the result goes, as the composer says it (back: Extend going back in time, before its clip)
+const sec = (n: number) => n.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 function placeText(p: Place, kind: Kind, back: boolean) {
-  if (!p.replace) return kind === "audio" ? `The voice goes in at ${p.at.toFixed(1)} s` : `The result goes into the cut at ${p.at.toFixed(1)} s`
-  if (p.how === "after") return back ? "The result goes right before its clip" : "The result goes right after its clip"
-  if (p.how === "from") return p.to == null ? `The result replaces its clip from ${p.at.toFixed(1)} s` : `The result replaces its clip from ${p.at.toFixed(1)} s, for the voice's ${(p.to - (p.from ?? 0)).toFixed(1)} s`
-  return p.how === "whole" ? "The result replaces its clip" : "The result takes its clip's place"
+  if (!p.replace) return kind === "audio" ? t("The voice goes in at {at} s", { at: sec(p.at) }) : t("The result goes into the cut at {at} s", { at: sec(p.at) })
+  if (p.how === "after") return back ? t("The result goes right before its clip") : t("The result goes right after its clip")
+  if (p.how === "from") return p.to == null ? t("The result replaces its clip from {at} s", { at: sec(p.at) }) : t("The result replaces its clip from {at} s, for the voice's {length} s", { at: sec(p.at), length: sec(p.to - (p.from ?? 0)) })
+  return p.how === "whole" ? t("The result replaces its clip") : t("The result takes its clip's place")
 }
 
 // the tool list's prices for the session, per space, tool and model (a probe estimate, before any input)
@@ -199,7 +201,7 @@ export function Composer({
   // mask of who speaks on the photo
   const framedTool = tool.inputs.some((i) => i.key === "first_frame")
   const modelInputs: InputT[] = !framedTool ? [] : [
-    ...(tool.id === "talking-avatar" && mp?.masks ? [{ key: "speaker_masks", kind: "mask" as const, label: "Who speaks", optional: true }] : []),
+    ...(tool.id === "talking-avatar" && mp?.masks ? [{ key: "speaker_masks", kind: "mask" as const, label: t("Who speaks"), optional: true }] : []),
   ]
   // a model with middle frames (Kling 4.0, Grok): its first, middle and last frames in one strip, in order
   const strip = kind === "video" && framedTool && !!mp?.mid_frames
@@ -213,9 +215,9 @@ export function Composer({
   // sounds, and voices of one's own (Kling 4.0), after the tool's references
   const omni = kind === "video" && mode === "create" && model?.role === "generate" && tool.inputs.some((i) => i.key === "references")
   const refInputs: InputT[] = !omni ? [] : [
-    ...((mp?.videos ?? 0) > 0 ? [{ key: "ref_videos", kind: "video" as const, label: "Videos", optional: true, multiple: true }] : []),
-    ...((mp?.audios ?? 0) > 0 ? [{ key: "ref_audios", kind: "audio" as const, label: "Sounds", optional: true, multiple: true }] : []),
-    ...((mp?.named_voices ?? 0) > 0 ? [{ key: "ref_voices", kind: "audio" as const, label: "Voices", optional: true, multiple: true }] : []),
+    ...((mp?.videos ?? 0) > 0 ? [{ key: "ref_videos", kind: "video" as const, label: t("Videos"), optional: true, multiple: true }] : []),
+    ...((mp?.audios ?? 0) > 0 ? [{ key: "ref_audios", kind: "audio" as const, label: t("Sounds"), optional: true, multiple: true }] : []),
+    ...((mp?.named_voices ?? 0) > 0 ? [{ key: "ref_voices", kind: "audio" as const, label: t("Voices"), optional: true, multiple: true }] : []),
   ]
   const slotTool = { ...tool, inputs: [...(first < 0 ? toolInputs : [...toolInputs.slice(0, first + 1), ...modelInputs, ...toolInputs.slice(first + 1)]), ...refInputs] }
   // the words and the prompt, unless the model takes none (Volcengine's lip sync)
@@ -313,51 +315,51 @@ export function Composer({
   // what is missing, as the button's words until it can run
   const expand = tool.local === "expand", extend = tool.local === "extend"
   const blocker = missing
-    ? missing.kind === "mask" || missing.kind === "sketch" ? missing.label : `Add ${missing.label.toLowerCase()}`
+    ? missing.kind === "mask" || missing.kind === "sketch" ? own(missing.label) : t("Add {what}", { what: own(missing.label).toLowerCase() })
     : unpicked
-      ? unpicked.type === "element" ? `Pick ${unpicked.label === "With" ? "an element" : `a ${unpicked.label.toLowerCase()}`}` : `Fill ${unpicked.label.toLowerCase()}`
+      ? unpicked.type === "element" ? (unpicked.label === "With" ? t("Pick an element") : t("Pick a {what}", { what: own(unpicked.label).toLowerCase() })) : t("Fill {what}", { what: own(unpicked.label).toLowerCase() })
     : keyframing && tool.keyframe!.required && !keyframe
-      ? "Make the keyframe first"
+      ? t("Make the keyframe first")
     : overRefs > 0 && model
       ? usedRefs === styleImages
-        ? framed ? "Frames or your style, not both" : "Pick a model for your style"
-        : framed ? "Frames or references, not both" : maxRefs === 0 ? "Pick a model that takes images" : `Remove ${overRefs} image${overRefs > 1 ? "s" : ""}`
+        ? framed ? t("Frames or your style, not both") : t("Pick a model for your style")
+        : framed ? t("Frames or references, not both") : maxRefs === 0 ? t("Pick a model that takes images") : overRefs > 1 ? t("Remove {n} images", { n: overRefs }) : t("Remove {n} image", { n: overRefs })
     : expand && !Object.values(marginsOf(value.fields)).some(Boolean)
-      ? "Set the frame"
+      ? t("Set the frame")
     : sheets && !sheetCount
-      ? "Pick a sheet"
+      ? t("Pick a sheet")
     : unsaid
-      ? tool.fields.some((f) => f.type === "element" && tool.one_of?.includes(f.key)) ? "Pick an element or add photos" : "Describe it or add photos"
+      ? tool.fields.some((f) => f.type === "element" && tool.one_of?.includes(f.key)) ? t("Pick an element or add photos") : t("Describe it or add photos")
       : draftOf
       ? null
       : shots
-      ? !shots.some((x) => x.prompt.trim()) ? "Write the shots" : shotLengths.length && !shotLengths.includes(shotsTotal) ? `Shots last ${shotsTotal} s: ${shotLengths[0]} to ${shotLengths.at(-1)} s` : null
+      ? !shots.some((x) => x.prompt.trim()) ? t("Write the shots") : shotLengths.length && !shotLengths.includes(shotsTotal) ? t("Shots last {total} s: {from} to {to} s", { total: shotsTotal, from: shotLengths[0], to: shotLengths.at(-1)! }) : null
       : dialogue
-      ? !dialogue.some((l) => l.text.trim()) ? "Write the lines" : dialogue.some((l) => l.text.trim() && !l.voice) ? "Pick each line's voice" : mp?.speakers && dialogueVoices > mp.speakers ? `${mp.speakers} voices at most` : dialogueChars > (direct ? 2000 : 5000) ? "Shorten the dialogue" : null
+      ? !dialogue.some((l) => l.text.trim()) ? t("Write the lines") : dialogue.some((l) => l.text.trim() && !l.voice) ? t("Pick each line's voice") : mp?.speakers && dialogueVoices > mp.speakers ? t("{n} voices at most", { n: mp.speakers }) : dialogueChars > (direct ? 2000 : 5000) ? t("Shorten the dialogue") : null
       : cap != null && frameCount > cap
-      ? `${cap} frames at most at ${seconds} s`
+      ? t("{n} frames at most at {s} s", { n: cap, s: seconds })
       : strip && mp?.mid_frames?.timed && (value.inputs.mid_frames?.length ?? 0) > 0 && (value.inputs.mid_frames ?? []).some((_, i) => !(((value.params.mid_times as number[] | undefined)?.[i] ?? 0) > 0))
-      ? "Time each middle frame"
+      ? t("Time each middle frame")
       : !eleven && !local && words && !((whole || custom) && !value.raw ? value.intent.trim() : prompt) && tool.id !== "upscale" && !lines.some((l) => l.text.trim())
-      ? kind === "audio" ? (tool.id === "voice" ? "Write the text" : "Describe it") : "Write a prompt"
+      ? kind === "audio" ? (tool.id === "voice" ? t("Write the text") : t("Describe it")) : t("Write a prompt")
       : direct && !value.params.voice
-        ? "Pick a voice"
+        ? t("Pick a voice")
       : direct && model?.params.max_chars && value.intent.length > model.params.max_chars
-        ? "Shorten the text"
+        ? t("Shorten the text")
       : tool.id === "translate" && !value.fields.to?.trim()
-        ? "Pick the languages"
+        ? t("Pick the languages")
       : tool.id === "change-voice" && !value.params.voice
-        ? "Pick the new voice"
+        ? t("Pick the new voice")
       : tool.id === "remix-voice" && !value.params.voice
-        ? "Pick the voice"
+        ? t("Pick the voice")
       : (tool.id === "design-voice" || tool.id === "remix-voice") && !value.fields.description?.trim()
-        ? tool.id === "design-voice" ? "Describe the voice" : "Say what changes"
+        ? tool.id === "design-voice" ? t("Describe the voice") : t("Say what changes")
       : tool.id === "create-singer" && !value.fields.voice?.trim()
-        ? "Describe the voice"
+        ? t("Describe the voice")
       : tool.id === "music"
         ? (value.fields.mode ?? "describe") === "describe"
-          ? !value.fields.description?.trim() && !["references", "ref_videos", "ref_audios"].some((k) => value.inputs[k]?.length) ? "Describe the song" : null
-          : !value.fields.title?.trim() && !elevenModel ? "Give it a title" : !value.fields.style?.trim() && !value.fields.lyrics?.trim() ? "Give its style or lyrics" : null
+          ? !value.fields.description?.trim() && !["references", "ref_videos", "ref_audios"].some((k) => value.inputs[k]?.length) ? t("Describe the song") : null
+          : !value.fields.title?.trim() && !elevenModel ? t("Give it a title") : !value.fields.style?.trim() && !value.fields.lyrics?.trim() ? t("Give its style or lyrics") : null
         : null
   // (with the spec it answers: the agent's fill and submit wait for the one of what the composer holds)
   const [est, setEst] = useState<{ key?: string; answer?: EstimateAnswer; error?: string }>({})
@@ -431,8 +433,8 @@ export function Composer({
       setAsk(null)
       // one result takes the place on the timeline: the next generation is a plain one
       if (value.place) onChange({ ...value, place: undefined })
-      toast.success(sheetCount > 1 ? `${sheetCount} sheets started` : `${spec.batch ? `${spec.batch} × ` : ""}${tool.label} started`, {
-        description: sheetCount > 1 ? "The first sets the look, the others follow it. They keep running if you close this page." : "It keeps running if you close this page.",
+      toast.success(sheetCount > 1 ? t("{n} sheets started", { n: sheetCount }) : spec.batch ? t("{n} × {tool} started", { n: spec.batch, tool: own(tool.label) }) : t("{tool} started", { tool: own(tool.label) }), {
+        description: sheetCount > 1 ? t("The first sets the look, the others follow it. They keep running if you close this page.") : t("It keeps running if you close this page."),
       })
       return { started: r.ids }
     } catch (e) {
@@ -450,7 +452,7 @@ export function Composer({
   function clear() {
     const before = value
     onChange({ ...blank(kind, tool.id), model: value.model, batch: value.batch })
-    toast("Composer cleared", { action: { label: "Undo", onClick: () => onChange(before) } })
+    toast(t("Composer cleared"), { action: { label: t("Undo"), onClick: () => onChange(before) } })
   }
   function copyPrompt() {
     const files = Object.entries(value.inputs).filter(([, f]) => f.length).map(([k, f]) => `${k}: ${f.join(", ")}`)
@@ -467,8 +469,8 @@ export function Composer({
       "I will read it and click Generate myself.",
     ].filter((l) => l !== "").join("\n")
     navigator.clipboard.writeText(text).then(
-      () => toast.success("Prompt copied", { description: "Paste it in your agent: it writes the prompt here, without generating." }),
-      () => toast.error("The clipboard refused the copy")
+      () => toast.success(t("Prompt copied"), { description: t("Paste it in your agent: it writes the prompt here, without generating.") }),
+      () => toast.error(t("The clipboard refused the copy"))
     )
   }
 
@@ -485,12 +487,12 @@ export function Composer({
     if (!d?.at || d.at <= draftSeen || Date.now() - Date.parse(d.at) > 36e5) return
     const when = d.at
     onDraftSeen(when)
-    const before = value, t = tools.find((x) => x.id === d.tool) ?? tool, same = t.id === value.tool
+    const before = value, dt = tools.find((x) => x.id === d.tool) ?? tool, same = dt.id === value.tool
     // the files the composer holds stay, in the inputs the tool has
-    const kept = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => same || t.inputs.some((i) => i.key === k)))
-    const raw = !!d.raw && !ownPrompt(t), words = d.prompt ?? ""
+    const kept = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => same || dt.inputs.some((i) => i.key === k)))
+    const raw = !!d.raw && !ownPrompt(dt), words = d.prompt ?? ""
     const base: Compose = {
-      ...blank(kind, t.id),
+      ...blank(kind, dt.id),
       model: d.model ?? (same ? value.model : undefined),
       fields: { ...(same ? value.fields : {}), ...d.fields },
       inputs: { ...kept, ...d.inputs },
@@ -499,7 +501,7 @@ export function Composer({
       place: value.place,
       raw,
     }
-    const texts = Object.keys(d.fields ?? {}).filter((k) => t.fields.find((f) => f.key === k)?.type === "text")
+    const texts = Object.keys(d.fields ?? {}).filter((k) => dt.fields.find((f) => f.key === k)?.type === "text")
     const typed = (n: number) => {
       const part = (x: string) => x.slice(0, Math.ceil((x.length * n) / TYPED))
       return { ...base, fields: { ...base.fields, ...Object.fromEntries(texts.map((k) => [k, part(base.fields[k])])) }, ...(raw ? { rawText: part(words) } : { intent: part(words) }) }
@@ -513,7 +515,7 @@ export function Composer({
       setTyping(false)
       setTold(when)
     }, 30)
-    toast("The agent filled the composer", { description: t.label, action: { label: "Undo", onClick: () => onChange(before) } })
+    toast(t("The agent filled the composer"), { description: own(dt.label), action: { label: t("Undo"), onClick: () => onChange(before) } })
     // the page left before the end: all of it, at once
     return () => {
       if (n >= TYPED) return
@@ -534,9 +536,11 @@ export function Composer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sub?.at])
 
-  const label = keyframe ? "Apply to the shot" : tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? tool.label : "Generate"
+  const label = keyframe ? t("Apply to the shot") : tool.id === "change-voice" ? t("Change voice") : tool.id === "translate" ? t("Translate") : local ? own(tool.label) : t("Generate")
   const a = blocker ? undefined : est.answer
   const price = a ? priceLabel(a) : blocker && probe.key === probeKey ? probe.label : null
+  // (the agent hears the price in priceLabel's words; the button shows it in the dashboard's)
+  const priceShown = price && t(price)
   const ready = !busy && !!a && (eleven || elevenModel ? state.keys.elevenlabs : local || state.keys[state.router])
 
   // what the agent hears back, once the words are typed in and the composer priced (or held back by what it misses),
@@ -580,7 +584,7 @@ export function Composer({
       }
     }
     if (inputs !== value.inputs) set({ inputs })
-    else if (files.length) toast.error(`${tool.label} takes no such file here`)
+    else if (files.length) toast.error(t("{tool} takes no such file here", { tool: own(tool.label) }))
   }
 
   return (
@@ -609,10 +613,12 @@ export function Composer({
           <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
             <ListVideoIcon className="size-4 shrink-0 text-space" aria-hidden />
             <span className="flex-1">
-              {placeText(value.place, kind, tool.id === "extend" && value.fields.direction === "prequel")} on the timeline of{" "}
-              {state.workspaces.find((w) => w.slug === value.place!.workspace)?.name ?? "its workspace"}.
+              {t("{place} on the timeline of {workspace}.", {
+                place: placeText(value.place, kind, tool.id === "extend" && value.fields.direction === "prequel"),
+                workspace: state.workspaces.find((w) => w.slug === value.place!.workspace)?.name ?? t("its workspace"),
+              })}
             </span>
-            <Button size="icon-xs" variant="ghost" aria-label="Do not lay the result on the timeline" title="Do not lay it on the timeline" onClick={() => set({ place: undefined })}>
+            <Button size="icon-xs" variant="ghost" aria-label={t("Do not lay the result on the timeline")} title={t("Do not lay it on the timeline")} onClick={() => set({ place: undefined })}>
               <XIcon />
             </Button>
           </div>
@@ -622,7 +628,7 @@ export function Composer({
           className="grid grid-cols-2"
           options={["create", "edit"] as const}
           value={mode}
-          label={(m) => (m === "create" ? "Create" : "Edit")}
+          label={(m) => (m === "create" ? t("Create") : t("Edit"))}
           icon={(m) => (m === "create" ? <SparklesIcon /> : <PencilLineIcon />)}
           onChange={(m) => onChange({ ...blank(kind, firstOf(kind, m, tools)), batch: value.batch, ...(kind === "audio" && value.inputs.clip ? { inputs: { clip: value.inputs.clip } } : {}) })}
         />
@@ -636,7 +642,7 @@ export function Composer({
           onPick={(t) => onChange({ ...blank(kind, t.id), batch: value.batch, inputs: Object.fromEntries(Object.entries(value.inputs).filter(([k]) => t.inputs.some((i) => i.key === k))) })}
         />
 
-        {!words && <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={limits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />}
+        {!words && <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={limits} none={framed ? t("Not with a frame") : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />}
 
         {tool.presets && <Setups tool={tool} fields={value.fields} onPick={(fields) => set({ fields: { ...value.fields, ...fields }, raw: false })} />}
 
@@ -645,7 +651,7 @@ export function Composer({
         {sections(tool.fields.filter((f) => shown(f.when) && f.type !== "margin" && !(extend && ["direction", "join"].includes(f.key)) && !(((direct && !mp?.tags) || waiting) && f.key === "instructions") && !(elevenModel && (f.type === "singer" || f.suno)))).map(({ section, fields }, i) =>
           section ? (
             <div key={section}>
-              <Label>{section}</Label>
+              <Label>{own(section)}</Label>
               <div className="grid grid-cols-2 gap-2">
                 {fields.map((f) =>
                   f.type === "select" ? (
@@ -662,8 +668,8 @@ export function Composer({
             fields.map((f) =>
               tool.id === "translate" && f.key === "to" ? (
                 <div key={f.key}>
-                  <Label>{f.label}</Label>
-                  <Input value={value.fields.to ?? ""} placeholder={f.placeholder} onChange={(e) => set({ fields: { ...value.fields, to: e.target.value } })} />
+                  <Label>{own(f.label)}</Label>
+                  <Input value={value.fields.to ?? ""} placeholder={own(f.placeholder)} onChange={(e) => set({ fields: { ...value.fields, to: e.target.value } })} />
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {COMMON_LANGS.map((l) => {
                       const list = (value.fields.to ?? "").split(/[,\s]+/).filter(Boolean), on = list.includes(l)
@@ -706,7 +712,7 @@ export function Composer({
               ) : f.type === "recolors" ? (
                 <Recolors key={f.key} field={f} fields={value.fields} onChange={(patch) => set({ fields: { ...value.fields, ...patch }, raw: false })} />
               ) : f.type === "element" ? (
-                <ElementField key={f.key} field={f} value={value.fields[f.key]} items={items} views={mp?.element_views} blocked={maxRefs === 0 ? (framed ? "not with a frame" : "not on this model") : undefined} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
+                <ElementField key={f.key} field={f} value={value.fields[f.key]} items={items} views={mp?.element_views} blocked={maxRefs === 0 ? (framed ? t("not with a frame") : t("not on this model")) : undefined} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               ) : (
                 <FieldInput key={f.key} field={f} value={value.fields[f.key]} onChange={(v) => set({ fields: { ...value.fields, [f.key]: v }, raw: false })} />
               )
@@ -718,7 +724,7 @@ export function Composer({
           <VoicePicker enabled={state.keys.elevenlabs} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
         )}
         {tool.id === "remix-voice" && (
-          <VoicePicker enabled={state.keys.elevenlabs} label="Voice to remix" placeholder="Pick the voice" value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
+          <VoicePicker enabled={state.keys.elevenlabs} label={t("Voice to remix")} placeholder={t("Pick the voice")} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
         )}
         {tool.id === "voice" && !noClone && (
           <LibraryVoices
@@ -735,7 +741,7 @@ export function Composer({
             className="grid grid-cols-2"
             options={["one", "dialogue"] as const}
             value={dialogue ? "dialogue" : "one"}
-            label={(m) => (m === "one" ? "One voice" : "Dialogue")}
+            label={(m) => (m === "one" ? t("One voice") : t("Dialogue"))}
             icon={(m) => (m === "one" ? <MicIcon /> : <MessagesSquareIcon />)}
             onChange={(m) => {
               const { dialogue: _, ...rest } = value.params
@@ -744,7 +750,7 @@ export function Composer({
           />
         )}
         {tool.id === "voice" && direct && !dialogue && (
-          <VoicePicker enabled={state.keys.elevenlabs} label="Voice" placeholder="Pick a voice" value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
+          <VoicePicker enabled={state.keys.elevenlabs} label={t("Voice")} placeholder={t("Pick a voice")} value={value.params.voice as string | undefined} onChange={(voice) => set({ params: { ...value.params, voice } })} library={state.elements ?? []} />
         )}
         {dialogue && (
           <DialogueEditor
@@ -755,9 +761,9 @@ export function Composer({
             tags={!!mp?.tags}
             picker={(voice, onVoice, label) =>
               direct ? (
-                <VoicePicker enabled={state.keys.elevenlabs} value={voice || undefined} onChange={onVoice} library={state.elements ?? []} label={label} placeholder="Pick its voice" hint="" />
+                <VoicePicker enabled={state.keys.elevenlabs} value={voice || undefined} onChange={onVoice} library={state.elements ?? []} label={label} placeholder={t("Pick its voice")} hint="" />
               ) : (
-                <ModelVoices model={model!.model} voices={mp?.voices ?? []} info={mp?.voice_info} value={voice} onChange={onVoice} label={label} placeholder="Pick its voice" />
+                <ModelVoices model={model!.model} voices={mp?.voices ?? []} info={mp?.voice_info} value={voice} onChange={onVoice} label={label} placeholder={t("Pick its voice")} />
               )
             }
           />
@@ -767,7 +773,7 @@ export function Composer({
             className="grid grid-cols-2"
             options={["one", "shots"] as const}
             value={shots ? "shots" : "one"}
-            label={(m) => (m === "one" ? "One prompt" : "Shots")}
+            label={(m) => (m === "one" ? t("One prompt") : t("Shots"))}
             icon={(m) => (m === "one" ? <TypeIcon /> : <FilmIcon />)}
             onChange={(m) => {
               const { shots: _, ...rest } = value.params
@@ -778,12 +784,12 @@ export function Composer({
         {shots && mp?.shots && <ShotsEditor shots={shots} onChange={(s) => set({ params: { ...value.params, shots: s } })} max={mp.shots.max} each={mp.shots.each} lengths={shotLengths} />}
         {/* with shots, the tool's files stay: its frames and references */}
         {shots && slotTool.inputs.length > 0 && (
-          <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={slotLimits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />
+          <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} limits={slotLimits} none={framed ? t("Not with a frame") : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />
         )}
         {draftOf && (
           <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
-            <span className="flex-1">The final of the draft {draftOf}, in 1080p: no prompt, it is the draft&apos;s. Kie lists no price for it.</span>
-            <Button size="icon-xs" variant="ghost" aria-label="Not from the draft" title="Not from the draft" onClick={() => { const { draft_of: _, ...rest } = value.params; set({ params: rest }) }}>
+            <span className="flex-1">{t("The final of the draft {draft}, in 1080p: no prompt, it is the draft's. Kie lists no price for it.", { draft: draftOf })}</span>
+            <Button size="icon-xs" variant="ghost" aria-label={t("Not from the draft")} title={t("Not from the draft")} onClick={() => { const { draft_of: _, ...rest } = value.params; set({ params: rest }) }}>
               <XIcon />
             </Button>
           </div>
@@ -808,19 +814,19 @@ export function Composer({
             {/* the prompt the tool builds, read only: what goes to the model */}
             {!whole && (
               <div>
-                <Label hint={value.raw ? "written by the agent" : "built by the tool, with your words"}>Prompt</Label>
+                <Label hint={value.raw ? t("written by the agent") : t("built by the tool, with your words")}>{t("Prompt")}</Label>
                 <div className="relative">
                   <Textarea
                     readOnly
                     value={keyframe && est.answer?.prompt ? est.answer.prompt : shownPrompt}
-                    aria-label="Prompt sent to the model"
+                    aria-label={t("Prompt sent to the model")}
                     className="max-h-[calc(6lh+1rem)] min-h-16 resize-none border-dashed bg-muted/40 py-2 pr-10 pl-3 text-sm leading-relaxed text-foreground/80 focus-visible:ring-0 md:text-sm dark:bg-muted/30"
                   />
-                  <CopyText text={keyframe && est.answer?.prompt ? est.answer.prompt : shownPrompt} what="Prompt" />
+                  <CopyText text={keyframe && est.answer?.prompt ? est.answer.prompt : shownPrompt} what={t("Prompt")} />
                 </div>
                 {value.raw && (
                   <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => set({ raw: false })}>
-                    Back to the tool's prompt
+                    {t("Back to the tool's prompt")}
                   </button>
                 )}
               </div>
@@ -828,34 +834,34 @@ export function Composer({
             {/* the user's own words, with the tool's files */}
             {(takesWords || slotTool.inputs.length > 0) && !dialogue && !shots && !draftOf && (
               <div>
-                <Label hint={direct && model?.params.max_chars ? `${value.intent.length.toLocaleString("en")} / ${model.params.max_chars.toLocaleString("en")} characters` : whole ? undefined : custom ? "added to the tool's prompt" : "optional, added to the tool's prompt"}>{kind === "audio" ? (tool.id === "voice" ? "Text to speak" : "What it sounds like") : whole ? "Prompt" : "Your words"}</Label>
+                <Label hint={direct && model?.params.max_chars ? t("{n} / {max} characters", { n: value.intent.length.toLocaleString(locale()), max: model.params.max_chars.toLocaleString(locale()) }) : whole ? undefined : custom ? t("added to the tool's prompt") : t("optional, added to the tool's prompt")}>{kind === "audio" ? (tool.id === "voice" ? t("Text to speak") : t("What it sounds like")) : whole ? t("Prompt") : t("Your words")}</Label>
                 <InputGroup className="h-auto flex-col rounded-xl bg-input/20 has-[[data-slot=input-group-control]:focus-visible]:border-space/60 has-[[data-slot=input-group-control]:focus-visible]:ring-space/20">
                   {takesWords && kind === "audio" && (
                     <InputGroupTextarea
                       value={value.intent}
-                      aria-label={tool.id === "voice" ? "Text to speak" : "What it sounds like"}
-                      placeholder={tool.id === "voice" ? "What the voice says" : "rain on a tin roof, distant thunder"}
+                      aria-label={tool.id === "voice" ? t("Text to speak") : t("What it sounds like")}
+                      placeholder={tool.id === "voice" ? t("What the voice says") : t("rain on a tin roof, distant thunder")}
                       className={cn("max-h-[calc(6lh+1.25rem)] py-2.5 pr-10 pl-3 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
                       onChange={(e) => set({ intent: e.target.value })}
                     />
                   )}
-                  {takesWords && <CopyText text={value.intent} what={kind === "audio" ? "Text" : "Prompt"} />}
+                  {takesWords && <CopyText text={value.intent} what={kind === "audio" ? t("Text") : t("Prompt")} />}
                   {takesWords && kind !== "audio" && (
                     <MentionTextarea
                       value={value.intent}
                       items={items}
                       first={ws?.linked}
                       firstLabel={ws?.name}
-                      blocked={maxRefs === 0 ? (framed ? "Not with a frame: with a first or last frame, the model takes no reference image." : `${model?.name ?? "This model"} takes no reference image: pick another model to cite one.`) : undefined}
-                      aria-label={whole ? "Prompt" : "Your words"}
-                      placeholder={`${whole ? tool.description : custom ? "What to change." : "Anything to add: details, style, what must not change."} Type @ to cite an element.`}
+                      blocked={maxRefs === 0 ? (framed ? t("Not with a frame: with a first or last frame, the model takes no reference image.") : t("{model} takes no reference image: pick another model to cite one.", { model: model?.name ?? t("This model") })) : undefined}
+                      aria-label={whole ? t("Prompt") : t("Your words")}
+                      placeholder={t("{text} Type @ to cite an element.", { text: whole ? own(tool.description) : custom ? t("What to change.") : t("Anything to add: details, style, what must not change.") })}
                       className={cn("max-h-[calc(6lh+1.25rem)] py-2.5 pr-10 pl-3 text-[15px] leading-relaxed md:text-[15px]", whole ? "min-h-28" : "min-h-16")}
                       onChange={(intent) => set({ intent })}
                     />
                   )}
                   {slotTool.inputs.length > 0 && (
                     <InputGroupAddon align="block-end" className={cn("px-3 pt-3 pb-3 font-normal", takesWords && "border-t")}>
-                      <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} limits={slotLimits} none={framed ? "Not with a frame" : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />
+                      <InputSlots tool={slotTool} value={value.inputs} onChange={(inputs) => set({ inputs })} home={state.home} media={state.media} label={false} limits={slotLimits} none={framed ? t("Not with a frame") : undefined} fields={value.fields} onField={(k, v) => set({ fields: { ...value.fields, [k]: v }, raw: false })} />
                     </InputGroupAddon>
                   )}
                 </InputGroup>
@@ -945,10 +951,10 @@ export function Composer({
 
         {lipFrame && (
           <div>
-            <Label hint="the talking head starts from it: 0 is the first frame">From the frame at</Label>
+            <Label hint={t("the talking head starts from it: 0 is the first frame")}>{t("From the frame at")}</Label>
             <div className="flex items-center gap-2">
-              <Input type="number" min={0} step={0.1} className="w-24" value={(value.params.frame as number | undefined) ?? 0} onChange={(e) => set({ params: { ...value.params, frame: Math.max(0, Number(e.target.value) || 0) } })} aria-label="Second of the video's frame" />
-              <span className="text-sm text-muted-foreground">s into the video</span>
+              <Input type="number" min={0} step={0.1} className="w-24" value={(value.params.frame as number | undefined) ?? 0} onChange={(e) => set({ params: { ...value.params, frame: Math.max(0, Number(e.target.value) || 0) } })} aria-label={t("Second of the video's frame")} />
+              <span className="text-sm text-muted-foreground">{t("s into the video")}</span>
             </div>
           </div>
         )}
@@ -960,34 +966,34 @@ export function Composer({
         )}
         {tool.id === "change-voice" && (
           <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
-            Keeps the delivery: pauses, emotion and rhythm stay, only the timbre changes. Up to 5 min goes in one call; a longer clip is sent in pieces.
+            {t("Keeps the delivery: pauses, emotion and rhythm stay, only the timbre changes. Up to 5 min goes in one call; a longer clip is sent in pieces.")}
           </p>
         )}
         {(tool.id === "design-voice" || tool.id === "remix-voice") && (
           <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
-            Three previews come back: open the one you like and « Keep this voice » makes it a voice of your ElevenLabs account and of the Library, for Voice, Change voice and the others. Keeping it is free.
+            {t("Three previews come back: open the one you like and « {keep} » makes it a voice of your ElevenLabs account and of the Library, for {voice}, {change} and the others. Keeping it is free.", { keep: t("Keep this voice"), voice: own("Voice"), change: own("Change voice") })}
           </p>
         )}
         {tool.id === "transcribe" && (
           <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
-            The text, its captions (SRT) and each word's time. Given its text, the words are not guessed: they are timed exactly as written.
+            {t("The text, its captions (SRT) and each word's time. Given its text, the words are not guessed: they are timed exactly as written.")}
           </p>
         )}
         {tool.id === "isolate-voice" && (
           <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
-            The voice alone: music, noise and room taken out. A video comes back with only its voice, a sound as an MP3. ElevenLabs' Voice Isolator, whichever router.
+            {t("The voice alone: music, noise and room taken out. A video comes back with only its voice, a sound as an MP3. ElevenLabs' Voice Isolator, whichever router.")}
           </p>
         )}
         {tool.id === "translate" && (
           <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
-            No lip-sync: the voices are dubbed in their own timbre, the lips keep the original language. Subtitles come with each language.
+            {t("No lip-sync: the voices are dubbed in their own timbre, the lips keep the original language. Subtitles come with each language.")}
           </p>
         )}
         {(eleven || elevenModel) && !state.keys.elevenlabs && (
-          <p className="rounded-lg border p-3 text-xs text-destructive">No ElevenLabs key: set it with /plugin configure skill-video@pabrisson or ELEVENLABS_API_KEY, then restart your agent.</p>
+          <p className="rounded-lg border p-3 text-xs text-destructive">{t("No ElevenLabs key: set it with /plugin configure skill-video@pabrisson or ELEVENLABS_API_KEY, then restart your agent.")}</p>
         )}
         {!eleven && !elevenModel && !local && !state.keys[state.router] && (
-          <p className="rounded-lg border p-3 text-xs text-destructive">No {ROUTER_NAME[state.router]} key: prices show, nothing can be generated. Set it with /plugin configure skill-video@pabrisson, or pick the other router in Settings.</p>
+          <p className="rounded-lg border p-3 text-xs text-destructive">{t("No {router} key: prices show, nothing can be generated. Set it with /plugin configure skill-video@pabrisson, or pick the other router in Settings.", { router: ROUTER_NAME[state.router] })}</p>
         )}
       </div>
 
@@ -997,7 +1003,7 @@ export function Composer({
           {!eleven && !local && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon-lg" className="size-11" aria-label="Prompt and composer">
+                <Button variant="outline" size="icon-lg" className="size-11" aria-label={t("Prompt and composer")}>
                   <EllipsisVerticalIcon />
                 </Button>
               </DropdownMenuTrigger>
@@ -1005,17 +1011,17 @@ export function Composer({
                 <DropdownMenuItem onSelect={copyPrompt} className="items-start">
                   <CopyIcon className="mt-0.5" />
                   <span className="flex flex-col gap-0.5">
-                    <span className="font-medium">Copy prompt</span>
+                    <span className="font-medium">{t("Copy prompt")}</span>
                     <span className="text-xs text-muted-foreground">
-                      A request for the agent with this tool, {model ? model.name : "the model"} and your inputs: paste it in your agent, the agent writes the prompt this model handles best here. Nothing is generated, nothing is spent.
+                      {t("A request for the agent with this tool, {model} and your inputs: paste it in your agent, the agent writes the prompt this model handles best here. Nothing is generated, nothing is spent.", { model: model ? model.name : t("the model") })}
                     </span>
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={clear} className="items-start">
                   <EraserIcon className="mt-0.5" />
                   <span className="flex flex-col gap-0.5">
-                    <span className="font-medium">Clear</span>
-                    <span className="text-xs text-muted-foreground">Empties the words, files and settings; keeps the tool and the model.</span>
+                    <span className="font-medium">{t("Clear")}</span>
+                    <span className="text-xs text-muted-foreground">{t("Empties the words, files and settings; keeps the tool and the model.")}</span>
                   </span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -1030,15 +1036,15 @@ export function Composer({
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">{blocker ?? label}</span>
                     {/* the shortcut gives way to a long price (« ≈ 49 credits »): the tooltip still says it */}
-                    {!blocker && (price?.length ?? 0) < 8 && <Kbd className="shrink-0 bg-space-foreground/15 px-1.5 text-space-foreground/80">⌘↵</Kbd>}
+                    {!blocker && (priceShown?.length ?? 0) < 8 && <Kbd className="shrink-0 bg-space-foreground/15 px-1.5 text-space-foreground/80">⌘↵</Kbd>}
                   </span>
-                  {price && <Price className="bg-space-foreground/15 text-space-foreground">{price}</Price>}
+                  {priceShown && <Price className="bg-space-foreground/15 text-space-foreground">{priceShown}</Price>}
                 </Button>
               </span>
             </TooltipTrigger>
             <TooltipContent side="top">
               {blocker ?? label}
-              {price ? ` · ${price}` : ""}
+              {priceShown ? ` · ${priceShown}` : ""}
               {!blocker && ready ? " · ⌘↵" : ""}
             </TooltipContent>
           </Tooltip>
@@ -1047,17 +1053,17 @@ export function Composer({
 
       <Dialog open={!!ask} onOpenChange={(o) => !o && setAsk(null)}>
         <DialogContent>
-          <DialogTitle>{ask?.needs === "cap" ? "Over this month's cap" : ask?.needs === "unknown" ? "Unknown cost" : "Over your confirmation threshold"}</DialogTitle>
+          <DialogTitle>{ask?.needs === "cap" ? t("Over this month's cap") : ask?.needs === "unknown" ? t("Unknown cost") : t("Over your confirmation threshold")}</DialogTitle>
           <DialogDescription>
             {ask?.needs === "unknown"
-              ? "This model lists no price for these settings: the actual cost shows in Credits once it is done."
+              ? t("This model lists no price for these settings: the actual cost shows in Credits once it is done.")
               : ask?.needs === "cap"
-                ? `This would take this month's spend over the cap you set in Settings: ${ask?.shown}.`
-                : `This costs ${ask?.shown}, above the threshold you set in Settings.`}
+                ? t("This would take this month's spend over the cap you set in Settings: {price}.", { price: ask?.shown ?? "" })
+                : t("This costs {price}, above the threshold you set in Settings.", { price: ask?.shown ?? "" })}
           </DialogDescription>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setAsk(null)}>Cancel</Button>
-            <Button disabled={busy} onClick={() => go(true)}>{label} anyway</Button>
+            <Button variant="outline" onClick={() => setAsk(null)}>{t("Cancel")}</Button>
+            <Button disabled={busy} onClick={() => go(true)}>{t("{label} anyway", { label })}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1068,19 +1074,22 @@ export function Composer({
 // how many times to run it: 1 to 4 jobs, each its own result and cost; the button shows the total
 function Batch({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
-    <div className="flex h-11 items-center rounded-md border bg-background dark:border-input dark:bg-input/30" role="group" aria-label="Batch: how many to generate">
-      <button type="button" aria-label="One less" disabled={value <= 1} onClick={() => onChange(value - 1)} className="grid h-full w-7 place-items-center rounded-l-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40">
+    <div className="flex h-11 items-center rounded-md border bg-background dark:border-input dark:bg-input/30" role="group" aria-label={t("Batch: how many to generate")}>
+      <button type="button" aria-label={t("One less")} disabled={value <= 1} onClick={() => onChange(value - 1)} className="grid h-full w-7 place-items-center rounded-l-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40">
         <MinusIcon className="size-3.5" />
       </button>
-      <span className="w-9 text-center text-sm font-medium tabular-nums" aria-live="polite" title="Batch: how many to generate">
+      <span className="w-9 text-center text-sm font-medium tabular-nums" aria-live="polite" title={t("Batch: how many to generate")}>
         {value}/4
       </span>
-      <button type="button" aria-label="One more" disabled={value >= 4} onClick={() => onChange(value + 1)} className="grid h-full w-7 place-items-center rounded-r-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40">
+      <button type="button" aria-label={t("One more")} disabled={value >= 4} onClick={() => onChange(value + 1)} className="grid h-full w-7 place-items-center rounded-r-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40">
         <PlusIcon className="size-3.5" />
       </button>
     </div>
   )
 }
+
+// a quality's words (the value sent stays the model's own)
+const QUALITY: Record<string, string> = { auto: t("auto"), low: t("low"), medium: t("medium"), high: t("high"), xhigh: t("xhigh"), max: t("max") }
 
 // the model and the settings it accepts: only what this model lists
 function ModelBlock({
@@ -1124,7 +1133,7 @@ function ModelBlock({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Label>Model</Label>
+        <Label>{t("Model")}</Label>
         <ModelPicker kind={kind} recommended={recommended} others={others} value={model.id} onChange={(id) => id && onModel(id)} prices={prices} onOpen={onOpenModels} why={why} />
         {caps.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
@@ -1135,10 +1144,10 @@ function ModelBlock({
 
       {kind === "video" && !edit && durations.length > 0 && (
         <div>
-          <Label>Duration</Label>
+          <Label>{t("Duration")}</Label>
           {durations.length > 6 ? (
             <div className="flex items-center gap-3">
-              <Slider min={durations[0]} max={durations.at(-1)} step={1} value={[pick(durations, params.duration as number, 5)!]} onValueChange={([d]) => put("duration", d)} aria-label="Duration" />
+              <Slider min={durations[0]} max={durations.at(-1)} step={1} value={[pick(durations, params.duration as number, 5)!]} onValueChange={([d]) => put("duration", d)} aria-label={t("Duration")} />
               <span className="w-10 text-right text-sm tabular-nums">{pick(durations, params.duration as number, 5)} s</span>
             </div>
           ) : (
@@ -1148,12 +1157,12 @@ function ModelBlock({
       )}
       {!edit && !own.includes("aspect_ratio") && p.aspect_ratio?.length ? (
         <div>
-          <Label>Ratio</Label>
+          <Label>{t("Ratio")}</Label>
           {hasImageInput ? (
             <Chips
               options={["same", ...p.aspect_ratio]}
               value={(params.aspect_ratio as string) ?? "same"}
-              label={(r) => (r === "same" ? "Same as the image" : r)}
+              label={(r) => (r === "same" ? t("Same as the image") : r)}
               icon={valueIcon}
               onChange={(r) => put("aspect_ratio", r === "same" ? undefined : r)}
             />
@@ -1164,25 +1173,25 @@ function ModelBlock({
       ) : null}
       {(params.options as Record<string, unknown> | undefined)?.draft ? (
         <div>
-          <Label>Resolution</Label>
-          <p className="text-sm text-muted-foreground">480p: a draft, its 1080p final made from it later</p>
+          <Label>{t("Resolution")}</Label>
+          <p className="text-sm text-muted-foreground">{t("480p: a draft, its 1080p final made from it later")}</p>
         </div>
       ) : p.resolution?.length && model.role !== "upscale" ? (
         <div>
-          <Label>Resolution</Label>
+          <Label>{t("Resolution")}</Label>
           <Chips options={p.resolution} value={pick(p.resolution, params.resolution as string, kind === "image" ? "2K" : "1080p", kind === "image" ? "1K" : "720p")} icon={valueIcon} onChange={(r) => put("resolution", r)} />
         </div>
       ) : kind !== "audio" && model.role !== "upscale" && model.role !== "avatar" ? (
         <div>
-          <Label>Resolution</Label>
-          <p className="text-sm text-muted-foreground">{edit ? "Same as the source video" : "Set by the model"}</p>
+          <Label>{t("Resolution")}</Label>
+          <p className="text-sm text-muted-foreground">{edit ? t("Same as the source video") : t("Set by the model")}</p>
         </div>
       ) : null}
 
       {kind === "video" && p.audio ? (
         <div>
-          <Label>Sound</Label>
-          <Chips options={["on", "off"] as const} value={params.sound === false ? "off" : "on"} label={(s) => (s === "on" ? "On" : "Off")} icon={(s) => (s === "on" ? <Volume2Icon /> : <VolumeXIcon />)} onChange={(s) => put("sound", s === "on")} />
+          <Label>{t("Sound")}</Label>
+          <Chips options={["on", "off"] as const} value={params.sound === false ? "off" : "on"} label={(s) => (s === "on" ? t("On") : t("Off"))} icon={(s) => (s === "on" ? <Volume2Icon /> : <VolumeXIcon />)} onChange={(s) => put("sound", s === "on")} />
         </div>
       ) : null}
       {kind === "audio" && p.voices?.length && !cloning && !own.includes("voice") ? (
@@ -1192,10 +1201,10 @@ function ModelBlock({
         // opened by the user, or already open when something is set; never closed under them when a value goes back to its default
         <details className="group/more" open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
           <summary className="flex list-none items-center gap-1 text-xs font-semibold tracking-wider text-foreground/70 uppercase hover:text-foreground [&::-webkit-details-marker]:hidden">
-            <ChevronRightIcon className="size-3.5 transition-transform group-open/more:rotate-90" /> Options
+            <ChevronRightIcon className="size-3.5 transition-transform group-open/more:rotate-90" /> {t("Options")}
             {params.options != null && (
               <button type="button" className="ml-auto text-[11px] font-normal tracking-normal normal-case text-muted-foreground hover:text-foreground" onClick={(e) => (e.preventDefault(), put("options", undefined))}>
-                Back to the defaults
+                {t("Back to the defaults")}
               </button>
             )}
           </summary>
@@ -1203,16 +1212,16 @@ function ModelBlock({
             {p.options?.length ? <ModelOptions options={p.options} value={(params.options as Record<string, unknown>) ?? {}} onChange={(o) => put("options", o)} /> : null}
             {p.quality?.length ? (
               <div>
-                <Label>Quality</Label>
-                <Chips options={p.quality} value={pick(p.quality, params.quality as string, "high")} icon={valueIcon} onChange={(q) => put("quality", q)} />
+                <Label>{t("Quality")}</Label>
+                <Chips options={p.quality} value={pick(p.quality, params.quality as string, "high")} label={(q) => QUALITY[q] ?? q} icon={valueIcon} onChange={(q) => put("quality", q)} />
               </div>
             ) : null}
             {p.seed && (
               <div>
-                <Label hint="the same seed gives the same result" stacked>Seed</Label>
+                <Label hint={t("the same seed gives the same result")} stacked>{t("Seed")}</Label>
                 <Input
                   inputMode="numeric"
-                  placeholder="random"
+                  placeholder={t("random")}
                   value={(params.seed as number | undefined) ?? ""}
                   onChange={(e) => put("seed", e.target.value === "" ? undefined : Number(e.target.value.replace(/\D/g, "")))}
                 />
@@ -1238,7 +1247,7 @@ function SongText({ field: f, value, onChange, help, theme, onTitle }: { field: 
       setVersions((await api.assist("lyrics", subject, confirm)).texts)
     } catch (e) {
       const err = e as Error & { status?: number; body?: { shown?: string } }
-      if (err.status === 409) toast(`This costs ${err.body?.shown ?? "more"}, above your threshold`, { action: { label: "Go on", onClick: () => run(true) } })
+      if (err.status === 409) toast(t("This costs {price}, above your threshold", { price: err.body?.shown ?? t("more") }), { action: { label: t("Go on"), onClick: () => run(true) } })
       else toast.error(plain(err.message))
     } finally {
       setBusy(false)
@@ -1247,31 +1256,31 @@ function SongText({ field: f, value, onChange, help, theme, onTitle }: { field: 
   return (
     <div>
       <div className="flex items-center gap-2">
-        <Label>{f.label}</Label>
+        <Label>{own(f.label)}</Label>
         {help && (
-          <Button size="xs" variant="ghost" className="-mt-1.5 ml-auto" title="Suno writes two versions from what it is about (a small request, in Credits)" disabled={busy || !subject} onClick={() => run()}>
+          <Button size="xs" variant="ghost" className="-mt-1.5 ml-auto" title={t("Suno writes two versions from what it is about (a small request, in Credits)")} disabled={busy || !subject} onClick={() => run()}>
             {busy ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}
-            Write lyrics
+            {t("Write lyrics")}
           </Button>
         )}
       </div>
-      {help && <Input className="mb-2" value={about} placeholder={theme ? `About: ${theme}` : "What the song is about, for Write lyrics"} onChange={(e) => setAbout(e.target.value)} aria-label="What the song is about" />}
-      <Textarea id={`song-${f.key}`} value={value} placeholder={f.placeholder} onChange={(e) => onChange(e.target.value)} className="max-h-[calc(10lh+1rem)] min-h-28 text-sm leading-relaxed" />
+      {help && <Input className="mb-2" value={about} placeholder={theme ? t("About: {theme}", { theme }) : t("What the song is about, for Write lyrics")} onChange={(e) => setAbout(e.target.value)} aria-label={t("What the song is about")} />}
+      <Textarea id={`song-${f.key}`} value={value} placeholder={own(f.placeholder)} onChange={(e) => onChange(e.target.value)} className="max-h-[calc(10lh+1rem)] min-h-28 text-sm leading-relaxed" />
       {versions && (
         <div className="mt-2 flex flex-col gap-2">
           {versions.map((v, i) => (
             <div key={i} className="rounded-lg border bg-muted/40 p-2.5">
               <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-medium">{v.title || `Version ${i + 1}`}</span>
+                <span className="truncate text-sm font-medium">{v.title || t("Version {n}", { n: i + 1 })}</span>
                 <Button size="xs" className="ml-auto" onClick={() => (onChange(v.text), v.title && onTitle(v.title), setVersions(null))}>
-                  Use
+                  {t("Use")}
                 </Button>
               </div>
               <p className="mt-1 line-clamp-4 text-xs whitespace-pre-line text-muted-foreground">{v.text}</p>
             </div>
           ))}
           <button type="button" className="self-start text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setVersions(null)}>
-            Keep mine
+            {t("Keep mine")}
           </button>
         </div>
       )}
@@ -1284,7 +1293,7 @@ function SingerField({ field: f, value, elements, onChange }: { field: Field; va
   // a singer still waiting for its phrase is listed, never picked
   const singers = elements.filter((e) => e.type === "singer" && e.files.length)
   const picked = singers.find((e) => `@${e.name}` === value && !needsPhrase(e))
-  return <SingerPicker singers={singers} value={picked ? value! : ""} onChange={onChange} label={f.label} />
+  return <SingerPicker singers={singers} value={picked ? value! : ""} onChange={onChange} label={own(f.label)} />
 }
 
 // the two dubbing models, each with its price for this clip
@@ -1302,11 +1311,11 @@ function DubModels({ spec, value, ready, onChange }: { spec: Spec; value: string
   }, [key, ready])
   return (
     <div>
-      <Label>Model</Label>
+      <Label>{t("Model")}</Label>
       <div className="grid gap-1.5">
         {[
-          ["dubbing_v1", "Dubbing v1", "automatic speaker detection, the cheaper one"],
-          ["dubbing_v2", "Dubbing v2", "keeps the voices' emotion, much dearer"],
+          ["dubbing_v1", "Dubbing v1", t("automatic speaker detection, the cheaper one")],
+          ["dubbing_v2", "Dubbing v2", t("keeps the voices' emotion, much dearer")],
         ].map(([id, name, note]) => (
           <button
             key={id}
@@ -1335,10 +1344,10 @@ function CopyText({ text, what }: { text: string; what: string }) {
       type="button"
       size="icon-xs"
       variant="ghost"
-      aria-label={`Copy the ${what.toLowerCase()}`}
-      title={`Copy the ${what.toLowerCase()}`}
+      aria-label={t("Copy the {what}", { what: what.toLowerCase() })}
+      title={t("Copy the {what}", { what: what.toLowerCase() })}
       disabled={!text.trim()}
-      onClick={() => navigator.clipboard.writeText(text).then(() => toast.success(`${what} copied`), () => toast.error("The clipboard refused the copy"))}
+      onClick={() => navigator.clipboard.writeText(text).then(() => toast.success(t("{what} copied", { what })), () => toast.error(t("The clipboard refused the copy")))}
       className="absolute top-1.5 right-1.5 z-10 bg-background/70 text-muted-foreground backdrop-blur-sm hover:text-foreground"
     >
       <CopyIcon />

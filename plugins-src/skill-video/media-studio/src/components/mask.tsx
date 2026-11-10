@@ -10,6 +10,8 @@ import { Separator } from "@/components/ui/separator"
 import { Slider } from "@/components/ui/slider"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api, fileUrl, plain } from "@/lib/api"
+import { secs } from "@/components/cut"
+import { own, t } from "@/lib/i18n"
 
 // a mask painted over an image (inpaint) or a frame of a video (clean up). The strokes keep fractions of the picture,
 // so the screen shows them at its size and the file at the picture's; what is sent is the picture with the painted
@@ -18,9 +20,9 @@ import { api, fileUrl, plain } from "@/lib/api"
 type Tool = "brush" | "eraser" | "lasso"
 type Op = { tool: Tool | "invert"; size: number; points: [number, number][] }
 const TOOLS = [
-  { value: "brush", label: "Brush", key: "B", icon: BrushIcon },
-  { value: "eraser", label: "Eraser", key: "E", icon: EraserIcon },
-  { value: "lasso", label: "Lasso: fill a shape", key: "L", icon: LassoIcon },
+  { value: "brush", label: t("Brush"), key: "B", icon: BrushIcon },
+  { value: "eraser", label: t("Eraser"), key: "E", icon: EraserIcon },
+  { value: "lasso", label: t("Lasso: fill a shape"), key: "L", icon: LassoIcon },
 ] as const
 // the brush in thousandths of the picture's long side
 const SIZES = { min: 5, max: 200, start: 40 }
@@ -68,9 +70,10 @@ export function MaskDialog({ src, video, matte, words, onClose, onSave }: { src:
   return (
     <Dialog open={!!src} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-[min(1100px,calc(100%-2rem))] sm:max-w-[min(1100px,calc(100%-2rem))]">
-        <DialogTitle>Paint the area</DialogTitle>
+        <DialogTitle>{t("Paint the area")}</DialogTitle>
         <DialogDescription>
-          Paint over what should change, a little wider than the new thing will be{words ? `, then say it below` : ""}. The model works there only{matte ? "; the rest of the image is kept pixel for pixel" : ""}.
+          {words ? t("Paint over what should change, a little wider than the new thing will be, then say it below.") : t("Paint over what should change, a little wider than the new thing will be.")}{" "}
+          {matte ? t("The model works there only; the rest of the image is kept pixel for pixel.") : t("The model works there only.")}
         </DialogDescription>
         {src && <Painter key={src} start={src} video={video} matte={matte} words={words} onSave={onSave} />}
       </DialogContent>
@@ -134,8 +137,8 @@ function Painter({ start, video, matte, words, onSave }: { start: string; video?
         return e.shiftKey ? redo() : undo()
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      const t = TOOLS.find((x) => x.key.toLowerCase() === k)
-      if (t) setTool(t.value)
+      const pick = TOOLS.find((x) => x.key.toLowerCase() === k)
+      if (pick) setTool(pick.value)
       if (e.key === "[" || e.key === "]") resize(e.key === "[" ? -10 : 10)
     }
     window.addEventListener("keydown", on)
@@ -163,7 +166,7 @@ function Painter({ start, video, matte, words, onSave }: { start: string; video?
   async function save() {
     const i = img.current!
     await i.decode().catch(() => {})
-    if (!i.naturalWidth) return toast.error("The picture is still loading")
+    if (!i.naturalWidth) return toast.error(t("The picture is still loading"))
     const out = document.createElement("canvas"), mask = document.createElement("canvas")
     out.width = mask.width = i.naturalWidth
     out.height = mask.height = i.naturalHeight
@@ -191,7 +194,7 @@ function Painter({ start, video, matte, words, onSave }: { start: string; video?
   return (
     <>
       <div className="flex flex-wrap items-center gap-1">
-        <ToggleGroup type="single" value={tool} onValueChange={(v) => v && setTool(v as Tool)} aria-label="Paint tool">
+        <ToggleGroup type="single" value={tool} onValueChange={(v) => v && setTool(v as Tool)} aria-label={t("Paint tool")}>
           {TOOLS.map(({ value, label, key, icon: Icon }) => (
             <ToggleGroupItem key={value} value={value} aria-label={label} title={`${label} (${key})`}>
               <Icon />
@@ -200,8 +203,8 @@ function Painter({ start, video, matte, words, onSave }: { start: string; video?
         </ToggleGroup>
         <Separator orientation="vertical" className="mx-1 h-5" />
         <div className={tool === "lasso" ? "pointer-events-none flex items-center gap-2 opacity-40" : "flex items-center gap-2"}>
-          <span className="text-sm text-muted-foreground">Size</span>
-          <Slider className="w-36" min={SIZES.min} max={SIZES.max} step={1} value={[size]} onValueChange={([v]) => setSize(v)} aria-label="Brush size" />
+          <span className="text-sm text-muted-foreground">{t("Size")}</span>
+          <Slider className="w-36" min={SIZES.min} max={SIZES.max} step={1} value={[size]} onValueChange={([v]) => setSize(v)} aria-label={t("Brush size")} />
           <span className="grid size-8 place-items-center" aria-hidden>
             <span className="rounded-full bg-[rgb(255_0_255/0.55)] ring-1 ring-foreground/30" style={{ width: Math.max(3, Math.min(32, brushPx)), height: Math.max(3, Math.min(32, brushPx)) }} />
           </span>
@@ -211,23 +214,23 @@ function Painter({ start, video, matte, words, onSave }: { start: string; video?
           </span>
         </div>
         <Separator orientation="vertical" className="mx-1 h-5" />
-        <Button variant="ghost" size="icon" aria-label="Undo" title="Undo (⌘Z)" disabled={!ops.length} onClick={undo}>
+        <Button variant="ghost" size="icon" aria-label={t("Undo")} title={t("Undo (⌘Z)")} disabled={!ops.length} onClick={undo}>
           <Undo2Icon />
         </Button>
-        <Button variant="ghost" size="icon" aria-label="Redo" title="Redo (⇧⌘Z)" disabled={!undone.length} onClick={redo}>
+        <Button variant="ghost" size="icon" aria-label={t("Redo")} title={t("Redo (⇧⌘Z)")} disabled={!undone.length} onClick={redo}>
           <Redo2Icon />
         </Button>
-        <Button variant="ghost" size="icon" aria-label="Invert the mask" title="Invert: paint everything else" onClick={() => commit([...ops, { tool: "invert", size: 0, points: [] }])}>
+        <Button variant="ghost" size="icon" aria-label={t("Invert the mask")} title={t("Invert: paint everything else")} onClick={() => commit([...ops, { tool: "invert", size: 0, points: [] }])}>
           <FlipHorizontal2Icon />
         </Button>
-        <Button variant="ghost" size="icon" aria-label="Clear the mask" title="Clear" disabled={!ops.length} onClick={() => commit([])}>
+        <Button variant="ghost" size="icon" aria-label={t("Clear the mask")} title={t("Clear")} disabled={!ops.length} onClick={() => commit([])}>
           <Trash2Icon />
         </Button>
       </div>
 
       <div className="rounded-xl bg-black/40 p-3">
         <div className="relative mx-auto w-fit" onPointerLeave={() => setCursor(null)}>
-          <img ref={img} src={src} alt="To paint on" className="block max-h-[60vh] max-w-full rounded-md select-none" draggable={false} />
+          <img ref={img} src={src} alt={t("To paint on")} className="block max-h-[60vh] max-w-full rounded-md select-none" draggable={false} />
           <canvas
             ref={canvas}
             className={tool === "lasso" ? "absolute inset-0 size-full cursor-crosshair touch-none" : "absolute inset-0 size-full cursor-none touch-none"}
@@ -259,25 +262,25 @@ function Painter({ start, video, matte, words, onSave }: { start: string; video?
       {video && (
         <div className="flex items-center gap-3 rounded-xl bg-muted px-3 py-2">
           <video src={fileUrl(video)} preload="metadata" hidden onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setLength(e.currentTarget.duration)} />
-          <span className="text-sm whitespace-nowrap text-muted-foreground">Paint on the frame at</span>
-          <Slider className="flex-1" min={0} max={Math.max(0.1, length - 0.1)} step={0.1} value={[at]} disabled={!length} onValueChange={([t]) => setAt(t)} onValueCommit={([t]) => {
+          <span className="text-sm whitespace-nowrap text-muted-foreground">{t("Paint on the frame at")}</span>
+          <Slider className="flex-1" min={0} max={Math.max(0.1, length - 0.1)} step={0.1} value={[at]} disabled={!length} onValueChange={([v]) => setAt(v)} onValueCommit={([v]) => {
               clearTimeout(wait.current)
-              wait.current = window.setTimeout(() => pickFrame(t), 250)
-            }} aria-label="The frame to paint on" />
-          <span className="w-14 text-right text-sm tabular-nums">{at.toFixed(1)} s</span>
+              wait.current = window.setTimeout(() => pickFrame(v), 250)
+            }} aria-label={t("The frame to paint on")} />
+          <span className="w-14 text-right text-sm tabular-nums">{secs(at)} s</span>
         </div>
       )}
 
       <div className="flex flex-wrap items-end justify-end gap-3">
         {words ? (
           <label className="mr-auto flex min-w-64 flex-1 flex-col gap-1.5">
-            <span className="text-xs font-semibold tracking-wider text-foreground/70 uppercase">{words.label}</span>
-            <Input value={words.value} placeholder={words.placeholder} onChange={(e) => words.onChange(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ops.some((o) => o.tool !== "eraser") && save()} />
+            <span className="text-xs font-semibold tracking-wider text-foreground/70 uppercase">{own(words.label)}</span>
+            <Input value={words.value} placeholder={own(words.placeholder)} onChange={(e) => words.onChange(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ops.some((o) => o.tool !== "eraser") && save()} />
           </label>
         ) : (
-          <span className="mr-auto self-center text-xs text-muted-foreground">B brush · E eraser · L lasso · [ ] size · ⌘Z undo</span>
+          <span className="mr-auto self-center text-xs text-muted-foreground">{t("B brush · E eraser · L lasso · [ ] size · ⌘Z undo")}</span>
         )}
-        <Button onClick={save} disabled={!ops.some((o) => o.tool !== "eraser")}>Use this mask</Button>
+        <Button onClick={save} disabled={!ops.some((o) => o.tool !== "eraser")}>{t("Use this mask")}</Button>
       </div>
     </>
   )

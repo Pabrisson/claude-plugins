@@ -7,11 +7,13 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input"
 import { fileUrl } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON, Label, valueIcon } from "@/components/chips"
+import { t } from "@/lib/i18n"
 
 // Expand's frame: margins on each side as a share of the image (top and bottom of its height, left and right of its
 // width), the frame up to 3 times the image each way. The engine pads the image with them (media.mjs expandCanvas)
 type Margins = { top: number; right: number; bottom: number; left: number }
 const SIDES = ["top", "right", "bottom", "left"] as const
+const SIDE_NAMES = { top: t("Top"), right: t("Right"), bottom: t("Bottom"), left: t("Left") }
 const NONE: Margins = { top: 0, right: 0, bottom: 0, left: 0 }
 const MAX = 2
 const RATIOS = ["1:1", "4:5", "3:4", "2:3", "9:16", "16:9", "3:2", "4:3", "21:9"]
@@ -72,12 +74,12 @@ export function ExpandPreview({ image, fields, onChange }: { image?: string; fie
   const [w, h] = fa > 16 / 9 ? [86, (86 * 16) / 9 / fa] : [(86 * fa * 9) / 16, 86]
   return (
     <div>
-      <Label hint={any ? undefined : "drag it wider or taller"}>Frame</Label>
+      <Label hint={any ? undefined : t("drag it wider or taller")}>{t("Frame")}</Label>
       <button
         type="button"
         onClick={() => setOpen(true)}
         className="group relative block aspect-video w-full overflow-hidden rounded-xl border bg-black/85 transition-colors hover:border-space/60"
-        aria-label="Edit the frame"
+        aria-label={t("Edit the frame")}
       >
         <span className="absolute rounded-sm border border-dashed border-white/70 bg-[repeating-linear-gradient(45deg,rgb(255_255_255/0.06)_0_6px,transparent_6px_12px)]" style={{ left: `${(100 - w) / 2}%`, top: `${(100 - h) / 2}%`, width: `${w}%`, height: `${h}%` }}>
           <img
@@ -89,12 +91,12 @@ export function ExpandPreview({ image, fields, onChange }: { image?: string; fie
           />
         </span>
         <span className="absolute right-2 bottom-2 flex items-center gap-1.5 rounded-md bg-black/70 px-2 py-1 text-xs text-white opacity-90 group-hover:opacity-100">
-          <ExpandIcon className="size-3.5" /> {any ? "Edit the frame" : "Expand"}
+          <ExpandIcon className="size-3.5" /> {any ? t("Edit the frame") : t("Expand")}
         </span>
       </button>
       {size && any && (
         <p className="mt-1.5 text-xs text-muted-foreground tabular-nums">
-          {Math.round(size.w * fw)} × {Math.round(size.h * fh)} · {Math.round((fw * fh - 1) * 100)} % more picture
+          {t("{w} × {h} · {more} % more picture", { w: Math.round(size.w * fw), h: Math.round(size.h * fh), more: Math.round((fw * fh - 1) * 100) })}
         </p>
       )}
       <ExpandDialog open={open} image={image} start={m} onClose={() => setOpen(false)} onDone={(n) => (onChange(Object.fromEntries(SIDES.map((k) => [k, String(n[k])]))), setOpen(false))} />
@@ -106,8 +108,8 @@ function ExpandDialog({ open, image, start, onClose, onDone }: { open: boolean; 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-[min(1000px,calc(100%-2rem))] sm:max-w-[min(1000px,calc(100%-2rem))]">
-        <DialogTitle>Expand the frame</DialogTitle>
-        <DialogDescription>Drag the frame's edges and corners outward, or the picture inside it. The striped area is what the model paints.</DialogDescription>
+        <DialogTitle>{t("Expand the frame")}</DialogTitle>
+        <DialogDescription>{t("Drag the frame's edges and corners outward, or the picture inside it. The striped area is what the model paints.")}</DialogDescription>
         {open && <Editor image={image} start={start} onDone={onDone} />}
       </DialogContent>
     </Dialog>
@@ -148,7 +150,7 @@ function Editor({ image, start, onDone }: { image: string; start: Margins; onDon
     <>
       <div className="flex flex-wrap items-center gap-1.5">
         <button type="button" aria-pressed={!SIDES.some((k) => m[k])} onClick={() => set(NONE)} className={cn(CHIP, "flex items-center gap-1 px-2.5 py-0.5 text-xs", CHIP_OFF)}>
-          <RotateCcwIcon className="size-3" /> Reset
+          <RotateCcwIcon className="size-3" /> {t("Reset")}
         </button>
         {RATIOS.map((r) => {
           const on = !!img && SIDES.some((k) => m[k]) && Math.abs(Math.log(ratio / ratioOf(r))) < 0.01
@@ -182,7 +184,7 @@ function Editor({ image, start, onDone }: { image: string; start: Margins; onDon
             <div className="absolute rounded-sm bg-[repeating-linear-gradient(45deg,rgb(255_255_255/0.07)_0_8px,transparent_8px_16px)]" style={frame} />
             <img
               src={fileUrl(image)}
-              alt="The image to expand"
+              alt={t("The image to expand")}
               draggable={false}
               className="absolute cursor-move"
               style={pic}
@@ -214,7 +216,7 @@ function Editor({ image, start, onDone }: { image: string; start: Margins; onDon
       <div className="flex flex-wrap items-end gap-3">
         {SIDES.map((k) => (
           <label key={k} className="flex w-24 flex-col gap-1 text-xs text-muted-foreground capitalize">
-            {k}
+            {SIDE_NAMES[k]}
             <span className="relative">
               <Input
                 type="number"
@@ -231,7 +233,7 @@ function Editor({ image, start, onDone }: { image: string; start: Margins; onDon
         ))}
         <span className="mr-auto self-center text-sm text-muted-foreground tabular-nums">{img && `${Math.round(fw(m))} × ${Math.round(fh(m))}`}</span>
         <Button disabled={!SIDES.some((k) => m[k])} onClick={() => onDone(m)}>
-          Use this frame
+          {t("Use this frame")}
         </Button>
       </div>
     </>

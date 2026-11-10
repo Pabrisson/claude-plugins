@@ -43,14 +43,15 @@ import { Input } from "@/components/ui/input"
 import { fileUrl, mediaKind, opt, outputPath, type Field, type Job, type Kind, type SavedStyle, type SoundFamily } from "@/lib/api"
 import { Chips, Label } from "@/components/chips"
 import { Listen } from "@/components/inputs"
+import { own, t } from "@/lib/i18n"
 
 export type Preset = ReturnType<typeof opt> & { swatch?: string[]; for?: SoundFamily }
 
 // the sound styles' families: what they are for, their icon, the palette of one's own style's card
 export const FAMILIES: Record<SoundFamily, { label: string; icon: LucideIcon; swatch: string[] }> = {
-  music: { label: "Music", icon: MusicIcon, swatch: ["#7b2cbf", "#ff5d8f", "#1b1b3a", "#ffd166"] },
-  voice: { label: "Voice", icon: SpeechIcon, swatch: ["#2a9d8f", "#264653", "#1d3557", "#e9c46a"] },
-  sound: { label: "Sound", icon: Volume2Icon, swatch: ["#3a86ff", "#03045e", "#0b090a", "#ff006e"] },
+  music: { label: t("Music"), icon: MusicIcon, swatch: ["#7b2cbf", "#ff5d8f", "#1b1b3a", "#ffd166"] },
+  voice: { label: t("Voice"), icon: SpeechIcon, swatch: ["#2a9d8f", "#264653", "#1d3557", "#e9c46a"] },
+  sound: { label: t("Sound"), icon: Volume2Icon, swatch: ["#3a86ff", "#03045e", "#0b090a", "#ff006e"] },
 }
 // one's own sound style as a card: its family's palette on the waveform
 export const familyArt = (s: SavedStyle): Preset => ({ value: s.name, label: s.name, swatch: s.for ? FAMILIES[s.for].swatch : undefined })
@@ -175,15 +176,15 @@ export function StyleField({
   // only the styles of its kind: a look for an image or a video, a sound of its family
   const mine = styles.filter((s) => s.for === f.for)
   const preset = presets.find((p) => p.value === v), saved = mine.find((s) => s.name === v)
-  const name = preset?.label ?? (saved ? saved.name : v)
+  const name = preset ? own(preset.label) : saved ? saved.name : v
   const file = saved ? (saved.files[0] ?? null) : v ? lastIn(v, preset?.label, kind, media, home, f.key) : null
   const optional = f.default == null && !f.required
   const None = f.for ? FAMILIES[f.for].icon : PaintbrushIcon
   return (
     <div>
-      <Label hint={optional ? "optional" : undefined}>{f.label}</Label>
+      <Label hint={optional ? t("optional") : undefined}>{own(f.label)}</Label>
       <div className="flex items-center gap-3 rounded-xl border bg-card p-2 pr-2.5">
-        <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label={`Style: ${name || "none"}. Change it`}>
+        <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label={t("{label}: {name}. Change it", { label: t("Style"), name: name || t("none") })}>
           {v ? (
             <StyleThumb file={file} preset={saved?.for ? familyArt(saved) : preset} className="size-11 shrink-0 rounded-lg border" />
           ) : (
@@ -192,18 +193,18 @@ export function StyleField({
             </span>
           )}
           <span className="min-w-0 flex-1">
-            <span className={cn("block truncate text-sm font-medium", !v && "text-muted-foreground")}>{name || "No style"}</span>
+            <span className={cn("block truncate text-sm font-medium", !v && "text-muted-foreground")}>{name || t("No style")}</span>
             <span className="block truncate text-xs text-muted-foreground">
-              {!v ? (f.for ? "The model's own way" : "The model's own look") : saved ? "Your style" : preset ? preset.group : "Your words"}
+              {!v ? (f.for ? t("The model's own way") : t("The model's own look")) : saved ? t("Your style") : preset ? own(preset.group) : t("Your words")}
             </span>
           </span>
         </button>
         {f.for && preset?.preview && <Listen key={preset.preview} path="" src={preset.preview} />}
         <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-          {v ? "Change" : "Choose"}
+          {v ? t("Change") : t("Choose")}
         </Button>
         {v && optional && (
-          <Button size="icon-sm" variant="ghost" aria-label="No style" onClick={() => onChange("")}>
+          <Button size="icon-sm" variant="ghost" aria-label={t("No style")} onClick={() => onChange("")}>
             <XIcon />
           </Button>
         )}
@@ -244,35 +245,35 @@ function Gallery({
   const [query, setQuery] = useState("")
   const groups = [...new Set(presets.map((p) => p.group ?? ""))]
   const q = query.trim().toLowerCase()
-  const shown = presets.filter((p) => (!group || p.group === group) && (!q || `${p.label} ${p.note ?? ""} ${p.group ?? ""}`.toLowerCase().includes(q)))
+  const shown = presets.filter((p) => (!group || p.group === group) && (!q || `${p.label} ${p.note ?? ""} ${p.group ?? ""} ${own(p.label)} ${own(p.note) ?? ""} ${own(p.group) ?? ""}`.toLowerCase().includes(q)))
   const yours = styles.filter((s) => !q || `${s.name} ${s.words}`.toLowerCase().includes(q))
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex h-[min(860px,calc(100vh-2rem))] max-w-[min(1080px,calc(100%-2rem))] flex-col gap-4 sm:max-w-[min(1080px,calc(100%-2rem))]">
         <div>
-          <DialogTitle>Pick a style</DialogTitle>
+          <DialogTitle>{t("Pick a style")}</DialogTitle>
           <DialogDescription className="mt-1">
             {family
-              ? `A sound style is how it sounds: ${family === "voice" ? "a voice's delivery, its pace and its mood" : family === "music" ? "genre, instruments, tempo and mood" : "its texture and its space"}. Your own are made in the Library, in words.`
-              : "A style is a look: medium, palette, line and texture, never what is in the picture. Your own are made in the Library, from your images."}
+              ? t("A sound style is how it sounds: {what}. Your own are made in the Library, in words.", { what: family === "voice" ? t("a voice's delivery, its pace and its mood") : family === "music" ? t("genre, instruments, tempo and mood") : t("its texture and its space") })
+              : t("A style is a look: medium, palette, line and texture, never what is in the picture. Your own are made in the Library, from your images.")}
           </DialogDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Chips options={["presets", "yours"] as const} value={tab} label={(t) => (t === "presets" ? "Presets" : `Yours · ${styles.length}`)} icon={(t) => (t === "presets" ? <SparklesIcon /> : <UserIcon />)} onChange={setTab} />
+          <Chips options={["presets", "yours"] as const} value={tab} label={(x) => (x === "presets" ? t("Presets") : t("Yours · {n}", { n: styles.length }))} icon={(x) => (x === "presets" ? <SparklesIcon /> : <UserIcon />)} onChange={setTab} />
           <span className="flex-1" />
           <div className="relative w-full sm:w-64">
             <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search styles" aria-label="Search styles" className="pl-8" />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Search styles")} aria-label={t("Search styles")} className="pl-8" />
           </div>
         </div>
         {tab === "presets" && (
-          <Chips options={["", ...groups]} value={group ?? ""} label={(g) => g || "All"} icon={(g) => <GroupIcon group={g || null} />} onChange={(g) => setGroup(g || null)} className="[&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs" />
+          <Chips options={["", ...groups]} value={group ?? ""} label={(g) => own(g) || t("All")} icon={(g) => <GroupIcon group={g || null} />} onChange={(g) => setGroup(g || null)} className="[&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs" />
         )}
         <div className="-mx-1 min-h-0 flex-1 overflow-auto px-1 pb-1">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3" role="radiogroup" aria-label="Styles">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3" role="radiogroup" aria-label={t("Styles")}>
             {tab === "presets"
-              ? shown.map((p) => <StyleCard key={p.value} on={p.value === value} title={p.label} note={p.note} sample={family ? p.preview : undefined} onPick={() => onPick(p.value)} thumb={<StyleThumb file={lastIn(p.value, p.label, kind, media, home, fieldKey)} preset={p} className="absolute inset-0" />} />)
-              : yours.map((s) => <StyleCard key={s.name} on={s.name === value} title={s.name} note={s.words || `${s.files.length} image${s.files.length > 1 ? "s" : ""}`} onPick={() => onPick(s.name)} thumb={<StyleThumb file={s.files[0] ?? null} preset={s.for ? familyArt(s) : undefined} className="absolute inset-0" />} />)}
+              ? shown.map((p) => <StyleCard key={p.value} on={p.value === value} title={own(p.label)} note={own(p.note)} sample={family ? p.preview : undefined} onPick={() => onPick(p.value)} thumb={<StyleThumb file={lastIn(p.value, p.label, kind, media, home, fieldKey)} preset={p} className="absolute inset-0" />} />)
+              : yours.map((s) => <StyleCard key={s.name} on={s.name === value} title={s.name} note={s.words || t(s.files.length > 1 ? "{n} images" : "{n} image", { n: s.files.length })} onPick={() => onPick(s.name)} thumb={<StyleThumb file={s.files[0] ?? null} preset={s.for ? familyArt(s) : undefined} className="absolute inset-0" />} />)}
             {tab === "yours" && (
               <button
                 type="button"
@@ -280,12 +281,12 @@ function Gallery({
                 className="flex aspect-video flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed text-sm text-muted-foreground transition-colors outline-none hover:border-space/50 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 <PlusIcon className="size-5" />
-                New style
-                <span className="px-6 text-center text-xs">{family ? "In the Library, in a few words" : "In the Library, from 1 to 5 images of the look"}</span>
+                {t("New style")}
+                <span className="px-6 text-center text-xs">{family ? t("In the Library, in a few words") : t("In the Library, from 1 to 5 images of the look")}</span>
               </button>
             )}
           </div>
-          {tab === "presets" && !shown.length && <p className="py-8 text-center text-sm text-muted-foreground">No style matches.</p>}
+          {tab === "presets" && !shown.length && <p className="py-8 text-center text-sm text-muted-foreground">{t("No style matches.")}</p>}
         </div>
       </DialogContent>
     </Dialog>

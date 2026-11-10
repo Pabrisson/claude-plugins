@@ -12,7 +12,8 @@ import { Chips, Label, valueIcon } from "@/components/chips"
 import { activeFilters, factsOf, formatOf, NO_FILTERS, passes, RATIO_CHIPS, RES_CHIPS, SOUND_NAMES, SOUND_TYPES, soundOf, sorted, SORTS, type Filters, type Sort } from "@/lib/filters"
 import { SketchDialog } from "@/components/sketch"
 import { MaskDialog } from "@/components/mask"
-import { CutDialog } from "@/components/cut"
+import { CutDialog, secs } from "@/components/cut"
+import { own, t } from "@/lib/i18n"
 
 const ACCEPT = { image: "image/*", sketch: "image/*", mask: "image/*", matte: "image/*", video: "video/*", audio: "audio/*", media: "audio/*,video/*" }
 // an input drawn in the dashboard: a sketch (marks) or a mask (a painted area)
@@ -103,7 +104,7 @@ export function InputSlots({
     } catch (e) {
       return toast.error(plain((e as Error).message))
     }
-    if (!base) return toast.error(`Add the ${tool.inputs.find((i) => !drawn(i))?.label.toLowerCase() ?? "image"} first, then draw on it`)
+    if (!base) return toast.error(t("Add the {input} first, then draw on it", { input: own(tool.inputs.find((i) => !drawn(i))?.label)?.toLowerCase() ?? t("image") }))
     const mask = tool.inputs.find((i) => i.key === key)?.kind === "mask"
     setSketch({ key, src: fileUrl(base), mask, video: mask && !value.image?.[0] && !value.first_frame?.[0] ? video : undefined })
   }
@@ -115,7 +116,7 @@ export function InputSlots({
   if (!tool.inputs.length) return null
   return (
     <div className="w-full">
-      {label && <Label>Inputs</Label>}
+      {label && <Label>{t("Inputs")}</Label>}
       <div className="flex flex-wrap gap-2">
         {tool.inputs.filter((i) => i.kind !== "matte").map((input) => (
           <Slot
@@ -177,7 +178,7 @@ function Slot({
   onCut,
   library,
   limit,
-  none = "Not on this model",
+  none = t("Not on this model"),
 }: {
   input: Input
   files: string[]
@@ -195,7 +196,7 @@ function Slot({
   // the files that still fit; those beyond the model's count are left out, said once
   const fit = <T,>(more: T[]) => {
     const left = limit == null ? more.length : Math.max(0, limit - files.length)
-    if (more.length > left) toast.warning(`${more.length - left} left out`, { description: `The model takes ${limit} here: remove one to swap it.` })
+    if (more.length > left) toast.warning(t("{n} left out", { n: more.length - left }), { description: t("The model takes {limit} here: remove one to swap it.", { limit: limit! }) })
     return more.slice(0, left)
   }
 
@@ -221,7 +222,7 @@ function Slot({
             <Thumb path={f} />
             <button
               type="button"
-              aria-label={`Remove ${input.label.toLowerCase()}`}
+              aria-label={t("Remove {input}", { input: own(input.label).toLowerCase() })}
               onClick={() => onFiles(files.filter((_, j) => j !== i))}
               className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             >
@@ -230,8 +231,8 @@ function Slot({
             {mediaKind(f) === "video" && (
               <button
                 type="button"
-                aria-label={`Cut or crop the ${input.label.toLowerCase()}`}
-                title="Cut and crop"
+                aria-label={t("Cut or crop the {input}", { input: own(input.label).toLowerCase() })}
+                title={t("Cut and crop")}
                 onClick={() => onCut(f)}
                 className="absolute bottom-1 left-1 rounded-full bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
               >
@@ -239,15 +240,15 @@ function Slot({
               </button>
             )}
           </div>
-          <span className="line-clamp-2 text-center text-xs leading-tight" title={input.label}>{input.label}</span>
+          <span className="line-clamp-2 text-center text-xs leading-tight" title={own(input.label)}>{own(input.label)}</span>
         </div>
       ))}
       {!room && input.multiple && limit != null && (
         <div className="flex w-18 flex-col gap-1">
-          <div className="grid size-18 place-items-center rounded-lg border border-dashed p-1 text-center text-xs leading-tight text-muted-foreground" title={limit === 0 ? none : `The model takes ${limit} here`}>
-            {limit === 0 && !files.length ? none : "Full"}
+          <div className="grid size-18 place-items-center rounded-lg border border-dashed p-1 text-center text-xs leading-tight text-muted-foreground" title={limit === 0 ? none : t("The model takes {limit} here", { limit })}>
+            {limit === 0 && !files.length ? none : t("Full")}
           </div>
-          <span className="line-clamp-2 text-center text-xs leading-tight text-muted-foreground">{input.label}</span>
+          <span className="line-clamp-2 text-center text-xs leading-tight text-muted-foreground">{own(input.label)}</span>
           {(files.length > 0 || limit > 0) && <Count files={files.length} limit={limit} />}
         </div>
       )}
@@ -268,11 +269,11 @@ function Slot({
             )}
           >
             {drawn(input) ? (
-              <button type="button" onClick={onDraw} className="grid size-full place-items-center rounded-lg" aria-label={input.label} title={input.kind === "mask" ? "Paint the area on the image" : "Draw on the image"}>
+              <button type="button" onClick={onDraw} className="grid size-full place-items-center rounded-lg" aria-label={own(input.label)} title={input.kind === "mask" ? t("Paint the area on the image") : t("Draw on the image")}>
                 {input.kind === "mask" ? <BrushIcon className="size-5" /> : <PencilIcon className="size-5" />}
               </button>
             ) : (
-              <button type="button" disabled={busy} onClick={() => picker.current?.click()} className="grid size-full place-items-center rounded-lg" aria-label={`Add ${input.label.toLowerCase()}`} title="Pick a file, drop one here, or paste it">
+              <button type="button" disabled={busy} onClick={() => picker.current?.click()} className="grid size-full place-items-center rounded-lg" aria-label={t("Add {input}", { input: own(input.label).toLowerCase() })} title={t("Pick a file, drop one here, or paste it")}>
                 {busy ? <LoaderCircleIcon className="size-5 animate-spin" /> : <PlusIcon className="size-5" />}
               </button>
             )}
@@ -281,10 +282,10 @@ function Slot({
             )}
             <input ref={picker} type="file" hidden multiple={input.multiple} accept={ACCEPT[input.kind]} onChange={(e) => e.target.files && add(e.target.files)} />
           </div>
-          <span className={cn("line-clamp-2 text-center text-xs leading-tight", input.optional ? "text-muted-foreground" : "text-foreground")} title={input.label}>
-            {input.label}
+          <span className={cn("line-clamp-2 text-center text-xs leading-tight", input.optional ? "text-muted-foreground" : "text-foreground")} title={own(input.label)}>
+            {own(input.label)}
           </span>
-          {input.multiple && limit != null ? <Count files={files.length} limit={limit} /> : input.optional && <span className="text-center text-xs text-muted-foreground/70">optional</span>}
+          {input.multiple && limit != null ? <Count files={files.length} limit={limit} /> : input.optional && <span className="text-center text-xs text-muted-foreground/70">{t("optional")}</span>}
         </div>
       )}
     </>
@@ -312,7 +313,7 @@ export function Listen({ path, src }: { path: string; src?: string }) {
       <audio ref={audio} src={src ?? fileUrl(path)} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
       <button
         type="button"
-        aria-label={playing ? "Pause" : "Listen"}
+        aria-label={playing ? t("Pause") : t("Listen")}
         onClick={() => (playing ? audio.current?.pause() : audio.current?.play())}
         className="grid size-8 shrink-0 place-items-center rounded-full bg-aud text-background transition-transform hover:scale-105"
       >
@@ -333,12 +334,12 @@ function LibraryPicker({ input, items, picked, onPick }: { input: Input; items: 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" aria-label={`${input.label} from the library`} title="From the library" className="absolute right-1 bottom-1 grid size-6 place-items-center rounded-md bg-muted text-muted-foreground hover:text-foreground">
+        <button type="button" aria-label={t("{input} from the library", { input: own(input.label) })} title={t("From the library")} className="absolute right-1 bottom-1 grid size-6 place-items-center rounded-md bg-muted text-muted-foreground hover:text-foreground">
           <FolderOpenIcon className="size-3.5" />
         </button>
       </PopoverTrigger>
       <PopoverContent side="right" align="end" sideOffset={8} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col gap-0 p-0">
-        <LibraryList title={`${input.label} from the library`} items={items} picked={picked} onPick={pick} multiple={input.multiple} />
+        <LibraryList title={t("{input} from the library", { input: own(input.label) })} items={items} picked={picked} onPick={pick} multiple={input.multiple} />
       </PopoverContent>
     </Popover>
   )
@@ -367,7 +368,7 @@ export function useSort() {
 export function SortSelect({ value, onChange }: { value: Sort; onChange: (s: Sort) => void }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as Sort)}>
-      <SelectTrigger size="sm" className="h-7 gap-1 px-2 text-xs" aria-label="Sort">
+      <SelectTrigger size="sm" className="h-7 gap-1 px-2 text-xs" aria-label={t("Sort")}>
         <ArrowDownUpIcon className="size-3.5 text-muted-foreground" />
         <SelectValue />
       </SelectTrigger>
@@ -380,6 +381,7 @@ export function SortSelect({ value, onChange }: { value: Sort; onChange: (s: Sor
   )
 }
 const SMALL = "[&>button]:px-2.5 [&>button]:py-0.5 [&>button]:text-xs"
+const MEDIA = { all: t("All"), video: t("Video"), image: t("Image"), audio: t("Audio") }
 // the filter chips of a list: a medium when it holds several, then only that medium's (a picture's format and quality,
 // a sound's type and file format; none under All), the favorites when there are some. Another medium starts its
 // filters afresh
@@ -398,16 +400,16 @@ export function FilterChips({ value, onChange, items, kinds = true }: { value: F
   )
   return (
     <div className="flex flex-col gap-1.5">
-      {kinds && media.size > 1 && row("Media", <Chips options={["all", "video", "image", "audio"] as const} value={value.kind} label={(k) => (k === "all" ? "All" : k[0].toUpperCase() + k.slice(1))} onChange={(kind) => onChange({ ...NO_FILTERS, kind, favorites: value.favorites })} icon={valueIcon} className={SMALL} />)}
+      {kinds && media.size > 1 && row(t("Media"), <Chips options={["all", "video", "image", "audio"] as const} value={value.kind} label={(k) => MEDIA[k]} onChange={(kind) => onChange({ ...NO_FILTERS, kind, favorites: value.favorites })} icon={valueIcon} className={SMALL} />)}
       {(kind === "video" || kind === "image") && (
         <>
-          {row("Ratio", <Chips options={RATIO_CHIPS} value={value.ratio} label={(r) => (r === "all" ? "All" : r === "other" ? "Other" : r)} onChange={(ratio) => onChange({ ...value, ratio })} icon={valueIcon} className={SMALL} />)}
-          {row("Resolution", <Chips options={RES_CHIPS} value={value.res} label={(r) => (r === "all" ? "All" : r)} onChange={(res) => onChange({ ...value, res })} icon={valueIcon} className={SMALL} />)}
+          {row(t("Ratio"), <Chips options={RATIO_CHIPS} value={value.ratio} label={(r) => (r === "all" ? t("All") : r === "other" ? t("Other") : r)} onChange={(ratio) => onChange({ ...value, ratio })} icon={valueIcon} className={SMALL} />)}
+          {row(t("Resolution"), <Chips options={RES_CHIPS} value={value.res} label={(r) => (r === "all" ? t("All") : r)} onChange={(res) => onChange({ ...value, res })} icon={valueIcon} className={SMALL} />)}
         </>
       )}
-      {types.length > 0 && row("Type", <Chips options={["all", ...types]} value={value.type} label={(t) => (t === "all" ? "All" : SOUND_NAMES[t])} onChange={(type) => onChange({ ...value, type })} icon={valueIcon} className={SMALL} />)}
-      {formats.length > 0 && row("Format", <Chips options={["all", ...formats]} value={value.format} label={(f) => (f === "all" ? "All" : f.toUpperCase())} onChange={(format) => onChange({ ...value, format })} icon={valueIcon} className={SMALL} />)}
-      {items.some((i) => i.job.favorite) && row("Show", <Chips options={["all", "favorites"] as const} value={value.favorites ? "favorites" : "all"} label={(o) => (o === "all" ? "All" : "Favorites")} onChange={(o) => onChange({ ...value, favorites: o === "favorites" })} icon={valueIcon} className={SMALL} />)}
+      {types.length > 0 && row(t("Type"), <Chips options={["all", ...types]} value={value.type} label={(x) => (x === "all" ? t("All") : SOUND_NAMES[x])} onChange={(type) => onChange({ ...value, type })} icon={valueIcon} className={SMALL} />)}
+      {formats.length > 0 && row(t("Format"), <Chips options={["all", ...formats]} value={value.format} label={(f) => (f === "all" ? t("All") : f.toUpperCase())} onChange={(format) => onChange({ ...value, format })} icon={valueIcon} className={SMALL} />)}
+      {items.some((i) => i.job.favorite) && row(t("Show"), <Chips options={["all", "favorites"] as const} value={value.favorites ? "favorites" : "all"} label={(o) => (o === "all" ? t("All") : t("Favorites"))} onChange={(o) => onChange({ ...value, favorites: o === "favorites" })} icon={valueIcon} className={SMALL} />)}
     </div>
   )
 }
@@ -432,8 +434,8 @@ export function LibraryList({ title, items, picked, onPick, multiple, from }: { 
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold">{title}</span>
           <span className="block text-xs text-muted-foreground">
-            {list.length} result{list.length === 1 ? "" : "s"}
-            {multiple ? " · pick several" : ""}
+            {list.length === 1 ? t("{n} result", { n: 1 }) : t("{n} results", { n: list.length })}
+            {multiple ? ` · ${t("pick several")}` : ""}
           </span>
         </span>
         <div className="flex gap-2">
@@ -441,38 +443,38 @@ export function LibraryList({ title, items, picked, onPick, multiple, from }: { 
             <InputGroupAddon>
               <SearchIcon />
             </InputGroupAddon>
-            <InputGroupInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search prompts, tools, files" aria-label="Search the results" />
+            <InputGroupInput value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search prompts, tools, files")} aria-label={t("Search the results")} />
           </InputGroup>
           {ws.list.length > 0 && (
             <Select value={source} onValueChange={setSource}>
-              <SelectTrigger size="sm" className="max-w-52" aria-label="Show the results of">
+              <SelectTrigger size="sm" className="max-w-52" aria-label={t("Show the results of")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper" align="end">
                 <SelectGroup>
-                  <SelectLabel>Workspaces</SelectLabel>
+                  <SelectLabel>{t("Workspaces")}</SelectLabel>
                   {ws.list.map((w) => (
                     <SelectItem key={w.slug} value={w.slug}>
                       {w.name}
-                      {w.slug === ws.current ? <span className="text-muted-foreground"> · current</span> : null}
+                      {w.slug === ws.current ? <span className="text-muted-foreground"> · {t("current")}</span> : null}
                     </SelectItem>
                   ))}
                 </SelectGroup>
                 <SelectSeparator />
-                <SelectItem value="library">Whole library</SelectItem>
+                <SelectItem value="library">{t("Whole library")}</SelectItem>
               </SelectContent>
             </Select>
           )}
         </div>
         <div className="flex items-center gap-2">
           <Button size="xs" variant={active ? "secondary" : "ghost"} aria-expanded={unfolded} onClick={() => setUnfolded((u) => !u)}>
-            <SlidersHorizontalIcon data-icon="inline-start" /> Filters{active ? ` · ${active}` : ""}
+            <SlidersHorizontalIcon data-icon="inline-start" /> {t("Filters")}{active ? ` · ${active}` : ""}
           </Button>
           <SortSelect value={sort} onChange={setSort} />
           <span className="flex-1" />
           {active > 0 && (
             <Button size="xs" variant="ghost" onClick={() => setFilters(NO_FILTERS)}>
-              Clear
+              {t("Clear")}
             </Button>
           )}
         </div>
@@ -480,13 +482,13 @@ export function LibraryList({ title, items, picked, onPick, multiple, from }: { 
       </div>
       {!list.length && source !== "library" && !words && !active && items.length > 0 ? (
         <div className="flex flex-col items-center gap-2 px-3 py-8 text-center text-sm text-muted-foreground">
-          Nothing from {name ?? "this workspace"} here yet.
+          {t("Nothing from {name} here yet.", { name: name ?? t("this workspace") })}
           <Button size="sm" variant="outline" onClick={() => setSource("library")}>
-            Show the whole library
+            {t("Show the whole library")}
           </Button>
         </div>
       ) : (
-        <PickList items={list} picked={picked} onPick={onPick} empty={!items.length ? "Nothing in the library yet." : words ? `Nothing matches “${q.trim()}”.` : "Nothing matches these filters."} className="max-h-[min(380px,55vh)] min-h-0 flex-1 p-3" />
+        <PickList items={list} picked={picked} onPick={onPick} empty={!items.length ? t("Nothing in the library yet.") : words ? t("Nothing matches “{q}”.", { q: q.trim() }) : t("Nothing matches these filters.")} className="max-h-[min(380px,55vh)] min-h-0 flex-1 p-3" />
       )}
     </>
   )
@@ -513,7 +515,7 @@ export function Section({ title, count, titled, children }: { title: string; cou
 // a file's length from what the engine measured
 export const lengthLabel = (i: Pick) => {
   const d = factsOf(i).dur
-  return d ? `${d.toFixed(1)} s` : ""
+  return d ? `${secs(d)} s` : ""
 }
 
 // results to pick from, newest first, by medium: videos at 16:9 with their length, images square, sounds as rows to
@@ -527,8 +529,8 @@ export function PickList({ items, picked, onPick, empty, className }: { items: P
         key={i.path}
         type="button"
         aria-pressed={on}
-        aria-label={`${i.job.label}, ${when(i.job.created)}`}
-        title={`${i.job.label} · ${when(i.job.created)}`}
+        aria-label={`${own(i.job.label)}, ${when(i.job.created)}`}
+        title={`${own(i.job.label)} · ${when(i.job.created)}`}
         onClick={() => onPick(i.path)}
         className={cn("group/tile relative overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/5 transition outline-none hover:ring-2 hover:ring-space/60 focus-visible:ring-2 focus-visible:ring-ring", video ? "aspect-video" : "aspect-square", on && "ring-2 ring-space")}
       >
@@ -537,7 +539,7 @@ export function PickList({ items, picked, onPick, empty, className }: { items: P
         {video && lengthLabel(i) && <span className="absolute right-1.5 bottom-1.5 rounded bg-black/60 px-1 text-[11px] text-white tabular-nums">{lengthLabel(i)}</span>}
         {i.job.favorite && <StarIcon className="absolute top-1.5 left-1.5 size-3.5 fill-current text-cost drop-shadow" />}
         <span className="absolute inset-x-0 bottom-0 truncate bg-linear-to-t from-black/75 to-transparent px-1.5 pt-5 pb-1 text-left text-xs text-white opacity-0 transition-opacity group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100">
-          {i.job.label}
+          {own(i.job.label)}
         </span>
         {on && <CheckIcon className="absolute top-1.5 right-1.5 size-5 rounded-full bg-space p-0.5 text-space-foreground" />}
       </button>
@@ -547,17 +549,17 @@ export function PickList({ items, picked, onPick, empty, className }: { items: P
     <div className={cn("flex flex-col gap-4 overflow-auto", className)}>
       {!items.length && <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>}
       {videos.length > 0 && (
-        <Section title="Videos" count={videos.length} titled={titled}>
+        <Section title={t("Videos")} count={videos.length} titled={titled}>
           <div className="grid grid-cols-3 gap-2">{videos.map((i) => tile(i, true))}</div>
         </Section>
       )}
       {images.length > 0 && (
-        <Section title="Images" count={images.length} titled={titled}>
+        <Section title={t("Images")} count={images.length} titled={titled}>
           <div className="grid grid-cols-4 gap-2">{images.map((i) => tile(i, false))}</div>
         </Section>
       )}
       {sounds.length > 0 && (
-        <Section title="Audio" count={sounds.length} titled={titled}>
+        <Section title={t("Audio")} count={sounds.length} titled={titled}>
           <div className="flex flex-col gap-1.5">
             {sounds.map((i) => {
               const on = picked.includes(i.path)
@@ -566,9 +568,9 @@ export function PickList({ items, picked, onPick, empty, className }: { items: P
                   <SoundCover path={i.path} className="size-9 shrink-0 rounded-md" />
                   <Listen path={i.path} />
                   <button type="button" aria-pressed={on} onClick={() => onPick(i.path)} className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-sm">{i.job.prompt || i.job.label}</span>
+                    <span className="block truncate text-sm">{i.job.prompt || own(i.job.label)}</span>
                     <span className="block text-xs text-muted-foreground">
-                      {i.job.label} · {when(i.job.created)}
+                      {own(i.job.label)} · {when(i.job.created)}
                       {lengthLabel(i) && ` · ${lengthLabel(i)}`}
                     </span>
                   </button>

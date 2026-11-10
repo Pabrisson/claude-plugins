@@ -10,13 +10,23 @@ import { CHIP, CHIP_OFF, CHIP_ON, ToolIcon } from "@/components/chips"
 import { ModelLogo } from "@/components/model-logo"
 import { shortName } from "@/components/model-picker"
 import { isLocal } from "@/lib/api"
+import { t, own } from "@/lib/i18n"
 
-const needs = (t: Tool) => {
-  const req = t.inputs.filter((i) => !i.optional)
-  if (!req.length) return [t.template ? (t.id === "voice" ? "text" : "prompt") : "words"]
+// (each kind its words, one and several)
+const COUNTED: Record<string, (n: number) => string> = {
+  image: (n) => (n > 1 ? t("{n} images", { n }) : t("{n} image", { n })),
+  video: (n) => (n > 1 ? t("{n} videos", { n }) : t("{n} video", { n })),
+  audio: (n) => (n > 1 ? t("{n} audios", { n }) : t("{n} audio", { n })),
+  mask: (n) => (n > 1 ? t("{n} masks", { n }) : t("{n} mask", { n })),
+  matte: (n) => (n > 1 ? t("{n} mattes", { n }) : t("{n} matte", { n })),
+  media: (n) => (n > 1 ? t("{n} clips", { n }) : t("{n} clip", { n })),
+}
+const needs = (tool: Tool) => {
+  const req = tool.inputs.filter((i) => !i.optional)
+  if (!req.length) return [tool.template ? (tool.id === "voice" ? t("text") : t("prompt")) : t("words")]
   const counts = new Map<string, number>()
   for (const i of req) counts.set(i.kind === "sketch" ? "sketch" : i.kind, (counts.get(i.kind) ?? 0) + (i.count ?? 1))
-  return [...counts].map(([k, n]) => (k === "sketch" ? "a sketch" : `${n} ${k === "media" ? "clip" : k}${n > 1 ? "s" : ""}`))
+  return [...counts].map(([k, n]) => (k === "sketch" ? t("a sketch") : COUNTED[k](n)))
 }
 
 // a tool's picture: its icon on the space's color, always (a last result made the list hard to read)
@@ -59,12 +69,12 @@ export function ToolPicker({
       }}
     >
       <PopoverTrigger asChild>
-        <button type="button" className="flex w-full items-center gap-3 rounded-xl border bg-card p-2.5 text-left transition-colors hover:border-space/40 hover:bg-muted/60" aria-label={`Tool: ${value.label}. Change the tool`}>
+        <button type="button" className="flex w-full items-center gap-3 rounded-xl border bg-card p-2.5 text-left transition-colors hover:border-space/40 hover:bg-muted/60" aria-label={t("Tool: {tool}. Change the tool", { tool: own(value.label) })}>
           <Tile tool={value} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] font-semibold">{value.label}</span>
+            <span className="block truncate text-[15px] font-semibold">{own(value.label)}</span>
             <span className="block truncate text-xs text-muted-foreground">
-              {value.group} · needs {needs(value).join(", ")}
+              {t("{group} · needs {needs}", { group: own(value.group), needs: needs(value).join(", ") })}
             </span>
           </span>
           <ChevronDownIcon className="size-4 text-muted-foreground" />
@@ -73,46 +83,47 @@ export function ToolPicker({
       {/* beside the composer, where the room is, and never taller than the screen: the list scrolls */}
       <PopoverContent side="right" align="start" sideOffset={8} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(520px,calc(100vw-2rem))] flex-col p-0">
         <Command loop className="min-h-0 flex-1">
-          <CommandInput placeholder="Search tools" aria-label="Search tools" />
+          <CommandInput placeholder={t("Search tools")} aria-label={t("Search tools")} />
           {groups.length > 1 && (
             <div className="flex flex-wrap gap-1.5 border-b p-2">
               {groups.map((g) => (
                 <button key={g} type="button" aria-pressed={group === g} onClick={() => setGroup(group === g ? null : g)} className={cn(CHIP, "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs", group === g ? CHIP_ON : CHIP_OFF)}>
-                  <ToolIcon name={tools.find((t) => t.group === g)!.icon} className="size-3.5" />
-                  {g}
+                  <ToolIcon name={tools.find((x) => x.group === g)!.icon} className="size-3.5" />
+                  {own(g)}
                 </button>
               ))}
             </div>
           )}
           <CommandList className="max-h-[min(620px,80vh)] min-h-0 flex-1">
-            <CommandEmpty>No tool matches.</CommandEmpty>
+            <CommandEmpty>{t("No tool matches.")}</CommandEmpty>
             {groups.filter((g) => !group || g === group).map((g) => (
-              <CommandGroup key={g} heading={g}>
-                {tools.filter((t) => t.group === g).map((t) => {
-                  const m = modelOf(t.models?.[0])
+              <CommandGroup key={g} heading={own(g)}>
+                {tools.filter((x) => x.group === g).map((tool) => {
+                  const m = modelOf(tool.models?.[0])
                   return (
                     <CommandItem
-                      key={t.id}
-                      value={`${t.label} ${t.group} ${t.description}`}
-                      onSelect={() => (onPick(t), setOpen(false))}
-                      data-checked={t.id === value.id}
+                      key={tool.id}
+                      // (searched in the words shown)
+                      value={`${own(tool.label)} ${own(tool.group)} ${own(tool.description)}`}
+                      onSelect={() => (onPick(tool), setOpen(false))}
+                      data-checked={tool.id === value.id}
                       className="items-start gap-3 py-2.5"
                     >
-                      <Tile tool={t} />
+                      <Tile tool={tool} />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-baseline gap-2">
-                          <span className="truncate font-semibold">{t.label}</span>
-                          {prices[t.id] && <span className="ml-auto text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{prices[t.id]}</span>}
+                          <span className="truncate font-semibold">{own(tool.label)}</span>
+                          {prices[tool.id] && <span className="ml-auto text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{t(prices[tool.id])}</span>}
                         </span>
-                        <span className="line-clamp-2 text-xs text-muted-foreground">{t.description}</span>
+                        <span className="line-clamp-2 text-xs text-muted-foreground">{own(tool.description)}</span>
                         <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                          {needs(t).map((n) => (
+                          {needs(tool).map((n) => (
                             <Badge key={n} variant="outline" className="font-normal text-muted-foreground">{n}</Badge>
                           ))}
                           <span className="ml-auto flex min-w-0 items-center gap-1.5">
-                            {isLocal(t) ? (
-                              "Local, free"
-                            ) : t.provider === "elevenlabs" ? (
+                            {isLocal(tool) ? (
+                              t("Local, free")
+                            ) : tool.provider === "elevenlabs" ? (
                               <>
                                 <ModelLogo model="elevenlabs" className="size-4 rounded-sm bg-transparent p-0" />
                                 ElevenLabs
@@ -123,7 +134,7 @@ export function ToolPicker({
                                 <span className="truncate">{shortName(m)}</span>
                               </>
                             ) : (
-                              "Any model"
+                              t("Any model")
                             )}
                           </span>
                         </span>

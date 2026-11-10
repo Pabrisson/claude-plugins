@@ -21,19 +21,27 @@ import { isRunning, Results, type Bridge } from "@/components/results"
 import { lengthOf, useTimelines, type Ask } from "@/components/timeline"
 import { WorkspaceMenu, WorkspacePage } from "@/components/workspace"
 import { ToolFilter, toolKey } from "@/components/tool-filter"
+import { locale, own, t } from "@/lib/i18n"
 
-// the project first (the home page), the Library, then the spaces that make things, the money and the settings
+// the project first (the home page), the Library, then the spaces that make things, the money and the settings. Each
+// word fits the rail's 60 px: the Library's has a key of its own ({short} fills with nothing), its French a short word
 const RAIL = [
-  { page: "workspace", label: "Workspace", icon: FolderKanbanIcon },
-  { page: "library", label: "Library", icon: LibraryBigIcon },
+  { page: "workspace", label: t("Workspace"), icon: FolderKanbanIcon },
+  { page: "library", label: t("Library{short}", { short: "" }), icon: LibraryBigIcon },
   null,
-  { page: "image", label: "Image", icon: ImageIcon },
-  { page: "video", label: "Video", icon: VideoIcon },
-  { page: "audio", label: "Audio", icon: AudioLinesIcon },
+  { page: "image", label: t("Image"), icon: ImageIcon },
+  { page: "video", label: t("Video"), icon: VideoIcon },
+  { page: "audio", label: t("Audio"), icon: AudioLinesIcon },
   null,
-  { page: "credits", label: "Credits", icon: DollarSignIcon },
-  { page: "settings", label: "Settings", icon: SettingsIcon },
+  { page: "credits", label: t("Credits"), icon: DollarSignIcon },
+  { page: "settings", label: t("Settings"), icon: SettingsIcon },
 ] as const
+// a space with nothing yet, in the scope shown
+const NONE_YET: Record<Kind, (name?: string) => string> = {
+  image: (name) => (name ? t("No image in {name} yet", { name }) : t("No image yet")),
+  video: (name) => (name ? t("No video in {name} yet", { name }) : t("No video yet")),
+  audio: (name) => (name ? t("No audio in {name} yet", { name }) : t("No audio yet")),
+}
 const SPACES: Kind[] = ["image", "video", "audio"]
 const TOOL_KEY = "media-generator:tool-filter"
 const ICON = { image: ImageIcon, video: VideoIcon, audio: AudioLinesIcon }
@@ -146,9 +154,9 @@ function Dashboard() {
     for (const j of state.media) {
       const before = was.current?.[j.id]
       if (!before || before === j.status || !["queued", "running"].includes(before) || j.kind === page) continue
-      const open = { label: "Open", onClick: () => setPage(j.kind) }
-      if (j.status === "done") toast.success(`${j.label} is ready`, { description: j.name, action: open })
-      if (j.status === "failed") toast.error(`${j.label} failed`, { description: plain(j.error ?? ""), action: open })
+      const open = { label: t("Open"), onClick: () => setPage(j.kind) }
+      if (j.status === "done") toast.success(t("{label} is ready", { label: own(j.label) }), { description: j.name, action: open })
+      if (j.status === "failed") toast.error(t("{label} failed", { label: own(j.label) }), { description: plain(j.error ?? ""), action: open })
     }
     was.current = Object.fromEntries(state.media.map((j) => [j.id, j.status]))
   }, [state, page])
@@ -159,8 +167,8 @@ function Dashboard() {
   useEffect(() => {
     if (!state) return
     for (const j of state.media) {
-      const asked = j.place, t = asked && timelines.get(asked.workspace)
-      if (!asked || !t || isRunning(j) || laid.current.has(j.id) || t.placed.includes(j.id)) continue
+      const asked = j.place, line = asked && timelines.get(asked.workspace)
+      if (!asked || !line || isRunning(j) || laid.current.has(j.id) || line.placed.includes(j.id)) continue
       laid.current.add(j.id)
       // Extend going back in time lands before its clip
       const p = j.tool === "extend" && asked.how === "after" && j.fields?.direction === "prequel" ? { ...asked, how: "before" as const } : asked
@@ -175,8 +183,8 @@ function Dashboard() {
       if (!inWorkspace(j, p.workspace)) api.workspaces({ slug: p.workspace, add: [j.id] }).catch(() => {})
       lengthOf(path).then((dur) => {
         timelines.change(p.workspace, (x) => ({ ...place(x, { path, job: j.id }, p, dur), placed: [...x.placed, j.id] }))
-        const what = p.how === "after" || p.how === "before" ? "The new shot" : p.replace ? "The new take" : j.kind === "audio" ? "The voice" : "The Bridge shot"
-        toast.success(`${what} is on the timeline`, { description: name, action: { label: "Show", onClick: () => (window.location.hash = "workspace/timeline") } })
+        const said = p.how === "after" || p.how === "before" ? t("The new shot is on the timeline") : p.replace ? t("The new take is on the timeline") : j.kind === "audio" ? t("The voice is on the timeline") : t("The Bridge shot is on the timeline")
+        toast.success(said, { description: name, action: { label: t("Show"), onClick: () => (window.location.hash = "workspace/timeline") } })
       })
     }
   }, [state, timelines])
@@ -218,7 +226,7 @@ function Dashboard() {
       const ws = currentOf(state!)
       if (!inWorkspace(job, ws.slug)) api.workspaces({ slug: ws.slug, add: [job.id] }).then(refresh, () => {})
       lengthOf(file).then((dur) => timelines.change(ws.slug, (t) => lay(t, { path: file, job: job.id }, dur)))
-      return toast.success("Added to the timeline", { description: ws.name, action: { label: "Show", onClick: () => (window.location.hash = "workspace/timeline") } })
+      return toast.success(t("Added to the timeline"), { description: ws.name, action: { label: t("Show"), onClick: () => (window.location.hash = "workspace/timeline") } })
     }
     if (b === "remix") {
       const tool = tools?.[job.kind].find((t) => t.id === job.tool)
@@ -292,7 +300,7 @@ function Dashboard() {
         const frame = (await api.frame(c.path, false, fileAt(a.time))).path, made = await api.import(frame)
         timelines.change(ws.slug, (t) => freeze(t, c.id, a.time, { path: `${home}/media/${made.id}/${frame.split(/[\\/]/).pop()!.replace(/^\d+-/, "")}`, job: made.id }))
         refresh()
-        return toast.success("Freeze frame laid", { description: "Free, from this machine." })
+        return toast.success(t("Freeze frame laid"), { description: t("Free, from this machine.") })
       }
       if (a.how === "after" || a.how === "before") return open("video", "extend", { inputs: { video: [await source(c)] }, fields: { direction: a.how === "before" ? "prequel" : "sequel" }, place: { ...by, how: "after" } })
       if (a.how !== "edit" && a.how !== "frame") return
@@ -321,7 +329,7 @@ function Dashboard() {
   if (!state || !tools)
     return (
       <div className="grid h-screen place-items-center text-sm text-muted-foreground">
-        {error ? `The dashboard's server does not answer (${error}). Run media.mjs studio again.` : "Loading…"}
+        {error ? t("The dashboard's server does not answer ({error}). Run media.mjs studio again.", { error }) : t("Loading…")}
       </div>
     )
 
@@ -340,7 +348,7 @@ function Dashboard() {
     <Workspaces.Provider value={{ list: state.workspaces, current: ws.slug, shots }}>
     <div className="grid h-screen grid-cols-[76px_minmax(340px,392px)_1fr] grid-rows-[48px_1fr]">
       <Header state={state} balances={balances} onChanged={refresh} />
-      <nav className="flex flex-col items-center gap-1 border-r py-3" aria-label="Pages">
+      <nav className="flex flex-col items-center gap-1 border-r py-3" aria-label={t("Pages")}>
         {RAIL.map((r, i) =>
           r ? (
             <button
@@ -358,7 +366,7 @@ function Dashboard() {
               {running[r.page] > 0 && (
                 <span
                   className={cn("absolute top-1 right-2 grid h-4.5 min-w-4.5 place-items-center rounded-full px-1 text-xs leading-none font-semibold text-background tabular-nums", RUNNING_DOT[r.page as Kind])}
-                  aria-label={`${running[r.page]} running`}
+                  aria-label={t("{n} running", { n: running[r.page] })}
                 >
                   {running[r.page]}
                 </span>
@@ -394,11 +402,11 @@ function Dashboard() {
           <main className="flex min-h-0 flex-col gap-4 overflow-auto bg-canvas px-6 py-5">
             <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
               <ToolFilter compact jobs={spacePool} value={spaceTool} onChange={(v) => pickTool(space!, v)} />
-              Show
+              {t("Show")}
               <Chips
                 options={["workspace", "all"] as const}
                 value={scope}
-                label={(o) => (o === "workspace" ? ws.name : "All")}
+                label={(o) => (o === "workspace" ? ws.name : t("All"))}
                 icon={(o) => (o === "workspace" ? <FolderKanbanIcon /> : valueIcon(o))}
                 onChange={(o) => {
                   setScope(o)
@@ -425,8 +433,8 @@ function Dashboard() {
                         return <Icon />
                       })()}
                     </EmptyMedia>
-                    <EmptyTitle>No {space} {scope === "workspace" ? `in ${ws.name} ` : ""}yet</EmptyTitle>
-                    <EmptyDescription>Pick a tool, fill it in, generate: the results land here, with what each one cost. <kbd>⌘V</kbd> pastes a file into the tool.</EmptyDescription>
+                    <EmptyTitle>{NONE_YET[space](scope === "workspace" ? ws.name : undefined)}</EmptyTitle>
+                    <EmptyDescription>{t("Pick a tool, fill it in, generate: the results land here, with what each one cost.")} <kbd>⌘V</kbd> {t("pastes a file into the tool.")}</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               }
@@ -453,7 +461,7 @@ function Dashboard() {
 async function keep(path: string, onAdded: () => void) {
   try {
     await api.import(path)
-    toast.success("Added to the workspace", { description: path.split(/[\\/]/).pop()?.replace(/^\d+-/, ""), action: { label: "Show", onClick: () => (window.location.hash = "workspace") } })
+    toast.success(t("Added to the workspace"), { description: path.split(/[\\/]/).pop()?.replace(/^\d+-/, ""), action: { label: t("Show"), onClick: () => (window.location.hash = "workspace") } })
     onAdded()
   } catch (e) {
     toast.error(plain((e as Error).message))
@@ -484,7 +492,7 @@ function DropToLibrary({ onAdded }: { onAdded: () => void }) {
       for (const f of [...e.dataTransfer.files]) {
         const k = mediaKind(f.name)
         if (k === "other") {
-          toast.error(`${f.name} is not an image, a video or a sound`)
+          toast.error(t("{name} is not an image, a video or a sound", { name: f.name }))
           continue
         }
         try {
@@ -512,7 +520,7 @@ function DropToLibrary({ onAdded }: { onAdded: () => void }) {
       {over && !taken && (
         <div className="pointer-events-none fixed inset-2 z-50 grid place-items-center rounded-2xl border-2 border-dashed border-space bg-space/10 animate-in fade-in-0">
           <span className="flex items-center gap-2 rounded-full bg-background/95 px-4 py-2 text-sm font-medium shadow-lg">
-            <FolderKanbanIcon className="size-4 text-space" /> Drop to add to the workspace
+            <FolderKanbanIcon className="size-4 text-space" /> {t("Drop to add to the workspace")}
           </span>
         </div>
       )}
@@ -533,8 +541,8 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
       <h1 className="text-[15px] font-semibold tracking-tight whitespace-nowrap">Media Generator</h1>
       <button
         type="button"
-        title={`${state.home}\nClick to copy the path`}
-        onClick={() => navigator.clipboard.writeText(state.home).then(() => toast.success("Folder path copied"))}
+        title={`${state.home}\n${t("Click to copy the path")}`}
+        onClick={() => navigator.clipboard.writeText(state.home).then(() => toast.success(t("Folder path copied")))}
         className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         <FolderIcon className="size-3.5 shrink-0" />
@@ -546,47 +554,47 @@ function Header({ state, balances, onChanged }: { state: State; balances: Balanc
       {/* the balances, hidden on the fake APIs (their amounts are made up); the active router's in dollars */}
       {!state.fake?.on && <>
       <Balance name={ROUTER_NAME[state.router]} provider={state.router}>
-        {!state.keys[state.router] ? <span className="text-muted-foreground">no key</span>
+        {!state.keys[state.router] ? <span className="text-muted-foreground">{t("no key")}</span>
           : state.router === "kie"
             ? !kb ? <span className="text-muted-foreground">…</span>
-              : kb.error ? <span className="text-muted-foreground">unavailable</span>
-              : <><b className="font-semibold tabular-nums">${(kb.account_left ?? 0).toFixed(2)}</b><small className="text-muted-foreground">left</small></>
+              : kb.error ? <span className="text-muted-foreground">{t("unavailable")}</span>
+              : <><b className="font-semibold tabular-nums">${(kb.account_left ?? 0).toFixed(2)}</b><small className="text-muted-foreground">{t("left")}</small></>
           : !ob ? <span className="text-muted-foreground">…</span>
-          : ob.error ? <span className="text-muted-foreground">unavailable</span>
-          : ob.account_left != null ? <><b className="font-semibold tabular-nums">${ob.account_left.toFixed(2)}</b><small className="text-muted-foreground">left</small></>
-          : ob.key_left != null ? <><b className="font-semibold tabular-nums">${ob.key_left.toFixed(2)}</b><small className="text-muted-foreground">left on this key</small></>
-          : <small className="text-muted-foreground">no limit on this key</small>}
+          : ob.error ? <span className="text-muted-foreground">{t("unavailable")}</span>
+          : ob.account_left != null ? <><b className="font-semibold tabular-nums">${ob.account_left.toFixed(2)}</b><small className="text-muted-foreground">{t("left")}</small></>
+          : ob.key_left != null ? <><b className="font-semibold tabular-nums">${ob.key_left.toFixed(2)}</b><small className="text-muted-foreground">{t("left on this key")}</small></>
+          : <small className="text-muted-foreground">{t("no limit on this key")}</small>}
       </Balance>
       {/* ElevenLabs, straight: its voices, Change voice and Translate; in dollars on a paid plan (its credits have no price
           on the free one) */}
       <Balance name="ElevenLabs" provider="elevenlabs">
-        {!state.keys.elevenlabs ? <span className="text-muted-foreground">no key</span>
+        {!state.keys.elevenlabs ? <span className="text-muted-foreground">{t("no key")}</span>
           : !eb ? <span className="text-muted-foreground">…</span>
-          : eb.error ? <span className="text-muted-foreground">unavailable</span>
-          : per1000(state) ? <><b className="font-semibold tabular-nums">${(((eb.left ?? 0) * per1000(state)!) / 1000).toFixed(2)}</b><small className="text-muted-foreground">left</small></>
-          : <><b className="font-semibold tabular-nums">{(eb.left ?? 0).toLocaleString("en-US")}</b><small className="text-muted-foreground">credits left</small></>}
+          : eb.error ? <span className="text-muted-foreground">{t("unavailable")}</span>
+          : per1000(state) ? <><b className="font-semibold tabular-nums">${(((eb.left ?? 0) * per1000(state)!) / 1000).toFixed(2)}</b><small className="text-muted-foreground">{t("left")}</small></>
+          : <><b className="font-semibold tabular-nums">{(eb.left ?? 0).toLocaleString(locale())}</b><small className="text-muted-foreground">{t("credits left")}</small></>}
       </Balance>
       </>}
       {(state.settings.developer?.on || state.fake?.on) && state.fake?.bases?.length ? (
         // developer mode on a server started on fake APIs: the fakes on or off; the page reloads on the other side
         <span className="flex items-center gap-2">
           {state.fake.on && (
-            <span className="rounded-md border border-cost/60 px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap text-cost" title={`Nothing is spent: the APIs are fakes at ${state.fake.bases.join(" and ")}`}>
+            <span className="rounded-md border border-cost/60 px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap text-cost" title={t("Nothing is spent: the APIs are fakes at {bases}", { bases: state.fake.bases.join(` ${t("and")} `) })}>
               Fake API
             </span>
           )}
           <Switch
             checked={state.fake.on}
             onCheckedChange={(on) => api.fake(on).then(() => window.location.reload(), (e) => toast.error(plain((e as Error).message)))}
-            aria-label={state.fake.on ? "Use the real APIs" : "Use the fake APIs"}
-            title={state.fake.on ? "On: the fake APIs, nothing is spent. Off: the real APIs, with this server's keys" : `Off: the real APIs. On: the fakes at ${state.fake.bases.join(" and ")}`}
+            aria-label={state.fake.on ? t("Use the real APIs") : t("Use the fake APIs")}
+            title={state.fake.on ? t("On: the fake APIs, nothing is spent. Off: the real APIs, with this server's keys") : t("Off: the real APIs. On: the fakes at {bases}", { bases: state.fake.bases.join(` ${t("and")} `) })}
           />
         </span>
       ) : null}
       <button
         type="button"
-        aria-label={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-        title={resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
+        aria-label={resolvedTheme === "dark" ? t("Switch to light mode") : t("Switch to dark mode")}
+        title={resolvedTheme === "dark" ? t("Light mode") : t("Dark mode")}
         onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >

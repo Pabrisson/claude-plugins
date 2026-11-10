@@ -1,6 +1,7 @@
 // What a list of results can be filtered and sorted by, from what the engine measured of each file (the pickers, the
 // timeline's bin)
 import { mediaKind, type Job } from "./api.ts"
+import { locale, own, t } from "./i18n.ts"
 import { RATIOS } from "./timeline.ts"
 
 // what a result's file is, as the engine measured it: its size and length
@@ -17,7 +18,7 @@ export const resOf = (w: number, h: number) => {
 // music (Suno's too); and a file's format, by its extension
 const VOICE_TOOLS = ["voice", "change-voice", "translate", "create-singer", "isolate-voice", "design-voice", "remix-voice", "transcribe"]
 export const SOUND_TYPES = ["voice", "music", "sound", "import"] as const
-export const SOUND_NAMES: Record<string, string> = { voice: "Voice", music: "Music", sound: "Sound effect", import: "Imported" }
+export const SOUND_NAMES: Record<string, string> = { voice: t("Voice"), music: t("Music"), sound: t("Sound effect"), import: t("Imported") }
 export const soundOf = (tool: string) => (tool === "sound-effect" ? "sound" : tool === "import" ? "import" : VOICE_TOOLS.includes(tool) ? "voice" : "music")
 export const formatOf = (path: string) => path.split(".").pop()!.toLowerCase()
 // the filters a list of results takes: a medium, then its own (a picture's format and quality, a sound's type and file
@@ -33,13 +34,14 @@ export function passes(i: { path: string; job: Job }, f: Filters) {
 
 // the orders a list of results takes, within each medium; kept in this browser
 export type Sort = "newest" | "oldest" | "longest" | "shortest" | "sharpest" | "softest" | "name"
-export const SORTS: [Sort, string][] = [["newest", "Newest"], ["oldest", "Oldest"], ["longest", "Longest"], ["shortest", "Shortest"], ["sharpest", "Highest resolution"], ["softest", "Lowest resolution"], ["name", "Name A–Z"]]
+export const SORTS: [Sort, string][] = [["newest", t("Newest")], ["oldest", t("Oldest")], ["longest", t("Longest")], ["shortest", t("Shortest")], ["sharpest", t("Highest resolution")], ["softest", t("Lowest resolution")], ["name", t("Name A–Z")]]
 // the results in that order (they come newest first); a file without the length or size sorted on goes last
 export function sorted<T extends { path: string; job: Job }>(items: T[], sort: Sort): T[] {
   if (sort === "newest") return items
   if (sort === "oldest") return [...items].reverse()
-  const name = (i: T) => `${i.job.label} ${i.path.split(/[\\/]/).pop()}`
-  if (sort === "name") return [...items].sort((a, b) => name(a).localeCompare(name(b)))
+  // by the tool's name as shown
+  const name = (i: T) => `${own(i.job.label)} ${i.path.split(/[\\/]/).pop()}`
+  if (sort === "name") return [...items].sort((a, b) => name(a).localeCompare(name(b), locale()))
   const value = (i: T) => {
     const { w, h, dur } = factsOf(i)
     return sort === "longest" || sort === "shortest" ? dur : w && h ? Math.min(w, h) : undefined

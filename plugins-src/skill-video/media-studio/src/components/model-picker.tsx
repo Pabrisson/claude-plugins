@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { Kind, Model } from "@/lib/api"
 import { CHIP, CHIP_OFF, CHIP_ON } from "@/components/chips"
 import { ModelLogo } from "@/components/model-logo"
+import { t as tr, t, own } from "@/lib/i18n"
 
 export type Priced = { label: string; amount: number | null }
 
@@ -16,7 +17,7 @@ const top = (m: Model) => m.params.resolution?.at(-1)
 const longest = (m: Model) => m.params.duration?.at(-1) ?? 0
 
 // a model added from OpenRouter's catalog, not in the engine's own list
-export const NewBadge = ({ children = "New" }: { children?: string }) => (
+export const NewBadge = ({ children = t("New") }: { children?: string }) => (
   <span className="shrink-0 rounded-full bg-space/15 px-1.5 py-px text-[10px] font-semibold tracking-wide whitespace-nowrap text-space uppercase">{children}</span>
 )
 
@@ -24,23 +25,24 @@ export const NewBadge = ({ children = "New" }: { children?: string }) => (
 export const shortName = (m: Model) => (m.lab && m.name.startsWith(`${m.lab}: `) ? m.name.slice(m.lab.length + 2) : m.name)
 
 // what a model can do, in a few words
-export function capsOf(m: Model) {
+// (in English for a prompt copied for the agent: capsOf(m, english))
+export function capsOf(m: Model, t = tr) {
   const p = m.params
   return [
-    p.duration?.length ? `up to ${p.duration.at(-1)} s` : null,
+    p.duration?.length ? t("up to {n} s", { n: p.duration.at(-1)! }) : null,
     p.resolution?.length ? (p.resolution.length > 1 ? `${p.resolution[0]}–${p.resolution.at(-1)}` : p.resolution[0]) : null,
-    p.audio ? "sound" : null,
-    p.frames?.includes("last_frame") ? "first + last frame" : p.frames?.length ? "first frame" : null,
-    p.references ? `${p.references} reference${p.references > 1 ? "s" : ""}` : null,
-    p.n && p.n.max > 1 ? `up to ${p.n.max} at once` : null,
-    p.voices?.length ? `${p.voices.length} voices` : null,
-    p.shots ? `${p.shots.max} shots` : null,
-    p.mid_frames ? `${p.mid_frames.max} middle frames` : null,
-    p.masks ? "who speaks" : null,
-    p.named_voices ? "Library voices" : null,
-    p.draft ? "draft" : null,
-    p.dialogue ? "dialogue" : null,
-    p.tags ? "audio tags" : null,
+    p.audio ? t("sound") : null,
+    p.frames?.includes("last_frame") ? t("first + last frame") : p.frames?.length ? t("first frame") : null,
+    p.references ? (p.references > 1 ? t("{n} references", { n: p.references }) : t("{n} reference", { n: p.references })) : null,
+    p.n && p.n.max > 1 ? t("up to {n} at once", { n: p.n.max }) : null,
+    p.voices?.length ? t("{n} voices", { n: p.voices.length }) : null,
+    p.shots ? t("{n} shots", { n: p.shots.max }) : null,
+    p.mid_frames ? t("{n} middle frames", { n: p.mid_frames.max }) : null,
+    p.masks ? t("who speaks") : null,
+    p.named_voices ? t("Library voices") : null,
+    p.draft ? t("draft") : null,
+    p.dialogue ? t("dialogue") : null,
+    p.tags ? t("audio tags") : null,
   ].filter((c): c is string => !!c)
 }
 
@@ -54,22 +56,22 @@ const FILTERS: Record<Kind, Filter[]> = {
     { id: "r1080", group: "res", label: "1080p+", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("1080p") },
     { id: "r2k", group: "res", label: "2K+", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("2K") },
     { id: "r4k", group: "res", label: "4K", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("4K") },
-    { id: "sound", label: "Sound", icon: Volume2Icon, test: (m) => !!m.params.audio },
-    { id: "last", label: "Last frame", icon: ArrowRightToLineIcon, test: (m) => !!m.params.frames?.includes("last_frame") },
-    { id: "seed", label: "Seed", icon: SproutIcon, test: (m) => !!m.params.seed },
+    { id: "sound", label: t("Sound"), icon: Volume2Icon, test: (m) => !!m.params.audio },
+    { id: "last", label: t("Last frame"), icon: ArrowRightToLineIcon, test: (m) => !!m.params.frames?.includes("last_frame") },
+    { id: "seed", label: t("Seed"), icon: SproutIcon, test: (m) => !!m.params.seed },
   ],
   image: [
     { id: "r2k", group: "res", label: "2K+", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("2K") },
     { id: "r4k", group: "res", label: "4K", icon: MonitorIcon, test: (m) => rank(top(m)) >= rank("4K") },
-    { id: "refs", label: "References", icon: ImagesIcon, test: (m) => (m.params.references ?? 0) > 0 },
-    { id: "many", label: "Several at once", icon: LayersIcon, test: (m) => (m.params.n?.max ?? 1) > 1 },
-    { id: "seed", label: "Seed", icon: SproutIcon, test: (m) => !!m.params.seed },
+    { id: "refs", label: t("References"), icon: ImagesIcon, test: (m) => (m.params.references ?? 0) > 0 },
+    { id: "many", label: t("Several at once"), icon: LayersIcon, test: (m) => (m.params.n?.max ?? 1) > 1 },
+    { id: "seed", label: t("Seed"), icon: SproutIcon, test: (m) => !!m.params.seed },
   ],
   audio: [
-    { id: "voices", label: "20+ voices", icon: UsersIcon, test: (m) => (m.params.voices?.length ?? 0) >= 20 },
-    { id: "dialogue", label: "Dialogue", icon: MessagesSquareIcon, test: (m) => !!m.params.dialogue },
-    { id: "tags", label: "Audio tags", icon: TagsIcon, test: (m) => !!m.params.tags },
-    { id: "free", label: "No cost", icon: GiftIcon, test: (m) => m.model.endsWith(":free") },
+    { id: "voices", label: t("20+ voices"), icon: UsersIcon, test: (m) => (m.params.voices?.length ?? 0) >= 20 },
+    { id: "dialogue", label: t("Dialogue"), icon: MessagesSquareIcon, test: (m) => !!m.params.dialogue },
+    { id: "tags", label: t("Audio tags"), icon: TagsIcon, test: (m) => !!m.params.tags },
+    { id: "free", label: t("No cost"), icon: GiftIcon, test: (m) => m.model.endsWith(":free") },
   ],
 }
 
@@ -83,7 +85,7 @@ export function ModelPicker({
   prices = {},
   onOpen,
   none,
-  label = "Model",
+  label = t("Model"),
   why = {},
 }: {
   kind: Kind
@@ -110,10 +112,10 @@ export function ModelPicker({
     setOn((list) => (list.includes(f.id) ? list.filter((x) => x !== f.id) : [...list.filter((x) => !f.group || filters.find((g) => g.id === x)?.group !== f.group), f.id]))
   const byPrice = (list: Model[]) => (cheap ? list.toSorted((a, b) => (prices[a.id]?.amount ?? Infinity) - (prices[b.id]?.amount ?? Infinity)) : list)
   const groups = cheap
-    ? [{ heading: "By price", list: byPrice(all.filter(pass)) }]
+    ? [{ heading: t("By price"), list: byPrice(all.filter(pass)) }]
     : [
-        { heading: recommended.length ? "Recommended" : "", list: recommended.filter(pass) },
-        { heading: recommended.length ? "Other models" : "", list: others.filter(pass) },
+        { heading: recommended.length ? t("Recommended") : "", list: recommended.filter(pass) },
+        { heading: recommended.length ? t("Other models") : "", list: others.filter(pass) },
       ]
 
   const item = (m: Model) => (
@@ -131,9 +133,9 @@ export function ModelPicker({
           {m.new && <NewBadge />}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{[m.lab, ...capsOf(m)].filter(Boolean).join(" · ")}</span>
-        {why[m.model] && recommended.includes(m) && <span className="mt-0.5 line-clamp-2 block text-[11px] leading-snug text-foreground/75">{why[m.model]}</span>}
+        {why[m.model] && recommended.includes(m) && <span className="mt-0.5 line-clamp-2 block text-[11px] leading-snug text-foreground/75">{own(why[m.model])}</span>}
       </span>
-      {prices[m.id] && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{prices[m.id].label}</span>}
+      {prices[m.id] && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{t(prices[m.id].label)}</span>}
     </CommandItem>
   )
 
@@ -148,7 +150,7 @@ export function ModelPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`${label}: ${model ? model.name : none}. Change the model`}
+          aria-label={t("{label}: {model}. Change the model", { label, model: model ? model.name : (none ?? "") })}
           className="flex h-11 w-full items-center gap-2.5 rounded-md border border-input bg-transparent px-2 text-left text-sm shadow-xs transition-colors outline-none hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
         >
           {model ? <ModelLogo model={model.model} lab={model.lab} /> : <span className="grid size-7 place-items-center rounded-md bg-muted"><SparklesIcon className="size-4 text-muted-foreground" /></span>}
@@ -163,7 +165,7 @@ export function ModelPicker({
           filters stay */}
       <PopoverContent side="right" align="start" sideOffset={8} collisionPadding={12} className="flex max-h-(--radix-popover-content-available-height) w-[min(460px,calc(100vw-2rem))] flex-col p-0">
         <Command loop className="min-h-0 flex-1">
-          <CommandInput placeholder="Search models" aria-label="Search models" />
+          <CommandInput placeholder={t("Search models")} aria-label={t("Search models")} />
           {(filters.length > 0 || Object.keys(prices).length > 0) && (
             <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
               {filters.map((f) => (
@@ -176,13 +178,13 @@ export function ModelPicker({
               {Object.keys(prices).length > 0 && (
                 <button type="button" aria-pressed={cheap} onClick={() => setCheap(!cheap)} className={cn(CHIP, "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs", cheap ? CHIP_ON : CHIP_OFF)}>
                   <ArrowDownNarrowWideIcon className="size-3.5" />
-                  Cheapest first
+                  {t("Cheapest first")}
                 </button>
               )}
             </div>
           )}
           <CommandList className="max-h-[min(560px,75vh)] min-h-0 flex-1">
-            <CommandEmpty>No model matches.</CommandEmpty>
+            <CommandEmpty>{t("No model matches.")}</CommandEmpty>
             {none && !on.length && (
               <CommandGroup>
                 <CommandItem value={none} data-checked={!value} onSelect={() => (onChange(null), setOpen(false))} className="gap-3 py-2">

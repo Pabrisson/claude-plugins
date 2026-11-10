@@ -1,4 +1,6 @@
 // The engine's local API (media.mjs serve) and the shapes it answers with
+import { locale, own, t } from "./i18n.ts"
+
 export type Kind = "image" | "video" | "audio"
 export type Page = Kind | "workspace" | "library" | "credits" | "settings"
 
@@ -365,15 +367,15 @@ export const needsPhrase = (e: Element) => e.type === "singer" && !(e.suno?.pers
 // voice: a character's own voice, a voice of the Library heard when it speaks in a video (Kling 4.0)
 export type Element = { name: string; type: ElementType; words: string; colors: string[]; font: string; voice_id: string | null; voice?: string | null; cover?: string | null; suno?: { persona_id?: string; voice_id?: string; pending?: { task_id: string; phrase: string } } | null; files: string[] }
 export const ELEMENT_TYPES: { type: ElementType; label: string; plural: string; hint: string }[] = [
-  { type: "character", label: "Character", plural: "Characters", hint: "a person, a creature, a mascot" },
-  { type: "outfit", label: "Outfit", plural: "Outfits", hint: "clothes, shoes, accessories worn" },
-  { type: "object", label: "Object", plural: "Objects", hint: "a product, a prop, a vehicle" },
-  { type: "location", label: "Location", plural: "Locations", hint: "a place, a set" },
-  { type: "pose", label: "Pose", plural: "Poses", hint: "a body pose to copy, nothing else" },
-  { type: "brand", label: "Brand", plural: "Brands", hint: "a logo kept exact, its colors" },
-  { type: "voice", label: "Voice", plural: "Voices", hint: "1 to 3 clips of speech, picked as Audio's voice and for Change voice" },
-  { type: "singer", label: "Singer", plural: "Singers", hint: "1 to 3 sung clips, picked as Music's singer once Suno has it" },
-  { type: "other", label: "Other", plural: "Other", hint: "anything else" },
+  { type: "character", label: t("Character"), plural: t("Characters"), hint: t("a person, a creature, a mascot") },
+  { type: "outfit", label: t("Outfit"), plural: t("Outfits"), hint: t("clothes, shoes, accessories worn") },
+  { type: "object", label: t("Object"), plural: t("Objects"), hint: t("a product, a prop, a vehicle") },
+  { type: "location", label: t("Location"), plural: t("Locations"), hint: t("a place, a set") },
+  { type: "pose", label: t("Pose"), plural: t("Poses"), hint: t("a body pose to copy, nothing else") },
+  { type: "brand", label: t("Brand"), plural: t("Brands"), hint: t("a logo kept exact, its colors") },
+  { type: "voice", label: t("Voice"), plural: t("Voices"), hint: t("1 to 3 clips of speech, picked as Audio's voice and for Change voice") },
+  { type: "singer", label: t("Singer"), plural: t("Singers"), hint: t("1 to 3 sung clips, picked as Music's singer once Suno has it") },
+  { type: "other", label: t("Other"), plural: t("Other"), hint: t("anything else") },
 ]
 export const typeLabel = (t: ElementType) => ELEMENT_TYPES.find((x) => x.type === t)!.label
 // a style of the Library: its images, the words on its look, and how a prompt cites it (media.mjs writes it)
@@ -486,10 +488,10 @@ export const textJob = (j: Job) => !!j.outputs[0] && isText(j.outputs[0])
 
 // an option's value, its words and its group
 export const opt = (o: Option) => (typeof o === "string" ? { value: o, label: o } : { ...o, label: o.label ?? o.value })
-// a value's words: its option's label, sentence-cased; Auto for an empty one
+// a value's words as shown: its option's label in the dashboard's language, sentence-cased; Auto for an empty one
 export function shown(f: Field, v: string) {
   const l = f.options?.map(opt).find((o) => o.value === v)?.label ?? v
-  return l ? sentence(l) : "Auto"
+  return l ? sentence(own(l)) : t("Auto")
 }
 // a label's first letter up, an aperture as written (f/2.8)
 export const sentence = (s: string) => (!s || /^f\//.test(s) ? s : s[0].toUpperCase() + s.slice(1))
@@ -499,18 +501,18 @@ export const sentence = (s: string) => (!s || /^f\//.test(s) ? s : s[0].toUpperC
 // precise first (media.mjs useOf and defaultKeys)
 export const USES: Record<Kind, { id: string; label: string; about: string }[]> = {
   image: [
-    { id: "create", label: "Create", about: "Custom, References, Camera, Product shot" },
-    { id: "edit", label: "Edit", about: "Restyle, relight, retouch, upscale, swaps, new angle" },
+    { id: "create", label: t("Create"), about: t("Custom, References, Camera, Product shot") },
+    { id: "edit", label: t("Edit"), about: t("Restyle, relight, retouch, upscale, swaps, new angle") },
   ],
   video: [
-    { id: "create", label: "Create", about: "From words, frames, camera moves, effects" },
-    { id: "avatar", label: "Talking avatar", about: "Talking avatar, Speech to video" },
-    { id: "edit", label: "Edit", about: "Edits of a clip: restyle, swaps, upscale, lip sync" },
+    { id: "create", label: t("Create"), about: t("From words, frames, camera moves, effects") },
+    { id: "avatar", label: t("Talking avatar"), about: t("Talking avatar, Speech to video") },
+    { id: "edit", label: t("Edit"), about: t("Edits of a clip: restyle, swaps, upscale, lip sync") },
   ],
   audio: [
-    { id: "voice", label: "Voice", about: "Voice, voice design, voice tools" },
-    { id: "music", label: "Music", about: "Music and its edits" },
-    { id: "sound", label: "Sound effect", about: "Sound effects" },
+    { id: "voice", label: t("Voice"), about: t("Voice, voice design, voice tools") },
+    { id: "music", label: t("Music"), about: t("Music and its edits") },
+    { id: "sound", label: t("Sound effect"), about: t("Sound effects") },
   ],
 }
 export const toolUse = (kind: Kind, t: Tool) =>
@@ -617,14 +619,14 @@ export const ROUTER_NAME: Record<Router, string> = { openrouter: "OpenRouter", k
 export const per1000 = (s: State) => s.plans?.[s.settings.elevenlabs?.plan ?? ""] || null
 // a price as the engine writes it: dollars, or ElevenLabs credits with their dollars on a paid plan
 export function money(amount: number | null | undefined, unit: "usd" | "credits", usdPer1000?: number | null): string {
-  if (amount == null) return "unknown cost"
+  if (amount == null) return t("unknown cost")
   if (unit === "usd") return `$${amount >= 0.1 || !amount ? amount.toFixed(2) : amount.toFixed(3).replace(/0$/, "")}`
-  const credits = `${Math.round(amount).toLocaleString("en-US")} credits`
+  const credits = t("{n} credits", { n: Math.round(amount).toLocaleString(locale()) })
   return usdPer1000 ? `${credits} · ${money((amount * usdPer1000) / 1000, "usd")}` : credits
 }
 
 // an estimate as a button or a list shows it: free, per minute (ElevenLabs before the clip), per character (a voice
-// before its text), or ≈ its price
+// before its text), or ≈ its price. In English: the composer sends it back to the agent too (its draft's answer)
 export function priceLabel(a: EstimateAnswer) {
   if (a.provider === "local") return "free"
   if (!a.estimate.known) return a.estimate.detail?.match(/^per \w+/)?.[0] ?? (/shows after/.test(a.estimate.detail ?? "") ? "priced after" : a.provider === "elevenlabs" ? "per minute" : "unknown cost")
@@ -636,10 +638,10 @@ export const plain = (msg: string) => msg.replace(/\s*\((--|media\.mjs)[^)]*\)/g
 
 export function when(iso: string) {
   const d = new Date(iso), now = new Date()
-  const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-  if (d.toDateString() === now.toDateString()) return `today ${hm}`
-  if (d.toDateString() === new Date(now.getTime() - 864e5).toDateString()) return `yesterday ${hm}`
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  const hm = d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+  if (d.toDateString() === now.toDateString()) return t("today {time}", { time: hm })
+  if (d.toDateString() === new Date(now.getTime() - 864e5).toDateString()) return t("yesterday {time}", { time: hm })
+  return d.toLocaleDateString(locale(), { month: "short", day: "numeric" })
 }
 
 export function elapsed(iso?: string) {

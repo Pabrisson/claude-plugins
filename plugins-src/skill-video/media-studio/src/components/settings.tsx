@@ -7,6 +7,7 @@ import {
   CopyIcon,
   GiftIcon,
   KeyRoundIcon,
+  LanguagesIcon,
   LayersIcon,
   LoaderCircleIcon,
   PaletteIcon,
@@ -32,24 +33,28 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { api, money, plain, ROUTER_NAME, USES, toolUse, type Kind, type Model, type Router, type Settings, type State, type Tool } from "@/lib/api"
 import { modelsFor } from "@/components/composer"
 import { Chips, ProviderIcon } from "@/components/chips"
+import { english, getLang, own, setLang, t, type Lang } from "@/lib/i18n"
 import { capsOf, ModelPicker, NewBadge, shortName } from "@/components/model-picker"
 import { ModelLogo } from "@/components/model-logo"
 import { Main, Side } from "@/components/pages"
 
 const KINDS: Kind[] = ["image", "video", "audio"]
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
+const KIND_LABEL: Record<Kind, string> = { image: t("Image"), video: t("Video"), audio: t("Audio") }
+const EVERY_TOOL: Record<Kind, string> = { image: t("Every image tool."), video: t("Every video tool."), audio: t("Every audio tool.") }
+const DEFAULT_OF: Record<Kind, string> = { image: t("Default image model"), video: t("Default video model"), audio: t("Default audio model") }
 // ElevenLabs' plans, each its icon (a plan the engine adds later: a wallet)
 const PLAN_ICON: Record<string, LucideIcon> = { none: CircleOffIcon, free: GiftIcon, starter: SproutIcon, creator: PaletteIcon, pro: BadgeCheckIcon, scale: TrendingUpIcon, business: Building2Icon }
 const PROVIDERS = [
-  { id: "kie", name: "Kie.ai", unit: "usd", what: "Images, videos and voices, its credits counted" },
-  { id: "openrouter", name: "OpenRouter", unit: "usd", what: "Images, videos and voices" },
-  { id: "elevenlabs", name: "ElevenLabs", unit: "credits", what: "Voices straight from it, Change voice, Translate, sound effects, music, voice design and transcripts" },
+  { id: "kie", name: "Kie.ai", unit: "usd", what: t("Images, videos and voices, its credits counted") },
+  { id: "openrouter", name: "OpenRouter", unit: "usd", what: t("Images, videos and voices") },
+  { id: "elevenlabs", name: "ElevenLabs", unit: "credits", what: t("Voices straight from it, Change voice, Translate, sound effects, music, voice design and transcripts") },
 ] as const
 // the routers, one active at a time (Kie by default): what each is, and its rate limit (OpenRouter's docs; Kie's docs and a probe,
 // 2026-10-31)
 const ROUTERS: { id: Router; about: string; limit: string }[] = [
-  { id: "kie", about: "Many labs through one key, billed in credits ($0.005 each) and shown in USD from its price list. Often cheaper; Seedance 2.5 edits a video here, in 1080p.", limit: "20 new generations every 10 s for the account: past that, the next ones wait their turn here." },
-  { id: "openrouter", about: "Many labs through one key, billed in USD. A video or a voice reaches it by a tunnel opened for the job.", limit: "No request cap on paid models: when a model's own limit answers, the job waits the time it asks and tries again." },
+  { id: "kie", about: t("Many labs through one key, billed in credits ($0.005 each) and shown in USD from its price list. Often cheaper; Seedance 2.5 edits a video here, in 1080p."), limit: t("20 new generations every 10 s for the account: past that, the next ones wait their turn here.") },
+  { id: "openrouter", about: t("Many labs through one key, billed in USD. A video or a voice reaches it by a tunnel opened for the job."), limit: t("No request cap on paid models: when a model's own limit answers, the job waits the time it asks and tries again.") },
 ]
 type Provider = (typeof PROVIDERS)[number]["id"]
 type Limit = { on: boolean; text: string }
@@ -57,11 +62,11 @@ const LIMITS = PROVIDERS.flatMap((p) => (["threshold", "cap"] as const).map((k) 
 const COMMAND = "/plugin configure skill-video@pabrisson"
 // the section the page goes back to after a reload
 const BACK = "media-generator:settings-back"
-const KIND_NAME: Record<string, string> = { image: "Image", video: "Video", speech: "Voice" }
+const KIND_NAME: Record<string, string> = { image: t("Image"), video: t("Video"), speech: t("Voice") }
 // how long ago, in a few words
 const ago = (iso: string) => {
   const min = Math.round((Date.now() - Date.parse(iso)) / 60e3)
-  return min < 1 ? "just now" : min < 60 ? `${min} min ago` : min < 1440 ? `${Math.round(min / 60)} h ago` : `${Math.round(min / 1440)} d ago`
+  return min < 1 ? t("just now") : min < 60 ? t("{n} min ago", { n: min }) : min < 1440 ? t("{n} h ago", { n: Math.round(min / 60) }) : t("{n} d ago", { n: Math.round(min / 1440) })
 }
 
 // a limit as typed: on with a positive number, or off; anything else is an error to fix before saving
@@ -69,7 +74,7 @@ const amount = (l: Limit) => (l.on ? Number(l.text) : null)
 const wrong = (l: Limit) => l.on && !(l.text.trim() !== "" && Number.isFinite(+l.text) && +l.text > 0)
 // what an amount turned on still needs: a word while empty, an error once something wrong is typed
 const hint = (l: Limit) =>
-  !wrong(l) ? null : l.text.trim() === "" ? <span className="text-xs text-muted-foreground">Enter an amount, or turn it off.</span> : <FieldError>Enter an amount above 0.</FieldError>
+  !wrong(l) ? null : l.text.trim() === "" ? <span className="text-xs text-muted-foreground">{t("Enter an amount, or turn it off.")}</span> : <FieldError>{t("Enter an amount above 0.")}</FieldError>
 // what this page edits of the settings, in the shape it saves them
 const project = (s: Omit<Settings, "workspace">) => ({
   router: { active: s.router.active },
@@ -84,7 +89,7 @@ const typed = (s: Settings): Record<string, Limit> =>
 
 // Development's prompt for the agent: every model of both routers checked against its docs and wired, the ones each
 // router's catalog adds named first
-const listed = (m: Model) => `- ${m.model} (${m.name}; ${m.kind}, ${m.role}${capsOf(m).length ? `; ${capsOf(m).join(", ")}` : ""})`
+const listed = (m: Model) => `- ${m.model} (${m.name}; ${m.kind}, ${m.role}${capsOf(m, english).length ? `; ${capsOf(m, english).join(", ")}` : ""})`
 const wirePrompt = (added: Record<Router, Model[]>, engine: string) =>
   [
     "Check every model of media-generator (skill-video) on both of its routers, Kie.ai and OpenRouter, and on ElevenLabs (reached straight), and wire what each one can do, every option it takes and what it costs. Generate nothing and spend nothing: read the docs, the price lists and the free routes only, no generation without my yes.",
@@ -202,7 +207,8 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
       const r = await api.refreshModels()
       const ids = Object.values(r.added).flat().filter((m) => m.found).map((m) => m.id)
       setFound(ids)
-      toast.success(ids.length ? `${ids.length} new model${ids.length > 1 ? "s" : ""} from ${ROUTER_NAME[saved.router.active]}` : "The model list is up to date")
+      const from = ROUTER_NAME[saved.router.active]
+      toast.success(!ids.length ? t("The model list is up to date") : ids.length > 1 ? t("{n} new models from {router}", { n: ids.length, router: from }) : t("{n} new model from {router}", { n: 1, router: from }))
       onModels()
       document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "nearest" })
     } catch (e) {
@@ -238,19 +244,19 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
       }
       // another router: its models in every list
       if (now !== was) {
-        toast.success(`${ROUTER_NAME[now as Router]} is now the router: the tools show its models`, { id: "settings" })
+        toast.success(t("{router} is now the router: the tools show its models", { router: ROUTER_NAME[now as Router] }), { id: "settings" })
         onModels()
-      } else toast.success("Settings saved", { id: "settings" })
+      } else toast.success(t("Settings saved"), { id: "settings" })
       onSaved()
     } catch (e) {
-      toast.error(`Not saved: ${plain((e as Error).message)}`, { id: "settings" })
+      toast.error(t("Not saved: {error}", { error: plain((e as Error).message) }), { id: "settings" })
     }
   })
   useEffect(() => {
     if (invalid || json === sent) return
     pending.current = json
-    const t = setTimeout(() => save(json), 500)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => save(json), 500)
+    return () => clearTimeout(timer)
   }, [json, invalid, sent])
   // leaving the page: a change still waiting is saved all the same
   useEffect(() => () => {
@@ -263,10 +269,10 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
   const noLimits = spending.every((p) => !limits[`${p.id}.threshold`].on && !limits[`${p.id}.cap`].on)
   const name = ROUTER_NAME[saved.router.active]
   const keys = [
-    { set: state.keys.kie, provider: "kie", name: "Kie.ai key", about: "Every image, video and voice model while Kie.ai is the router, and its credits left." },
-    { set: state.keys.openrouter, provider: "openrouter", name: "OpenRouter key", about: "Every image, video and voice model while OpenRouter is the router. Without it, prices show and nothing can be generated." },
-    { set: state.keys.management, provider: "openrouter", name: "OpenRouter management key", about: "Optional: the account's whole balance in the header, not only this key's." },
-    { set: state.keys.elevenlabs, provider: "elevenlabs", name: "ElevenLabs key", about: "Voice straight from ElevenLabs (Eleven v4…), Change voice, Translate, its sound effects, music, voice design and transcripts, and the credits left. Without it, the router's ElevenLabs voices." },
+    { set: state.keys.kie, provider: "kie", name: t("Kie.ai key"), about: t("Every image, video and voice model while Kie.ai is the router, and its credits left.") },
+    { set: state.keys.openrouter, provider: "openrouter", name: t("OpenRouter key"), about: t("Every image, video and voice model while OpenRouter is the router. Without it, prices show and nothing can be generated.") },
+    { set: state.keys.management, provider: "openrouter", name: t("OpenRouter management key"), about: t("Optional: the account's whole balance in the header, not only this key's.") },
+    { set: state.keys.elevenlabs, provider: "elevenlabs", name: t("ElevenLabs key"), about: t("Voice straight from ElevenLabs (Eleven v4…), Change voice, Translate, its sound effects, music, voice design and transcripts, and the credits left. Without it, the router's ElevenLabs voices.") },
   ]
   // developer mode: on a server started on fake APIs, it brings the header's Fake API switch (turned on with it)
   const fakes = !!state.fake?.bases?.length
@@ -277,24 +283,25 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
     return { recommended, others: [...new Set(fits.flatMap((f) => f.others))].filter((m) => !recommended.includes(m)) }
   }
   // the tools' own defaults, in the order of the kinds then of the tools
-  const own = KINDS.flatMap((kind) =>
+  const ownDefaults = KINDS.flatMap((kind) =>
     Object.entries(defaults)
       .filter(([key, id]) => id && key.startsWith(`${kind}/`))
       .map(([key, id]) => ({ key, kind, id, tool: tools?.[kind]?.find((t) => t.id === key.slice(kind.length + 1)) }))
   )
   const nav = [
-    { id: "spending", icon: WalletIcon, title: "Spending", status: noLimits ? "No limit set" : "Limits set", warn: noLimits },
-    { id: "plan", icon: WalletIcon, title: "ElevenLabs plan", status: plan ? cap(plan) : "Not set", warn: false },
-    { id: "models", icon: LayersIcon, title: "Default models", status: Object.values(defaults).some(Boolean) ? `${Object.values(defaults).filter(Boolean).length} set` : "The tools' choice", warn: false },
-    { id: "keys", icon: KeyRoundIcon, title: "API keys", status: `${keys.filter((k) => k.set).length} of ${keys.length} set`, warn: !state.keys[saved.router.active] },
-    { id: "router", icon: RouterIcon, title: "Router", status: `${name} active${state.catalog.at ? ` · list ${ago(state.catalog.at)}` : ""}`, warn: !state.keys[router] },
-    { id: "dev", icon: CodeIcon, title: "Development", status: !developer ? "Off" : fakes ? `On · ${state.fake.on ? "fake APIs" : "real APIs"}` : "On", warn: false },
+    { id: "spending", icon: WalletIcon, title: t("Spending"), status: noLimits ? t("No limit set") : t("Limits set"), warn: noLimits },
+    { id: "plan", icon: WalletIcon, title: t("ElevenLabs plan"), status: plan ? cap(plan) : t("Not set"), warn: false },
+    { id: "models", icon: LayersIcon, title: t("Default models"), status: Object.values(defaults).some(Boolean) ? t("{n} set", { n: Object.values(defaults).filter(Boolean).length }) : t("The tools' choice"), warn: false },
+    { id: "keys", icon: KeyRoundIcon, title: t("API keys"), status: t("{n} of {total} set", { n: keys.filter((k) => k.set).length, total: keys.length }), warn: !state.keys[saved.router.active] },
+    { id: "router", icon: RouterIcon, title: t("Router"), status: `${t("{name} active", { name })}${state.catalog.at ? ` · ${t("list {when}", { when: ago(state.catalog.at) })}` : ""}`, warn: !state.keys[router] },
+    { id: "language", icon: LanguagesIcon, title: t("Language"), status: getLang() === "fr" ? "Français" : "English", warn: false },
+    { id: "dev", icon: CodeIcon, title: t("Development"), status: !developer ? t("Off") : fakes ? (state.fake.on ? t("On · fake APIs") : t("On · real APIs")) : t("On"), warn: false },
   ]
 
   return (
     <>
       <Side>
-        <nav className="flex flex-col gap-1" aria-label="Settings">
+        <nav className="flex flex-col gap-1" aria-label={t("Settings")}>
           {nav.map((n) => (
             <button
               key={n.id}
@@ -308,22 +315,22 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                 <span className="block text-sm font-medium">{n.title}</span>
                 <span className={cn("block truncate text-xs", n.warn ? "text-cost" : "text-muted-foreground")}>{n.status}</span>
               </span>
-              {n.warn && <TriangleAlertIcon className="size-4 shrink-0 text-cost" aria-label="Needs a look" />}
+              {n.warn && <TriangleAlertIcon className="size-4 shrink-0 text-cost" aria-label={t("Needs a look")} />}
             </button>
           ))}
         </nav>
-        <p className="mt-auto text-xs text-muted-foreground">Saved in this folder's settings.json. The keys stay in your agent's settings.</p>
+        <p className="mt-auto text-xs text-muted-foreground">{t("Saved in this folder's settings.json. The keys stay in your agent's settings.")}</p>
       </Side>
 
-      <Main title="Settings">
+      <Main title={t("Settings")}>
         <div className="flex max-w-4xl flex-col gap-5 pb-4">
-          <Section id="spending" icon={WalletIcon} title="Spending" about="Each provider in its own unit. Off means never: every click on a paid button spends.">
+          <Section id="spending" icon={WalletIcon} title={t("Spending")} about={t("Each provider in its own unit. Off means never: every click on a paid button spends.")}>
             {spending.map((p) => {
-              const t = limits[`${p.id}.threshold`], c = limits[`${p.id}.cap`]
+              const th = limits[`${p.id}.threshold`], c = limits[`${p.id}.cap`]
               const spent = state.month[p.id], usd = p.unit === "usd"
               const show = (n: number) => money(n, p.unit)
-              const summary = !t.on && !c.on ? "Never asks, no cap."
-                : [t.on && !wrong(t) && `Asks above ${show(+t.text)}`, c.on && !wrong(c) && `stops at ${show(+c.text)} a month`].filter(Boolean).join(", ") + "."
+              const summary = !th.on && !c.on ? t("Never asks, no cap.")
+                : [th.on && !wrong(th) && t("Asks above {amount}", { amount: show(+th.text) }), c.on && !wrong(c) && t("stops at {amount} a month", { amount: show(+c.text) })].filter(Boolean).join(", ") + "."
               const field = (k: string, l: Limit, label: string) => (
                 <div className="flex items-center gap-3">
                   <Switch
@@ -340,12 +347,12 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                       id={k}
                       inputMode="decimal"
                       disabled={!l.on}
-                      placeholder={l.on ? "0.00" : "off"}
+                      placeholder={l.on ? "0.00" : t("off")}
                       aria-invalid={(wrong(l) && l.text.trim() !== "") || undefined}
                       value={l.text}
                       onChange={(e) => put(k, { text: e.target.value.replace(/[^\d.]/g, "") })}
                     />
-                    {!usd && <InputGroupAddon align="inline-end"><InputGroupText>credits</InputGroupText></InputGroupAddon>}
+                    {!usd && <InputGroupAddon align="inline-end"><InputGroupText>{t("credits")}</InputGroupText></InputGroupAddon>}
                   </InputGroup>
                 </div>
               )
@@ -356,27 +363,27 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                       <ProviderIcon id={p.id} className="size-4 shrink-0 text-muted-foreground" />
                       {p.name}
                     </span>
-                    <span className="text-xs text-muted-foreground">{p.what}, in {usd ? "USD" : "credits"}</span>
-                    <span className={cn("ml-auto text-xs", !t.on && !c.on ? "text-cost" : "text-muted-foreground")}>{summary}</span>
+                    <span className="text-xs text-muted-foreground">{usd ? t("{what}, in USD", { what: p.what }) : t("{what}, in credits", { what: p.what })}</span>
+                    <span className={cn("ml-auto text-xs", !th.on && !c.on ? "text-cost" : "text-muted-foreground")}>{summary}</span>
                   </div>
-                  <Row title="Ask before spending more than" about="A generation above this asks for your yes first, here and with the agent." htmlFor={`${p.id}.threshold`}>
-                    {field(`${p.id}.threshold`, t, `Ask before spending more than, ${p.name}`)}
-                    {hint(t)}
+                  <Row title={t("Ask before spending more than")} about={t("A generation above this asks for your yes first, here and with the agent.")} htmlFor={`${p.id}.threshold`}>
+                    {field(`${p.id}.threshold`, th, t("Ask before spending more than, {provider}", { provider: p.name }))}
+                    {hint(th)}
                   </Row>
-                  <Row title="Monthly cap" about="Past it, nothing more is spent this month, even with a yes." htmlFor={`${p.id}.cap`}>
-                    {field(`${p.id}.cap`, c, `Monthly cap, ${p.name}`)}
+                  <Row title={t("Monthly cap")} about={t("Past it, nothing more is spent this month, even with a yes.")} htmlFor={`${p.id}.cap`}>
+                    {field(`${p.id}.cap`, c, t("Monthly cap, {provider}", { provider: p.name }))}
                     {wrong(c) ? (
                       hint(c)
                     ) : c.on ? (
                       <>
-                        <Progress value={Math.min(100, (100 * spent) / +c.text)} className={cn(spent >= +c.text && "[&>div]:bg-destructive")} aria-label="Spent this month" />
-                        <span className="text-xs text-muted-foreground">{show(spent)} of {show(+c.text)} spent this month</span>
+                        <Progress value={Math.min(100, (100 * spent) / +c.text)} className={cn(spent >= +c.text && "[&>div]:bg-destructive")} aria-label={t("Spent this month")} />
+                        <span className="text-xs text-muted-foreground">{t("{spent} of {cap} spent this month", { spent: show(spent), cap: show(+c.text) })}</span>
                       </>
                     ) : (
-                      <span className="text-xs text-muted-foreground">{show(spent)} spent this month</span>
+                      <span className="text-xs text-muted-foreground">{t("{spent} spent this month", { spent: show(spent) })}</span>
                     )}
-                    {t.on && c.on && !wrong(t) && !wrong(c) && +c.text < +t.text && (
-                      <span className="text-xs text-cost">The cap is below the threshold: it stops before anything asks.</span>
+                    {th.on && c.on && !wrong(th) && !wrong(c) && +c.text < +th.text && (
+                      <span className="text-xs text-cost">{t("The cap is below the threshold: it stops before anything asks.")}</span>
                     )}
                   </Row>
                 </Fragment>
@@ -384,52 +391,52 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
             })}
           </Section>
 
-          <Section id="plan" icon={WalletIcon} title="ElevenLabs plan" about="Your plan prices ElevenLabs' credits in USD, everywhere a cost shows.">
-            <Row title="Plan" about="Not set: costs show in credits only.">
+          <Section id="plan" icon={WalletIcon} title={t("ElevenLabs plan")} about={t("Your plan prices ElevenLabs' credits in USD, everywhere a cost shows.")}>
+            <Row title={t("Plan")} about={t("Not set: costs show in credits only.")}>
               <Chips
                 options={["none", ...Object.keys(state.plans)]}
                 value={plan ?? "none"}
-                label={(p) => (p === "none" ? "Not set" : cap(p))}
+                label={(p) => (p === "none" ? t("Not set") : cap(p))}
                 icon={(p) => createElement(PLAN_ICON[p] ?? WalletIcon)}
                 onChange={(p) => setPlan(p === "none" ? null : p)}
               />
             </Row>
           </Section>
 
-          <Section id="models" icon={LayersIcon} title="Default models" about="The most precise one wins: a tool's own, then its use, then its kind. Each applies only to the tools its model fits, else the tool's first recommended model. The agent follows them too.">
+          <Section id="models" icon={LayersIcon} title={t("Default models")} about={t("The most precise one wins: a tool's own, then its use, then its kind. Each applies only to the tools its model fits, else the tool's first recommended model. The agent follows them too.")}>
             {KINDS.map((k) => (
               <Fragment key={k}>
-                <Row title={cap(k)} about={`Every ${k} tool.`}>
+                <Row title={KIND_LABEL[k]} about={EVERY_TOOL[k]}>
                   <ModelPicker
                     kind={k}
                     recommended={[]}
                     others={(models[k] ?? []).filter((m) => k !== "video" || m.role === "generate")}
                     value={defaults[k] ?? null}
                     onChange={(id) => setDefaults({ ...defaults, [k]: id })}
-                    none="The tool's choice"
-                    label={`Default ${k} model`}
+                    none={t("The tool's choice")}
+                    label={DEFAULT_OF[k]}
                   />
                 </Row>
                 {USES[k].map((u) => {
                   const key = `${k}:${u.id}`, { recommended, others } = modelsOfUse(k, u.id)
                   return (
-                    <Row key={key} title={`${cap(k)} · ${u.label}`} about={u.about}>
-                      <ModelPicker kind={k} recommended={recommended} others={others} value={defaults[key] ?? null} onChange={(id) => setDefaults({ ...defaults, [key]: id })} none="Not set" label={`Default ${k} ${u.label.toLowerCase()} model`} />
+                    <Row key={key} title={`${KIND_LABEL[k]} · ${u.label}`} about={u.about}>
+                      <ModelPicker kind={k} recommended={recommended} others={others} value={defaults[key] ?? null} onChange={(id) => setDefaults({ ...defaults, [key]: id })} none={t("Not set")} label={t("Default {kind} {use} model", { kind: KIND_LABEL[k].toLowerCase(), use: u.label.toLowerCase() })} />
                     </Row>
                   )
                 })}
               </Fragment>
             ))}
-            {own.length ? (
-              own.map(({ key, kind, tool, id }) => {
+            {ownDefaults.length ? (
+              ownDefaults.map(({ key, kind, tool, id }) => {
                 const fit = tool ? modelsFor(tool, kind, models[kind] ?? []) : { recommended: [], others: [] }
                 return (
-                  <Row key={key} title={`${cap(kind)} · ${tool?.label ?? key.split("/")[1]}`} about="This tool's own default.">
+                  <Row key={key} title={`${KIND_LABEL[kind]} · ${own(tool?.label) ?? key.split("/")[1]}`} about={t("This tool's own default.")}>
                     <div className="flex items-center gap-1.5">
                       <div className="min-w-0 flex-1">
-                        <ModelPicker kind={kind} recommended={fit.recommended} others={fit.others} value={id} onChange={(v) => setDefaults({ ...defaults, [key]: v })} none="Not set" label={`${tool?.label ?? key} default model`} />
+                        <ModelPicker kind={kind} recommended={fit.recommended} others={fit.others} value={id} onChange={(v) => setDefaults({ ...defaults, [key]: v })} none={t("Not set")} label={t("{tool} default model", { tool: own(tool?.label) ?? key })} />
                       </div>
-                      <Button variant="ghost" size="icon-sm" aria-label={`Remove ${tool?.label ?? key}'s default`} title="Remove" onClick={() => setDefaults({ ...defaults, [key]: null })}>
+                      <Button variant="ghost" size="icon-sm" aria-label={t("Remove {tool}'s default", { tool: own(tool?.label) ?? key })} title={t("Remove")} onClick={() => setDefaults({ ...defaults, [key]: null })}>
                         <XIcon />
                       </Button>
                     </div>
@@ -437,25 +444,25 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                 )
               })
             ) : (
-              <Row title="Tools" about="A tool's own default, the most precise one, is set by the agent when you ask.">
-                <span className="text-sm text-muted-foreground">None yet</span>
+              <Row title={t("Tools")} about={t("A tool's own default, the most precise one, is set by the agent when you ask.")}>
+                <span className="text-sm text-muted-foreground">{t("None yet")}</span>
               </Row>
             )}
           </Section>
 
-          <Section id="keys" icon={KeyRoundIcon} title="API keys" about="They stay in your agent's settings, never in this folder.">
+          <Section id="keys" icon={KeyRoundIcon} title={t("API keys")} about={t("They stay in your agent's settings, never in this folder.")}>
             {keys.map((k) => (
               <Row key={k.name} title={k.name} icon={k.provider} about={k.about} end>
                 <Badge variant={k.set ? "secondary" : "outline"} className={cn("h-6 px-2.5", k.set && "bg-done/15 text-done")}>
-                  {k.set ? "Set" : "Not set"}
+                  {k.set ? t("Set") : t("Not set")}
                 </Badge>
               </Row>
             ))}
-            <Row title="Set or change a key" about="Run this in your agent, or set its variable (KIE_API_KEY, OPENROUTER_API_KEY, OPENROUTER_MANAGEMENT_KEY, ELEVENLABS_API_KEY), then restart the agent.">
+            <Row title={t("Set or change a key")} about={t("Run this in your agent, or set its variable (KIE_API_KEY, OPENROUTER_API_KEY, OPENROUTER_MANAGEMENT_KEY, ELEVENLABS_API_KEY), then restart the agent.")}>
               <InputGroup>
-                <InputGroupInput readOnly value={COMMAND} aria-label="Command" className="font-mono text-xs md:text-xs" />
+                <InputGroupInput readOnly value={COMMAND} aria-label={t("Command")} className="font-mono text-xs md:text-xs" />
                 <InputGroupAddon align="inline-end">
-                  <Button size="icon-xs" variant="ghost" aria-label="Copy the command" onClick={() => navigator.clipboard.writeText(COMMAND).then(() => toast.success("Command copied"))}>
+                  <Button size="icon-xs" variant="ghost" aria-label={t("Copy the command")} onClick={() => navigator.clipboard.writeText(COMMAND).then(() => toast.success(t("Command copied")))}>
                     <CopyIcon />
                   </Button>
                 </InputGroupAddon>
@@ -463,9 +470,9 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
             </Row>
           </Section>
 
-          <Section id="router" icon={RouterIcon} title="Router" about="Where every image, video and voice is made. One router at a time: the tools show its models, priced by it.">
+          <Section id="router" icon={RouterIcon} title={t("Router")} about={t("Where every image, video and voice is made. One router at a time: the tools show its models, priced by it.")}>
             <div className="px-5 py-4">
-              <RadioGroup value={router} onValueChange={(v) => setRouter(v as Router)} className="grid gap-3 md:grid-cols-2" aria-label="Active router">
+              <RadioGroup value={router} onValueChange={(v) => setRouter(v as Router)} className="grid gap-3 md:grid-cols-2" aria-label={t("Active router")}>
                 {ROUTERS.map((r) => (
                   <FieldLabel key={r.id} htmlFor={`router-${r.id}`}>
                     <Field orientation="horizontal" className="items-start">
@@ -474,11 +481,11 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                         <FieldTitle>
                           <ProviderIcon id={r.id} className="size-4 shrink-0 text-muted-foreground" />
                           {ROUTER_NAME[r.id]}
-                          {saved.router.active === r.id && <Badge variant="secondary">Active</Badge>}
-                          <Badge variant="outline" className={cn(state.keys[r.id] ? "text-done" : "text-cost")}>{state.keys[r.id] ? "Key set" : "No key"}</Badge>
+                          {saved.router.active === r.id && <Badge variant="secondary">{t("Active")}</Badge>}
+                          <Badge variant="outline" className={cn(state.keys[r.id] ? "text-done" : "text-cost")}>{state.keys[r.id] ? t("Key set") : t("No key")}</Badge>
                         </FieldTitle>
                         <FieldDescription>{r.about}</FieldDescription>
-                        <FieldDescription className="text-xs">Rate limit: {r.limit}</FieldDescription>
+                        <FieldDescription className="text-xs">{t("Rate limit: {limit}", { limit: r.limit })}</FieldDescription>
                       </FieldContent>
                     </Field>
                   </FieldLabel>
@@ -486,31 +493,31 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
               </RadioGroup>
             </div>
             <Row
-              title={`${name}'s model list`}
+              title={t("{name}'s model list", { name })}
               end
               about={saved.router.active === "kie"
-                ? "The list kept with media-generator, plus the models Kie adds (read from its docs), and its prices from its price list: read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."
-                : "The list kept with media-generator, plus the models OpenRouter adds to its catalog, read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create."}
+                ? t("The list kept with media-generator, plus the models Kie adds (read from its docs), and its prices from its price list: read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create.")
+                : t("The list kept with media-generator, plus the models OpenRouter adds to its catalog, read at each start of this dashboard and once a day. They show « New » among the other models of the tools that create.")}
             >
               <Button variant="outline" disabled={checking} onClick={updateModels} aria-busy={checking || undefined}>
                 {checking ? <LoaderCircleIcon className="animate-spin" aria-hidden /> : <RefreshCwIcon aria-hidden />}
-                {checking ? "Updating the list…" : "Update the list"}
+                {checking ? t("Updating the list…") : t("Update the list")}
               </Button>
               <span className="text-xs text-muted-foreground">
-                {state.catalog.at ? `Checked ${ago(state.catalog.at)}` : "Not checked yet"}
-                {state.catalog.prices_at ? ` · prices ${ago(state.catalog.prices_at)}` : ""}
+                {state.catalog.at ? t("Checked {when}", { when: ago(state.catalog.at) }) : t("Not checked yet")}
+                {state.catalog.prices_at ? ` · ${t("prices {when}", { when: ago(state.catalog.prices_at) })}` : ""}
               </span>
             </Row>
             <div id="catalog" className="scroll-mt-5 px-5 py-4">
               <div className="mb-2 flex items-baseline gap-2">
-                <span className="text-sm font-medium">Added from {name}'s catalog</span>
+                <span className="text-sm font-medium">{t("Added from {name}'s catalog", { name })}</span>
                 {loaded && <span className="text-xs text-muted-foreground tabular-nums">{added.length}</span>}
-                {found && <span className="ml-auto text-xs text-muted-foreground">{found.length ? `${found.length} found just now` : "Nothing new just now"}</span>}
+                {found && <span className="ml-auto text-xs text-muted-foreground">{found.length ? t("{n} found just now", { n: found.length }) : t("Nothing new just now")}</span>}
               </div>
               {!loaded ? (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> Loading the models…</p>
+                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> {t("Loading the models…")}</p>
               ) : !added.length ? (
-                <p className="text-sm text-muted-foreground">None: the list already has every model of the catalog.</p>
+                <p className="text-sm text-muted-foreground">{t("None: the list already has every model of the catalog.")}</p>
               ) : (
                 <ul className="max-h-96 divide-y overflow-y-auto overscroll-contain rounded-lg border">
                   {added.map((m) => (
@@ -519,10 +526,10 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1.5">
                           <span className="truncate text-sm font-medium">{shortName(m)}</span>
-                          {found?.includes(m.id) ? <NewBadge>Just added</NewBadge> : <NewBadge />}
+                          {found?.includes(m.id) ? <NewBadge>{t("Just added")}</NewBadge> : <NewBadge />}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
-                          {[m.since && `added ${ago(m.since)}`, m.lab, KIND_NAME[m.kind] ?? m.kind, ["edit", "upscale"].includes(m.role) && `${m.role} only`, ...capsOf(m)].filter(Boolean).join(" · ")}
+                          {[m.since && t("added {when}", { when: ago(m.since) }), m.lab, KIND_NAME[m.kind] ?? m.kind, m.role === "edit" ? t("edit only") : m.role === "upscale" && t("upscale only"), ...capsOf(m)].filter(Boolean).join(" · ")}
                         </span>
                       </span>
                       {m.from && <span className="text-xs font-semibold whitespace-nowrap text-cost tabular-nums">{m.from}</span>}
@@ -533,19 +540,39 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
               {loaded && added.length > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground">
                   {saved.router.active === "kie"
-                    ? "Read from Kie's docs: their price is not on its list yet, so each asks for your yes, and the reference images a video model takes are unknown."
-                    : "Their prices are OpenRouter's, never measured here, and the reference images a video model takes are unknown."}
+                    ? t("Read from Kie's docs: their price is not on its list yet, so each asks for your yes, and the reference images a video model takes are unknown.")
+                    : t("Their prices are OpenRouter's, never measured here, and the reference images a video model takes are unknown.")}
                 </p>
               )}
             </div>
           </Section>
 
-          <Section id="dev" icon={CodeIcon} title="Development" about="For working on media-generator itself.">
+          <Section id="language" icon={LanguagesIcon} title={t("Language")} about={t("The dashboard's words, in this browser. What goes to the models, the prompts copied for the agent and the engine's messages stay in English.")}>
+            <Row title={t("Interface")} about={t("The page reloads in the language chosen.")}>
+              <Chips<Lang>
+                options={["en", "fr"]}
+                value={getLang()}
+                label={(l) => (l === "fr" ? "Français" : "English")}
+                icon={() => <LanguagesIcon />}
+                onChange={(l) => {
+                  if (l === getLang()) return
+                  try {
+                    sessionStorage.setItem(BACK, "language")
+                  } catch {
+                    /* the page opens at its top */
+                  }
+                  setLang(l)
+                }}
+              />
+            </Row>
+          </Section>
+
+          <Section id="dev" icon={CodeIcon} title={t("Development")} about={t("For working on media-generator itself.")}>
             <Row
-              title="Developer mode"
+              title={t("Developer mode")}
               about={fakes
-                ? "Shows the tools below, and the header's Fake API switch, turned on with it: nothing is spent until you switch it off. Off, the real APIs, switch hidden."
-                : "Shows the tools below. This server was started without fake APIs: everything runs on the real ones."}
+                ? t("Shows the tools below, and the header's Fake API switch, turned on with it: nothing is spent until you switch it off. Off, the real APIs, switch hidden.")
+                : t("Shows the tools below. This server was started without fake APIs: everything runs on the real ones.")}
               htmlFor="developer"
               end
             >
@@ -553,16 +580,16 @@ export function SettingsPage({ state, models, tools, engine, onSaved, onModels }
             </Row>
             {developer && (
               <Row
-                title="Check and wire every model"
+                title={t("Check and wire every model")}
                 end
-                about="Copies a prompt to paste in your agent: the agent reads the docs and price lists of every model of both routers, Kie.ai and OpenRouter (the ones their catalogs add first), and of ElevenLabs, checks what each one takes (reference images, omni references, video edits, avatars, shots, keyframes, elements, voices…), every option of its API and every rule of its price, wires what is missing into the model lists, their options, their estimates and the tools that fit, then runs the tests and rebuilds this dashboard. Nothing is generated, nothing is spent."
+                about={t("Copies a prompt to paste in your agent: the agent reads the docs and price lists of every model of both routers, Kie.ai and OpenRouter (the ones their catalogs add first), and of ElevenLabs, checks what each one takes (reference images, omni references, video edits, avatars, shots, keyframes, elements, voices…), every option of its API and every rule of its price, wires what is missing into the model lists, their options, their estimates and the tools that fit, then runs the tests and rebuilds this dashboard. Nothing is generated, nothing is spent.")}
               >
                 <Button
                   variant="outline"
                   disabled={!catalogs}
-                  onClick={() => navigator.clipboard.writeText(wirePrompt(catalogs!, engine)).then(() => toast.success("Prompt copied: paste it in your agent"))}
+                  onClick={() => navigator.clipboard.writeText(wirePrompt(catalogs!, engine)).then(() => toast.success(t("Prompt copied: paste it in your agent")))}
                 >
-                  {catalogs ? <CopyIcon aria-hidden /> : <LoaderCircleIcon className="animate-spin" aria-hidden />} Copy prompt
+                  {catalogs ? <CopyIcon aria-hidden /> : <LoaderCircleIcon className="animate-spin" aria-hidden />} {t("Copy prompt")}
                 </Button>
               </Row>
             )}

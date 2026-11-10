@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { api, fileUrl, plain } from "@/lib/api"
+import { locale, t } from "@/lib/i18n"
 
 // the part of the frame kept, in fractions of it; the whole frame keeps it uncropped
 type Box = { x: number; y: number; w: number; h: number }
@@ -22,9 +23,11 @@ const HANDLES = [
 ]
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
-const clock = (t: number) => {
-  const d = Math.round(t * 10) / 10
-  return `${Math.floor(d / 60)}:${(d % 60).toFixed(1).padStart(4, "0")}`
+// seconds as shown, one decimal in the dashboard's language (3.5, 3,5)
+export const secs = (n: number, digits = 1) => n.toLocaleString(locale(), { minimumIntegerDigits: digits, minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const clock = (s: number) => {
+  const d = Math.round(s * 10) / 10
+  return `${Math.floor(d / 60)}:${secs(d % 60, 2)}`
 }
 
 // the box after a drag of its body (move) or of a handle, by dx, dy fractions of the frame
@@ -75,8 +78,8 @@ export function CutDialog({ path, onClose, onDone }: { path: string | null; onCl
   return (
     <Dialog open={!!path} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-[min(960px,calc(100%-2rem))] sm:max-w-[min(960px,calc(100%-2rem))]">
-        <DialogTitle>Edit reference</DialogTitle>
-        <DialogDescription>Drag the ends of the strip to keep a part, the frame's edges to crop. Closing keeps the video whole.</DialogDescription>
+        <DialogTitle>{t("Edit reference")}</DialogTitle>
+        <DialogDescription>{t("Drag the ends of the strip to keep a part, the frame's edges to crop. Closing keeps the video whole.")}</DialogDescription>
         {path && <Editor key={path} path={path} onClose={onClose} onDone={onDone} />}
       </DialogContent>
     </Dialog>
@@ -194,7 +197,7 @@ function Editor({ path, onClose, onDone }: { path: string; onClose: () => void; 
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
           />
-          {failed && <p className="p-10 text-center text-sm text-white/80">This browser can't read this video: it stays whole.</p>}
+          {failed && <p className="p-10 text-center text-sm text-white/80">{t("This browser can't read this video: it stays whole.")}</p>}
           {!!duration && (
             <>
               <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -243,7 +246,7 @@ function Editor({ path, onClose, onDone }: { path: string; onClose: () => void; 
 
       {!!duration && (
         <div className="flex items-center gap-3 rounded-xl bg-muted p-2">
-          <Button size="icon" variant="secondary" className="size-11 shrink-0 rounded-lg" aria-label={playing ? "Pause" : "Play the part kept"} onClick={toggle}>
+          <Button size="icon" variant="secondary" className="size-11 shrink-0 rounded-lg" aria-label={playing ? t("Pause") : t("Play the part kept")} onClick={toggle}>
             {playing ? <PauseIcon className="fill-current" /> : <PlayIcon className="fill-current" />}
           </Button>
           <div
@@ -269,7 +272,7 @@ function Editor({ path, onClose, onDone }: { path: string; onClose: () => void; 
                 data-end={end}
                 role="slider"
                 tabIndex={0}
-                aria-label={end === "start" ? "Start of the part kept" : "End of the part kept"}
+                aria-label={end === "start" ? t("Start of the part kept") : t("End of the part kept")}
                 aria-valuemin={0}
                 aria-valuemax={Math.round(duration * 10) / 10}
                 aria-valuenow={Math.round(range[end] * 10) / 10}
@@ -289,11 +292,11 @@ function Editor({ path, onClose, onDone }: { path: string; onClose: () => void; 
       <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
         {!!duration && (
           <span className="mr-auto text-sm text-muted-foreground tabular-nums">
-            {clock(range.start)} – {clock(range.end)} · {(range.end - range.start).toFixed(1)} s of {duration.toFixed(1)} s · {out.w}×{out.h}
+            {t("{start} – {end} · {kept} s of {length} s · {size}", { start: clock(range.start), end: clock(range.end), kept: secs(range.end - range.start), length: secs(duration), size: `${out.w}×${out.h}` })}
           </span>
         )}
         <Button onClick={confirm} disabled={busy}>
-          {busy && <LoaderCircleIcon className="animate-spin" />} Confirm
+          {busy && <LoaderCircleIcon className="animate-spin" />} {t("Confirm")}
         </Button>
       </div>
     </>
