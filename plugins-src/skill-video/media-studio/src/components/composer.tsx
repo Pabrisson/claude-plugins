@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { ChevronRightIcon, CopyIcon, EllipsisVerticalIcon, EraserIcon, FilmIcon, LanguagesIcon, ListVideoIcon, LoaderCircleIcon, MessagesSquareIcon, MicIcon, MinusIcon, PencilLineIcon, PlusIcon, RefreshCwIcon, SparklesIcon, TimerIcon, TypeIcon, Volume2Icon, VolumeXIcon, XIcon } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ChevronRightIcon, CopyIcon, EllipsisVerticalIcon, EraserIcon, FilmIcon, LanguagesIcon, ListVideoIcon, LoaderCircleIcon, MessagesSquareIcon, MicIcon, MinusIcon, PencilLineIcon, PlusIcon, SparklesIcon, TimerIcon, TypeIcon, Volume2Icon, VolumeXIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -30,6 +30,7 @@ import {
   plain,
   priceLabel,
   ROUTER_NAME,
+  type Draft,
   type Element,
   type EstimateAnswer,
   type Field,
@@ -41,6 +42,7 @@ import {
   type Place,
   type Spec,
   type State,
+  type Submitted,
   type Tool,
   withLooks,
   withMentions,
@@ -139,6 +141,8 @@ function placeText(p: Place, kind: Kind, back: boolean) {
 
 // the tool list's prices for the session, per space, tool and model (a probe estimate, before any input)
 const PRICES = new Map<string, string>()
+// the agent's words typed into the composer in so many steps of 30 ms, whatever their length
+const TYPED = 40
 
 export function Composer({
   kind,
@@ -355,14 +359,15 @@ export function Composer({
           ? !value.fields.description?.trim() && !["references", "ref_videos", "ref_audios"].some((k) => value.inputs[k]?.length) ? "Describe the song" : null
           : !value.fields.title?.trim() && !elevenModel ? "Give it a title" : !value.fields.style?.trim() && !value.fields.lyrics?.trim() ? "Give its style or lyrics" : null
         : null
-  const [est, setEst] = useState<{ answer?: EstimateAnswer; error?: string }>({})
+  // (with the spec it answers: the agent's fill and submit wait for the one of what the composer holds)
+  const [est, setEst] = useState<{ key?: string; answer?: EstimateAnswer; error?: string }>({})
   const specKey = JSON.stringify(spec)
   useEffect(() => {
     if (blocker) return
     const t = setTimeout(() => {
       api.estimate(spec).then(
-        (answer) => setEst({ answer }),
-        (e) => setEst({ error: plain(e.message) })
+        (answer) => setEst({ key: specKey, answer }),
+        (e) => setEst({ key: specKey, error: plain(e.message) })
       )
     }, 400)
     return () => clearTimeout(t)
@@ -418,20 +423,23 @@ export function Composer({
   // Generate: the click is the yes, unless a threshold, the cap or an unknown price asks again
   const [busy, setBusy] = useState(false)
   const [ask, setAsk] = useState<{ needs: string; shown: string } | null>(null)
-  async function go(confirm = false) {
+  // (what it did, for the agent's submit)
+  async function go(confirm = false): Promise<Submitted> {
     setBusy(true)
     try {
-      await api.generate(spec, confirm)
+      const r = await api.generate(spec, confirm)
       setAsk(null)
       // one result takes the place on the timeline: the next generation is a plain one
       if (value.place) onChange({ ...value, place: undefined })
       toast.success(sheetCount > 1 ? `${sheetCount} sheets started` : `${spec.batch ? `${spec.batch} × ` : ""}${tool.label} started`, {
         description: sheetCount > 1 ? "The first sets the look, the others follow it. They keep running if you close this page." : "It keeps running if you close this page.",
       })
+      return { started: r.ids }
     } catch (e) {
       const err = e as Error & { status?: number; body?: { needs: string; shown: string } }
-      if (err.status === 409 && err.body) setAsk(err.body)
-      else toast.error(plain(err.message))
+      if (err.status === 409 && err.body) return setAsk(err.body), { asks: err.body.needs }
+      toast.error(plain(err.message))
+      return { error: plain(err.message) }
     } finally {
       setBusy(false)
     }
@@ -454,8 +462,8 @@ export function Composer({
       files.length ? `Inputs: ${files.join("; ")}.` : "",
       `What I want: ${prompt || "(nothing written yet, infer it from the tool and the inputs)"}`,
       "",
-      "Write the prompt this model handles best (its syntax, strengths and ideal length), then put it in the dashboard's composer with:",
-      `node "${engine}/media.mjs" draft --space ${kind} --tool ${tool.id}${modelId ? ` --model ${modelId}` : ""} --prompt "<the prompt>"`,
+      "Write the prompt this model handles best (its syntax, strengths and ideal length), then put it in the dashboard's composer with (the tool's fields as --field, the words it adds as --prompt; --raw only to replace the tool's own prompt):",
+      `node "${engine}/media.mjs" draft --space ${kind} --tool ${tool.id}${modelId ? ` --model ${modelId}` : ""} [--field <key>="<value>"]… --prompt "<the words>"`,
       "I will read it and click Generate myself.",
     ].filter((l) => l !== "").join("\n")
     navigator.clipboard.writeText(text).then(
@@ -464,24 +472,99 @@ export function Composer({
     )
   }
 
-  // a prompt the agent wrote with `media.mjs draft`
+  // the agent fills this composer (media.mjs draft, within the hour): the tool, model, fields, files and settings at
+  // once, its words and text fields typed in as the user watches; undone from the toast. Its words are the ones the
+  // tool adds to its prompt, or (raw) the whole prompt in place of the tool's, shown read only
   const draft = state.drafts[kind]
-  const newDraft = draft && draft.at > draftSeen
-  function applyDraft() {
-    if (!draft) return
-    const t = tools.find((x) => x.id === draft.tool) ?? tool
-    // the agent's prompt replaces the tool's (shown read-only, the user's words still go after it); for a tool whose
-    // prompt is the user's own, it is those words
-    const own = ownPrompt(t) && !!draft.prompt
-    onChange({ ...value, tool: t.id, model: draft.model ?? value.model, fields: { ...value.fields, ...draft.fields }, raw: !!draft.prompt && !own,
-      rawText: draft.prompt ?? value.rawText, intent: draft.prompt ? (own ? draft.prompt : "") : value.intent })
-    onDraftSeen(draft.at)
-  }
+  const [typing, setTyping] = useState(false)
+  // the last fill typed in, and the last one the agent heard of
+  const [told, setTold] = useState<string | null>(null)
+  const heard = useRef<string | null>(null)
+  useEffect(() => {
+    const d = draft
+    if (!d?.at || d.at <= draftSeen || Date.now() - Date.parse(d.at) > 36e5) return
+    const when = d.at
+    onDraftSeen(when)
+    const before = value, t = tools.find((x) => x.id === d.tool) ?? tool, same = t.id === value.tool
+    // the files the composer holds stay, in the inputs the tool has
+    const kept = Object.fromEntries(Object.entries(value.inputs).filter(([k]) => same || t.inputs.some((i) => i.key === k)))
+    const raw = !!d.raw && !ownPrompt(t), words = d.prompt ?? ""
+    const base: Compose = {
+      ...blank(kind, t.id),
+      model: d.model ?? (same ? value.model : undefined),
+      fields: { ...(same ? value.fields : {}), ...d.fields },
+      inputs: { ...kept, ...d.inputs },
+      params: { ...(same ? value.params : {}), ...d.params },
+      batch: d.batch ?? value.batch,
+      place: value.place,
+      raw,
+    }
+    const texts = Object.keys(d.fields ?? {}).filter((k) => t.fields.find((f) => f.key === k)?.type === "text")
+    const typed = (n: number) => {
+      const part = (x: string) => x.slice(0, Math.ceil((x.length * n) / TYPED))
+      return { ...base, fields: { ...base.fields, ...Object.fromEntries(texts.map((k) => [k, part(base.fields[k])])) }, ...(raw ? { rawText: part(words) } : { intent: part(words) }) }
+    }
+    let n = 0
+    const timer = setInterval(() => {
+      onChange(typed(++n))
+      if (n === 1) setTyping(true)
+      if (n < TYPED) return
+      clearInterval(timer)
+      setTyping(false)
+      setTold(when)
+    }, 30)
+    toast("The agent filled the composer", { description: t.label, action: { label: "Undo", onClick: () => onChange(before) } })
+    // the page left before the end: all of it, at once
+    return () => {
+      if (n >= TYPED) return
+      clearInterval(timer)
+      onChange(typed(TYPED))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft?.at])
+
+  // the agent submits this composer (media.mjs submit, once the user said yes to its price): one page takes it, then
+  // clicks Generate on what the composer holds, within that price
+  const sub = draft?.submit
+  const [submitting, setSubmitting] = useState<NonNullable<Draft["submit"]> | null>(null)
+  const submitted = useRef<string | null>(null)
+  useEffect(() => {
+    if (!sub || sub.claimed || Date.now() - Date.parse(sub.at) > 6e4) return
+    api.draft({ space: kind, at: sub.at, claim: true }).then(() => setSubmitting(sub), () => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sub?.at])
 
   const label = keyframe ? "Apply to the shot" : tool.id === "change-voice" ? "Change voice" : tool.id === "translate" ? "Translate" : local ? tool.label : "Generate"
   const a = blocker ? undefined : est.answer
   const price = a ? priceLabel(a) : blocker && probe.key === probeKey ? probe.label : null
   const ready = !busy && !!a && (eleven || elevenModel ? state.keys.elevenlabs : local || state.keys[state.router])
+
+  // what the agent hears back, once the words are typed in and the composer priced (or held back by what it misses),
+  // the models of the space there
+  const settled = !typing && (local || eleven || models.length > 0) && (!!blocker || (est.key === specKey && !!(est.answer || est.error)))
+  useEffect(() => {
+    if (!told || heard.current === told || !settled) return
+    heard.current = told
+    const f = blocker ? { blocker, price } : est.error ? { error: est.error } : { price: priceLabel(est.answer!), amount: est.answer!.estimate.amount, known: est.answer!.estimate.known }
+    api.draft({ space: kind, at: told, filled: f }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [told, settled])
+  useEffect(() => {
+    // (after the fill's answer, when one is due)
+    if (!submitting || submitted.current === submitting.at || (told && heard.current !== told) || busy || !settled) return
+    const s = submitting
+    submitted.current = s.at
+    const answer = (done: Submitted) => void api.draft({ space: kind, at: s.at, submitted: done }).catch(() => {})
+    if (blocker) return answer({ blocker })
+    if (est.error) return answer({ error: est.error })
+    const e = est.answer!.estimate, shown = priceLabel(est.answer!)
+    // more than the user said yes to, or an unknown price without their yes to that
+    if (e.known ? !(e.amount != null && e.amount <= (s.spend ?? -1) * 1.001 + 1e-9) : !s.unknown) return answer({ over: shown })
+    if (!ready) return answer({ error: `no key for ${eleven || elevenModel ? "ElevenLabs" : ROUTER_NAME[state.router]} on this dashboard` })
+    // (Generate's click, a moment after this render)
+    Promise.resolve().then(() => go()).then((r) => answer({ ...r, price: shown }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitting, told, busy, settled])
 
   // a file pasted or dropped anywhere on the composer goes to the first input that takes it
   async function take(files: File[]) {
@@ -522,16 +605,6 @@ export function Composer({
       }}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
-        {newDraft && (
-          <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
-            <span className="size-2 shrink-0 rounded-full bg-highlight" aria-hidden />
-            <span className="flex-1">The agent wrote a prompt for this space.</span>
-            <Button size="sm" onClick={applyDraft}>
-              <RefreshCwIcon /> Reload
-            </Button>
-          </div>
-        )}
-
         {value.place && (
           <div className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 text-sm">
             <ListVideoIcon className="size-4 shrink-0 text-space" aria-hidden />

@@ -181,15 +181,17 @@ function Dashboard() {
     }
   }, [state, timelines])
 
-  // a draft older than an hour when the page opens counts as seen
-  const first = useRef(true)
+  // the agent fills or submits a space's composer (media.mjs draft, submit): the page goes to that space, whose composer
+  // takes it (a fill within the hour, a submit within the minute)
   useEffect(() => {
-    if (!state || !first.current) return
-    first.current = false
-    setSeen((s) => {
-      const old = Object.fromEntries(Object.entries(state.drafts).filter(([k, d]) => d && !s[k] && Date.now() - Date.parse(d.at) > 36e5).map(([k, d]) => [k, d!.at]))
-      return { ...s, ...old }
+    if (!state) return
+    const fresh = (at: string | undefined, ms: number) => !!at && Date.now() - Date.parse(at) < ms
+    const k = SPACES.find((k) => {
+      const d = state.drafts[k]
+      return (fresh(d?.at, 36e5) && d!.at! > (seen[k] ?? "")) || (fresh(d?.submit?.at, 6e4) && !d!.submit!.claimed)
     })
+    if (k && page !== k) setPage(k)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 
   // the balances: on load, every minute, and after each finished job

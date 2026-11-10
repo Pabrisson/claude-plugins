@@ -60,7 +60,14 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
 const die = (msg, code = 1) => { console.error(`error: ${msg}`); process.exit(code) }
 const userError = (msg, code = 1) => Object.assign(new Error(msg), { code })
 const readJson = f => JSON.parse(fs.readFileSync(f, 'utf8'))
-const writeJson = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v, null, 2) + '\n') }
+// written aside then renamed over it: a reader in another process (a sheet waiting for the first, the page's state)
+// never reads half a file; where the rename is refused (a file held open on Windows), written in place
+const writeJson = (f, v) => {
+  fs.mkdirSync(path.dirname(f), { recursive: true })
+  const text = JSON.stringify(v, null, 2) + '\n', tmp = `${f}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, text)
+  try { fs.renameSync(tmp, f) } catch { fs.writeFileSync(f, text); fs.rmSync(tmp, { force: true }) }
+}
 const num = x => (x === undefined || x === '' || x === null ? undefined : Number(x))
 const clean = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''))
 const sleep = t => new Promise(ok => setTimeout(ok, t))
@@ -2080,15 +2087,92 @@ async function cmdTools(kind) {
   }
 }
 
-// draft: the agent's prompt for the dashboard's composer (Copy prompt), shown with a Reload bar; nothing is generated
-function draft() {
+// ---------- the dashboard's composer, filled and submitted by the agent ----------
+
+const draftsFile = () => at('.cache', 'drafts.json')
+const readDrafts = () => { try { return readJson(draftsFile()) } catch { return {} } }
+// a page open: it asked for the state within the last 90 s (a hidden tab asks about every minute)
+const pageOpen = srv => srv?.page != null && srv.page < 90e3
+// the page's answer to a draft or a submit, read until it comes (null after so many seconds)
+async function answer(space, get, seconds) {
+  for (const end = Date.now() + seconds * 1e3; Date.now() < end; await sleep(250)) {
+    const v = get(readDrafts()[space] ?? {})
+    if (v) return v
+  }
+  return null
+}
+
+// draft: the agent fills the dashboard's composer with the flags of image|video|audio, checked as an estimate is
+// (nothing generated). The open page goes to that space, sets the tool, model, fields, files and settings, types the
+// words in, then says what it shows: the price, or what Generate waits for. --prompt is the words the tool adds to its
+// own prompt, --raw the whole prompt in its place. A file from outside the folder is copied into its uploads, for the
+// page to show it; --open opens the dashboard when no page is
+async function draft() {
   const space = opt.space ?? 'video'
   if (!KINDS.includes(space)) die(`--space is one of ${KINDS.join(', ')}`)
-  if (opt.tool) toolOf(space, opt.tool)
-  const file = at('.cache', 'drafts.json'), all = fs.existsSync(file) ? readJson(file) : {}
-  all[space] = clean({ tool: opt.tool, model: opt.model, prompt: opt.prompt ?? args.join(' '), fields: Object.fromEntries((opt.field ?? []).map(x => { const i = x.indexOf('='); return [x.slice(0, i), x.slice(i + 1)] })), at: new Date().toISOString() })
-  writeJson(file, all)
-  console.log(`draft for ${space} written: the open dashboard shows it with a Reload bar`)
+  if (!opt.tool) die(`--tool <tool>: the composer's tool (media.mjs tools ${space})`)
+  const spec = specFromArgs(space)
+  let tool, p
+  try {
+    tool = toolOf(space, spec.tool)
+    const unknown = Object.keys(spec.fields).filter(k => !tool.fields.some(f => f.key === k))
+    if (unknown.length) throw userError(`${tool.label} has no field ${unknown.join(', ')}: its fields are ${tool.fields.map(f => f.key).join(', ') || 'none'} (media.mjs tools ${space})`)
+    // a References tool writes each sheet's own prompt: the agent's in its place would make them all alike
+    if (spec.raw && tool.fields.some(f => f.type === 'sheets')) throw userError(`${tool.label} writes each sheet's prompt: the subject in its fields (--field …), the rest in --prompt, without --raw`)
+    for (const [k, list] of Object.entries(spec.inputs)) {
+      const i = tool.inputs.find(x => x.key === k), bad = i && ['image', 'video', 'audio'].includes(i.kind) && list.find(f => kindOfFile(f) !== i.kind)
+      if (bad) throw userError(`${i.label} takes ${i.kind === 'image' ? 'an image' : `a ${i.kind}`}: ${path.basename(bad)} is not one`)
+    }
+    p = (await plans({ ...spec, probe: true }))[0].p
+  } catch (e) { die(e.message) }
+  // a choice by its label (light=Silhouette) as the composer holds it, by its value
+  for (const f of tool.fields) if (spec.fields[f.key] != null && ['select', 'choice'].includes(f.type)) spec.fields[f.key] = optionValue(f, spec.fields[f.key])
+  for (const list of Object.values(spec.inputs)) list.forEach((f, i) => {
+    if (inside(HOME, f)) return
+    const to = at('.cache', 'uploads', `${Date.now()}-${i}-${path.basename(f)}`)
+    fs.mkdirSync(path.dirname(to), { recursive: true })
+    fs.copyFileSync(f, to)
+    list[i] = to
+  })
+  // the model as the composer names it (kie:…), whichever way it was given
+  const model = spec.model && p.provider !== 'local' ? `${p.provider}:${p.model}` : undefined
+  const entry = clean({ at: new Date().toISOString(), tool: tool.id, model, prompt: spec.prompt, raw: spec.raw, fields: spec.fields, inputs: spec.inputs, params: spec.params, batch: spec.batch })
+  writeJson(draftsFile(), { ...readDrafts(), [space]: entry })
+  let srv = await running()
+  if (!pageOpen(srv) && opt.open) srv = { url: await dashboard(true, `#${space}`), page: 0 }
+  const said = 'nothing generated'
+  if (!pageOpen(srv)) return console.log(`draft for ${space} written, ${said}: no dashboard page is open, its composer takes it once opened within the hour (media.mjs studio --open)`)
+  const got = await answer(space, d => d.at === entry.at && d.filled, 20)
+  if (!got) return console.log(`draft for ${space} written, ${said}: no page took it within 20 s (a tab in the background takes it once looked at)`)
+  const yes = got.known ? `--spend ${got.amount}` : '--accept-unknown'
+  console.log(got.blocker ? `the ${space} composer is filled, ${said}: Generate waits for « ${got.blocker} »${got.price ? `, then ${got.price}` : ''}`
+    : got.error ? `the ${space} composer is filled, ${said}: ${got.error}`
+    : `the ${space} composer is filled, ${said}: ${got.price}. Once the user says yes: media.mjs submit --space ${space} ${yes}`)
+}
+
+// submit: the page clicks Generate on what its composer holds now (the user's changes kept), once the user said yes to
+// its price: --spend <amount> (the price the draft gave), --accept-unknown for an unknown one; above it, nothing goes.
+// One page takes it; a threshold or the cap asks the user there. Waits for its jobs, as image|video|audio do
+async function submit() {
+  const space = opt.space ?? 'video'
+  if (!KINDS.includes(space)) die(`--space is one of ${KINDS.join(', ')}`)
+  const spend = num(opt.spend)
+  if (spend == null && !opt['accept-unknown']) die('--spend <amount>: the price the composer shows (media.mjs draft gives it), once the user said yes')
+  if (!pageOpen(await running())) die('no dashboard page is open: the composer is there (media.mjs studio --open, then draft)')
+  const when = new Date().toISOString(), all = readDrafts()
+  writeJson(draftsFile(), { ...all, [space]: { ...all[space], submit: clean({ at: when, spend, unknown: opt['accept-unknown'] }) } })
+  const got = await answer(space, d => d.submit?.at === when && d.submit.done, 30)
+  if (!got) die('no page took the submit within 30 s, nothing generated (a tab in the background takes nothing: the user looks at it, or clicks Generate)')
+  if (!got.started) die(got.blocker ? `nothing generated: Generate waits for « ${got.blocker} »`
+    : got.over ? `nothing generated: the composer now costs ${got.over}, more than --spend: ask the user again`
+    : got.asks ? `the dashboard asks the user to confirm there (${got.asks}): it starts once they do` : `nothing generated: ${got.error}`, got.over || got.asks ? 2 : 1)
+  console.log(`started from the dashboard (${got.price}): ${got.started.map(id => `media/${id}`).join(', ')}`)
+  for (const id of got.started) {
+    let j
+    // (a job file caught while it is written reads as not done yet)
+    while (!['done', 'failed'].includes((j = (() => { try { return readJob(id) } catch { return {} } })()).status)) await sleep(1000)
+    console.log(j.status === 'done' ? `done: ${(j.delivered ?? j.outputs.map(f => path.join(mediaDir(id), f))).join(', ')} · ${money(j.actual, j.estimate.unit, per1000())}` : `failed: ${j.error}`)
+  }
 }
 
 function jobs(id) {
@@ -2397,7 +2481,7 @@ function mediaList() {
   })
 }
 
-let balanceCache = { at: 0, value: null }
+let balanceCache = { at: 0, value: null }, lastPage = 0
 
 // the fake APIs (FAKE): the header's toggle, shown in developer mode, turns them off (the real APIs, with the server's
 // keys) and on again, for this server and the runs it starts; developer mode turned on turns them on, off turns them off
@@ -2410,10 +2494,12 @@ function useFake(on) {
 
 async function handle(req, res) {
   const url = new URL(req.url, 'http://x'), p = url.pathname, post = req.method === 'POST'
-  if (p === '/__media-generator') return reply(res, 200, { home: HOME, engine: ENGINE, mtime: LOADED })
+  // page: how long ago a page last asked for the state (every 2 s while open, about every minute in a hidden tab)
+  if (p === '/__media-generator') return reply(res, 200, { home: HOME, engine: ENGINE, mtime: LOADED, page: lastPage ? Date.now() - lastPage : null })
   if (p === '/__media-generator/owner' && post) { watchOwner(+url.searchParams.get('pid')); return reply(res, 200, { ok: true }) }
   if (p === '/__media-generator/quit' && post) { reply(res, 200, { ok: true }); return setTimeout(() => process.exit(0), 50) }
   if (p === '/api/state') {
+    lastPage = Date.now()
     const drafts = fs.existsSync(at('.cache', 'drafts.json')) ? readJson(at('.cache', 'drafts.json')) : {}
     return reply(res, 200, { home: HOME, settings: settings(), keys: { openrouter: !!process.env.OPENROUTER_API_KEY, management: !!process.env.OPENROUTER_MANAGEMENT_KEY, kie: !!process.env.KIE_API_KEY, elevenlabs: !!process.env.ELEVENLABS_API_KEY },
       fake: fakeState(), router: active(), catalog: PROVIDERS[active()].catalogInfo(),
@@ -2453,6 +2539,18 @@ async function handle(req, res) {
       for (const j of jobs) startRun(j.id)
       return reply(res, 200, { id: jobs[0].id, ids: jobs.map(j => j.id) })
     } catch (e) { return reply(res, e.code === 2 ? 409 : 400, { error: e.message, needs: e.reason, estimate: e.estimate, shown: e.shown }) }
+  }
+  // the page's answers to the agent (media.mjs draft, submit): what its composer shows once filled; a submit taken by
+  // one page only, the first to claim it, then the jobs it started or what held it back
+  if (p === '/api/draft' && post) {
+    const { space, at: when, filled, claim, submitted } = await readBody(req), file = at('.cache', 'drafts.json')
+    const all = fs.existsSync(file) ? readJson(file) : {}, d = all[space], s = d?.submit?.at === when ? d.submit : null
+    if (claim) { if (!s || s.claimed) return reply(res, 409, { error: 'another page took it' }); s.claimed = true }
+    else if (filled && d?.at === when) d.filled = filled
+    else if (submitted && s) s.done = submitted
+    else return reply(res, 400, { error: 'no such draft' })
+    writeJson(file, all)
+    return reply(res, 200, { ok: true })
   }
   if (p === '/api/upload' && post) {
     ensureHome()
@@ -2706,12 +2804,15 @@ function watchOwner(pid) {
   }, 2000)
   owners.add(pid)
 }
-// the agent this command runs under: the nearest ancestor named after one (Claude Code, Codex, OpenCode, Cursor,
-// Goose, Amp…) or a node/bun/python running one (Gemini CLI, Qwen Code, Copilot CLI…); null outside one
+// the agent app this command runs under: the outermost ancestor named after one (Claude Desktop above its sessions,
+// each a claude process of its own; Claude Code in a terminal; Codex, OpenCode, Cursor, Goose, Amp…) or a
+// node/bun/python running one (Gemini CLI, Qwen Code, Copilot CLI…): the server lives as long as the app, not one of
+// its sessions; null outside one
 // ponytail: known names only, another agent's server runs until stopped: add its name to AGENT
 // ponytail: null on Windows (no ps -o), its server then runs until stopped
 const AGENT = /^(claude|codex|gemini|qwen|copilot|opencode|cursor-agent|goose|amp|crush|droid|kiro-cli|auggie)(-cli|-code)?$/i
 function agentPid() {
+  let found = null
   try {
     const procs = new Map(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { ...HIDE, encoding: 'utf8' }).trim().split('\n').map(l => {
       const [, pid, ppid, comm] = l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
@@ -2719,20 +2820,27 @@ function agentPid() {
     }))
     for (let pid = process.ppid; pid > 1 && procs.has(pid); pid = procs.get(pid).ppid) {
       const name = path.basename(procs.get(pid).comm).replace(/\.exe$/i, '')
-      if (AGENT.test(name)) return pid
+      if (AGENT.test(name)) found = pid
       // node/bun/python running an agent's script: a word of its path names it (…/@google/gemini-cli/dist/index.js)
-      if (/^(node|bun|deno|python3?)$/i.test(name)) {
+      else if (/^(node|bun|deno|python3?)$/i.test(name)) {
         const script = execFileSync('ps', ['-o', 'args=', '-p', `${pid}`], { ...HIDE, encoding: 'utf8' }).trim().split(/\s+/).slice(1).find(a => !a.startsWith('-')) ?? ''
-        if (script.split(/[/\\]/).some(w => AGENT.test(w.replace(/\.(m?js|py)$/i, '')))) return pid
+        if (script.split(/[/\\]/).some(w => AGENT.test(w.replace(/\.(m?js|py)$/i, '')))) found = pid
       }
     }
   } catch {}
-  return null
+  return found
+}
+// the servers on PORT and the 19 after it: what each says it is, {} for another app's, null for a free port
+const PORTS = Array.from({ length: 20 }, (_, i) => PORT + i), base = port => `http://127.0.0.1:${port}/`
+const ping = port => fetch(base(port) + '__media-generator').then(r => r.json().catch(() => ({})), () => null)
+// this folder's server when one runs, never started
+async function running() {
+  const lives = await Promise.all(PORTS.map(ping)), i = lives.findIndex(l => l?.home === HOME)
+  return i < 0 ? null : { url: base(PORTS[i]), ...lives[i] }
 }
 // one server per folder, from PORT up; reused when it runs this very engine, replaced when older
 async function findServer() {
-  const base = port => `http://127.0.0.1:${port}/`, ping = port => fetch(base(port) + '__media-generator').then(r => r.json()).catch(() => null)
-  const ports = Array.from({ length: 20 }, (_, i) => PORT + i), lives = await Promise.all(ports.map(ping))
+  const ports = PORTS, lives = await Promise.all(ports.map(ping))
   let i = lives.findIndex(l => l?.home === HOME)
   if (i >= 0 && lives[i].engine === ENGINE && lives[i].mtime === LOADED) return base(ports[i])
   if (i >= 0) { await fetch(base(ports[i]) + '__media-generator/quit', { method: 'POST' }).catch(() => {}); await sleep(300); lives[i] = null } else i = 0
@@ -2747,16 +2855,18 @@ async function findServer() {
   }
   die(`the server did not start on ports ${PORT}–${PORT + 19}, see ${at('.cache', 'server.log')}`)
 }
-async function studio() {
+// the folder's server, started or reused, working for this agent; open: in the browser, at a page (#image)
+async function dashboard(open, hash = '') {
   if (!fs.existsSync(path.join(STUDIO, 'index.html'))) die(`the dashboard is not built (${STUDIO})`)
   const url = await findServer(), owner = agentPid()
   if (owner) await fetch(url + `__media-generator/owner?pid=${owner}`, { method: 'POST' }).catch(() => {})
-  console.log(`dashboard: ${url}`)
-  if (opt.open) spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open', [url], { detached: true, ...HIDE, stdio: 'ignore' }).on('error', () => {}).unref()
+  if (open) spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open', [url + hash], { detached: true, ...HIDE, stdio: 'ignore' }).on('error', () => {}).unref()
+  return url
 }
+async function studio() { console.log(`dashboard: ${await dashboard(opt.open)}`) }
 
 const commands = {
-  doctor, setup: () => setup(...args), studio, serve, draft, credits, jobs: () => jobs(args[0]), elements: () => elements(...args), styles: () => styles(...args), workspaces: () => workspaces(...args),
+  doctor, setup: () => setup(...args), studio, serve, draft, submit, credits, jobs: () => jobs(args[0]), elements: () => elements(...args), styles: () => styles(...args), workspaces: () => workspaces(...args),
   models: () => cmdModels(args[0]), tools: () => cmdTools(args[0]),
   image: () => generate('image'), video: () => generate('video'), audio: () => generate('audio'),
   run: async () => { const j = await run(args[0]); console.log(`${j.status}: ${j.outputs.join(', ') || j.error}`) },

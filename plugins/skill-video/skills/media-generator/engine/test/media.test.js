@@ -941,6 +941,90 @@ test('the server: state, estimate, a threshold asks first (409), a confirmed cli
   assert.ok(stopped, 'the server stops once its agent has quit')
 })
 
+test('the dashboard lives as long as the outermost agent app above it (Claude Desktop above its sessions), not one session', { skip: process.platform === 'win32', timeout: 40000 }, async t => {
+  const port = 43000 + Math.floor(Math.random() * 300), url = `http://127.0.0.1:${port}`, bin = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-'))
+  const pause = ms => new Promise(ok => setTimeout(ok, ms))
+  // an app named claude (Desktop) runs a session named claude, which opens the dashboard and quits; then the app quits
+  const link = path.join(bin, 'claude')
+  fs.symlinkSync(process.execPath, link)
+  fs.writeFileSync(path.join(bin, 'session.js'), `require('child_process').execFileSync(${JSON.stringify(process.execPath)}, [${JSON.stringify(engine)}, 'studio'], { stdio: 'ignore' }); setTimeout(() => {}, 300)`)
+  fs.writeFileSync(path.join(bin, 'app.js'), `require('fs').writeFileSync(${JSON.stringify(path.join(bin, 'app.pid'))}, String(process.pid)); const s = require('child_process').spawn(${JSON.stringify(link)}, [${JSON.stringify(path.join(bin, 'session.js'))}], { stdio: 'ignore' }); s.on('exit', () => require('fs').writeFileSync(${JSON.stringify(path.join(bin, 'session.done'))}, '')); setTimeout(() => {}, 60000)`)
+  // (outside this test's own agent: the app's parent is gone, as Desktop's is launchd)
+  spawn('/bin/sh', ['-c', `"${link}" "${path.join(bin, 'app.js')}" &`], { env: { ...env, MEDIA_GENERATOR_PORT: `${port}` }, detached: true, stdio: 'ignore' }).unref()
+  const up = () => fetch(url + '/__media-generator').then(r => r.ok, () => false)
+  t.after(async () => { await fetch(url + '/__media-generator/quit', { method: 'POST' }).catch(() => {}); try { process.kill(+fs.readFileSync(path.join(bin, 'app.pid'), 'utf8')) } catch {} })
+  for (let i = 0; i < 150 && !fs.existsSync(path.join(bin, 'session.done')); i++) await pause(100)
+  assert.ok(fs.existsSync(path.join(bin, 'session.done')), 'the session opened the dashboard and quit')
+  await pause(2500)
+  assert.ok(await up(), 'the server outlives the session')
+  process.kill(+fs.readFileSync(path.join(bin, 'app.pid'), 'utf8'))
+  let down = false
+  for (let i = 0; i < 50 && !(down = !(await up())); i++) await pause(200)
+  assert.ok(down, 'the server stops once the app has quit')
+})
+
+test('the agent fills the composer and submits it: checked first, the page answers, one page takes a submit', { timeout: 60000 }, async t => {
+  const port = 43400 + Math.floor(Math.random() * 300), url = `http://127.0.0.1:${port}`, e = { ...env, MEDIA_GENERATOR_PORT: `${port}` }
+  const pause = ms => new Promise(ok => setTimeout(ok, ms))
+  const srv = spawn(process.execPath, [engine, 'serve'], { cwd: home, env: { ...e, MEDIA_GENERATOR_CATALOG: path.join(home, 'catalog-server3.json') } })
+  t.after(() => srv.kill())
+  for (let i = 0; i < 50; i++) { if (await fetch(url + '/__media-generator').then(r => r.ok).catch(() => false)) break; await pause(100) }
+  const post = (p, body) => fetch(url + p, { method: 'POST', body: JSON.stringify(body) }).then(async r => ({ code: r.status, body: await r.json() }))
+  const drafts = () => JSON.parse(fs.readFileSync(at('.cache', 'drafts.json'), 'utf8'))
+  const until = async get => { for (let i = 0; i < 100; i++) { const v = get(); if (v) return v; await pause(100) } }
+  // checked as an estimate is: a field the tool has not, a file of another kind, a References tool's prompt replaced
+  const refused = await Promise.all([
+    cliWith(e, 'draft', '--space', 'image', '--tool', 'character', '--field', 'whom=x'),
+    cliWith(e, 'draft', '--space', 'image', '--tool', 'character', '--field', 'who=x', '--in', `references=${at('voice.mp3')}`),
+    cliWith(e, 'draft', '--space', 'image', '--tool', 'character', '--raw', '--prompt', 'a troll'),
+    cliWith(e, 'draft', '--space', 'image', '--prompt', 'a troll'),
+  ])
+  assert.deepEqual(refused.map(r => r.code), [1, 1, 1, 1])
+  assert.match(refused[0].err, /Character references has no field whom: its fields are who, sheets, style/)
+  assert.match(refused[1].err, /Photos takes an image: voice\.mp3 is not one/)
+  assert.match(refused[2].err, /writes each sheet's prompt: the subject in its fields/)
+  assert.match(refused[3].err, /--tool <tool>/)
+  // no page open: written, its composer takes it once opened
+  const alone = await cliWith(e, 'draft', '--space', 'image', '--tool', 'free', '--model', 'fake/img', '--prompt', 'a fox')
+  assert.match(alone.out, /no dashboard page is open, its composer takes it once opened within the hour/)
+  // a page open (it asks for the state): the draft waits for its answer; the model named as the composer does, a file
+  // from outside the folder copied into its uploads
+  const outside = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pic-')), 'troll.png')
+  fs.copyFileSync(at('a.png'), outside)
+  const page = setInterval(() => fetch(url + '/api/state').catch(() => {}), 500)
+  t.after(() => clearInterval(page))
+  await fetch(url + '/api/state')
+  const filling = cliWith(e, 'draft', '--space', 'image', '--tool', 'character', '--model', 'fake/img', '--field', 'who=a swamp troll', '--field', 'sheets=Face close-up', '--in', `references=${outside}`, '--ratio', '1:1', '--prompt', 'photoreal')
+  const d = await until(() => drafts().image?.tool === 'character' && drafts().image)
+  assert.deepEqual([d.model, d.prompt, d.fields, d.params], ['openrouter:fake/img', 'photoreal', { who: 'a swamp troll', sheets: 'Face close-up' }, { aspect_ratio: '1:1' }])
+  assert.ok(d.inputs.references[0].startsWith(at('.cache', 'uploads') + path.sep) && fs.existsSync(d.inputs.references[0]), 'copied into the uploads')
+  assert.equal((await post('/api/draft', { space: 'image', at: 'another', filled: {} })).code, 400)
+  await post('/api/draft', { space: 'image', at: d.at, filled: { price: '$0.08', amount: 0.08, known: true } })
+  const filled = await filling
+  assert.equal(filled.code, 0, filled.err)
+  assert.match(filled.out, /the image composer is filled, nothing generated: \$0\.08\. Once the user says yes: media\.mjs submit --space image --spend 0\.08/)
+  // submit: only with the user's yes (--spend); one page takes it, a second is refused; it waits for the jobs
+  assert.match((await cliWith(e, 'submit', '--space', 'image')).err, /--spend <amount>/)
+  const submitting = cliWith(e, 'submit', '--space', 'image', '--spend', '0.08')
+  const s = await until(() => drafts().image?.submit)
+  assert.equal(s.spend, 0.08)
+  assert.deepEqual([(await post('/api/draft', { space: 'image', at: s.at, claim: true })).code, (await post('/api/draft', { space: 'image', at: s.at, claim: true })).code], [200, 409])
+  const job = (await post('/api/generate', { kind: 'image', tool: 'free', model: 'openrouter:fake/img', prompt: 'a fox', fields: {}, inputs: {}, params: {}, confirm: true })).body
+  await post('/api/draft', { space: 'image', at: s.at, submitted: { started: job.ids, price: '$0.04' } })
+  const out = await submitting
+  assert.equal(out.code, 0, out.err)
+  assert.match(out.out, /^started from the dashboard \(\$0\.04\): media\/\S+\ndone: \S+out-1\.png · \$[\d.]+/)
+  // what the page held back: over the price said (exit 2), or what Generate waits for (exit 1)
+  for (const [answer, code, said] of [[{ over: '$0.50' }, 2, /now costs \$0\.50, more than --spend: ask the user again/], [{ blocker: 'Add photos' }, 1, /Generate waits for « Add photos »/]]) {
+    const run = cliWith(e, 'submit', '--space', 'image', '--spend', '0.08')
+    const again = await until(() => drafts().image?.submit?.at !== s.at && !drafts().image.submit.done && drafts().image.submit)
+    await post('/api/draft', { space: 'image', at: again.at, submitted: answer })
+    const r = await run
+    assert.equal(r.code, code)
+    assert.match(r.err, said)
+  }
+})
+
 test('workspaces: the Default one from the start, new generations join the current one; a timeline in words, rendered, zipped', { timeout: 60000 }, async t => {
   const port = 42500 + Math.floor(Math.random() * 400), url = `http://127.0.0.1:${port}`
   const srv = spawn(process.execPath, [engine, 'serve'], { cwd: home, env: { ...env, MEDIA_GENERATOR_PORT: `${port}`, MEDIA_GENERATOR_CATALOG: path.join(home, 'catalog-server2.json') } })

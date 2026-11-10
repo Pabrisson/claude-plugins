@@ -247,12 +247,22 @@ export type Settings = {
   developer: { on: boolean }
   workspace: { current: string }
 }
+// what the agent put in a space's composer (media.mjs draft), and its ask to submit it (media.mjs submit), with the
+// page's answers
+export type Filled = { price?: string | null; amount?: number | null; known?: boolean; blocker?: string; error?: string }
+export type Submitted = { started?: string[]; price?: string; blocker?: string; over?: string; asks?: string; error?: string }
 export type Draft = {
+  at?: string
   tool?: string
   model?: string
   prompt?: string
+  raw?: boolean
   fields?: Record<string, string>
-  at: string
+  inputs?: Record<string, string[]>
+  params?: Record<string, unknown>
+  batch?: number
+  filled?: Filled
+  submit?: { at: string; spend?: number; unknown?: boolean; claimed?: boolean; done?: Submitted }
 }
 export type State = {
   home: string
@@ -397,6 +407,8 @@ export const api = {
   estimate: (spec: Spec) => post<EstimateAnswer>("/api/estimate", spec),
   generate: (spec: Spec, confirm = false) =>
     post<{ id: string; ids: string[] }>("/api/generate", { ...spec, confirm }),
+  // the page's answer to the agent's draft or submit; claim: this page takes the submit (409: another one did)
+  draft: (body: { space: Kind; at: string; filled?: Filled; claim?: true; submitted?: Submitted }) => post<{ ok: true }>("/api/draft", body),
   upload: (file: Blob, name: string) =>
     call<{ path: string }>(`/api/upload?name=${encodeURIComponent(name)}`, {
       method: "POST",

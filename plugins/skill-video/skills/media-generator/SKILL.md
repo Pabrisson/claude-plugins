@@ -1,6 +1,6 @@
 ---
 name: media-generator
-description: Generates and edits images, videos, voices, music and sound effects with AI models through a model router (Kie.ai by default, or OpenRouter) and ElevenLabs, every cost shown and approved first. Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles cited with @name, workspaces with a timeline, and a local dashboard. Use it whenever the user wants an image, a video clip, a voice, a song or a sound made or transformed by AI (create, animate, restyle, upscale, face or object swap, inpaint, camera moves, talking avatar, lip sync, voice-over, voice change, voice design, dubbing, transcripts, music, stems, sound effects), for example "génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "redessine-la en style anime", "crée le personnage Lulu avec ces photos", "crée la voix du narrateur", "voix off", "traduis cette vidéo en anglais", "crée une musique", "un bruitage de pluie", "ouvre le générateur", "transcris cette vidéo", "combien j'ai dépensé", or when they paste a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Agent").
+description: Generates and edits images, videos, voices, music and sound effects with AI models through a model router (Kie.ai by default, or OpenRouter) and ElevenLabs, every cost shown and approved first. Keeps a Library of Elements (characters, outfits, objects, places, poses, brands, voices) and styles cited with @name, workspaces with a timeline, and a local dashboard. Use it whenever the user wants an image, a video clip, a voice, a song or a sound made or transformed by AI (create, animate, restyle, upscale, face or object swap, inpaint, camera moves, talking avatar, lip sync, voice-over, voice change, voice design, dubbing, transcripts, music, stems, sound effects), for example "génère une image", "crée une vidéo IA de…", "anime cette photo", "fais un dolly zoom", "change le visage", "redessine-la en style anime", "crée le personnage Lulu avec ces photos", "crée la voix du narrateur", "voix off", "traduis cette vidéo en anglais", "crée une musique", "un bruitage de pluie", "ouvre le générateur", "remplis le composer", "transcris cette vidéo", "combien j'ai dépensé", or when they paste a prompt copied from the media-generator dashboard ("Copy prompt", "Send to edit", "Ask Agent").
 argument-hint: "[studio | setup | credits | <what to generate, with files> | <a prompt copied from the dashboard>]"
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/engine/media.mjs" *), Bash(node ${CLAUDE_SKILL_DIR}/engine/media.mjs *)
 ---
@@ -63,7 +63,8 @@ Run `media.mjs doctor` once per conversation.
 | `studio`, "ouvre le générateur" | `media.mjs studio --open`, give the URL |
 | `setup` | Show `media.mjs setup`, change only what the user asks |
 | `credits`, "combien j'ai dépensé" | `media.mjs credits`, then sum it up |
-| A pasted "Copy prompt" from the dashboard | The model's prompt, as a draft (below) |
+| A pasted "Copy prompt" from the dashboard | The model's prompt, put in its composer (below) |
+| "Remplis le composer", "mets-le dans le générateur", "lance-le depuis le dashboard" | The composer, filled, then submitted on the user's yes (below) |
 | A pasted "Send to edit" from the dashboard | Hand the file to the video-editor skill |
 | An Element or a style to make, or a pasted "Ask Agent" | `references/library.md` |
 | A workspace ("crée un workspace", "travaille dans le projet …"), its files or its edit | `references/library.md`, « Workspaces » |
@@ -197,18 +198,35 @@ goes to a folder: `--out <folder>` on `image`, `video` or `audio` puts its files
 hard link, no space taken twice), in no workspace and with no dashboard; the job stays in `media/` and its cost in the
 ledger. Use it when the user names a folder for the result, or when the video-editor skill asks for a medium for a video.
 
-## A pasted "Copy prompt"
+## The dashboard's composer
 
-The dashboard's « Copy prompt » gives you the space, the tool, the chosen model, its fields, its input files and
-what the user wants. Write **the best prompt for that model**: its strengths, its syntax and its ideal length (a
-camera move named the way the model understands it, the subject first, light and lens, what must not change). Then:
+The agent fills a space's composer in the open dashboard, under the user's eyes: the page goes to that space, sets
+the tool, model, fields, files and settings, types the words in, and answers with what it shows. Nothing is generated.
 
 ```
-media.mjs draft --space <image|video|audio> --tool <tool> --model <model> --prompt "<the prompt>"
+media.mjs draft --space <image|video|audio> --tool <tool> [--model <model>] [--field <key>="<value>"]… [--in <input>=<file>]… [--option …] [--ratio …] [--duration …] --prompt "<the words>"
 ```
 
-**Never generate** from this request: nothing is spent. Tell the user the open dashboard shows a « Reload » bar with
-the new prompt, to review and generate there.
+It takes the flags of `image|video|audio` and checks them as an estimate does (a field the tool lacks, a file of
+another kind, a model that does not fit: refused, with the reason). `--prompt` is the words the tool adds to its own
+prompt (Custom: the whole prompt); put the subject in the tool's fields (`--field who="…"` on Character references).
+`--raw` replaces the tool's own prompt with yours: never on a References tool. With no page open, add `--open`. It
+prints the price, or what Generate waits for (« Add photos »): say it to the user.
+
+**Submit** only once the user said yes to that price (step 3): the page clicks Generate on what its composer holds
+now, the user's changes kept, and the command waits for the jobs, as a generation does:
+
+```
+media.mjs submit --space <space> --spend <the price's amount>
+```
+
+`--accept-unknown` for an unknown price. Exit 2: the composer now costs more than `--spend` (ask again), or the
+dashboard asks the user to confirm a threshold or the cap there. Exit 1: what Generate waits for, or no page open.
+
+**A pasted "Copy prompt"** gives you the space, the tool, the chosen model, its fields, its input files and what the
+user wants. Write **the best prompt for that model**: its strengths, its syntax and its ideal length (a camera move
+named the way the model understands it, the subject first, light and lens, what must not change). Fill the composer
+with it (the files are already there). **Never submit** from this request: the user reviews it and clicks Generate.
 
 ## A pasted "Send to edit"
 
@@ -226,8 +244,9 @@ rush, or a B-roll clip in the project the prompt names.
 ## Good to know
 
 - **The dashboard.** `media.mjs studio` reuses this folder's server or starts one on the first free port from 41287,
-  on 127.0.0.1 only. It stops by itself once every agent session that opened it has quit. A generation started
-  there runs in its own process and finishes even if the page closes.
+  on 127.0.0.1 only. It stops by itself once every agent app that opened it has quit: the app itself (Claude
+  Desktop, Claude Code…), not one of its sessions. A generation started there runs in its own process and finishes
+  even if the page closes.
 - **Costs.** OpenRouter in USD as it reports them, never converted. Kie in USD from its own price list (its public
   price API, read at each start of the dashboard and once a day; its credits at $0.005 each, shown beside; the models
   its catalog adds priced by `providers/kie-catalog-prices.json`, matched by hand), the real cost from the credits each

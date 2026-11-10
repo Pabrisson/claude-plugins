@@ -42,13 +42,13 @@
     },
     {
       "id": 4,
-      "prompt": "media-generator — Copy prompt\nSpace: video · Tool: orbit (Orbit) · Model: openrouter:kwaivgi/kling-v3.0-pro\nFields: subject=a perfume bottle on black marble, direction=right, arc=a half turn\nInputs: first_frame=/tmp/bottle.png\nWhat I want: a luxurious slow product reveal\nWrite the best prompt for this model, then run: media.mjs draft --space video --tool orbit --model openrouter:kwaivgi/kling-v3.0-pro --prompt \"…\" — do not generate.",
-      "expected_output": "A model-specific prompt written into the dashboard's draft, nothing generated and nothing spent.",
+      "prompt": "media-generator — Copy prompt\nSpace: video · Tool: orbit (Orbit) · Model: openrouter:kwaivgi/kling-v3.0-pro\nFields: subject=a perfume bottle on black marble, direction=right, arc=a half turn\nInputs: first_frame=/tmp/bottle.png\nWhat I want: a luxurious slow product reveal\nWrite the best prompt for this model, then run: media.mjs draft --space video --tool orbit --model openrouter:kwaivgi/kling-v3.0-pro [--field <key>=\"<value>\"]… --prompt \"…\" — do not generate.",
+      "expected_output": "A model-specific prompt put into the dashboard's video composer with its fields, nothing generated, nothing submitted and nothing spent.",
       "files": [],
       "expectations": [
         "Runs `media.mjs draft` with --space video, --tool orbit and the model",
-        "Never runs `media.mjs video` and never passes --spend",
-        "Tells the user to use the Reload bar in the dashboard"
+        "Never runs `media.mjs video` nor `media.mjs submit`, and never passes --spend",
+        "Tells the user the composer is filled (or fills once the dashboard is open) and that they click Generate there"
       ]
     },
     {
@@ -95,6 +95,17 @@
         "Keeps or names the sheets Body turnaround and Face close-up",
         "Asks before spending, with the total price in USD",
         "Does not run `elements add` (the user asked only for the images)"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Remplis le composer du générateur avec une fiche personnage d'un troll des marais, photoréaliste, puis lance-le si ça coûte moins de 20 centimes",
+      "expected_output": "`media.mjs draft --space image --tool character --field who=\"…\"` with the words in --prompt (never --raw), the price it prints said to the user, then `media.mjs submit --space image --spend <that amount>` only within the user's 20 cents.",
+      "files": [],
+      "expectations": [
+        "Runs `media.mjs draft --space image --tool character` with the troll in `--field who=…`, without --raw",
+        "Says the price the draft prints before any submit",
+        "Runs `media.mjs submit --space image --spend <amount>` only when that price is under $0.20, never `media.mjs image`"
       ]
     }
   ]
