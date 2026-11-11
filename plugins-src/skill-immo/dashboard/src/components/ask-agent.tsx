@@ -2,8 +2,8 @@ import { review } from "@engine/decide.js"
 import { DOC_GROUPS, DOC_TYPES, docTypeOf } from "@engine/documents.js"
 import { negotiation, typeOf } from "@engine/market.js"
 import {
-  BadgeEuroIcon, BellRingIcon, Building2Icon, CalendarCheckIcon, CalendarDaysIcon, CalendarIcon, ChevronDownIcon, FileImageIcon, FileQuestionMarkIcon, FileSearchIcon, FileSpreadsheetIcon,
-  FileStackIcon, FileTextIcon, HammerIcon, HandCoinsIcon, LandmarkIcon, MapPinnedIcon, MessageCircleQuestionMarkIcon, MessageSquarePlusIcon, MoonIcon, PenLineIcon, ReplyIcon,
+  BadgeEuroIcon, BellRingIcon, CircleQuestionMarkIcon, Building2Icon, CalendarCheckIcon, CalendarDaysIcon, CalendarIcon, ChevronDownIcon, FileImageIcon, FileQuestionMarkIcon, FileSearchIcon, FileSpreadsheetIcon,
+  FileStackIcon, FileTextIcon, HammerIcon, HandCoinsIcon, HandshakeIcon, PhoneIcon, LandmarkIcon, MapPinnedIcon, MessageCircleQuestionMarkIcon, MessageSquarePlusIcon, MoonIcon, PenLineIcon, ReplyIcon,
   ScanSearchIcon, SearchCheckIcon, ShieldAlertIcon, TrendingUpIcon, WalletIcon, type LucideIcon, type LucideProps,
 } from "lucide-react"
 import { useState, type ReactNode } from "react"
@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 
 // what the agent is asked to write: the prompt says what, the agent reads the conversation first
 const DRAFTS = {
+  contact: "une première prise de contact (dire que le bien peut m'intéresser, sans m'engager ni parler de budget ou de négociation)",
   offer: "une offre d'achat (montant et arguments à partir de la marge de négociation)", question: "les questions à poser à l'agence ou au vendeur", visit: "une demande de visite",
   reply: "une réponse au dernier message reçu, d'après toute la conversation", follow_up: "une relance du dernier message resté sans réponse",
   documents: "une demande des documents (diagnostics complets, PV des 3 dernières AG, relevé de charges, avis de taxe foncière, pré-état daté)",
@@ -53,6 +54,11 @@ const SLOTS: Opt[] = [
   { value: "en soirée", label: "En soirée", icon: MoonIcon },
   { value: "le samedi", label: "Le samedi", icon: CalendarDaysIcon },
 ]
+const CONTACT: Opt[] = [
+  { value: "s'il est toujours disponible", label: "Toujours disponible ?", icon: CircleQuestionMarkIcon },
+  { value: "un appel", label: "Un appel", icon: PhoneIcon },
+  { value: "une visite", label: "Une visite", icon: CalendarCheckIcon },
+]
 const FUNDING: Opt[] = [
   { value: "crédit immobilier", label: "Crédit immobilier", icon: LandmarkIcon },
   { value: "comptant", label: "Comptant", icon: WalletIcon },
@@ -70,6 +76,7 @@ const ASKS: Record<Ask, { title: string; description: string; icon: LucideIcon; 
   analyse: { title: "Analyser ce bien", description: "L'agent l'analyse avec les ventes, le bâtiment, le quartier et votre budget. Dites-lui ce qui compte pour vous.", icon: SearchCheckIcon, text: "Instruction en plus", placeholder: "Ex. : je compte le louer meublé, est-ce rentable ?" },
   summary: { title: "Résumer des documents", description: "L'agent lit les documents choisis et les résume, en citant le document et la page. Vous pourrez garder le résumé dans « Mes notes ».", icon: FileSearchIcon, text: "Instruction en plus", placeholder: "Ex. : concentre-toi sur les travaux du toit et ce qu'ils coûteront au lot" },
   doc_question: { title: "Question sur les documents", description: "L'agent cherche la réponse dans les documents choisis, et dit où il l'a trouvée.", icon: FileQuestionMarkIcon, text: "Votre question", placeholder: "Ex. : le ravalement est-il déjà voté, et pour combien ?" },
+  contact: { title: "Rédiger une prise de contact", description: "L'agent se présente, dit votre intérêt pour le bien et demande où en est la vente, sans parler de votre budget ni négocier.", icon: HandshakeIcon, text: "Instruction en plus", placeholder: "Ex. : résidence principale, je peux visiter vite" },
   offer: { title: "Rédiger une offre d'achat", description: "L'agent l'écrit d'après la marge de négociation et la conversation.", icon: HandCoinsIcon, text: "Instruction en plus", placeholder: "Ex. : insiste sur les travaux de la toiture" },
   question: { title: "Rédiger les questions à l'agence", description: "Les questions de la synthèse et celles à demander de vos notes que l'agent posera, et les vôtres. Il laisse de côté celles déjà répondues dans la conversation.", icon: MessageCircleQuestionMarkIcon, text: "Vos questions en plus", placeholder: "Une question par ligne" },
   visit: { title: "Rédiger une demande de visite", description: "L'agent propose vos disponibilités.", icon: CalendarCheckIcon, text: "Précisions", placeholder: "Ex. : jeudi 14 après 18 h, ou samedi matin" },
@@ -97,7 +104,7 @@ export function AskMenu({ l, short, analyse = false, size = "sm" }: { l: Listing
   const ms = l.messages ?? [], none = !docsOf(l).length
   const item = (k: Ask, disabled = false, hint?: string) => {
     const I = ASKS[k].icon
-    return <DropdownMenuItem key={k} disabled={disabled} onSelect={() => setAsk(k)}><I />{{ analyse: "Analyser ce bien", summary: "Résumer des documents", doc_question: "Question sur les documents", offer: "Une offre d'achat", question: "Les questions à l'agence", visit: "Une demande de visite", documents: "Une demande de documents", reply: "Répondre au dernier message", follow_up: "Une relance" }[k]}…{hint && <span className="ml-auto text-xs text-muted-foreground">{hint}</span>}</DropdownMenuItem>
+    return <DropdownMenuItem key={k} disabled={disabled} onSelect={() => setAsk(k)}><I />{{ analyse: "Analyser ce bien", summary: "Résumer des documents", doc_question: "Question sur les documents", contact: "Une prise de contact", offer: "Une offre d'achat", question: "Les questions à l'agence", visit: "Une demande de visite", documents: "Une demande de documents", reply: "Répondre au dernier message", follow_up: "Une relance" }[k]}…{hint && <span className="ml-auto text-xs text-muted-foreground">{hint}</span>}</DropdownMenuItem>
   }
   return (
     <>
@@ -120,7 +127,7 @@ export function AskMenu({ l, short, analyse = false, size = "sm" }: { l: Listing
               <DropdownMenuLabel className="text-xs text-muted-foreground">Rédiger</DropdownMenuLabel>
             </>
           )}
-          {(["offer", "question", "visit", "documents"] as const).map(k => item(k))}
+          {(["contact", "offer", "question", "visit", "documents"] as const).map(k => item(k))}
           <DropdownMenuSeparator />
           {item("reply", !ms.some(m => m.from === "them"))}
           {item("follow_up", !ms.some(m => m.from !== "them" && m.sent_at))}
@@ -163,7 +170,7 @@ export function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; sh
   const got = new Map<string, string>()
   for (const d of docs) if (!got.has(typeOfDoc(d))) got.set(typeOfDoc(d), d.date)
   const received = (x: DocType) => got.get(x.key) ?? (x.group === "diagnostics" ? got.get("ddt") : undefined)
-  const [chips, setChips] = useState<string[]>([]), [funding, setFunding] = useState<string[]>([])
+  const [chips, setChips] = useState<string[]>(() => ask === "contact" ? [CONTACT[0].value] : []), [funding, setFunding] = useState<string[]>([])
   const [picked, setPicked] = useState(() => docs.map(d => d.id)), [qs, setQs] = useState(() => [...questions, ...noted])
   const [asked, setAsked] = useState(() => toAsk.flatMap(g => g.items.filter((x: DocType) => x.on && !received(x)).map((x: DocType) => x.key)))
   const [amount, setAmount] = useState(""), [days, setDays] = useState("10"), [text, setText] = useState("")
@@ -180,7 +187,7 @@ export function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; sh
       const what = ask === "documents" ? `une demande des documents suivants : ${toAsk.flatMap(g => g.items).filter((x: DocType) => asked.includes(x.key)).map((x: DocType) => x.request || x.label).join(", ")}` : ask === "question" && qs.length ? `${DRAFTS.question} : ${qs.map((q, i) => `${i + 1}) ${q}`).join(" ")}` : DRAFTS[ask]
       f = {
         kind: "message", text: `${MESSAGE_LABEL[ask].toLowerCase()} pour ${l.id} — ${short} : rédige ${what}${details([
-          ["montant", !!amount && eur(Number(amount))], ["validité", ask === "offer" && !!days && `${days} jours`], ["financement", funding[0]],
+          ["demander", ask === "contact" && chips.join(", ")], ["montant", !!amount && eur(Number(amount))], ["validité", ask === "offer" && !!days && `${days} jours`], ["financement", funding[0]],
           ["disponibilités", ask === "visit" && chips.join(", ")], [ask === "question" ? "questions en plus" : ask === "visit" ? "précisions" : "consigne", said],
         ])}`,
       }
@@ -214,6 +221,12 @@ export function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; sh
                 <Field><FieldLabel htmlFor="ask-days">Validité (jours)</FieldLabel><Input id="ask-days" type="number" inputMode="numeric" min={1} value={days} onChange={e => setDays(e.target.value)} /></Field>
               </div>
               {nego && <FieldDescription>Marge estimée : une offre entre {eur(Math.round(l.price! * (1 - nego.high) / 1000) * 1000)} et {eur(Math.round(l.price! * (1 - nego.low) / 1000) * 1000)}.</FieldDescription>}
+              <Field><FieldLabel>Financement</FieldLabel><Chips single opts={FUNDING} value={funding} onChange={setFunding} label="Financement" /></Field>
+            </>
+          )}
+          {ask === "contact" && (
+            <>
+              <Field><FieldLabel>Demander</FieldLabel><Chips opts={CONTACT} value={chips} onChange={setChips} label="Demander" /></Field>
               <Field><FieldLabel>Financement</FieldLabel><Chips single opts={FUNDING} value={funding} onChange={setFunding} label="Financement" /></Field>
             </>
           )}

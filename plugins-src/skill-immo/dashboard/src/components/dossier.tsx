@@ -2,7 +2,7 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { AtSignIcon, BellRingIcon, TextQuoteIcon, CalendarClockIcon, PencilIcon, CheckIcon, ClockIcon, EllipsisIcon, MessagesSquareIcon, ReplyIcon, SendIcon, Undo2Icon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, Maximize2Icon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { AtSignIcon, BellRingIcon, HandshakeIcon, TextQuoteIcon, CalendarClockIcon, PencilIcon, CheckIcon, ClockIcon, EllipsisIcon, MessagesSquareIcon, ReplyIcon, SendIcon, Undo2Icon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, Maximize2Icon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { Fragment, useEffect, useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
@@ -575,15 +575,16 @@ type Change = { sent?: boolean; delete?: boolean; document?: { id: string; type:
 // their light blue, the user's on the right (the agent's drafts dashed until sent). The thread keeps a height of its own
 // and opens on the start of the latest message (an added one comes into view the same way). Under it, adding a
 // message and writing one with the agent, the next step suggested:
-// answering the last message received, or following up one left 3 days without an answer. The agent reads it all
+// a first contact on an empty conversation, answering the last message received, or following up one left 3 days without an answer. The agent reads it all
 // before writing the next one.
 function Conversation({ l, short }: { l: Listing; short: string }) {
   const { slug, reload } = useSearch()
-  const [ask, setAsk] = useState<"reply" | "follow_up" | null>(null)
+  const [ask, setAsk] = useState<"contact" | "reply" | "follow_up" | null>(null)
   const ms = (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), t = typeOf(l) as PropertyType
   const docs = ms.reduce((n, m) => n + (m.documents?.length ?? 0), 0), last = ms.at(-1)
   const waiting = last && last.from !== "them" && last.sent_at ? daysSince(last.sent_at) : null
-  const next = last?.from === "them" ? { ask: "reply" as const, label: "Répondre", icon: ReplyIcon }
+  const next = !last ? { ask: "contact" as const, label: "Prendre contact", icon: HandshakeIcon }
+    : last.from === "them" ? { ask: "reply" as const, label: "Répondre", icon: ReplyIcon }
     : waiting != null && waiting >= 3 ? { ask: "follow_up" as const, label: "Relancer", icon: BellRingIcon } : null
   async function change(m: Message, body: Change) {
     await api.listing(slug, l.id, { message: { id: m.id, ...body } })

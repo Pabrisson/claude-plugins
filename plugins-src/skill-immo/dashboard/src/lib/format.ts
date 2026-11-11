@@ -22,7 +22,7 @@ export const TYPE_PLURAL = { flat: "Appartements", house: "Maisons", land: "Terr
 // the unit a type is priced in: €/m², €/m² of land for a plot, € for a parking
 export const UNIT = { flat: "€/m²", house: "€/m²", land: "€/m² de terrain", parking: "€ la place", premises: "€/m²" } as const
 export const perUnit = (n: number | null | undefined, type: keyof typeof UNIT = "flat") => (n == null ? "—" : `${nf.format(n)} ${UNIT[type]}`)
-export const MESSAGE_LABEL = { offer: "Offre", question: "Questions", visit: "Demande de visite", reply: "Réponse", follow_up: "Relance", documents: "Demande de documents", other: "Message" } as const
+export const MESSAGE_LABEL = { contact: "Prise de contact", offer: "Offre", question: "Questions", visit: "Demande de visite", reply: "Réponse", follow_up: "Relance", documents: "Demande de documents", other: "Message" } as const
 export const CHANNEL_LABEL = { email: "E-mail", sms: "SMS", phone: "Téléphone", visit: "Sur place" } as const
 const dtf = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
 // "27 oct., 18:30"

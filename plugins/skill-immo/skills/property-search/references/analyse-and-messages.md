@@ -86,6 +86,7 @@ whose type is wrong or `other` (« scan001.pdf » that is a PV d'AG), set it: `i
 <doc id> <type>`.
 
 **A message to write**, when the user asks for one or a `[message]` item of the dashboard does:
+- `contact`: a first contact, to open the conversation (the property may interest the user);
 - `offer`: an offer;
 - `question`: the questions for the agency;
 - `visit`: a visit request;
@@ -103,12 +104,16 @@ whose type is wrong or `other` (« scan001.pdf » that is a PV d'AG), set it: `i
      property with its parcel when the listing is placed at its address: `immo.mjs cadastre -p <slug> --id <id>` prints
      the line to use (« cadastré section DN n° 68, pour une contenance de 9 a 90 ca »; a flat's is its building's,
      with « lot n° … » left for the seller to fill), « sous réserve de vérification sur le titre de propriété »;
+   - a first contact: 5 to 8 lines. The property as its listing names it (type, surface, town, its reference and the
+     portal when known, the asking price), the user's interest as possible, never a commitment. Never the budget, an
+     opinion on the price or a negotiation argument: they come with the offer. Ask only what `demander` lists (still
+     for sale, a call, a visit; none given: whether it is still for sale), the financing in one line when given;
    - a reply to a counter-offer: where it stands against the range and what the seller said;
    - questions or documents: those of `review.questions` that still matter and the open boxes of the notes (« À
      demander »), minus what the conversation already answered and the documents it already holds (their `type`; a `ddt` holds every diagnostic). The dashboard's item
      may list them (« : 1) … 2) … », « des documents suivants : … »): ask those, minus what is already there.
 
-   What the item adds after « ; » is the user's and comes first: `montant` (the offer's amount, or a counter-offer in a
+   What the item adds after « ; » is the user's and comes first: `demander` (a first contact), `montant` (the offer's amount, or a counter-offer in a
    reply), `validité` (days), `financement`, `disponibilités` and `précisions` (a visit), `questions en plus`,
    `consigne` (how to write it).
 

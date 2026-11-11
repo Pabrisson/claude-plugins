@@ -16,7 +16,7 @@ export type PropertyType = "flat" | "house" | "land" | "parking" | "premises"
 export type Channel = "email" | "sms" | "phone" | "visit"
 // a document a message carries, `file` its path in the search's folder (served under /api/s/<slug>/)
 export type Doc = { id: string; name: string; size: number; file: string; type?: string }
-export type Message = { id: string; date: string; from?: "me" | "them"; kind: "offer" | "question" | "visit" | "reply" | "follow_up" | "documents" | "other"; channel?: Channel | null; amount: number | null; to: string | null; text: string; sent_at: string | null; documents?: Doc[] }
+export type Message = { id: string; date: string; from?: "me" | "them"; kind: "contact" | "offer" | "question" | "visit" | "reply" | "follow_up" | "documents" | "other"; channel?: Channel | null; amount: number | null; to: string | null; text: string; sent_at: string | null; documents?: Doc[] }
 // its documents base64, the text optional with them
 export type NewMessage = { from: "me" | "them"; channel: Channel; date: string; text: string; amount?: number; sent?: boolean; documents?: { name: string; data: string; type?: string }[] }
 

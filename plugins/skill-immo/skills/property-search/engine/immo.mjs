@@ -58,7 +58,7 @@ const GITIGNORE = `# skill-immo: what the engine makes again, and the buyer's pr
 // what git must keep, to check against the .gitignore
 const KEPT = ['s/search.json', 's/listings.json', 's/alerts.json', '.costs.json', '.cache/api-usage.json']
 const CRITERIA = ['budget_min', 'budget_max', 'area_min', 'area_max', 'rooms_min', 'rooms_max', 'floor_min', 'land_min', 'dpe_max', 'elevator', 'outdoor']
-const MESSAGE_KINDS = ['offer', 'question', 'visit', 'reply', 'follow_up', 'documents', 'other']
+const MESSAGE_KINDS = ['contact', 'offer', 'question', 'visit', 'reply', 'follow_up', 'documents', 'other']
 const CHANNELS = ['email', 'sms', 'phone', 'visit']
 // the documents a message carries (diagnostics, minutes, a tax notice, a photo of a page): kept in
 // <search>/documents/<listing>/, served by the dashboard (shown in the browser when it can: no HTML nor SVG)

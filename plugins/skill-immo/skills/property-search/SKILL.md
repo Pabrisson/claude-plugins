@@ -17,8 +17,8 @@ these types. You find what is for sale there, and the local engine weighs each l
 - against the rent of the same home (carte des loyers) and the user's budget.
 
 It gives each listing a review (strong points, points to watch, questions to ask, each with its source) and a score out
-of 100 weighted by the user's priorities. You write the messages the user sends (an offer, questions, a visit request, a
-reply, a reminder, a request for documents), from each listing's conversation with the agency or the seller.
+of 100 weighted by the user's priorities. You write the messages the user sends (a first contact, an offer, questions, a visit
+request, a reply, a reminder, a request for documents), from each listing's conversation with the agency or the seller.
 The user then works in a local dashboard, and its feedback comes back to you as a pasted prompt.
 
 `immo.mjs` below means `node "${CLAUDE_SKILL_DIR}/engine/immo.mjs"`, the path in double quotes (it can hold spaces or, on
@@ -281,7 +281,7 @@ Do every item in order:
   says, on the `axes` and the `consigne` it gives first.
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings (`references/analyse-and-messages.md`).
 - `[message]`: `references/analyse-and-messages.md`, « Messages and the conversation ». What follows « ; » is the
-  user's: the amount, the validity, the financing, the availabilities, the documents or questions to ask, a `consigne`.
+  user's: what a first contact asks, the amount, the validity, the financing, the availabilities, the documents or questions to ask, a `consigne`.
 - `[documents]`: a summary of the conversation's documents, or a question on them: `references/analyse-and-messages.md`,
   « The conversation's documents ».
 - `[ajouter]`: the add mode.

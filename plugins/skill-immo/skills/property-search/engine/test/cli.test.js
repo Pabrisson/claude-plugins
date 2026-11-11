@@ -317,6 +317,10 @@ test('a message for a listing: kept with it, shown to the agent', async () => {
   const [m] = read(dir, 'listings.json')[0].messages
   assert.deepEqual([m.from, m.kind, m.amount, m.to, m.sent_at, m.text.split('\n')[1]], ['me', 'offer', 250000, 'Particulier', null, 'je vous propose 250 000 €.'])
   assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--kind', 'letter', '--text', 'x'], { key: null })).status, 1)
+  // a first contact, sent before all: it opens the conversation and leaves the listing's status alone
+  r = await run(home, ['message', '-p', 'paul-bert', '--id', id, '--kind', 'contact', '--sent', '--date', '2019-12-31T09:00', '--text', 'Ce bien pourrait m\'intéresser.'], { key: null })
+  assert.equal(r.status, 0, r.err)
+  assert.equal(read(dir, 'listings.json')[0].my_status ?? null, null)
   // the seller's answer, pasted, dated the day before: the conversation reads in order
   r = await run(home, ['message', '-p', 'paul-bert', '--id', id, '--from', 'them', '--channel', 'phone', '--amount', '256000', '--date', '2020-01-01T10:00', '--text', 'Le vendeur descend à 256 000 €.'], { key: null })
   assert.equal(r.status, 0, r.err)
@@ -330,8 +334,8 @@ test('a message for a listing: kept with it, shown to the agent', async () => {
   await run(home, ['add', '-p', 'paul-bert', '--file', path.join(dir, 'l.json')], { key: null })
   await run(home, ['search', '-p', 'paul-bert'], { key: null })
   const shown = JSON.parse((await run(home, ['show', '-p', 'paul-bert', '--id', id], { key: null })).out)
-  assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent, shown.favorite, shown.labels], ['flat', 3, 883, false, []])
-  assert.deepEqual(shown.messages.map(x => [x.from, x.channel, !!x.sent_at]), [['them', 'phone', false], ['me', null, false], ['me', null, true]])
+  assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent, shown.favorite, shown.labels], ['flat', 4, 883, false, []])
+  assert.deepEqual(shown.messages.map(x => [x.from, x.channel, !!x.sent_at]), [['me', null, true], ['them', 'phone', false], ['me', null, false], ['me', null, true]])
   assert.ok(shown.review.questions.length && shown.score.parts.length === 6)
   // documents the user gave in the chat: copied into the search, their path in show; a page is no document
   fs.writeFileSync(path.join(dir, 'pv.pdf'), '%PDF-1.4')
