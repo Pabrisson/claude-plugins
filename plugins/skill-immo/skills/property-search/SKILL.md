@@ -218,7 +218,8 @@ or high confidence. The building data are read again at the new place. Nothing i
 ## Analyse, compare and messages
 
 Read `references/analyse-and-messages.md` and follow it: what `show` gives, how to answer on a listing or the market,
-a message received, a message to write (an offer, questions, a visit, a reply, a reminder, documents), a parcel (its
+a message received, a message to write (an offer, questions, a visit, a reply, a reminder, documents), the documents of a
+conversation (a summary, a question on them), a parcel (its
 cadastre, urban plan and sales: `cadastre`).
 
 ## Other public data: the data.gouv.fr MCP
@@ -240,11 +241,12 @@ apply this feedback (recherche <slug>)
 4. [annonces] cherche de nouvelles annonces sur l'API (crédits avec mon accord) et sur le web
 5. [analyser] <id> — <a short description>
 6. [comparer] <id>, <id>
-7. [message] offre pour <id> — <a short description> : rédige une offre d'achat (…)
+7. [message] offre pour <id> — <a short description> : rédige une offre d'achat (…) ; montant : 250 000 € ; consigne : …
 8. [ajouter] <url or text>
 9. [chercher] l'annonce du DPE <number> : maison 204 m², DPE D du 19 oct. 2026, <address>
 10. [question] <free text>
 11. [parcelle] étudier la parcelle DN 68 (69383000DN0068), Lyon 3e, 990 m²
+12. [documents] résumé pour <id> — <a short description> : « PV AG 2025.pdf » (d-1a2b3c4d) ; points : … ; consigne : …
 ```
 
 `(sans recherche)` in place of `(recherche <slug>)`: the dashboard's page without a search (« Explorer » on its home
@@ -272,9 +274,12 @@ Do every item in order:
   `--spend` counts for free and stops on the estimate (exit 2): the credits rule, then `fetch --spend`; then the assisted
   mode, 5 to 10 listing pages at most. « sur le web » (no key, an OpenData search or the API off): the assisted mode only. Say what each brought.
 - `[analyser]`: `show --id`, and `enrich --id` if it has no building data; answer as `references/analyse-and-messages.md`
-  says.
+  says, on the `axes` and the `consigne` it gives first.
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings (`references/analyse-and-messages.md`).
-- `[message]`: `references/analyse-and-messages.md`, « Messages and the conversation ».
+- `[message]`: `references/analyse-and-messages.md`, « Messages and the conversation ». What follows « ; » is the
+  user's: the amount, the validity, the financing, the availabilities, the documents or questions to ask, a `consigne`.
+- `[documents]`: a summary of the conversation's documents, or a question on them: `references/analyse-and-messages.md`,
+  « The conversation's documents ».
 - `[ajouter]`: the add mode.
 - `[chercher]`: a recent DPE of the map that no listing matches, or an energy audit (`l'annonce de l'audit énergétique
   <number> : maison 57 m², classe F…`; « immeuble entier » for a whole building). Look for its listing the assisted way: WebSearch its

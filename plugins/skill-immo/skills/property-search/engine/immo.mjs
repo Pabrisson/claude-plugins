@@ -59,6 +59,10 @@ const KEPT = ['s/search.json', 's/listings.json', 's/alerts.json', '.costs.json'
 const CRITERIA = ['budget_min', 'budget_max', 'area_min', 'area_max', 'rooms_min', 'rooms_max', 'floor_min', 'land_min', 'dpe_max', 'elevator', 'outdoor']
 const MESSAGE_KINDS = ['offer', 'question', 'visit', 'reply', 'follow_up', 'documents', 'other']
 const CHANNELS = ['email', 'sms', 'phone', 'visit']
+// the documents a message carries (diagnostics, minutes, a tax notice, a photo of a page): kept in
+// <search>/documents/<listing>/, served by the dashboard (shown in the browser when it can: no HTML nor SVG)
+const DOC_MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', txt: 'text/plain; charset=utf-8', csv: 'text/plain; charset=utf-8', doc: null, docx: null, odt: null, xls: null, xlsx: null, ods: null, rtf: null, eml: null }
+const DOC_MAX = 25e6, DOCS_PER_MESSAGE = 20, NOTES_MAX = 20000
 const LETTERS = 'ABCDEFG'
 // the profile's numbers, the only fields the dashboard may write
 const PROFILE_NUMBERS = ['down_payment', 'net_income_monthly', 'other_loans_monthly', 'rate', 'years', 'insurance_rate', 'notary_old', 'notary_new', 'eur_per_credit', 'monthly_credit_cap', 'max_fetch']
@@ -77,7 +81,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     project: { type: 'string', short: 'p' }, slug: { type: 'string' }, json: { type: 'boolean' },
     estimate: { type: 'boolean' }, spend: { type: 'string' }, force: { type: 'boolean' }, 'accept-unknown': { type: 'boolean' },
     mode: { type: 'string' }, zone: { type: 'string' }, radius: { type: 'string' }, type: { type: 'string' }, types: { type: 'string' }, criteria: { type: 'string' }, max: { type: 'string' },
-    kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' }, from: { type: 'string' }, channel: { type: 'string' }, date: { type: 'string' }, sent: { type: 'boolean' },
+    kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' }, from: { type: 'string' }, channel: { type: 'string' }, date: { type: 'string' }, sent: { type: 'boolean' }, attach: { type: 'string', multiple: true },
     url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' },
     open: { type: 'boolean' }, preview: { type: 'boolean' },
     at: { type: 'string' }, address: { type: 'string' }, osint: { type: 'string' }, confidence: { type: 'string' }, reset: { type: 'boolean' },
@@ -1029,7 +1033,7 @@ function show() {
     return {
     id: l.id, source: l.source, type: t, title: l.title, url: l.urls.find(u => u.url)?.url ?? null, portals: l.urls.map(u => u.source),
     price: l.price, area: l.area, land_area: l.land_area ?? null, price_per_m2: l.price_per_m2, rooms: l.rooms, floor: l.floor, dpe: l.dpe?.energy, status: l.status,
-    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, favorite: !!l.favorite, labels: l.labels ?? [], notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), address: l.location.address,
+    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, favorite: !!l.favorite, labels: l.labels ?? [], notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)).map(x => (x.documents ? { ...x, documents: x.documents.map(d => ({ ...d, path: docPath(dir, d.file) })) } : x)), address: l.location.address,
     located: l.location_source ? { by: l.location.by, at: l.location.at, osint: l.location.osint ?? null, source: { point: l.location_source.point, accuracy: l.location_source.accuracy, address: l.location_source.address } } : null,
     market: { reference: ref, badge: badge(unitPrice(l), ref?.ppm2), street_ppm2: m.dvf?.[t]?.street?.median_ppm2 ?? null, asking_ppm2: asking(m, t) },
     negotiation: negotiation(l, ref?.ppm2), days_online: daysOnline(l), dropped: Math.round(dropped(l) * 1000) / 1000, urgent: l.urgent, favorites: l.favorites,
@@ -1046,35 +1050,68 @@ function show() {
 
 // A message of a listing's conversation with the agency or the seller: one the user sends (from: me, a draft until
 // sent_at; the agent writes them) or one received (from: them: a reply pasted, a call summed up). Its text is kept as given.
-function newMessage(l, { from = 'me', kind = 'other', channel = null, amount = null, to, text, date, sent = false }) {
+// Its documents (`newDocument`, written once the message holds) make the text optional.
+function newMessage(l, { from = 'me', kind = 'other', channel = null, amount = null, to, text, date, sent = false, documents = [] }) {
   if (!['me', 'them'].includes(from)) throw new Error('from is me or them')
   if (!MESSAGE_KINDS.includes(kind)) throw new Error(`kind is ${MESSAGE_KINDS.join(', ')}`)
   if (channel != null && !CHANNELS.includes(channel)) throw new Error(`channel is ${CHANNELS.join(', ')}`)
   if (amount != null && !(+amount > 0)) throw new Error('amount is a price in €')
+  if (documents.length > DOCS_PER_MESSAGE) throw new Error(`${DOCS_PER_MESSAGE} documents a message at most`)
   const body = String(text ?? '').trim().slice(0, 10000), at = date ? new Date(date) : new Date()
-  if (!body) throw new Error('the message is empty')
+  if (!body && !documents.length) throw new Error('the message is empty')
   if (Number.isNaN(at.getTime())) throw new Error('date is an ISO date: 2026-10-27 or 2026-10-27T18:30')
   return {
     id: `m-${randomBytes(4).toString('hex')}`, date: at.toISOString(), from, kind, channel, amount: amount != null ? +amount : null,
-    to: to ?? l.publishers?.[0]?.name ?? null, text: body, sent_at: from === 'me' && sent ? at.toISOString() : null,
+    to: to ?? l.publishers?.[0]?.name ?? null, text: body, sent_at: from === 'me' && sent ? at.toISOString() : null, ...(documents.length ? { documents } : {}),
   }
 }
 // an offer sent puts the listing in "Offre faite"
 const afterSent = (l, m) => { if (m.sent_at && m.kind === 'offer') l.my_status = 'offer' }
+// A document of a message, checked before it is written: its name kept readable (no folder, no odd character), an
+// extension of DOC_MIME, 25 MB at most. `file` is its path in the search's folder.
+function newDocument(l, name, size) {
+  const base = path.basename(String(name ?? '').replaceAll('\\', '/')).normalize('NFC').replace(/[^\p{L}\p{N}._ ()'-]+/gu, '_').replace(/^[.\s]+/, '').slice(-120)
+  if (!Object.hasOwn(DOC_MIME, path.extname(base).slice(1).toLowerCase())) throw new Error(`a document is a ${Object.keys(DOC_MIME).join(', ')} file: ${base || name}`)
+  if (!(size > 0 && size <= DOC_MAX)) throw new Error(`a document is empty or over 25 MB: ${base}`)
+  const id = `d-${randomBytes(4).toString('hex')}`
+  return { id, name: base, size, file: `documents/${l.id}/${id}-${base}` }
+}
+// a document's file in the search's folder, null when its path leaves the folder's documents/
+const docPath = (dir, file) => { const root = path.join(dir, 'documents'), f = path.resolve(dir, String(file)); return f.startsWith(root + path.sep) ? f : null }
+const removeDocuments = (dir, m) => { for (const d of m.documents ?? []) { const f = docPath(dir, d.file); if (f) fs.rmSync(f, { force: true }) } }
+const writeDocument = (dir, d, write) => { const f = docPath(dir, d.file); fs.mkdirSync(path.dirname(f), { recursive: true }); write(f) }
 
 // message -p <slug> --id <id> [--from me|them] [--kind …] [--channel …] [--amount €] [--to <who>] [--date <iso>]
-// [--sent] --file <text> | --text "…": a message added to the listing's conversation, shown in its dossier
+// [--sent] [--attach <document>]… --file <text> | --text "…": a message added to the listing's conversation, shown in
+// its dossier; --attach copies a document into the search (the text is then optional)
 function message() {
   const dir = searchDir(), f = path.join(dir, 'listings.json'), ls = listingsOf(dir), l = ls.find(x => x.id === opt.id)
-  if (!l) die(`usage: message -p <slug> --id <listing id> [--from me|them] [--kind ${MESSAGE_KINDS.join('|')}] [--channel ${CHANNELS.join('|')}] [--amount €] [--to <who>] [--date <iso>] [--sent] --file <text file> | --text "…"`)
-  const text = opt.file ? fs.readFileSync(opt.file === '-' ? 0 : opt.file, 'utf8') : opt.text
+  if (!l) die(`usage: message -p <slug> --id <listing id> [--from me|them] [--kind ${MESSAGE_KINDS.join('|')}] [--channel ${CHANNELS.join('|')}] [--amount €] [--to <who>] [--date <iso>] [--sent] [--attach <document>]… --file <text file> | --text "…"`)
+  const text = opt.file ? fs.readFileSync(opt.file === '-' ? 0 : opt.file, 'utf8') : opt.text, files = opt.attach ?? []
   let m
-  try { m = newMessage(l, { from: opt.from, kind: opt.kind, channel: opt.channel, amount: opt.amount, to: opt.to, text, date: opt.date, sent: opt.sent }) } catch (e) { die(e.message) }
+  try {
+    const documents = files.map(x => newDocument(l, path.basename(x), fs.statSync(x, { throwIfNoEntry: false })?.isFile() ? fs.statSync(x).size : die(`no file ${x}`)))
+    m = newMessage(l, { from: opt.from, kind: opt.kind, channel: opt.channel, amount: opt.amount, to: opt.to, text, date: opt.date, sent: opt.sent, documents })
+  } catch (e) { die(e.message) }
+  m.documents?.forEach((d, i) => writeDocument(dir, d, to => fs.copyFileSync(files[i], to)))
   l.messages = [...(l.messages ?? []), m]
   afterSent(l, m)
   writeJson(f, ls)
   const state = m.from === 'them' ? 'received' : m.sent_at ? 'sent' : 'draft'
-  console.log(`message ${m.id} (${m.kind}, ${state}${m.amount ? `, ${fmt(m.amount)} €` : ''}) added to the conversation of ${l.id}: the dossier shows it`)
+  console.log(`message ${m.id} (${m.kind}, ${state}${m.amount ? `, ${fmt(m.amount)} €` : ''}${m.documents ? `, ${m.documents.length} document${m.documents.length > 1 ? 's' : ''}` : ''}) added to the conversation of ${l.id}: the dossier shows it`)
+}
+
+// note -p <slug> --id <id> --file <text> | --text "…": added at the end of the listing's « Mes notes » (a summary of
+// its documents the user wanted kept), after a blank line
+function note() {
+  const dir = searchDir(), f = path.join(dir, 'listings.json'), ls = listingsOf(dir), l = ls.find(x => x.id === opt.id)
+  const text = String((opt.file ? fs.readFileSync(opt.file === '-' ? 0 : opt.file, 'utf8') : opt.text) ?? '').trim()
+  if (!l || !text) die('usage: note -p <slug> --id <listing id> --file <text file> | --text "…"')
+  const notes = [l.notes?.trim(), text].filter(Boolean).join('\n\n')
+  if (notes.length > NOTES_MAX) die(`the notes would hold ${notes.length} characters, ${NOTES_MAX} at most: shorten the text`)
+  l.notes = notes
+  writeJson(f, ls)
+  console.log(`added to the notes of ${l.id} (${notes.length} characters): the dossier shows it in « Mes notes »`)
 }
 
 function list() {
@@ -1094,10 +1131,10 @@ const readBody = (req, max = 2e6) => new Promise((ok, ko) => {
   req.on('end', () => { try { ok(chunks.length ? JSON.parse(Buffer.concat(chunks)) : {}) } catch (e) { ko(e) } })
   req.on('error', ko)
 })
-function sendFile(res, file) {
+function sendFile(res, file, headers = {}) {
   const st = file && fs.statSync(file, { throwIfNoEntry: false })
   if (!st?.isFile()) return reply(res, 404, { error: 'not found' })
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream', 'Content-Length': st.size, 'Cache-Control': file.includes(`${path.sep}assets${path.sep}`) ? 'max-age=31536000, immutable' : 'no-cache' })
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream', 'Content-Length': st.size, 'Cache-Control': file.includes(`${path.sep}assets${path.sep}`) ? 'max-age=31536000, immutable' : 'no-cache', ...headers })
   fs.createReadStream(file).pipe(res)
 }
 
@@ -1307,9 +1344,19 @@ async function handle(req, res) {
       const { ls: [n] } = await addListings(dir, readJson(path.join(dir, 'search.json')), [x], 'manual')
       return reply(res, 200, listingsOf(dir).find(l => l.id === n.id))
     }
+    // a document of a conversation: shown in the browser when it can be (PDF, image, text), else downloaded
+    const dm = sub.match(/^\/documents\/([\w-]+)\/([^/]+)$/)
+    if (dm && req.method === 'GET') {
+      let name
+      try { name = decodeURIComponent(dm[2]) } catch { return reply(res, 400, { error: 'bad name' }) }
+      const f = docPath(dir, `documents/${dm[1]}/${name}`), type = DOC_MIME[path.extname(name).slice(1).toLowerCase()]
+      return sendFile(res, f, { 'Content-Type': type ?? 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `${type ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(name.replace(/^d-[0-9a-f]+-/, ''))}` })
+    }
     const lm = sub.match(/^\/listings\/([\w-]+)$/)
     if (lm && post) {
-      const body = await readBody(req)
+      // a message's documents come in it, base64: 20 of 25 MB at most
+      let body
+      try { body = await readBody(req, DOCS_PER_MESSAGE * DOC_MAX * 1.4) } catch (e) { return reply(res, 400, { error: e.message }) }
       // « Préciser l'adresse »: a point and the address shown (empty: the address base's), or null back to the source's
       if ('location' in body) {
         const at = body.location, str = v => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null)
@@ -1319,7 +1366,7 @@ async function handle(req, res) {
       const f = path.join(dir, 'listings.json'), ls = readJson(f, []), l = ls.find(x => x.id === lm[1])
       if (!l) return reply(res, 404, { error: 'no such listing' })
       if ('my_status' in body) { if (![null, 'to_visit', 'visited', 'offer', 'dropped'].includes(body.my_status)) return reply(res, 400, { error: 'bad status' }); l.my_status = body.my_status }
-      if (typeof body.notes === 'string') l.notes = body.notes.slice(0, 5000)
+      if (typeof body.notes === 'string') l.notes = body.notes.slice(0, NOTES_MAX)
       if (typeof body.favorite === 'boolean') l.favorite = body.favorite
       // the user's free labels: trimmed, without doubles, 20 of 40 characters at most
       if ('labels' in body) {
@@ -1328,14 +1375,22 @@ async function handle(req, res) {
       }
       // opened: no longer « Nouveau »; seen: false puts it back
       if (typeof body.seen === 'boolean') l.seen_at = body.seen ? l.seen_at ?? now() : null
-      // the conversation: a message the user adds (a reply received, a call), one marked sent or not, one deleted
+      // the conversation: a message the user adds (a reply received, a call) with its documents ({ name, data: base64 }),
+      // one marked sent or not, one deleted with its documents
       if (body.message?.add) {
-        try { l.messages = [...(l.messages ?? []), newMessage(l, body.message.add)] } catch (e) { return reply(res, 400, { error: e.message }) }
-        afterSent(l, l.messages.at(-1))
+        const add = body.message.add, files = Array.isArray(add.documents) ? add.documents : []
+        let m, bufs
+        try {
+          bufs = files.map(d => Buffer.from(typeof d?.data === 'string' ? d.data : '', 'base64'))
+          m = newMessage(l, { ...add, documents: files.map((d, i) => newDocument(l, d?.name, bufs[i].length)) })
+        } catch (e) { return reply(res, 400, { error: e.message }) }
+        m.documents?.forEach((d, i) => writeDocument(dir, d, to => fs.writeFileSync(to, bufs[i])))
+        l.messages = [...(l.messages ?? []), m]
+        afterSent(l, m)
       } else if (body.message?.id) {
         const msg = (l.messages ?? []).find(x => x.id === body.message.id)
         if (!msg) return reply(res, 404, { error: 'no such message' })
-        if (body.message.delete) l.messages = l.messages.filter(x => x !== msg)
+        if (body.message.delete) { l.messages = l.messages.filter(x => x !== msg); removeDocuments(dir, msg) }
         else if (msg.from !== 'them') { msg.sent_at = body.message.sent ? now() : null; afterSent(l, msg) }
       }
       writeJson(f, ls)
@@ -1568,7 +1623,7 @@ async function dashboard() {
 
 const commands = {
   doctor, setup: () => setup(...args), geocode: () => geocode(args.join(' ')), search: () => search(args.join(' ')), fetch: fetchListings, market, add, enrich, refresh, reread,
-  alert: () => alert(args[0]), alerts: alertsCmd, cadastre: () => cadastre(args.join(' ')), usage: usageCmd, costs: () => costs(...args), show, message, locate: locateCmd, list, dashboard, serve,
+  alert: () => alert(args[0]), alerts: alertsCmd, cadastre: () => cadastre(args.join(' ')), usage: usageCmd, costs: () => costs(...args), show, message, note, locate: locateCmd, list, dashboard, serve,
 }
 if (!commands[cmd]) die(`usage: immo.mjs <${Object.keys(commands).join(' | ')}> [-p <slug>]`)
 await commands[cmd]()

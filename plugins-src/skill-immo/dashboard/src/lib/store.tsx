@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api, EXPLORE, EXPLORE_SLUG, type Listing, type MapRow, type Poi, type Point, type Profile, type PropertyType, type Search, type SearchData, type State, type Stats } from "@/lib/api"
 
 // what the user asks the agent, collected across the dashboard and copied as one prompt
-export type FeedbackKind = "affiner" | "élargir" | "zone" | "annonces" | "analyser" | "comparer" | "ajouter" | "chercher" | "message" | "question" | "parcelle"
+export type FeedbackKind = "affiner" | "élargir" | "zone" | "annonces" | "analyser" | "comparer" | "ajouter" | "chercher" | "message" | "question" | "parcelle" | "documents"
 export type Feedback = { kind: FeedbackKind; text: string }
 // the sold unit price a type is weighed against, and the stats of its scope
 export type Ref = { ppm2: number; scope: string; count: number; type: PropertyType }

@@ -4,7 +4,7 @@ Read it before analysing or comparing listings, a question on a listing or on th
 to write (an offer, questions, a visit, a reply, a reminder, documents). `immo.mjs` means `node "${CLAUDE_SKILL_DIR}/engine/immo.mjs"`, as in SKILL.md; the credits rule and the
 assisted mode are SKILL.md's.
 
-Contents: analyse and compare (`show`, `market.json`, the verdict) · messages and the conversation (one received, one to write) · a parcel (`cadastre`) · `market.json`
+Contents: analyse and compare (`show`, `market.json`, the verdict) · messages and the conversation (one received, one to write) · the conversation's documents (a summary, a question) · a parcel (`cadastre`) · `market.json`
 
 ## Analyse and compare
 
@@ -19,7 +19,8 @@ Contents: analyse and compare (`show`, `market.json`, the verdict) · messages a
 - `rent`: the rent of the same home, the owner's monthly cost, the gross yield, and the years before buying beats
   renting (null: renting stays cheaper over the loan); `budget.works`, the work a DPE E, F or G calls for;
 - `messages`: its conversation with the agency or the seller, in order: `from: me` (yours and the user's, a draft until
-  `sent_at`) or `from: them` (received: a reply the user pasted, a call summed up), with `channel` and `amount`;
+  `sent_at`) or `from: them` (received: a reply the user pasted, a call summed up), with `channel` and `amount`, and
+  `documents[] { id, name, size, path }` (the files it carries, `path` to read them);
 - the negotiation range and its reasons;
 - the days online, the drops already made;
 - the budget against the profile (total, loan, monthly payment, debt ratio, HCSF 35 %, down payment needed);
@@ -44,7 +45,8 @@ Each listing keeps its conversation with the agency or the seller. The user adds
 
 **A message the user received** (« l'agence m'a répondu… », a call): add it to the conversation as they give it,
 `immo.mjs message -p <slug> --id <id> --from them [--channel email|sms|phone|visit] [--amount <€ proposed>] [--date
-<iso>] --file <file>`, and say so in one line.
+<iso>] [--attach <document>]… --file <file>`, and say so in one line. `--attach` (once per file: PDF, image, Word, Excel,
+text, 25 MB at most) copies a document the user gave you into the search; with documents, the text is optional.
 
 **A message to write**, when the user asks for one or a `[message]` item of the dashboard does:
 - `offer`: an offer;
@@ -66,7 +68,12 @@ Each listing keeps its conversation with the agency or the seller. The user adds
      with « lot n° … » left for the seller to fill), « sous réserve de vérification sur le titre de propriété »;
    - a reply to a counter-offer: where it stands against the range and what the seller said;
    - questions or documents: those of `review.questions` that still matter, minus what the conversation already
-     answered.
+     answered and the documents it already holds. The dashboard's item may list them (« : 1) … 2) … », « des
+     documents suivants : … »): ask those, minus what is already there.
+
+   What the item adds after « ; » is the user's and comes first: `montant` (the offer's amount, or a counter-offer in a
+   reply), `validité` (days), `financement`, `disponibilités` and `précisions` (a visit), `questions en plus`,
+   `consigne` (how to write it).
 
    Never sign with a name the user did not give.
 3. Give the text in your answer, ready to copy. You never send anything: the user does.
@@ -75,6 +82,25 @@ Each listing keeps its conversation with the agency or the seller. The user adds
    `immo.mjs message -p <slug> --id <id> --kind <kind> [--amount <€>] [--to "<who>"] [--sent] --file <file>` (`--sent`
    for « déjà envoyé »). The dossier shows it in « Conversation », with « Copier » and « Marquer envoyé »; an offer
    marked sent moves the listing to « Offre faite ».
+
+## The conversation's documents
+
+The user joins documents to the conversation (the dossier's « Ajouter », or you with `message --attach`): diagnostics,
+minutes of general meetings, a statement of charges, a tax notice, a pre-sale statement, plans. A `[documents]` item
+names some by their name and id:
+- `résumé pour <id> … : « <name> » (<doc id>), … ; points : … ; consigne : …`: summarise them;
+- `question pour <id> … : « <name> » (<doc id>), … ; question : …`: answer the question from them.
+
+1. `immo.mjs show -p <slug> --id <id>`: each document's `path` in `messages[].documents`. Read each one named, whole
+   (a PDF a few pages at a time). A Word or Excel file you cannot read: say so and ask for a PDF.
+2. Answer in French from what they say only. Each fact with its source: the document and its page (« PV AG 2025,
+   p. 3 »). A summary: what matters to a buyer first, then by document: the works voted or to come and the
+   share of this lot, the charges and the arrears, the procedures (unpaid charges, disputes with the syndic or a
+   neighbour), what differs from the listing (surface, DPE, charges against `show`). The `points` and the `consigne`
+   come first. A question: the answer, then where it is written; « les documents n'en disent rien » when they do not.
+3. Ask in one AskUserQuestion whether to keep it in the listing's « Mes notes »: « Oui » first, then « Non ». On a yes,
+   write it to a file in the scratchpad, with a first line « Résumé des documents (<date>) : <names> » (or « Question
+   sur les documents »), and run `immo.mjs note -p <slug> --id <id> --file <file>`: it is added after the user's notes.
 
 ## A parcel
 

@@ -333,6 +333,22 @@ test('a message for a listing: kept with it, shown to the agent', async () => {
   assert.deepEqual([shown.type, shown.messages.length, shown.rent.rent, shown.favorite, shown.labels], ['flat', 3, 883, false, []])
   assert.deepEqual(shown.messages.map(x => [x.from, x.channel, !!x.sent_at]), [['them', 'phone', false], ['me', null, false], ['me', null, true]])
   assert.ok(shown.review.questions.length && shown.score.parts.length === 6)
+  // documents the user gave in the chat: copied into the search, their path in show; a page is no document
+  fs.writeFileSync(path.join(dir, 'pv.pdf'), '%PDF-1.4')
+  r = await run(home, ['message', '-p', 'paul-bert', '--id', id, '--from', 'them', '--attach', path.join(dir, 'pv.pdf')], { key: null })
+  assert.match(r.out, /1 document\)/, r.err)
+  const [d] = JSON.parse((await run(home, ['show', '-p', 'paul-bert', '--id', id], { key: null })).out).messages.at(-1).documents
+  assert.deepEqual([d.name, fs.readFileSync(d.path, 'utf8')], ['pv.pdf', '%PDF-1.4'])
+  fs.writeFileSync(path.join(dir, 'x.html'), '<script>')
+  assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--attach', path.join(dir, 'x.html')], { key: null })).status, 1)
+  assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--attach', path.join(dir, 'nope.pdf')], { key: null })).status, 1)
+  // a summary kept in « Mes notes », after what the user wrote
+  const notes = (l = read(dir, 'listings.json')[0]) => l.notes
+  await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', 'Résumé du PV : ravalement voté.'], { key: null })
+  await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', 'Charges : 2 400 €/an.'], { key: null })
+  assert.equal(notes(), 'Résumé du PV : ravalement voté.\n\nCharges : 2 400 €/an.')
+  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', ' '], { key: null })).status, 1)
+  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', 'x'.repeat(20001)], { key: null })).status, 1)
 })
 
 // the open data a new zone asks, kept in the cache beforehand: its box's places, DPE and audits, its center's risks and

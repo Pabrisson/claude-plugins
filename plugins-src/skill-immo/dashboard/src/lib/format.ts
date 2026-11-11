@@ -12,6 +12,8 @@ export const keur = (n: number | null | undefined) => (n == null ? "—" : `${nf
 export const pct = (x: number | null | undefined, digits = 0) =>
   x == null ? "—" : `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x * 100).toFixed(digits).replace(".", ",")} %`
 export const share = (x: number | null | undefined, digits = 0) => (x == null ? "—" : `${(x * 100).toFixed(digits).replace(".", ",")} %`)
+// a file's weight: 840 ko, 2,4 Mo
+export const bytes = (n: number) => (n < 1e6 ? `${Math.max(1, Math.round(n / 1e3))} ko` : `${(n / 1e6).toFixed(1).replace(".", ",")} Mo`)
 export const date = (d: string | null | undefined) => (d ? df.format(new Date(d)) : "—")
 export const credits = (n: number, eurPerCredit: number) => `${nf.format(n)} crédit${n > 1 ? "s" : ""} (${(n * eurPerCredit).toFixed(2).replace(".", ",")} €)`
 

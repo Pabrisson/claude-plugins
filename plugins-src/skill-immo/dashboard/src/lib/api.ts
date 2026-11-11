@@ -14,8 +14,11 @@ export type PropertyType = "flat" | "house" | "land" | "parking" | "premises"
 // a message of a listing's conversation: the user's (from: me, a draft until sent_at) or the agency's or seller's
 // (from: them, received); `to` is the one on the other side
 export type Channel = "email" | "sms" | "phone" | "visit"
-export type Message = { id: string; date: string; from?: "me" | "them"; kind: "offer" | "question" | "visit" | "reply" | "follow_up" | "documents" | "other"; channel?: Channel | null; amount: number | null; to: string | null; text: string; sent_at: string | null }
-export type NewMessage = { from: "me" | "them"; channel: Channel; date: string; text: string; amount?: number; sent?: boolean }
+// a document a message carries, `file` its path in the search's folder (served under /api/s/<slug>/)
+export type Doc = { id: string; name: string; size: number; file: string }
+export type Message = { id: string; date: string; from?: "me" | "them"; kind: "offer" | "question" | "visit" | "reply" | "follow_up" | "documents" | "other"; channel?: Channel | null; amount: number | null; to: string | null; text: string; sent_at: string | null; documents?: Doc[] }
+// its documents base64, the text optional with them
+export type NewMessage = { from: "me" | "them"; channel: Channel; date: string; text: string; amount?: number; sent?: boolean; documents?: { name: string; data: string }[] }
 
 export type Listing = {
   id: string
@@ -288,6 +291,8 @@ export const api = {
   dpe: (insee: string) => json<DpeRow[]>(`/api/dpe?insee=${insee}`),
   run: (body: { cmd: string; slug?: string; args?: Record<string, string | number | boolean>; estimate?: boolean; accept_unknown?: boolean }) => post<RunResult>("/api/run", body),
 }
+
+export const docUrl = (slug: string, d: Doc) => `/api/s/${slug}/${d.file.split("/").map(encodeURIComponent).join("/")}`
 
 // the search a URL is about: /<slug>/
 export const slugOfUrl = () => location.pathname.split("/").filter(Boolean)[0] ?? null

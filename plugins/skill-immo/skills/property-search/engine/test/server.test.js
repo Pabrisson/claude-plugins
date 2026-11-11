@@ -129,6 +129,29 @@ test('a message marked sent: an offer puts the listing in "Offre faite"', async 
   assert.ok(!c.messages.some(x => x.id === got.id))
 })
 
+test("a message's documents: written in the search, served, refused when not a document, deleted with it", async () => {
+  const msg = body => post(`/api/s/paul-bert/listings/${property.uuid}`, { message: body })
+  const pdf = Buffer.from('%PDF-1.4 PV AG 2025'), b64 = pdf.toString('base64')
+  // documents make the text optional; a folder in the name is dropped
+  const c = await (await msg({ add: { from: 'them', channel: 'email', text: '', documents: [{ name: '../../PV AG 2025.pdf', data: b64 }, { name: 'dpe.PNG', data: b64 }] } })).json()
+  const m = c.messages.at(-1), [d] = m.documents
+  assert.deepEqual([m.text, m.documents.length, d.name, d.size, d.file], ['', 2, 'PV AG 2025.pdf', pdf.length, `documents/${property.uuid}/${d.id}-PV AG 2025.pdf`])
+  assert.deepEqual(fs.readFileSync(path.join(dir, d.file)), pdf)
+  const r = await fetch(`${base}/api/s/paul-bert/documents/${property.uuid}/${encodeURIComponent(`${d.id}-${d.name}`)}`)
+  assert.deepEqual([r.status, r.headers.get('content-type'), r.headers.get('x-content-type-options'), r.headers.get('content-disposition')], [200, 'application/pdf', 'nosniff', "inline; filename*=UTF-8''PV%20AG%202025.pdf"])
+  // a page, a script or an empty file is no document, and nothing is written; a path out of documents/ is not served
+  const before = c.messages.length
+  for (const documents of [[{ name: 'x.html', data: b64 }], [{ name: 'x.svg', data: b64 }], [{ name: 'x.pdf', data: '' }], Array.from({ length: 21 }, () => ({ name: 'x.pdf', data: b64 }))])
+    assert.equal((await msg({ add: { from: 'them', text: 'x', documents } })).status, 400)
+  assert.equal((await msg({ add: { from: 'them', text: '' } })).status, 400)
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'listings.json'), 'utf8'))[0].messages.length, before)
+  assert.equal(fs.readdirSync(path.join(dir, 'documents', property.uuid)).length, 2)
+  assert.equal((await fetch(`${base}/api/s/paul-bert/documents/${property.uuid}/..%2F..%2Fsearch.json`)).status, 404)
+  // deleted with its message
+  await msg({ id: m.id, delete: true })
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'documents', property.uuid)), [])
+})
+
 test('a listing the user typed: added free with its building data; refused without a price, with a bad link or type, when its link is known', async () => {
   const add = body => post('/api/s/paul-bert/listings', body)
   assert.equal((await add({ area: 50 })).status, 400)
