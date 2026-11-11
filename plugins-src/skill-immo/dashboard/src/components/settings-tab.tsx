@@ -54,7 +54,7 @@ export function SettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><GlobeIcon className="size-4" />API Stream Estate</CardTitle>
-          <CardDescription>{state.has_key ? "Les annonces de tous les portails, payées à l'annonce." : "Aucune clé : renseignez-la avec /plugin configure skill-immo@pabrisson ou la variable STREAM_ESTATE_API_KEY, puis redémarrez l'agent."}</CardDescription>
+          <CardDescription>{state.has_key ? "Les annonces de tous les portails, payées à l'annonce." : "Aucune clé : renseignez-la avec /plugin configure skill-immo@pabrisson ou la variable STREAM_ESTATE_API_KEY, puis redémarrez l'IA."}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           {state.test_api && (
@@ -63,7 +63,7 @@ export function SettingsTab() {
             </p>
           )}
           <Toggle id="s-api" label="Utiliser l'API" checked={st.api && state.has_key} disabled={!state.has_key} onChange={v => save({ api: v })}
-            hint="Coupée : ni comptage, ni récupération, ni facturation ; l'actualisation ne reprend que les données ouvertes et l'agent cherche les annonces sur le web. Les recherches gardent leur mode." />
+            hint="Coupée : ni comptage, ni récupération, ni facturation ; l'actualisation ne reprend que les données ouvertes et l'IA cherche les annonces sur le web. Les recherches gardent leur mode." />
           <Toggle id="s-auto" label="Récupération automatique" checked={st.auto_fetch} disabled={!state.stream_estate} onChange={v => save({ auto_fetch: v })}
             hint="À chaque veille, quand l'API a du nouveau, le serveur actualise seul les recherches en mode API, sans dépasser le budget mensuel que vous lui donnez ni votre plafond. Vos alertes s'appliquent aux annonces récupérées." />
           {st.auto_fetch && (

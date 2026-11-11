@@ -115,6 +115,9 @@ test("the user's status and notes, the last visit, the profile", async () => {
   assert.ok((await (await post('/api/s/paul-bert/visit', {})).json()).last_visit)
   const p = await (await post('/api/profile', { rate: 3.1, down_payment: '50000', places: 'nope', weights: { price: 9, energy: '1', nope: 2 } })).json()
   assert.deepEqual([p.rate, p.down_payment, p.places, p.weights.price, p.weights.energy, p.weights.nope], [3.1, 50000, [], 3, 1, undefined])
+  // the buyer of a first contact: its known texts kept, trimmed, the others dropped; the numbers left as they were
+  const b = await (await post('/api/profile', { buyer: { name: ' Pierre Martin ', phone: '06 00 00 00 00', email: ' ', project: 5, nope: 'x', financing: 'a'.repeat(300) } })).json()
+  assert.deepEqual([b.buyer, b.rate], [{ financing: 'a'.repeat(200), name: 'Pierre Martin', phone: '06 00 00 00 00' }, 3.1])
 })
 
 test('a message marked sent: an offer puts the listing in "Offre faite"', async () => {

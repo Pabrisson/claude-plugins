@@ -44,7 +44,7 @@ export function TopBar({ onNews, onSettings, page }: { onNews: () => void; onSet
   function askListings() {
     if (feedback.some(f => f.kind === "annonces")) return toast("Déjà dans le prompt")
     addFeedback({ kind: "annonces", text: streamOn ? "cherche de nouvelles annonces sur l'API (crédits avec mon accord) et sur le web" : "cherche de nouvelles annonces sur le web" })
-    toast.success("Ajouté au prompt", { description: streamOn ? "L'agent cherchera sur l'API, après votre accord sur le coût, et sur le web." : "L'agent cherchera sur le web, gratuitement." })
+    toast.success("Ajouté au prompt", { description: streamOn ? "L'IA cherchera sur l'API, après votre accord sur le coût, et sur le web." : "L'IA cherchera sur le web, gratuitement." })
   }
   const chips = criteriaLabels(s.criteria)
   return (
@@ -63,7 +63,7 @@ export function TopBar({ onNews, onSettings, page }: { onNews: () => void; onSet
           <h1 className="truncate text-sm font-bold md:text-base">{s.label}</h1>
           <Tooltip>
             <TooltipTrigger asChild><Badge variant={streamOn ? "default" : "secondary"} className={cn("shrink-0", testApi && "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300")}>{s.mode === "stream-estate" ? (testApi ? "API test" : "API") : "OpenData"}</Badge></TooltipTrigger>
-            <TooltipContent>{testApi ? `Fausse API Stream Estate des tests (${state.test_api}) : annonces fictives, aucun crédit réel` : s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API (payant, avec votre accord)" : "Mode API, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par l'agent : gratuit"}</TooltipContent>
+            <TooltipContent>{testApi ? `Fausse API Stream Estate des tests (${state.test_api}) : annonces fictives, aucun crédit réel` : s.mode === "stream-estate" ? (state.stream_estate ? "Annonces de tous les portails via l'API (payant, avec votre accord)" : "Mode API, mais la clé est absente : rien ne sera facturé") : "Open data et annonces trouvées par l'IA : gratuit"}</TooltipContent>
           </Tooltip>
         </span>
         <span className="truncate text-xs text-muted-foreground">{s.zone.label}</span>
@@ -78,7 +78,7 @@ export function TopBar({ onNews, onSettings, page }: { onNews: () => void; onSet
           <TooltipTrigger asChild>
             <Button size="sm" onClick={askListings}><ListPlusIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span></Button>
           </TooltipTrigger>
-          <TooltipContent>{streamOn ? "Ajoute au prompt une recherche de nouvelles annonces, sur l'API (le coût vous est demandé avant) et sur le web" : "Ajoute au prompt une recherche de nouvelles annonces sur le web, par l'agent (gratuit)"}</TooltipContent>
+          <TooltipContent>{streamOn ? "Ajoute au prompt une recherche de nouvelles annonces, sur l'API (le coût vous est demandé avant) et sur le web" : "Ajoute au prompt une recherche de nouvelles annonces sur le web, par l'IA (gratuit)"}</TooltipContent>
         </Tooltip>}
         {/* a listing's news: its dossier, or its own page from another listing's */}
         <NewsBell onOpen={onNews} onListing={page ? id => location.assign(listingUrl(slug, id)) : select} />
@@ -211,7 +211,7 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
   function add() {
     const words = [criteriaLabels(c).join(", ") || "aucun critère", types.map(t => TYPE_PLURAL[t].toLowerCase()).join(", "), mode === "classic" ? "OpenData" : "API"].join(" · ")
     addFeedback({ kind: "affiner", text: `${engine} — ${words}` })
-    toast.success("Ajouté au prompt : l'agent enregistrera ces critères")
+    toast.success("Ajouté au prompt : l'IA enregistrera ces critères")
     setOpen(false)
   }
   return (
@@ -224,7 +224,7 @@ function CriteriaPopover({ chips }: { chips: string[] }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-h-[80dvh] w-[min(30rem,calc(100vw-2rem))] overflow-y-auto" align="center">
-        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>Le prompt copié, l'agent enregistre ces critères : la liste se filtre dessus, et l'API les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
+        <PopoverHeader><PopoverTitle>Critères et source</PopoverTitle><PopoverDescription>Le prompt copié, l'IA enregistre ces critères : la liste se filtre dessus, et l'API les applique aux prochaines annonces récupérées.</PopoverDescription></PopoverHeader>
         <div className="mt-3 flex flex-col gap-3">
           <TypesField value={types} onChange={setTypes} />
           <CriteriaFields value={c} onChange={setC} types={types} />
@@ -246,7 +246,7 @@ function AddListing() {
   const [open, setOpen] = useState(false), [value, setValue] = useState(""), [manual, setManual] = useState(false)
   function submit() {
     addFeedback({ kind: "ajouter", text: value.trim().replace(/\s+/g, " ") })
-    toast.success("Ajouté au prompt : l'agent lira l'annonce")
+    toast.success("Ajouté au prompt : l'IA lira l'annonce")
     setOpen(false)
     setValue("")
   }
@@ -256,7 +256,7 @@ function AddListing() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Ajouter une annonce</DialogTitle>
-          <DialogDescription>Collez son lien ou son texte : l'agent la lira et l'ajoutera.</DialogDescription>
+          <DialogDescription>Collez son lien ou son texte : l'IA la lira et l'ajoutera.</DialogDescription>
         </DialogHeader>
         <Field>
           <FieldLabel htmlFor="listing">Lien ou texte de l'annonce</FieldLabel>
@@ -375,7 +375,7 @@ export function PromptButton() {
   const items = [...feedback, ...ways.map(text => ({ kind: "élargir" as const, text })), ...(question.trim() ? [{ kind: "question" as const, text: question.trim() }] : [])]
   async function copy() {
     await navigator.clipboard.writeText(promptText(slug, items))
-    toast.success("Prompt copié : collez-le dans votre agent")
+    toast.success("Prompt copié : collez-le dans votre IA")
     clearFeedback()
     setQuestion("")
     setPicked([])
@@ -388,7 +388,7 @@ export function PromptButton() {
     <Popover>
       <PopoverTrigger asChild><Button variant="outline" size="sm"><ClipboardCopyIcon data-icon="inline-start" /><span className="max-sm:sr-only">Copier le prompt</span>{feedback.length ? ` (${feedback.length})` : ""}</Button></PopoverTrigger>
       <PopoverContent align="end" className="max-h-[85dvh] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto">
-        <PopoverHeader><PopoverTitle>Pour l'agent</PopoverTitle><PopoverDescription>Ce que vous avez demandé dans le dashboard, à coller dans votre agent.</PopoverDescription></PopoverHeader>
+        <PopoverHeader><PopoverTitle>Pour l'IA</PopoverTitle><PopoverDescription>Ce que vous avez demandé dans le dashboard, à coller dans votre IA.</PopoverDescription></PopoverHeader>
         <div className="mt-3 flex flex-col gap-3">
           {feedback.map((f, i) => (
             <div key={i} className="flex items-start justify-between gap-2 rounded-md bg-muted px-2.5 py-1.5 text-sm">
@@ -410,7 +410,7 @@ export function PromptButton() {
               ))}
             </FieldSet>
             <Input value={other} onChange={e => setOther(e.target.value)} placeholder="Autre : la rue voisine, une autre commune…" aria-label="Autre façon d'élargir" />
-            <FieldDescription>L'agent change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode API, le coût est annoncé avant.</FieldDescription>
+            <FieldDescription>L'IA change la zone ou les critères (gratuit), puis cherche les nouvelles annonces : en mode API, le coût est annoncé avant.</FieldDescription>
           </FieldGroup>
           <Separator /></>}
           <Field>
@@ -440,7 +440,7 @@ export function ProfileDialog() {
     <Dialog onOpenChange={o => o && setP(profile)}>
       <DialogTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Mon profil"><UserRoundIcon /></Button></DialogTrigger>
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader><DialogTitle>Mon profil</DialogTitle><DialogDescription>Gardé sur cette machine (.profile.json). Les lieux clés se règlent avec l'agent : « setup ».</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>Mon profil</DialogTitle><DialogDescription>Gardé sur cette machine (.profile.json). Les lieux clés se règlent avec l'IA : « setup ».</DialogDescription></DialogHeader>
         <FieldGroup className="grid grid-cols-2 gap-3">
           {fields.map(([k, label, hint]) => (
             <Field key={k}><FieldLabel htmlFor={k}>{label}</FieldLabel><Input id={k} type="number" step="any" value={p[k] as number} onChange={set(k)} />{hint && <FieldDescription>{hint}</FieldDescription>}</Field>
@@ -473,7 +473,7 @@ export function StaleBar() {
   if (!stale) return null
   return (
     <div role="status" className="flex items-center justify-center gap-3 border-b bg-primary px-3 py-1.5 text-sm text-primary-foreground">
-      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (l'agent ou la veille du serveur ont mis la recherche à jour).
+      <RefreshCwIcon className="size-4" />De nouvelles informations sont arrivées (l'IA ou la veille du serveur ont mis la recherche à jour).
       <Button size="xs" variant="secondary" onClick={() => location.reload()}>Recharger</Button>
     </div>
   )

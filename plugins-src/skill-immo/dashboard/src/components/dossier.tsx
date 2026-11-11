@@ -607,7 +607,7 @@ function Conversation({ l, short }: { l: Listing; short: string }) {
           <EmptyHeader>
             <EmptyMedia variant="icon"><MessagesSquareIcon /></EmptyMedia>
             <EmptyTitle>Aucun message</EmptyTitle>
-            <EmptyDescription>Gardez ici les réponses de l'agence, le résumé d'un appel ou les documents reçus. L'agent lit toute la conversation avant d'écrire.</EmptyDescription>
+            <EmptyDescription>Gardez ici les réponses de l'agence, le résumé d'un appel ou les documents reçus. L'IA lit toute la conversation avant d'écrire.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="flex-row flex-wrap justify-center"><AddMessage l={l} />{write}</EmptyContent>
         </Empty>
@@ -716,7 +716,7 @@ function MessageRow({ m, t, email, onChange }: { m: Message; t: PropertyType; em
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer ce message ?</AlertDialogTitle>
-            <AlertDialogDescription>Il sera retiré de la conversation{docs.length ? ` avec ${docs.length > 1 ? `ses ${docs.length} documents` : "son document"}, supprimé${docs.length > 1 ? "s" : ""} du dossier` : ""}, et l'agent ne le lira plus.</AlertDialogDescription>
+            <AlertDialogDescription>Il sera retiré de la conversation{docs.length ? ` avec ${docs.length > 1 ? `ses ${docs.length} documents` : "son document"}, supprimé${docs.length > 1 ? "s" : ""} du dossier` : ""}, et l'IA ne le lira plus.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>
@@ -817,7 +817,7 @@ function AddMessage({ l }: { l: Listing }) {
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Ajouter un message</DialogTitle>
-          <DialogDescription>Une réponse de l'agence, le résumé d'un appel ou un message que vous avez envoyé, avec ses documents : l'agent le lira avant d'écrire le suivant.</DialogDescription>
+          <DialogDescription>Une réponse de l'agence, le résumé d'un appel ou un message que vous avez envoyé, avec ses documents : l'IA le lira avant d'écrire le suivant.</DialogDescription>
         </DialogHeader>
         <FieldGroup>
           <Field>

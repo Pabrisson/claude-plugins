@@ -103,6 +103,7 @@ history stay.
   until resumed, its period kept), `api` (false: no call
   at all), `auto_fetch` and `auto_credits` (the automatic fetch and its credits a month), `notify`, `sound`, `quiet`
   (`["22:00", "08:00"]` or null), `read_on_open`, `keep_days` (0, 30, 90, 365; 0 keeps all).
-- `.profile.json` (private): the budget's numbers, `weights`, `places`, and the credits' settings of « Réglages »:
+- `.profile.json` (private): the budget's numbers, `weights`, `places`, `buyer { project, situation, timing, financing, name, phone, email }` (the
+  dashboard's first contact: who the buyer is and their signature, in the words a message uses; every message is signed with it), and the credits' settings of « Réglages »:
   `monthly_credit_cap`, `eur_per_credit`, `max_fetch` (100), `account { deposited, items, at, topups[] { date, eur } }`
   (Stream Estate's console: the € deposited and « API items returned » as of `at`; `costs account`, `costs topup`).

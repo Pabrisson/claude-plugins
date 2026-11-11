@@ -60,8 +60,8 @@ export function CompareTab() {
         <h2 className="text-base font-semibold">Comparer {ls.length} biens</h2>
         <span className="flex flex-wrap gap-2">
           <Button variant="ghost" size="sm" onClick={clearCompare}><BrushCleaningIcon data-icon="inline-start" />Vider le comparateur</Button>
-          <Button variant="outline" size="sm" onClick={() => { addFeedback({ kind: "comparer", text: ls.map(l => l.id).join(", ") }); toast.success("Ajouté au prompt pour l'agent") }}>
-            <MessageSquarePlusIcon data-icon="inline-start" />Comparer avec l'agent
+          <Button variant="outline" size="sm" onClick={() => { addFeedback({ kind: "comparer", text: ls.map(l => l.id).join(", ") }); toast.success("Ajouté au prompt pour l'IA") }}>
+            <MessageSquarePlusIcon data-icon="inline-start" />Comparer avec l'IA
           </Button>
         </span>
       </div>

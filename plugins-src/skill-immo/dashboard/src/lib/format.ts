@@ -34,8 +34,8 @@ export const SALE_STATUS = { AVAILABLE: "Disponible", UNDER_OFFER: "Sous offre",
 // where a listing comes from: the API, or the agent (a page it read, a text the user pasted)
 export const ORIGIN = {
   "stream-estate": { short: "API", long: "Trouvée par l'API Stream Estate" },
-  websearch: { short: "Agent", long: "Lue par l'agent sur le web" },
-  pasted: { short: "Agent", long: "Collée dans l'agent" },
+  websearch: { short: "IA", long: "Lue par l'IA sur le web" },
+  pasted: { short: "IA", long: "Collée dans l'IA" },
   manual: { short: "Vous", long: "Saisie à la main" },
 } as const
 export const POI_LABEL: Record<string, string> = { transport: "Métro, tram, gare", bus: "Bus", shops: "Commerces", food: "Cafés et restaurants", schools: "Écoles et crèches", health: "Santé", parks: "Parcs" }

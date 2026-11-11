@@ -483,7 +483,7 @@ function WatchCard({ type, listings, total }: { type: PropertyType; listings: Li
       <CardHeader>
         <Title icon={EyeIcon} tone="var(--chart-4)">Veille des annonces</Title>
         <CardDescription>
-          {data.search.mode === "stream-estate" ? "Les annonces de la zone suivies par la recherche, semaine par semaine." : "Les annonces trouvées par l'agent, semaine par semaine : un échantillon, pas tout le marché."}
+          {data.search.mode === "stream-estate" ? "Les annonces de la zone suivies par la recherche, semaine par semaine." : "Les annonces trouvées par l'IA, semaine par semaine : un échantillon, pas tout le marché."}
           {listings.length < total && <b className="font-medium text-foreground"> {num(listings.length)} annonce{listings.length > 1 ? "s" : ""} sur {num(total)} (filtrées).</b>}
         </CardDescription>
       </CardHeader>

@@ -246,13 +246,13 @@ function NewsRow({ n, fresh, lit, onOpen, onRead, onView }: { n: NewsItem; fresh
           {n.kind === "dpe" && (
             <>
               <Button variant="ghost" size="xs" onClick={() => { onOpen(); focusMap({ kind: "dpe", row: n.dpe }); onView("odds") }}><MapIcon data-icon="inline-start" />Carte</Button>
-              <Button variant="ghost" size="xs" onClick={() => { onOpen(); addFeedback({ kind: "chercher", text: dpeAsk(n.dpe) }); toast.success("Ajouté au prompt : l'agent cherchera l'annonce") }}><SearchIcon data-icon="inline-start" />Chercher l'annonce</Button>
+              <Button variant="ghost" size="xs" onClick={() => { onOpen(); addFeedback({ kind: "chercher", text: dpeAsk(n.dpe) }); toast.success("Ajouté au prompt : l'IA cherchera l'annonce") }}><SearchIcon data-icon="inline-start" />Chercher l'annonce</Button>
             </>
           )}
           {n.kind === "audit" && (
             <>
               <Button variant="ghost" size="xs" onClick={() => { onOpen(); focusMap({ kind: "audit", row: n.audit }); onView("odds") }}><MapIcon data-icon="inline-start" />Carte</Button>
-              <Button variant="ghost" size="xs" onClick={() => { onOpen(); addFeedback({ kind: "chercher", text: auditAsk(n.audit) }); toast.success("Ajouté au prompt : l'agent cherchera l'annonce") }}><SearchIcon data-icon="inline-start" />Chercher l'annonce</Button>
+              <Button variant="ghost" size="xs" onClick={() => { onOpen(); addFeedback({ kind: "chercher", text: auditAsk(n.audit) }); toast.success("Ajouté au prompt : l'IA cherchera l'annonce") }}><SearchIcon data-icon="inline-start" />Chercher l'annonce</Button>
             </>
           )}
           {n.kind === "permit" && <Button variant="ghost" size="xs" onClick={() => { onOpen(); focusMap({ kind: "permit", row: n.permit }); onView("odds") }}><MapIcon data-icon="inline-start" />Carte</Button>}

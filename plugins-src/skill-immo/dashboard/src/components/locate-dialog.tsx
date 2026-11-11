@@ -113,7 +113,7 @@ function ByPhotos({ l, onDone }: { l: Listing; onDone: () => void }) {
   const prompt = ready ? osintPrompt(l, slug, data.search.zone?.label ?? data.search.label, chosen, leave === "yes") : ""
   async function copy() {
     try { await navigator.clipboard.writeText(prompt) } catch { return toast.error("Copie impossible") }
-    toast.success("Prompt copié : collez-le dans votre agent", { description: "Son skill OSINT localise la photo puis déplace l'annonce ; le tableau de bord affichera « Recharger »." })
+    toast.success("Prompt copié : collez-le dans votre IA", { description: "Son skill OSINT localise la photo puis déplace l'annonce ; le tableau de bord affichera « Recharger »." })
     onDone()
   }
   return (
@@ -145,7 +145,7 @@ function ByPhotos({ l, onDone }: { l: Listing; onDone: () => void }) {
       {/* fixed: grown to its content, its long links would widen the dialog */}
       {ready && <Textarea readOnly value={prompt} rows={9} className="field-sizing-fixed font-mono text-xs break-all md:text-xs" aria-label="Le prompt" />}
       <DialogFooter>
-        <Button onClick={copy} disabled={!ready}><ClipboardCopyIcon data-icon="inline-start" />Copier le prompt pour l'agent</Button>
+        <Button onClick={copy} disabled={!ready}><ClipboardCopyIcon data-icon="inline-start" />Copier le prompt pour l'IA</Button>
       </DialogFooter>
     </div>
   )

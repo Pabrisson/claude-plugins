@@ -68,6 +68,9 @@ const DOC_MAX = 25e6, DOCS_PER_MESSAGE = 20, NOTES_MAX = 20000
 const LETTERS = 'ABCDEFG'
 // the profile's numbers, the only fields the dashboard may write
 const PROFILE_NUMBERS = ['down_payment', 'net_income_monthly', 'other_loans_monthly', 'rate', 'years', 'insurance_rate', 'notary_old', 'notary_new', 'eur_per_credit', 'monthly_credit_cap', 'max_fetch']
+// the buyer of a first contact (the dashboard's « Rédiger une prise de contact »): their project, situation, timing,
+// financing and signature, short texts the dashboard fills next time and every message is signed with
+const BUYER = ['project', 'situation', 'timing', 'financing', 'name', 'phone', 'email']
 // The dashboard's settings (« Réglages », .settings.json, the folder's): the watch's period in minutes (0: off;
 // IMMO_WATCH_HOURS sets its default) and its pause (the period kept until it resumes), the API on or off, the automatic fetch and its credits a month, the desktop
 // notifications (sound, quiet hours), a news read once opened, how many days of news the follow-up keeps (0: all)
@@ -1296,6 +1299,8 @@ async function handle(req, res) {
     const change = body.account_set && typeof body.account_set === 'object' ? body.account_set : null
     // the score's priorities: 0 to 3 for each of its parts
     if (body.weights) pr.weights = Object.fromEntries(Object.keys(WEIGHTS).map(k => [k, Math.max(0, Math.min(3, Math.round(+body.weights[k])))]).filter(([, v]) => Number.isFinite(v)))
+    // the buyer, replaced as a whole: its texts trimmed and cut, an empty one dropped
+    if (body.buyer && typeof body.buyer === 'object') pr.buyer = Object.fromEntries(BUYER.map(k => [k, typeof body.buyer[k] === 'string' ? body.buyer[k].trim().slice(0, 200) : '']).filter(([, v]) => v))
     writeJson(PROFILE_FILE, pr)
     if (change) setAccount(change)
     return reply(res, 200, profile())

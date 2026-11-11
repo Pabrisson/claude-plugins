@@ -390,7 +390,7 @@ function IrisBlock({ i, years, onClose, hover }: { i: IrisOdds; years: string[];
 function PlaceBlock({ g, i, onClose, hover }: { g: OddsPlace; i: IrisOdds | undefined; onClose: () => void; hover: { onMouseEnter: () => void; onMouseLeave: () => void } }) {
   const ref = useScrolledTo(), { addFeedback } = useSearch(), [asked, setAsked] = useState<string[]>([])
   const ask = (n: string, text: string) => (
-    <Button size="xs" variant="outline" className="shrink-0" disabled={asked.includes(n)} onClick={() => { addFeedback({ kind: "chercher", text }); setAsked([...asked, n]); toast.success("Ajouté au prompt : l'agent cherchera l'annonce") }}>
+    <Button size="xs" variant="outline" className="shrink-0" disabled={asked.includes(n)} onClick={() => { addFeedback({ kind: "chercher", text }); setAsked([...asked, n]); toast.success("Ajouté au prompt : l'IA cherchera l'annonce") }}>
       <SearchIcon data-icon="inline-start" />Chercher l'annonce
     </Button>
   )

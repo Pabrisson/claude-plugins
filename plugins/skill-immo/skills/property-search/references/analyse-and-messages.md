@@ -105,22 +105,37 @@ whose type is wrong or `other` (« scan001.pdf » that is a PV d'AG), set it: `i
      property with its parcel when the listing is placed at its address: `immo.mjs cadastre -p <slug> --id <id>` prints
      the line to use (« cadastré section DN n° 68, pour une contenance de 9 a 90 ca »; a flat's is its building's,
      with « lot n° … » left for the seller to fill), « sous réserve de vérification sur le titre de propriété »;
-   - a first contact: 5 to 8 lines. The property as its listing names it (type, surface, town, its reference and the
-     portal when known, the asking price), the user's interest as possible, never a commitment. Never the budget, an
-     opinion on the price or a negotiation argument: they come with the offer. Ask only what `demander` lists (still
-     for sale, a call, a visit; none given: whether it is still for sale), the financing in one line when given;
+   - a first contact: an email built from the item's modules, in this order, each left out when the item does not give it:
+     1. the property as its listing names it (type, surface, town, its reference and the portal when known, the asking
+        price): an agency handles many listings;
+     2. `me présenter` (project, situation, timing) in one sentence: what makes the user a buyer to call back;
+     3. `financement` in one line, never a figure (no budget, down payment nor income);
+     4. `questions`, a short list, each fitted to the property (a house outside a condominium has no charges nor votes:
+        only its property tax and works); « les 2 questions les plus utiles de la synthèse »: the two of
+        `review.questions` that matter most before a visit;
+     5. `demander` (still for sale, a call, a visit; none given: whether it is still for sale), with `créneaux`: « leurs
+        disponibilités » asks for theirs, the others offer the user's;
+     6. the signature (`signer`).
+
+     `formule` sets the length: `juste un appel` 2 to 4 lines (the property, then when to talk, nothing else), `standard`
+     5 to 8, `complet` 8 to 14. No `formule` (asked in the chat): standard. The user's interest as possible, never a
+     commitment: never « j'accepte », « je suis d'accord pour ce prix », « je le prends ». An answer accepting the firm
+     price of a listing without reserve can make the sale (Cass. 3e civ., 8 octobre 2026, n° 25-10.100). Never the
+     budget, an opinion on the price or a negotiation argument: they come with the offer. Never a document of the
+     user's (ID, payslips, tax notice): they come with the offer, through the notary or the agency;
    - a reply to a counter-offer: where it stands against the range and what the seller said;
    - questions or documents: those of `review.questions` that still matter and the open boxes of the notes (« À
      demander »), minus what the conversation already answered and the documents it already holds (their `type`; a `ddt` holds every diagnostic). The dashboard's item
      may list them (« : 1) … 2) … », « des documents suivants : … »): ask those, minus what is already there.
 
-   What the item adds after « ; » is the user's and comes first: `demander` (a first contact), `montant` (the offer's amount, or a counter-offer in a
-   reply), `validité` (days), `financement`, `disponibilités` and `précisions` (a visit), `questions en plus`,
-   `consigne` (how to write it).
+   What the item adds after « ; » is the user's and comes first: `formule`, `demander`, `créneaux`, `me présenter` and
+   `questions` (a first contact), `montant` (the offer's amount, or a counter-offer in a reply), `validité` (days),
+   `financement`, `disponibilités` and `précisions` (a visit), `questions en plus`, `consigne` (how to write it), `signer`.
 
    An email starts with its subject, alone on the first line, `Objet : <subject>`, then a blank line and the body:
-   the dossier shows the subject apart and copies each on its own (« Copier l'objet », « Copier le message »). Never
-   sign with a name the user did not give.
+   the dossier shows the subject apart and copies each on its own (« Copier l'objet », « Copier le message »). `signer`
+   (any message: the buyer's name, phone, email from the dashboard's profile) signs it, the name then the phone and
+   the email under it. Never sign with a name the user did not give.
 3. Give the text in your answer, ready to copy. You never send anything: the user does.
 4. Always ask, in one AskUserQuestion, whether to add it to the listing's conversation: « Oui, en brouillon » first,
    then « Oui, je l'ai déjà envoyé » and « Non ». On a yes, write it to a file in the scratchpad and run

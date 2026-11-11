@@ -94,7 +94,7 @@ function Editor({ value, onChange, area, scroller }: { value: string; onChange: 
 // a version of the notes: the notes before a change, rebuilt by the engine from the change's .diff (lib/notes.js;
 // null when the notes no longer hold it), and who made the change
 type Version = NonNullable<Listing["notes_history"]>[number]
-const BY = { user: "Notes modifiées", agent: "Notes complétées par l'agent", restore: "Version restaurée" }
+const BY = { user: "Notes modifiées", agent: "Notes complétées par l'IA", restore: "Version restaurée" }
 
 // What restoring a version does to the note, side by side as git shows it: on the left the current note, the lines that
 // go in red; on the right the note once restored, the lines that come back in green. In a change, removed and added lines

@@ -19,9 +19,9 @@ export const useRun = () => useContext(RunContext)
 const lastLine = (s: string) => s.split("\n").filter(Boolean).at(-1) ?? ""
 // what went wrong, in French: the engine's exit codes, else its message (technical, in English)
 const failure = (r: RunResult) => ({
-  2: "Cette action attend votre accord : relancez-la depuis le dashboard ou demandez-la à l'agent.",
-  3: "L'API est indisponible (plus de crédits ou pas de clé) : demandez à l'agent, il cherchera sans (mode assisté).",
-  4: "L'API ne connaît pas cette annonce : ajoutez-la par « Ajouter », l'agent la lira.",
+  2: "Cette action attend votre accord : relancez-la depuis le dashboard ou demandez-la à l'IA.",
+  3: "L'API est indisponible (plus de crédits ou pas de clé) : demandez à l'IA, elle cherchera sans (mode assisté).",
+  4: "L'API ne connaît pas cette annonce : ajoutez-la par « Ajouter », l'IA la lira.",
 }[r.code] ?? `Échec. Détail technique : ${lastLine(r.err).replace(/^error: /, "")}`)
 
 export function RunProvider({ children, onDone }: { children: ReactNode; onDone: () => void | Promise<void> }) {

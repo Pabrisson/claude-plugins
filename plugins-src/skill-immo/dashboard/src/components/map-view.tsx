@@ -463,7 +463,7 @@ export function MapView({ className, right = 0, odds, typeFilter, floorFilter }:
             // the DPE or the audit of the button
             const r = s.kind === "place" ? s.place.signals.find(x => x.row.number === b.dataset.n)! : s.kind === "dpe" ? { kind: "dpe" as const, row: s.group.items.find(d => d.number === b.dataset.n)! } : s
             addFeedback({ kind: "chercher", text: r.kind === "audit" ? auditAsk(r.row) : dpeAsk(r.row as DpeRow) })
-            toast.success("Ajouté au prompt : l'agent cherchera l'annonce")
+            toast.success("Ajouté au prompt : l'IA cherchera l'annonce")
             b.disabled = true
           }
           popup.remove()
@@ -520,7 +520,7 @@ export function MapView({ className, right = 0, odds, typeFilter, floorFilter }:
     const i = feedback.findIndex(f => f.kind === "zone")
     if (i >= 0) removeFeedback(i)
     addFeedback({ kind: "zone", text: `dessinée sur la carte (${edit.corners} sommets)` })
-    toast.success("Zone enregistrée : copiez le prompt, l'agent l'appliquera")
+    toast.success("Zone enregistrée : copiez le prompt, l'IA l'appliquera")
   }
 
   // a DPE, an audit, a permit or an address picked in the odds tab's column: the map goes to it and pins its card (an
@@ -704,7 +704,7 @@ function LayersPanel({ docked, cats, setCats, layers, setLayers, scope, setScope
     <Group title="Zone">
       <div className="flex items-center gap-2"><Switch id="veil" checked={layers.includes("veil")} onCheckedChange={v => toggle("veil", v)} /><Label htmlFor="veil" className="text-xs">Assombrir l'extérieur de la zone</Label></div>
       {edit && <Button size="xs" variant="outline" className="self-start" onClick={edit.start} disabled={edit.editing}><PencilIcon data-icon="inline-start" />Modifier la zone</Button>}
-      {edit?.drawn && <p className="text-muted-foreground">En pointillés : la zone dessinée, ajoutée au prompt. L'agent l'applique quand vous le collez.</p>}
+      {edit?.drawn && <p className="text-muted-foreground">En pointillés : la zone dessinée, ajoutée au prompt. L'IA l'applique quand vous le collez.</p>}
     </Group>
   )
   return (

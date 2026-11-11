@@ -229,14 +229,14 @@ function Home({ error }: { error?: string }) {
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-4 py-8">
       {fresh && (
         <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
-          <span className="flex items-center gap-2"><RefreshCwIcon className="size-4" />L'agent a créé ou mis à jour une recherche.</span>
+          <span className="flex items-center gap-2"><RefreshCwIcon className="size-4" />L'IA a créé ou mis à jour une recherche.</span>
           <Button size="xs" variant="secondary" onClick={() => location.reload()}>Recharger</Button>
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Recherche immobilière</h1>
-          <p className="text-sm text-muted-foreground">{stream ? "API activée" : "Mode OpenData : open data et annonces trouvées par l'agent"}</p>
+          <p className="text-sm text-muted-foreground">{stream ? "API activée" : "Mode OpenData : open data et annonces trouvées par l'IA"}</p>
         </div>
         {/* the map's tabs without a search (ExplorePage) */}
         <span className="flex flex-wrap gap-1.5">
@@ -253,7 +253,7 @@ function Home({ error }: { error?: string }) {
         </div>
       ) : (
         <Empty className="border">
-          <EmptyHeader><EmptyTitle>Aucune recherche</EmptyTitle><EmptyDescription>Commencez par une adresse, une rue ou un quartier : copiez le prompt pour l'agent, ou demandez-lui directement.</EmptyDescription></EmptyHeader>
+          <EmptyHeader><EmptyTitle>Aucune recherche</EmptyTitle><EmptyDescription>Commencez par une adresse, une rue ou un quartier : copiez le prompt pour l'IA, ou demandez-lui directement.</EmptyDescription></EmptyHeader>
           <EmptyContent><NewSearch streamEstate={stream} trigger={trigger} /></EmptyContent>
         </Empty>
       )}
@@ -269,7 +269,7 @@ function SearchCard({ s, onDeleted }: { s: SearchSummary; onDeleted: () => void 
       toast.success(`Recherche « ${s.label} » supprimée`)
       onDeleted()
     } catch (e) {
-      toast.error("La recherche n'a pas été supprimée", { description: (e as Error).message === "alert" ? "Elle a une alerte de l'API : demandez à l'agent de la supprimer d'abord." : `Détail technique : ${(e as Error).message}` })
+      toast.error("La recherche n'a pas été supprimée", { description: (e as Error).message === "alert" ? "Elle a une alerte de l'API : demandez à l'IA de la supprimer d'abord." : `Détail technique : ${(e as Error).message}` })
     }
   }
   return (

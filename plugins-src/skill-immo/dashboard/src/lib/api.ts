@@ -216,7 +216,9 @@ export type Alerts = { off?: string[]; custom?: Alert[] }
 export type SearchData = { search: Search; listings: Listing[]; market: Market; area: Area; alerts: Alerts; feed: Feed; unread: number; version: number }
 // the account as Stream Estate's console shows it: the euros deposited, « API items returned » as of `at`, the top-ups
 export type Account = { deposited: number; items: number; at: string; topups: { date: string; eur: number }[] }
-export type Profile = { max_fetch: number; account?: Account; down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
+export type Profile = { max_fetch: number; account?: Account; buyer?: Buyer; down_payment: number; net_income_monthly: number; other_loans_monthly: number; rate: number; years: number; insurance_rate: number; notary_old: number; notary_new: number; eur_per_credit: number; monthly_credit_cap: number; weights?: Partial<Record<ScoreKey, number>>; places: { label: string; address: string; point: Point }[] }
+// the buyer of a first contact (« Rédiger une prise de contact »), each text as the message says it
+export type Buyer = Partial<Record<"project" | "situation" | "timing" | "financing" | "name" | "phone" | "email", string>>
 export type ScoreKey = "price" | "budget" | "energy" | "transport" | "travel" | "outdoor"
 export type UsageEntry = { date: string; route: string; credits: number | null; results: number; search: string | null; by?: "auto" }
 // the dashboard's settings (« Réglages », .settings.json): the watch every so many minutes (0: off) and its pause, the API, the

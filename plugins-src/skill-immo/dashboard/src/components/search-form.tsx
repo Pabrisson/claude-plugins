@@ -89,7 +89,7 @@ export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; tr
 
   async function copy() {
     await navigator.clipboard.writeText(newSearchPrompt({ place: place ?? q, street, zone, radius, mode, types, criteria }))
-    toast.success("Prompt copié : collez-le dans votre agent", { description: "L'agent crée la recherche ; elle apparaîtra ici." })
+    toast.success("Prompt copié : collez-le dans votre IA", { description: "L'IA crée la recherche ; elle apparaîtra ici." })
     setOpen(false)
   }
 
@@ -99,7 +99,7 @@ export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; tr
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Nouvelle recherche</DialogTitle>
-          <DialogDescription>Une adresse, une rue ou un quartier. Le prompt copié, l'agent crée la recherche : les ventes réelles, le quartier et les risques sont gratuits.</DialogDescription>
+          <DialogDescription>Une adresse, une rue ou un quartier. Le prompt copié, l'IA crée la recherche : les ventes réelles, le quartier et les risques sont gratuits.</DialogDescription>
         </DialogHeader>
         <FieldGroup>
           <Command shouldFilter={false} className="rounded-lg border">
@@ -133,13 +133,13 @@ export function NewSearch({ streamEstate, trigger }: { streamEstate: boolean; tr
               <ToggleGroupItem value="stream-estate" disabled={!streamEstate}>API</ToggleGroupItem>
               <ToggleGroupItem value="classic">OpenData</ToggleGroupItem>
             </ToggleGroup>
-            <FieldDescription>{streamEstate ? "API : les annonces de tous les portails, payantes (votre accord est demandé avant chaque dépense). OpenData : open data et annonces trouvées par l'agent, gratuit." : "Sans clé de l'API : open data et annonces trouvées par l'agent, gratuit."}</FieldDescription>
+            <FieldDescription>{streamEstate ? "API : les annonces de tous les portails, payantes (votre accord est demandé avant chaque dépense). OpenData : open data et annonces trouvées par l'IA, gratuit." : "Sans clé de l'API : open data et annonces trouvées par l'IA, gratuit."}</FieldDescription>
           </FieldSet>
           <TypesField value={types} onChange={setTypes} />
           <CriteriaFields value={criteria} onChange={setCriteria} types={types} />
         </FieldGroup>
         <DialogFooter>
-          <Button onClick={copy} disabled={q.length < 3}><ClipboardCopyIcon data-icon="inline-start" />Copier le prompt pour l'agent</Button>
+          <Button onClick={copy} disabled={q.length < 3}><ClipboardCopyIcon data-icon="inline-start" />Copier le prompt pour l'IA</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

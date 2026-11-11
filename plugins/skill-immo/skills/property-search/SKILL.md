@@ -281,7 +281,7 @@ Do every item in order:
   says, on the `axes` and the `consigne` it gives first.
 - `[comparer]`: `show --id a,b`, and a table of the 2 to 4 listings (`references/analyse-and-messages.md`).
 - `[message]`: `references/analyse-and-messages.md`, « Messages and the conversation ». What follows « ; » is the
-  user's: what a first contact asks, the amount, the validity, the financing, the availabilities, the documents or questions to ask, a `consigne`.
+  user's: a first contact's modules (formula, what it asks, slots, the buyer, questions), the amount, the validity, the financing, the availabilities, the documents or questions to ask, a `consigne`, the signature.
 - `[documents]`: a summary of the conversation's documents, or a question on them: `references/analyse-and-messages.md`,
   « The conversation's documents ».
 - `[ajouter]`: the add mode.
