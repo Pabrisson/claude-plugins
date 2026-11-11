@@ -2,12 +2,12 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { CalendarClockIcon, CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
-import { useEffect, useState, type ReactNode } from "react"
+import { CalendarClockIcon, CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { Fragment, useEffect, useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
 
-import { AskMenu, DocIcon } from "@/components/ask-agent"
+import { AskMenu, DOC_LABEL, DocIcon, docTypesFor, typeOfDoc } from "@/components/ask-agent"
 import { Dpe } from "@/components/dpe"
 import { nearby } from "@/components/map-view"
 import { Gap, Ruler } from "@/components/ruler"
@@ -28,15 +28,16 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api, docUrl, type Cadastre, type Channel, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
+import { api, docUrl, type Cadastre, type Channel, type Doc, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
 import { ACCURACY_LABEL, bytes, CHANNEL_LABEL, date, dateTime, eur, keur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
 import { shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
@@ -428,21 +429,22 @@ const CHANNEL_ICON = { email: MailIcon, sms: MessageSquareTextIcon, phone: Phone
 function Conversation({ l, short }: { l: Listing; short: string }) {
   const { slug, reload } = useSearch()
   const ms = (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date))
-  async function change(m: Message, body: { sent?: boolean; delete?: boolean }) {
+  async function change(m: Message, body: { sent?: boolean; delete?: boolean; document?: { id: string; type: string } }) {
     await api.listing(slug, l.id, { message: { id: m.id, ...body } })
     await reload()
-    if (body.delete) toast.success("Message supprimé de la conversation")
+    if (body.document) toast.success(`Type du document : ${DOC_LABEL[body.document.type]}`)
+    else if (body.delete) toast.success("Message supprimé de la conversation")
     else if (body.sent) toast.success(m.kind === "offer" ? "Offre envoyée : le bien passe dans « Offre faite »" : "Message marqué comme envoyé")
   }
   return (
     <Section title="Conversation" action={<span className="flex flex-wrap justify-end gap-1.5"><AddMessage l={l} /><AskMenu size="xs" l={l} short={short} /></span>}>
       {!ms.length && <p className="text-sm text-muted-foreground">Aucun message. « Ajouter » garde une réponse de l'agence, le résumé d'un appel ou des documents reçus ; « Rédiger avec l'agent » met la demande dans le prompt, et l'agent lit toute la conversation avant d'écrire.</p>}
-      <ol className="flex flex-col gap-2">{ms.map(m => <Bubble key={m.id} m={m} onChange={b => change(m, b)} />)}</ol>
+      <ol className="flex flex-col gap-2">{ms.map(m => <Bubble key={m.id} m={m} t={typeOf(l) as PropertyType} onChange={b => change(m, b)} />)}</ol>
     </Section>
   )
 }
 
-function Bubble({ m, onChange }: { m: Message; onChange: (b: { sent?: boolean; delete?: boolean }) => void }) {
+function Bubble({ m, t, onChange }: { m: Message; t: PropertyType; onChange: (b: { sent?: boolean; delete?: boolean; document?: { id: string; type: string } }) => void }) {
   const { slug } = useSearch()
   const [full, setFull] = useState(false), docs = m.documents ?? []
   const mine = m.from !== "them", Icon = m.channel ? CHANNEL_ICON[m.channel] : MailIcon
@@ -459,13 +461,34 @@ function Bubble({ m, onChange }: { m: Message; onChange: (b: { sent?: boolean; d
       {m.text && <p className={cn("text-sm whitespace-pre-line", !full && "line-clamp-3")}>{m.text}</p>}
       {docs.length > 0 && (
         <ul className="flex flex-wrap gap-1.5" aria-label="Documents">
-          {docs.map(d => (
+          {/* a document: opened, or given its type (the one its name said, to begin with) */}
+          {docs.map(d => { const type = typeOfDoc(d); return (
             <li key={d.id} className="max-w-full">
-              <Button variant="outline" size="xs" className="max-w-full" asChild>
-                <a href={docUrl(slug, d)} target="_blank" rel="noreferrer" title={d.name}><DocIcon name={d.name} data-icon="inline-start" /><span className="truncate">{d.name}</span><span className="text-muted-foreground">{bytes(d.size)}</span></a>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="xs" className="max-w-full" title={d.name}>
+                    <DocIcon name={d.name} data-icon="inline-start" />{type !== "other" && <span>{DOC_LABEL[type]}</span>}<span className={cn("truncate", type !== "other" && "text-muted-foreground")}>{d.name}</span><span className="text-muted-foreground">{bytes(d.size)}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  <DropdownMenuItem asChild><a href={docUrl(slug, d)} target="_blank" rel="noreferrer"><ExternalLinkIcon />Ouvrir le document</a></DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger><TagIcon />Type : {DOC_LABEL[type]}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] w-64 overflow-y-auto">
+                      <DropdownMenuRadioGroup value={type} onValueChange={v => v !== type && onChange({ document: { id: d.id, type: v } })}>
+                        {docTypesFor(t, type).map(g => (
+                          <Fragment key={g.label}>
+                            <DropdownMenuLabel className="text-xs text-muted-foreground">{g.label}</DropdownMenuLabel>
+                            {g.items.map(x => <DropdownMenuRadioItem key={x.key} value={x.key}>{x.label}</DropdownMenuRadioItem>)}
+                          </Fragment>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </li>
-          ))}
+          ) })}
         </ul>
       )}
       <div className="flex flex-wrap gap-1.5">
@@ -501,16 +524,18 @@ function AddMessage({ l }: { l: Listing }) {
   const { slug, reload } = useSearch()
   const [open, setOpen] = useState(false), [from, setFrom] = useState<"them" | "me">("them"), [channel, setChannel] = useState<Channel>("email")
   const [when, setWhen] = useState(localNow), [text, setText] = useState(""), [amount, setAmount] = useState("")
-  const [files, setFiles] = useState<File[]>([]), [busy, setBusy] = useState(false), [over, setOver] = useState(false)
+  // each file with its type, the one its name says to begin with
+  const [files, setFiles] = useState<{ f: File; type: string }[]>([]), [busy, setBusy] = useState(false), [over, setOver] = useState(false)
+  const t = typeOf(l) as PropertyType
   function attach(list: FileList | null) {
     const all = [...(list ?? [])], ok = all.filter(f => DOC_EXT.includes(f.name.split(".").at(-1)?.toLowerCase() ?? "") && f.size > 0 && f.size <= DOC_MAX)
     if (ok.length < all.length) toast.error("Fichier refusé", { description: "PDF, image, Word, Excel ou texte, de 25 Mo au plus." })
-    setFiles(fs => [...fs, ...ok.filter(f => !fs.some(x => x.name === f.name && x.size === f.size))].slice(0, DOCS_MAX))
+    setFiles(fs => [...fs, ...ok.filter(f => !fs.some(x => x.f.name === f.name && x.f.size === f.size)).map(f => ({ f, type: typeOfDoc({ name: f.name } as Doc) }))].slice(0, DOCS_MAX))
   }
   async function save() {
     setBusy(true)
     try {
-      const documents = await Promise.all(files.map(async f => ({ name: f.name, data: await base64(f) })))
+      const documents = await Promise.all(files.map(async ({ f, type }) => ({ name: f.name, type, data: await base64(f) })))
       await api.listing(slug, l.id, { message: { add: { from, channel, date: new Date(when).toISOString(), text, ...(amount ? { amount: Number(amount) } : {}), sent: from === "me", ...(documents.length ? { documents } : {}) } } })
     } catch (e) { setBusy(false); return toast.error("Le message n'a pas été ajouté", { description: `Détail technique : ${(e as Error).message}` }) }
     await reload()
@@ -562,10 +587,23 @@ function AddMessage({ l }: { l: Listing }) {
             </label>
             {files.length > 0 && (
               <ul className="flex flex-col gap-1">
-                {files.map(f => (
-                  <li key={`${f.name}|${f.size}`} className="flex items-center gap-2 rounded-md border px-2 py-1 text-sm">
-                    <DocIcon name={f.name} className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{f.name}</span><span className="shrink-0 text-xs text-muted-foreground">{bytes(f.size)}</span>
-                    <Button variant="ghost" size="icon-xs" aria-label={`Retirer ${f.name}`} onClick={() => setFiles(fs => fs.filter(x => x !== f))}><XIcon /></Button>
+                {files.map(x => (
+                  <li key={`${x.f.name}|${x.f.size}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border py-1 pr-1 pl-2 text-sm">
+                    <DocIcon name={x.f.name} className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{x.f.name}</span><span className="shrink-0 text-xs text-muted-foreground">{bytes(x.f.size)}</span>
+                    <span className="flex items-center gap-1 max-sm:w-full">
+                      <Select value={x.type} onValueChange={type => setFiles(fs => fs.map(y => (y === x ? { ...y, type } : y)))}>
+                        <SelectTrigger size="sm" className="w-56 max-sm:flex-1" aria-label={`Type de ${x.f.name}`}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {docTypesFor(t).map(g => (
+                            <SelectGroup key={g.label}>
+                              <SelectLabel>{g.label}</SelectLabel>
+                              {g.items.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button variant="ghost" size="icon-xs" aria-label={`Retirer ${x.f.name}`} onClick={() => setFiles(fs => fs.filter(y => y !== x))}><XIcon /></Button>
+                    </span>
                   </li>
                 ))}
               </ul>

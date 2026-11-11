@@ -1,4 +1,5 @@
 import { review } from "@engine/decide.js"
+import { DOC_GROUPS, DOC_TYPES, docTypeOf } from "@engine/documents.js"
 import { negotiation, typeOf } from "@engine/market.js"
 import {
   BadgeEuroIcon, BellRingIcon, Building2Icon, CalendarCheckIcon, CalendarDaysIcon, CalendarIcon, ChevronDownIcon, FileImageIcon, FileQuestionMarkIcon, FileSearchIcon, FileSpreadsheetIcon,
@@ -20,6 +21,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { Doc, Listing, PropertyType } from "@/lib/api"
 import { bytes, date, eur, MESSAGE_LABEL } from "@/lib/format"
 import { useSearch, type Feedback } from "@/lib/store"
+import { cn } from "@/lib/utils"
 
 // what the agent is asked to write: the prompt says what, the agent reads the conversation first
 const DRAFTS = {
@@ -56,24 +58,13 @@ const FUNDING: Opt[] = [
   { value: "comptant", label: "Comptant", icon: WalletIcon },
 ]
 
-// the documents to ask for, by type of property; `on`: ticked to begin with
-const ALL: PropertyType[] = ["flat", "house", "land", "parking", "premises"], HOME: PropertyType[] = ["flat", "house"], BUILT: PropertyType[] = ["flat", "house", "premises"], COPRO: PropertyType[] = ["flat", "parking", "premises"]
-const TO_ASK: { group: string; items: { label: string; types: PropertyType[]; on?: boolean }[] }[] = [
-  { group: "Diagnostics", items: [
-    { label: "DPE complet", types: BUILT, on: true }, { label: "Amiante", types: BUILT, on: true }, { label: "Plomb (CREP)", types: HOME, on: true },
-    { label: "Électricité", types: HOME, on: true }, { label: "Gaz", types: HOME, on: true }, { label: "Termites", types: BUILT, on: true },
-    { label: "État des risques (ERP)", types: ALL, on: true }, { label: "Mesurage loi Carrez", types: ["flat", "premises"], on: true }, { label: "Assainissement", types: ["house"], on: true },
-  ] },
-  { group: "Copropriété", items: [
-    { label: "PV des 3 dernières AG", types: COPRO, on: true }, { label: "Relevé des charges des 2 dernières années", types: COPRO, on: true }, { label: "Pré-état daté", types: COPRO, on: true },
-    { label: "Règlement de copropriété et état descriptif", types: COPRO }, { label: "Fiche synthétique", types: COPRO }, { label: "Carnet d'entretien", types: COPRO },
-    { label: "Plan pluriannuel de travaux (PPT, DTG)", types: COPRO },
-  ] },
-  { group: "Le bien", items: [
-    { label: "Avis de taxe foncière", types: ALL, on: true }, { label: "Titre de propriété", types: ALL }, { label: "Plans", types: BUILT }, { label: "Factures de travaux", types: BUILT },
-    { label: "Factures d'énergie", types: HOME }, { label: "Certificat d'urbanisme", types: ["land"], on: true }, { label: "Bornage", types: ["land"], on: true },
-  ] },
-]
+// The types of documents (engine lib/documents.js): a document's own, else the one its name says (one added before
+// the types); those a property type has, by group, and the one a document already has
+type DocType = (typeof DOC_TYPES)[number]
+export const typeOfDoc = (d: Doc) => d.type ?? docTypeOf(d.name)
+export const DOC_LABEL: Record<string, string> = Object.fromEntries(DOC_TYPES.map(d => [d.key, d.label]))
+export const docTypesFor = (t: PropertyType, current?: string) =>
+  DOC_GROUPS.map(([g, label]) => ({ label, items: DOC_TYPES.filter((x: DocType) => x.group === g && ((x.types as string[]).includes(t) || x.key === current)) })).filter(g => g.items.length)
 
 const ASKS: Record<Ask, { title: string; description: string; icon: LucideIcon; text: string; placeholder: string }> = {
   analyse: { title: "Analyser ce bien", description: "L'agent l'analyse avec les ventes, le bâtiment, le quartier et votre budget. Dites-lui ce qui compte pour vous.", icon: SearchCheckIcon, text: "Instruction en plus", placeholder: "Ex. : je compte le louer meublé, est-ce rentable ?" },
@@ -82,7 +73,7 @@ const ASKS: Record<Ask, { title: string; description: string; icon: LucideIcon; 
   offer: { title: "Rédiger une offre d'achat", description: "L'agent l'écrit d'après la marge de négociation et la conversation.", icon: HandCoinsIcon, text: "Instruction en plus", placeholder: "Ex. : insiste sur les travaux de la toiture" },
   question: { title: "Rédiger les questions à l'agence", description: "Les questions de la synthèse que l'agent posera, et les vôtres. Il laisse de côté celles déjà répondues dans la conversation.", icon: MessageCircleQuestionMarkIcon, text: "Vos questions en plus", placeholder: "Une question par ligne" },
   visit: { title: "Rédiger une demande de visite", description: "L'agent propose vos disponibilités.", icon: CalendarCheckIcon, text: "Précisions", placeholder: "Ex. : jeudi 14 après 18 h, ou samedi matin" },
-  documents: { title: "Rédiger une demande de documents", description: "Cochez les documents à demander. L'agent laisse de côté ceux déjà reçus dans la conversation.", icon: FileStackIcon, text: "Instruction en plus", placeholder: "Ex. : demande-les avant la visite" },
+  documents: { title: "Rédiger une demande de documents", description: "Cochez les documents à demander. Ceux déjà reçus dans la conversation sont décochés.", icon: FileStackIcon, text: "Instruction en plus", placeholder: "Ex. : demande-les avant la visite" },
   reply: { title: "Répondre au dernier message", description: "L'agent répond au dernier message reçu, d'après toute la conversation.", icon: ReplyIcon, text: "Ce que vous voulez répondre", placeholder: "Ex. : accepter la visite mais refuser la contre-offre" },
   follow_up: { title: "Rédiger une relance", description: "L'agent relance le dernier message resté sans réponse.", icon: BellRingIcon, text: "Instruction en plus", placeholder: "Ex. : rappeler que mon financement est prêt" },
 }
@@ -95,6 +86,7 @@ export function DocIcon({ name, ...props }: { name: string } & LucideProps) {
   return <I {...props} />
 }
 
+const dayMonth = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" })
 // one line of the prompt: a text on one line, its details after « ; »
 const one = (s: string) => s.trim().replace(/\s*\n\s*/g, " / ")
 const details = (xs: [string, string | false | null | undefined][]) => xs.filter(([, v]) => v).map(([k, v]) => ` ; ${k} : ${v}`).join("")
@@ -162,22 +154,26 @@ function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; short: st
   const a = ASKS[ask], t = typeOf(l) as PropertyType, docs = docsOf(l)
   const questions: string[] = ask === "question" ? review(l, aidsFor(l)).questions : []
   const nego = ask === "offer" && l.price ? negotiation(l, marketFor(l).ref?.ppm2) : null
-  const toAsk = TO_ASK.map(g => ({ ...g, items: g.items.filter(x => x.types.includes(t)) })).filter(g => g.items.length)
+  // what can be asked for this type of property, and when each type came (the newest; a DDT holds every diagnostic)
+  const toAsk = docTypesFor(t).map(g => ({ ...g, items: g.items.filter((x: DocType) => x.request !== false) })).filter(g => g.items.length)
+  const got = new Map<string, string>()
+  for (const d of docs) if (!got.has(typeOfDoc(d))) got.set(typeOfDoc(d), d.date)
+  const received = (x: DocType) => got.get(x.key) ?? (x.group === "diagnostics" ? got.get("ddt") : undefined)
   const [chips, setChips] = useState<string[]>([]), [funding, setFunding] = useState<string[]>([])
   const [picked, setPicked] = useState(() => docs.map(d => d.id)), [qs, setQs] = useState(questions)
-  const [asked, setAsked] = useState(() => toAsk.flatMap(g => g.items.filter(x => x.on).map(x => x.label)))
+  const [asked, setAsked] = useState(() => toAsk.flatMap(g => g.items.filter((x: DocType) => x.on && !received(x)).map((x: DocType) => x.key)))
   const [amount, setAmount] = useState(""), [days, setDays] = useState("10"), [text, setText] = useState("")
   const isDocs = ask === "summary" || ask === "doc_question"
   const ready = isDocs ? picked.length > 0 && (ask === "summary" || !!text.trim()) : ask === "documents" ? asked.length > 0 : ask === "question" ? qs.length > 0 || !!text.trim() : true
 
   function submit() {
-    const said = one(text), names = docs.filter(d => picked.includes(d.id)).map(d => `« ${d.name} » (${d.id})`).join(", ")
+    const said = one(text), names = docs.filter(d => picked.includes(d.id)).map(d => `« ${d.name} » (${typeOfDoc(d) !== "other" ? `${DOC_LABEL[typeOfDoc(d)]}, ` : ""}${d.id})`).join(", ")
     let f: Feedback
     if (ask === "analyse") f = { kind: "analyser", text: `${l.id} — ${short}${details([["axes", chips.join(", ")], ["consigne", said]])}` }
     else if (ask === "summary") f = { kind: "documents", text: `résumé pour ${l.id} — ${short} : ${names}${details([["points", chips.join(", ")], ["consigne", said]])}` }
     else if (ask === "doc_question") f = { kind: "documents", text: `question pour ${l.id} — ${short} : ${names}${details([["question", said]])}` }
     else {
-      const what = ask === "documents" ? `une demande des documents suivants : ${asked.join(", ")}` : ask === "question" && qs.length ? `${DRAFTS.question} : ${qs.map((q, i) => `${i + 1}) ${q}`).join(" ")}` : DRAFTS[ask]
+      const what = ask === "documents" ? `une demande des documents suivants : ${toAsk.flatMap(g => g.items).filter((x: DocType) => asked.includes(x.key)).map((x: DocType) => x.request || x.label).join(", ")}` : ask === "question" && qs.length ? `${DRAFTS.question} : ${qs.map((q, i) => `${i + 1}) ${q}`).join(" ")}` : DRAFTS[ask]
       f = {
         kind: "message", text: `${MESSAGE_LABEL[ask].toLowerCase()} pour ${l.id} — ${short} : rédige ${what}${details([
           ["montant", !!amount && eur(Number(amount))], ["validité", ask === "offer" && !!days && `${days} jours`], ["financement", funding[0]],
@@ -203,7 +199,7 @@ function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; short: st
             <Field>
               <FieldLabel>Documents</FieldLabel>
               <Checks items={docs} value={picked} onChange={setPicked} id={d => d.id}
-                label={(d: Doc & { date: string }) => <span className="flex min-w-0 items-center gap-1.5"><DocIcon name={d.name} className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{d.name}</span><span className="shrink-0 text-xs text-muted-foreground">{date(d.date)} · {bytes(d.size)}</span></span>} />
+                label={(d: Doc & { date: string }) => <span className="flex min-w-0 items-center gap-1.5"><DocIcon name={d.name} className="size-4 shrink-0 text-muted-foreground" />{typeOfDoc(d) !== "other" && <span className="shrink-0">{DOC_LABEL[typeOfDoc(d)]}</span>}<span className={cn("truncate", typeOfDoc(d) !== "other" && "text-muted-foreground")}>{d.name}</span><span className="shrink-0 text-xs text-muted-foreground">{date(d.date)} · {bytes(d.size)}</span></span>} />
             </Field>
           )}
           {ask === "summary" && <Field><FieldLabel>Points à faire ressortir</FieldLabel><Chips opts={FOCUS} value={chips} onChange={setChips} label="Points à faire ressortir" /></Field>}
@@ -226,9 +222,10 @@ function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; short: st
           )}
           {ask === "visit" && <Field><FieldLabel>Disponibilités</FieldLabel><Chips opts={SLOTS} value={chips} onChange={setChips} label="Disponibilités" /></Field>}
           {ask === "documents" && toAsk.map(g => (
-            <Field key={g.group}>
-              <FieldLabel>{g.group}</FieldLabel>
-              <Checks columns items={g.items} value={asked} onChange={setAsked} id={x => x.label} label={x => x.label} />
+            <Field key={g.label}>
+              <FieldLabel>{g.label}</FieldLabel>
+              <Checks columns items={g.items} value={asked} onChange={setAsked} id={(x: DocType) => x.key}
+                label={(x: DocType) => <span>{x.request || x.label}{received(x) && <span className="ml-1.5 text-xs text-muted-foreground">reçu le {dayMonth.format(new Date(received(x)!))}</span>}</span>} />
             </Field>
           ))}
           <Field>

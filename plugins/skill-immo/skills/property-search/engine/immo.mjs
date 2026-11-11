@@ -17,6 +17,7 @@ import { PROFILE, budget, rentOf, rentVsBuy } from './lib/budget.js'
 import { estimate, gate, table, usage } from './lib/costs.js'
 import { review, score, WEIGHTS } from './lib/decide.js'
 import { recentDpe } from './lib/dpe.js'
+import { DOC_TYPES, docTypeOf, isDocType } from './lib/documents.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, band, bbox, center, circle, corridor, distance, IDU, inGeometry, inZone, middleOf, thin } from './lib/geo.js'
 import { addressQuery, deadAd, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl } from './lib/listings.js'
@@ -1033,7 +1034,7 @@ function show() {
     return {
     id: l.id, source: l.source, type: t, title: l.title, url: l.urls.find(u => u.url)?.url ?? null, portals: l.urls.map(u => u.source),
     price: l.price, area: l.area, land_area: l.land_area ?? null, price_per_m2: l.price_per_m2, rooms: l.rooms, floor: l.floor, dpe: l.dpe?.energy, status: l.status,
-    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, favorite: !!l.favorite, labels: l.labels ?? [], notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)).map(x => (x.documents ? { ...x, documents: x.documents.map(d => ({ ...d, path: docPath(dir, d.file) })) } : x)), address: l.location.address,
+    matches: matches(l, s.criteria, typesOf(s)), my_status: l.my_status, favorite: !!l.favorite, labels: l.labels ?? [], notes: l.notes, messages: (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)).map(x => (x.documents ? { ...x, documents: x.documents.map(d => ({ ...d, type: d.type ?? docTypeOf(d.name), path: docPath(dir, d.file) })) } : x)), address: l.location.address,
     located: l.location_source ? { by: l.location.by, at: l.location.at, osint: l.location.osint ?? null, source: { point: l.location_source.point, accuracy: l.location_source.accuracy, address: l.location_source.address } } : null,
     market: { reference: ref, badge: badge(unitPrice(l), ref?.ppm2), street_ppm2: m.dvf?.[t]?.street?.median_ppm2 ?? null, asking_ppm2: asking(m, t) },
     negotiation: negotiation(l, ref?.ppm2), days_online: daysOnline(l), dropped: Math.round(dropped(l) * 1000) / 1000, urgent: l.urgent, favorites: l.favorites,
@@ -1068,13 +1069,15 @@ function newMessage(l, { from = 'me', kind = 'other', channel = null, amount = n
 // an offer sent puts the listing in "Offre faite"
 const afterSent = (l, m) => { if (m.sent_at && m.kind === 'offer') l.my_status = 'offer' }
 // A document of a message, checked before it is written: its name kept readable (no folder, no odd character), an
-// extension of DOC_MIME, 25 MB at most. `file` is its path in the search's folder.
-function newDocument(l, name, size) {
+// extension of DOC_MIME, 25 MB at most, its type (lib/documents.js) the one given or the one its name says. `file` is
+// its path in the search's folder.
+function newDocument(l, name, size, type) {
   const base = path.basename(String(name ?? '').replaceAll('\\', '/')).normalize('NFC').replace(/[^\p{L}\p{N}._ ()'-]+/gu, '_').replace(/^[.\s]+/, '').slice(-120)
   if (!Object.hasOwn(DOC_MIME, path.extname(base).slice(1).toLowerCase())) throw new Error(`a document is a ${Object.keys(DOC_MIME).join(', ')} file: ${base || name}`)
   if (!(size > 0 && size <= DOC_MAX)) throw new Error(`a document is empty or over 25 MB: ${base}`)
+  if (type != null && !isDocType(type)) throw new Error(`a document's type is ${DOC_TYPES.map(d => d.key).join(', ')}`)
   const id = `d-${randomBytes(4).toString('hex')}`
-  return { id, name: base, size, file: `documents/${l.id}/${id}-${base}` }
+  return { id, name: base, size, file: `documents/${l.id}/${id}-${base}`, type: type ?? docTypeOf(base) }
 }
 // a document's file in the search's folder, null when its path leaves the folder's documents/
 const docPath = (dir, file) => { const root = path.join(dir, 'documents'), f = path.resolve(dir, String(file)); return f.startsWith(root + path.sep) ? f : null }
@@ -1098,7 +1101,18 @@ function message() {
   afterSent(l, m)
   writeJson(f, ls)
   const state = m.from === 'them' ? 'received' : m.sent_at ? 'sent' : 'draft'
-  console.log(`message ${m.id} (${m.kind}, ${state}${m.amount ? `, ${fmt(m.amount)} €` : ''}${m.documents ? `, ${m.documents.length} document${m.documents.length > 1 ? 's' : ''}` : ''}) added to the conversation of ${l.id}: the dossier shows it`)
+  console.log(`message ${m.id} (${m.kind}, ${state}${m.amount ? `, ${fmt(m.amount)} €` : ''}${m.documents ? `, ${m.documents.length} document${m.documents.length > 1 ? 's' : ''}: ${m.documents.map(d => `${d.id} ${d.name} as ${d.type}`).join(', ')}` : ''}) added to the conversation of ${l.id}: the dossier shows it`)
+}
+
+// document -p <slug> --id <listing id> <doc id> <type>: a document of its conversation given its type (lib/documents.js),
+// one its name did not tell (« scan001.pdf » that is a PV d'AG once read)
+function documentCmd() {
+  const dir = searchDir(), f = path.join(dir, 'listings.json'), ls = listingsOf(dir), l = ls.find(x => x.id === opt.id), [id, type] = args
+  const d = l?.messages?.flatMap(m => m.documents ?? []).find(x => x.id === id)
+  if (!d || !isDocType(type)) die(`usage: document -p <slug> --id <listing id> <doc id> <${DOC_TYPES.map(x => x.key).join('|')}>${l && id && !d ? ` (no document ${id} in ${l.id})` : ''}`)
+  d.type = type
+  writeJson(f, ls)
+  console.log(`${d.name} is now « ${DOC_TYPES.find(x => x.key === type).label} »: the dossier shows it`)
 }
 
 // note -p <slug> --id <id> --file <text> | --text "…": added at the end of the listing's « Mes notes » (a summary of
@@ -1375,14 +1389,14 @@ async function handle(req, res) {
       }
       // opened: no longer « Nouveau »; seen: false puts it back
       if (typeof body.seen === 'boolean') l.seen_at = body.seen ? l.seen_at ?? now() : null
-      // the conversation: a message the user adds (a reply received, a call) with its documents ({ name, data: base64 }),
-      // one marked sent or not, one deleted with its documents
+      // the conversation: a message the user adds (a reply received, a call) with its documents ({ name, data: base64,
+      // type? }), one marked sent or not, one deleted with its documents, one of its documents given another type
       if (body.message?.add) {
         const add = body.message.add, files = Array.isArray(add.documents) ? add.documents : []
         let m, bufs
         try {
           bufs = files.map(d => Buffer.from(typeof d?.data === 'string' ? d.data : '', 'base64'))
-          m = newMessage(l, { ...add, documents: files.map((d, i) => newDocument(l, d?.name, bufs[i].length)) })
+          m = newMessage(l, { ...add, documents: files.map((d, i) => newDocument(l, d?.name, bufs[i].length, d?.type)) })
         } catch (e) { return reply(res, 400, { error: e.message }) }
         m.documents?.forEach((d, i) => writeDocument(dir, d, to => fs.writeFileSync(to, bufs[i])))
         l.messages = [...(l.messages ?? []), m]
@@ -1391,6 +1405,12 @@ async function handle(req, res) {
         const msg = (l.messages ?? []).find(x => x.id === body.message.id)
         if (!msg) return reply(res, 404, { error: 'no such message' })
         if (body.message.delete) { l.messages = l.messages.filter(x => x !== msg); removeDocuments(dir, msg) }
+        else if (body.message.document) {
+          const d = msg.documents?.find(x => x.id === body.message.document.id)
+          if (!d) return reply(res, 404, { error: 'no such document' })
+          if (!isDocType(body.message.document.type)) return reply(res, 400, { error: 'bad type' })
+          d.type = body.message.document.type
+        }
         else if (msg.from !== 'them') { msg.sent_at = body.message.sent ? now() : null; afterSent(l, msg) }
       }
       writeJson(f, ls)
@@ -1623,7 +1643,7 @@ async function dashboard() {
 
 const commands = {
   doctor, setup: () => setup(...args), geocode: () => geocode(args.join(' ')), search: () => search(args.join(' ')), fetch: fetchListings, market, add, enrich, refresh, reread,
-  alert: () => alert(args[0]), alerts: alertsCmd, cadastre: () => cadastre(args.join(' ')), usage: usageCmd, costs: () => costs(...args), show, message, note, locate: locateCmd, list, dashboard, serve,
+  alert: () => alert(args[0]), alerts: alertsCmd, cadastre: () => cadastre(args.join(' ')), usage: usageCmd, costs: () => costs(...args), show, message, note, document: documentCmd, locate: locateCmd, list, dashboard, serve,
 }
 if (!commands[cmd]) die(`usage: immo.mjs <${Object.keys(commands).join(' | ')}> [-p <slug>]`)
 await commands[cmd]()

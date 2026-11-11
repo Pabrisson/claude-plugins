@@ -15,10 +15,10 @@ export type PropertyType = "flat" | "house" | "land" | "parking" | "premises"
 // (from: them, received); `to` is the one on the other side
 export type Channel = "email" | "sms" | "phone" | "visit"
 // a document a message carries, `file` its path in the search's folder (served under /api/s/<slug>/)
-export type Doc = { id: string; name: string; size: number; file: string }
+export type Doc = { id: string; name: string; size: number; file: string; type?: string }
 export type Message = { id: string; date: string; from?: "me" | "them"; kind: "offer" | "question" | "visit" | "reply" | "follow_up" | "documents" | "other"; channel?: Channel | null; amount: number | null; to: string | null; text: string; sent_at: string | null; documents?: Doc[] }
 // its documents base64, the text optional with them
-export type NewMessage = { from: "me" | "them"; channel: Channel; date: string; text: string; amount?: number; sent?: boolean; documents?: { name: string; data: string }[] }
+export type NewMessage = { from: "me" | "them"; channel: Channel; date: string; text: string; amount?: number; sent?: boolean; documents?: { name: string; data: string; type?: string }[] }
 
 export type Listing = {
   id: string
@@ -272,7 +272,7 @@ export const api = {
   cache: (clear = false) => json<{ files: number; bytes: number }>("/api/cache", clear ? { method: "DELETE" } : undefined),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean } | { add: NewMessage }; location?: NewLocation }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean; document?: { id: string; type: string } } | { add: NewMessage }; location?: NewLocation }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
   saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),

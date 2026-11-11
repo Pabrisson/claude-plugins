@@ -20,7 +20,7 @@ Contents: analyse and compare (`show`, `market.json`, the verdict) · messages a
   renting (null: renting stays cheaper over the loan); `budget.works`, the work a DPE E, F or G calls for;
 - `messages`: its conversation with the agency or the seller, in order: `from: me` (yours and the user's, a draft until
   `sent_at`) or `from: them` (received: a reply the user pasted, a call summed up), with `channel` and `amount`, and
-  `documents[] { id, name, size, path }` (the files it carries, `path` to read them);
+  `documents[] { id, name, size, type, path }` (the files it carries, `path` to read them; `type` below);
 - the negotiation range and its reasons;
 - the days online, the drops already made;
 - the budget against the profile (total, loan, monthly payment, debt ratio, HCSF 35 %, down payment needed);
@@ -48,6 +48,13 @@ Each listing keeps its conversation with the agency or the seller. The user adds
 <iso>] [--attach <document>]… --file <file>`, and say so in one line. `--attach` (once per file: PDF, image, Word, Excel,
 text, 25 MB at most) copies a document the user gave you into the search; with documents, the text is optional.
 
+Each document has a `type`, the one the user chose or the one its name says (`other` when it says none): `ddt` (the
+whole diagnostics file), `dpe`, `asbestos`, `lead`, `electricity`, `gas`, `termites`, `risks`, `carrez`, `sanitation`,
+`minutes` (PV d'AG), `charges`, `pre_sale` (pré-état daté), `rules`, `summary` (fiche synthétique), `logbook`,
+`works_plan`, `tax`, `deed`, `plans`, `invoices`, `energy_bills`, `urbanism`, `boundary`, `other`. When you read one
+whose type is wrong or `other` (« scan001.pdf » that is a PV d'AG), set it: `immo.mjs document -p <slug> --id <id>
+<doc id> <type>`.
+
 **A message to write**, when the user asks for one or a `[message]` item of the dashboard does:
 - `offer`: an offer;
 - `question`: the questions for the agency;
@@ -68,8 +75,8 @@ text, 25 MB at most) copies a document the user gave you into the search; with d
      with « lot n° … » left for the seller to fill), « sous réserve de vérification sur le titre de propriété »;
    - a reply to a counter-offer: where it stands against the range and what the seller said;
    - questions or documents: those of `review.questions` that still matter, minus what the conversation already
-     answered and the documents it already holds. The dashboard's item may list them (« : 1) … 2) … », « des
-     documents suivants : … »): ask those, minus what is already there.
+     answered and the documents it already holds (their `type`; a `ddt` holds every diagnostic). The dashboard's item
+     may list them (« : 1) … 2) … », « des documents suivants : … »): ask those, minus what is already there.
 
    What the item adds after « ; » is the user's and comes first: `montant` (the offer's amount, or a counter-offer in a
    reply), `validité` (days), `financement`, `disponibilités` and `précisions` (a visit), `questions en plus`,
@@ -87,7 +94,7 @@ text, 25 MB at most) copies a document the user gave you into the search; with d
 
 The user joins documents to the conversation (the dossier's « Ajouter », or you with `message --attach`): diagnostics,
 minutes of general meetings, a statement of charges, a tax notice, a pre-sale statement, plans. A `[documents]` item
-names some by their name and id:
+names some by their name, type and id:
 - `résumé pour <id> … : « <name> » (<doc id>), … ; points : … ; consigne : …`: summarise them;
 - `question pour <id> … : « <name> » (<doc id>), … ; question : …`: answer the question from them.
 

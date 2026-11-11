@@ -336,9 +336,14 @@ test('a message for a listing: kept with it, shown to the agent', async () => {
   // documents the user gave in the chat: copied into the search, their path in show; a page is no document
   fs.writeFileSync(path.join(dir, 'pv.pdf'), '%PDF-1.4')
   r = await run(home, ['message', '-p', 'paul-bert', '--id', id, '--from', 'them', '--attach', path.join(dir, 'pv.pdf')], { key: null })
-  assert.match(r.out, /1 document\)/, r.err)
+  assert.match(r.out, /1 document: d-\w+ pv\.pdf as minutes\)/, r.err)
   const [d] = JSON.parse((await run(home, ['show', '-p', 'paul-bert', '--id', id], { key: null })).out).messages.at(-1).documents
-  assert.deepEqual([d.name, fs.readFileSync(d.path, 'utf8')], ['pv.pdf', '%PDF-1.4'])
+  assert.deepEqual([d.name, d.type, fs.readFileSync(d.path, 'utf8')], ['pv.pdf', 'minutes', '%PDF-1.4'])
+  // a type the agent read in it
+  assert.equal((await run(home, ['document', '-p', 'paul-bert', '--id', id, d.id, 'tax'], { key: null })).status, 0)
+  assert.equal(read(dir, 'listings.json')[0].messages.at(-1).documents[0].type, 'tax')
+  assert.equal((await run(home, ['document', '-p', 'paul-bert', '--id', id, d.id, 'nope'], { key: null })).status, 1)
+  assert.equal((await run(home, ['document', '-p', 'paul-bert', '--id', id, 'd-nope', 'tax'], { key: null })).status, 1)
   fs.writeFileSync(path.join(dir, 'x.html'), '<script>')
   assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--attach', path.join(dir, 'x.html')], { key: null })).status, 1)
   assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--attach', path.join(dir, 'nope.pdf')], { key: null })).status, 1)

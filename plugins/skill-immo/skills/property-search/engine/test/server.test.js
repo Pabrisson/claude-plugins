@@ -147,6 +147,16 @@ test("a message's documents: written in the search, served, refused when not a d
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'listings.json'), 'utf8'))[0].messages.length, before)
   assert.equal(fs.readdirSync(path.join(dir, 'documents', property.uuid)).length, 2)
   assert.equal((await fetch(`${base}/api/s/paul-bert/documents/${property.uuid}/..%2F..%2Fsearch.json`)).status, 404)
+  // its type: from its name, or the one the user chose; another one later; a bad one refused
+  assert.deepEqual(m.documents.map(x => x.type), ['minutes', 'dpe'])
+  const typed = (await (await msg({ add: { from: 'me', text: 'x', sent: true, documents: [{ name: 'scan.pdf', data: b64, type: 'tax' }] } })).json()).messages.at(-1)
+  assert.equal(typed.documents[0].type, 'tax')
+  assert.equal((await msg({ add: { from: 'them', text: 'x', documents: [{ name: 'scan.pdf', data: b64, type: 'nope' }] } })).status, 400)
+  const retyped = (await (await msg({ id: typed.id, document: { id: typed.documents[0].id, type: 'deed' } })).json()).messages.find(x => x.id === typed.id)
+  assert.deepEqual([retyped.documents[0].type, !!retyped.sent_at], ['deed', true], 'a type changed leaves the message sent')
+  assert.equal((await msg({ id: typed.id, document: { id: typed.documents[0].id, type: 'nope' } })).status, 400)
+  assert.equal((await msg({ id: typed.id, document: { id: 'd-nope', type: 'tax' } })).status, 404)
+  await msg({ id: typed.id, delete: true })
   // deleted with its message
   await msg({ id: m.id, delete: true })
   assert.deepEqual(fs.readdirSync(path.join(dir, 'documents', property.uuid)), [])
