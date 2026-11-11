@@ -1,8 +1,8 @@
 import { WEIGHTS } from "@engine/decide.js"
 import { matches } from "@engine/market.js"
-import { BellIcon, CheckCheckIcon, ClipboardCopyIcon, HomeIcon, ListPlusIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { ArrowLeftIcon, BellIcon, CheckCheckIcon, ClipboardCopyIcon, HomeIcon, ListPlusIcon, MessageSquarePlusIcon, MinusIcon, MoonIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, SunIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useTheme } from "next-themes"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
 import { ManualListing } from "@/components/manual-listing"
@@ -22,7 +22,7 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, EXPLORE, type Criteria, type Profile, type PropertyType, type ScoreKey } from "@/lib/api"
+import { api, EXPLORE, listingUrl, type Criteria, type Profile, type PropertyType, type ScoreKey } from "@/lib/api"
 import { criteriaLabels, eur, SCORE_LABEL, TYPE_PLURAL } from "@/lib/format"
 import { useSearch, type Feedback } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -32,8 +32,12 @@ import { cn } from "@/lib/utils"
 export const promptText = (slug: string, items: Feedback[]) =>
   `/skill-immo:property-search apply this feedback (${EXPLORE ? "sans recherche" : `recherche ${slug}`})\n${items.map((f, i) => `${i + 1}. [${f.kind}] ${f.text}`).join("\n")}`
 
-export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings: () => void }) {
-  const { data, state, feedback, addFeedback } = useSearch()
+// The header of a search, its actions on the right. `page`: on a listing's own page, the same header, ← back to the
+// search and the listing's title in place of the search's, `extra` (« Voir ») in place of « Ajouter », without what acts
+// on the search itself (its criteria, new listings, adding one)
+type Page = { back: string; title: ReactNode; sub: ReactNode; extra?: ReactNode }
+export function TopBar({ onNews, onSettings, page }: { onNews: () => void; onSettings: () => void; page?: Page }) {
+  const { slug, data, state, feedback, addFeedback, select } = useSearch()
   // the tests' fake API (test/demo.mjs) wears an amber « API test »
   const s = data.search, streamOn = state.stream_estate && s.mode === "stream-estate", testApi = s.mode === "stream-estate" && !!state.test_api
   // new listings asked of the agent: at the API (its credits rule) and on the web, or on the web only
@@ -45,7 +49,15 @@ export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings:
   const chips = criteriaLabels(s.criteria)
   return (
     <header className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2 md:flex-nowrap md:px-4">
-      <Button variant="ghost" size="icon-sm" asChild aria-label="Toutes les recherches"><a href="/"><HomeIcon /></a></Button>
+      {page
+        ? <Button variant="ghost" size="icon-sm" asChild aria-label={`Retour à la recherche ${s.label}`} title={`Retour à ${s.label}`}><a href={page.back}><ArrowLeftIcon /></a></Button>
+        : <Button variant="ghost" size="icon-sm" asChild aria-label="Toutes les recherches"><a href="/"><HomeIcon /></a></Button>}
+      {page ? (
+        <div className="flex min-w-0 flex-col">
+          <h1 className="flex min-w-0 items-center gap-2 text-sm font-bold md:text-base"><span className="truncate">{page.title}</span></h1>
+          <span className="truncate text-xs text-muted-foreground">{page.sub}</span>
+        </div>
+      ) : (
       <div className="flex min-w-0 flex-col">
         <span className="flex min-w-0 items-center gap-2">
           <h1 className="truncate text-sm font-bold md:text-base">{s.label}</h1>
@@ -56,20 +68,22 @@ export function TopBar({ onNews, onSettings }: { onNews: () => void; onSettings:
         </span>
         <span className="truncate text-xs text-muted-foreground">{s.zone.label}</span>
       </div>
+      )}
       {/* the criteria in the middle of the room left between the title and the actions */}
-      <span className="hidden flex-1 md:block" />
-      <CriteriaPopover chips={chips} />
+      {!page && <><span className="hidden flex-1 md:block" /><CriteriaPopover chips={chips} /></>}
       <span className="flex-1" />
       <span className="flex flex-wrap items-center gap-1.5">
         <WatchCountdown onSettings={onSettings} />
-        <Tooltip>
+        {!page && <Tooltip>
           <TooltipTrigger asChild>
             <Button size="sm" onClick={askListings}><ListPlusIcon data-icon="inline-start" /><span className="max-sm:sr-only">Annonces</span></Button>
           </TooltipTrigger>
           <TooltipContent>{streamOn ? "Ajoute au prompt une recherche de nouvelles annonces, sur l'API (le coût vous est demandé avant) et sur le web" : "Ajoute au prompt une recherche de nouvelles annonces sur le web, par l'agent (gratuit)"}</TooltipContent>
-        </Tooltip>
-        <NewsBell onOpen={onNews} />
-        <AddListing />
+        </Tooltip>}
+        {/* a listing's news: its dossier, or its own page from another listing's */}
+        <NewsBell onOpen={onNews} onListing={page ? id => location.assign(listingUrl(slug, id)) : select} />
+        {/* a listing's page: « Voir » where the search has « Ajouter » */}
+        {page ? page.extra : <AddListing />}
         <PromptButton />
         <ProfileDialog />
         <ThemeButton />
@@ -117,8 +131,8 @@ function WatchCountdown({ onSettings }: { onSettings: () => void }) {
 
 // The bell: the count of the news not read yet (the server's watch, the agent's refresh), a toast when more come in, and
 // on a click the latest ones. A listing's opens its dossier, the others the follow-up on them.
-function NewsBell({ onOpen }: { onOpen: () => void }) {
-  const { slug, unread, stale, select, focusNews, reload } = useSearch()
+function NewsBell({ onOpen, onListing }: { onOpen: () => void; onListing: (id: string) => void }) {
+  const { slug, unread, stale, focusNews, reload } = useSearch()
   const { items, fresh } = useNews()
   const [open, setOpen] = useState(false)
   const before = useRef(unread), away = useRef(false)
@@ -157,7 +171,7 @@ function NewsBell({ onOpen }: { onOpen: () => void }) {
           <ul className="flex flex-col gap-0.5 px-1.5 pb-1.5">
             {items.slice(0, 6).map(n => (
               <li key={newsKey(n)}>
-                <button type="button" onClick={() => { if ("l" in n) { select(n.l.id); leave() } else follow(newsKey(n)) }}
+                <button type="button" onClick={() => { if ("l" in n) { onListing(n.l.id); leave() } else follow(newsKey(n)) }}
                   className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
                   <NewsTile n={n} dim={!fresh(n)} className="size-8" />
                   <span className="min-w-0 flex-1">

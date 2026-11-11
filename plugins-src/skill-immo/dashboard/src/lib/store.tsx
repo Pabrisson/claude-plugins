@@ -107,7 +107,8 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
 
   const [stale, setStale] = useState(false)
   const [unread, setUnread] = useState(initial.unread)
-  const [newsFocus, focusNews] = useState<string | null>(null)
+  // the news a listing's page pointed at (its bell's « Voir tout le suivi », a news picked), handed over like « Voir »
+  const [newsFocus, focusNews] = useState<string | null>(() => handoff(`immo:${slug}:news`))
   const [mapFocus, focusMap] = useState<MapRow | null>(null)
   // what a listing's page hands to its search when it goes back (« Voir », « Voir au cadastre »), read once
   const [parcelFocus, focusParcel] = useState<string | null>(() => handoff(`immo:${slug}:parcel`))
