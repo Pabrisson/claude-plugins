@@ -162,6 +162,17 @@ test("a message's documents: written in the search, served, refused when not a d
   assert.deepEqual(fs.readdirSync(path.join(dir, 'documents', property.uuid)), [])
 })
 
+test("a listing's own page: the dashboard's page, its files found from there", async () => {
+  const page = await fetch(`${base}/paul-bert/annonce/${property.uuid}`)
+  assert.match(await page.text(), /<div id="root">/)
+  const js = (await fetch(`${base}/paul-bert/`).then(r => r.text())).match(/assets\/index-[\w-]+\.js/)[0]
+  // its URL with a slash at the end, or without (the files then hang off /annonce/)
+  for (const at of [`annonce/${property.uuid}/`, 'annonce/']) {
+    const r = await fetch(`${base}/paul-bert/${at}${js}`)
+    assert.deepEqual([r.status, r.headers.get('content-type')], [200, 'text/javascript'], at)
+  }
+})
+
 test('a listing the user typed: added free with its building data; refused without a price, with a bad link or type, when its link is known', async () => {
   const add = body => post('/api/s/paul-bert/listings', body)
   assert.equal((await add({ area: 50 })).status, 400)

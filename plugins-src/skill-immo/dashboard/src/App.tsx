@@ -32,7 +32,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { TypeIcon } from "@/components/type-icon"
-import { api, EXPLORE, EXPLORE_SLUG, slugOfUrl, type Point, type Profile, type SearchData, type SearchSummary, type State } from "@/lib/api"
+import { ListingPage } from "@/components/listing-page"
+import { api, EXPLORE, EXPLORE_SLUG, listingOfUrl, slugOfUrl, type Point, type Profile, type SearchData, type SearchSummary, type State } from "@/lib/api"
 import { date, TYPE_PLURAL } from "@/lib/format"
 import type { Floor } from "@/lib/rank"
 import { emptySearch, SearchProvider, useSearch, useTabState } from "@/lib/store"
@@ -53,15 +54,16 @@ export default function App() {
 function SearchPage({ slug }: { slug: string }) {
   const [boot, setBoot] = useState<{ data: SearchData; state: State; profile: Profile; lastVisit: string | null } | { error: string } | null>(null)
   useEffect(() => {
-    // the visit first (it writes search.json): the data read after it carries the version the page starts from
-    api.visit(slug).then(v => Promise.all([api.search(slug), api.state(), api.profile()]).then(([data, state, profile]) => ({ data, state, profile, lastVisit: v.last_visit })))
+    // the visit first (it writes search.json): the data read after it carries the version the page starts from. A
+    // listing's page is no visit of its search: what is new stays new until the search is seen
+    ;(listingOfUrl() ? Promise.resolve({ last_visit: null }) : api.visit(slug)).then(v => Promise.all([api.search(slug), api.state(), api.profile()]).then(([data, state, profile]) => ({ data, state, profile, lastVisit: v.last_visit })))
       .then(setBoot, e => setBoot({ error: e.message }))
   }, [slug])
   if (!boot) return <div className="grid h-dvh grid-rows-[auto_1fr] gap-2 p-3"><Skeleton className="h-12" /><Skeleton /></div>
   if ("error" in boot) return <Home error={`Recherche « ${slug} » introuvable (${boot.error}).`} />
   return (
     <SearchProvider slug={slug} initial={boot.data} state={boot.state} profile={boot.profile} lastVisit={boot.lastVisit}>
-      <Workspace />
+      {listingOfUrl() ? <ListingPage id={listingOfUrl()!} /> : <Workspace />}
     </SearchProvider>
   )
 }

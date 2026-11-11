@@ -2,7 +2,7 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { CalendarClockIcon, CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { CalendarClockIcon, CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, Maximize2Icon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { Fragment, useEffect, useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
@@ -37,11 +37,11 @@ import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api, docUrl, type Cadastre, type Channel, type Doc, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
+import { api, docUrl, listingUrl, type Cadastre, type Channel, type Doc, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
 import { ACCURACY_LABEL, bytes, CHANNEL_LABEL, date, dateTime, eur, keur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
 import { shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
-import { useIsMobile } from "@/lib/use-mobile"
+import { useIsMobile, useMedia } from "@/lib/use-mobile"
 import { cn } from "@/lib/utils"
 
 const priceConfig = { price: { label: "Prix affiché", color: "var(--chart-4)" } } satisfies ChartConfig
@@ -104,8 +104,17 @@ function Row({ label, children, hint }: { label: string; children: ReactNode; hi
   )
 }
 
+// a listing's name, a link to its own page (/<slug>/annonce/<id>): a click opens it, the row or card around it keeps its own
+export function ListingLink({ l, className, children }: { l: Listing; className?: string; children?: ReactNode }) {
+  const { slug } = useSearch()
+  return (
+    <a href={listingUrl(slug, l.id)} onClick={e => e.stopPropagation()} title="Ouvrir la page de l'annonce"
+      className={cn("underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none", className)}>{children ?? titleOf(l)}</a>
+  )
+}
+
 // the dossier's « Voir »: the listing on the map, on the board or in the list, the dossier closed
-function ShowIn({ l, onView }: { l: Listing; onView: (v: string) => void }) {
+export function ShowIn({ l, onView }: { l: Listing; onView: (v: string) => void }) {
   const { select, spotListing } = useSearch()
   // the tab first (it lets the last one pointed at go), then this one
   const go = (view: string) => { select(null); onView(view); spotListing(l.id) }
@@ -126,7 +135,8 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
   const { data, selected, select } = useSearch()
   const mobile = useIsMobile()
   const l = data.listings.find(x => x.id === selected)
-  const title = l ? <span className="flex items-center gap-2"><TypeIcon type={l.property_type} className="size-4 shrink-0 text-muted-foreground" />{titleOf(l)}</span> : ""
+  // its name opens its own page, the same dossier
+  const title = l ? <span className="flex items-center gap-2"><TypeIcon type={l.property_type} className="size-4 shrink-0 text-muted-foreground" /><ListingLink l={l}>{titleOf(l)}<Maximize2Icon className="ml-1.5 inline size-3.5 text-muted-foreground" aria-hidden /></ListingLink></span> : ""
   const body = l && <DossierBody key={l.id} l={l} onView={onView} />
   if (mobile)
     return (
@@ -194,7 +204,8 @@ function ParcelSection({ l, onView }: { l: Listing; onView: (v: string) => void 
   )
 }
 
-function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void }) {
+export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (v: string) => void; wide?: boolean }) {
+  const halves = useMedia("(min-width: 1024px)") && wide
   const { slug, data, profile, marketFor, aidsFor, reload, compare, toggleCompare } = useSearch()
   const run = useRun()
   const [notes, setNotes] = useState(l.notes)
@@ -254,81 +265,166 @@ function DossierBody({ l, onView }: { l: Listing; onView: (v: string) => void })
       </div>
       <LabelsEditor l={l} />
 
-      <Synthesis l={l} aids={aids} />
+      {/* the page (`wide`) on a wide screen: the blocks on two halves, on the right the conversation, the follow-up, the
+          budget and renting or buying; narrower, the panel's order */}
+      {halves ? (
+        <div className="grid grid-cols-2 items-start gap-4">
+          <div className="flex min-w-0 flex-col gap-3">
+            <Synthesis l={l} aids={aids} />
 
-      <Section title="Prix et négociation">
-        <PriceChart l={l} sold={ref?.ppm2 ? (t === "parking" ? ref.ppm2 : l.area ? ref.ppm2 * l.area : null) : null} />
-        {refStats && <Ruler stats={refStats} ticks={[{ id: l.id, ppm2: l.price_per_m2 }]} />}
-        <Row label="Écart au prix vendu"><Gap ppm2={l.price_per_m2} refPpm2={ref?.ppm2} long /></Row>
-        <Row label={`Vendu, ${{ recent: "zone (2 ans)", zone: "zone (5 ans)", commune: "commune" }[ref?.scope ?? "recent"]}`} hint={ref ? `${ref.count} ventes` : undefined}>{perUnit(ref?.ppm2, t)}</Row>
-        {data.market.dvf?.[t]?.street?.count ? <Row label={`Vendu, ${data.search.street?.name ?? "rue"}`}>{perUnit(data.market.dvf[t]!.street!.median_ppm2, t)}</Row> : null}
-        {asking(data.market, t) ? <Row label="Affiché, zone (dernier mois)">{m2(asking(data.market, t))}</Row> : null}
-        <Row label="En ligne depuis">{days != null ? `${days} jours, depuis le ${date(l.published_at ?? l.first_seen)}` : "—"}{l.urgent ? " · urgent" : ""}{l.favorites ? ` · ${l.favorites} favoris` : ""}</Row>
-        {drop > 0 && <Row label="Baisses déjà faites">{pct(-drop, 1)}</Row>}
-        {/* the portals' changes and those the search saw: a change both saw, once */}
-        {[...new Map([...l.price_changes.map(c => ({ date: c.date, text: `${eur(c.from)} → ${eur(c.to)}` })), ...(l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, text: `${eur(c.from as number)} → ${eur(c.to as number)}` }))].map(c => [`${c.date.slice(0, 10)}|${c.text}`, c])).values()].map(c => (
-          <Row key={`${c.date}|${c.text}`} label={date(c.date)}>{c.text}</Row>
-        ))}
-        {nego ? (
-          <div className="flex flex-col gap-1 rounded-lg bg-muted p-3">
-            <span className="text-xs text-muted-foreground">Marge de négociation estimée</span>
-            <span className="text-2xl font-bold">{share(nego.low)} à {share(nego.high)}</span>
-            <span className="text-xs text-muted-foreground">soit {eur(Math.round((l.price ?? 0) * nego.low))} à {eur(Math.round((l.price ?? 0) * nego.high))} · {["3 % d'écart habituel entre affiché et vendu", ...nego.reasons.map((r: unknown[]) => REASON[r[0] as string]?.(r[1] as number | boolean))].join(", ")}</span>
+            <Section title="Prix et négociation">
+              <PriceChart l={l} sold={ref?.ppm2 ? (t === "parking" ? ref.ppm2 : l.area ? ref.ppm2 * l.area : null) : null} />
+              {refStats && <Ruler stats={refStats} ticks={[{ id: l.id, ppm2: l.price_per_m2 }]} />}
+              <Row label="Écart au prix vendu"><Gap ppm2={l.price_per_m2} refPpm2={ref?.ppm2} long /></Row>
+              <Row label={`Vendu, ${{ recent: "zone (2 ans)", zone: "zone (5 ans)", commune: "commune" }[ref?.scope ?? "recent"]}`} hint={ref ? `${ref.count} ventes` : undefined}>{perUnit(ref?.ppm2, t)}</Row>
+              {data.market.dvf?.[t]?.street?.count ? <Row label={`Vendu, ${data.search.street?.name ?? "rue"}`}>{perUnit(data.market.dvf[t]!.street!.median_ppm2, t)}</Row> : null}
+              {asking(data.market, t) ? <Row label="Affiché, zone (dernier mois)">{m2(asking(data.market, t))}</Row> : null}
+              <Row label="En ligne depuis">{days != null ? `${days} jours, depuis le ${date(l.published_at ?? l.first_seen)}` : "—"}{l.urgent ? " · urgent" : ""}{l.favorites ? ` · ${l.favorites} favoris` : ""}</Row>
+              {drop > 0 && <Row label="Baisses déjà faites">{pct(-drop, 1)}</Row>}
+              {/* the portals' changes and those the search saw: a change both saw, once */}
+              {[...new Map([...l.price_changes.map(c => ({ date: c.date, text: `${eur(c.from)} → ${eur(c.to)}` })), ...(l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, text: `${eur(c.from as number)} → ${eur(c.to as number)}` }))].map(c => [`${c.date.slice(0, 10)}|${c.text}`, c])).values()].map(c => (
+                <Row key={`${c.date}|${c.text}`} label={date(c.date)}>{c.text}</Row>
+              ))}
+              {nego ? (
+                <div className="flex flex-col gap-1 rounded-lg bg-muted p-3">
+                  <span className="text-xs text-muted-foreground">Marge de négociation estimée</span>
+                  <span className="text-2xl font-bold">{share(nego.low)} à {share(nego.high)}</span>
+                  <span className="text-xs text-muted-foreground">soit {eur(Math.round((l.price ?? 0) * nego.low))} à {eur(Math.round((l.price ?? 0) * nego.high))} · {["3 % d'écart habituel entre affiché et vendu", ...nego.reasons.map((r: unknown[]) => REASON[r[0] as string]?.(r[1] as number | boolean))].join(", ")}</span>
+                </div>
+              ) : <p className="text-sm text-muted-foreground">Pas de marge : le bien est sous offre, vendu ou retiré.</p>}
+            </Section>
+
+            <Section title="Bâtiment et risques" action={
+              <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
+            }>
+              <Row label="Localisation">{l.location.address ?? "—"} ({l.location_source ? placedBy(l.location) : ACCURACY_LABEL[l.location.accuracy ?? "UNKNOWN"] ?? "inconnue"})</Row>
+              {home && <Row label="DPE de l'annonce"><Dpe value={l.dpe?.energy} />{l.dpe?.energy_value ? <span className="ml-2 text-muted-foreground">{l.dpe.energy_value} kWh/m²/an</span> : null}</Row>}
+              {home && <Row label="DPE au registre ADEME">{dpeReg ? <><Dpe value={dpeReg.energy} /><span className="ml-2 text-muted-foreground">{date(dpeReg.date)} · {dpeReg.area} m² · {eur(dpeReg.cost)}/an</span></> : b?.dpe.length ? `${b.dpe.length} DPE à l'adresse, aucun de cette surface` : "—"}</Row>}
+              {budget(l, profile).rent_ban && <Row label="Location interdite">dès {budget(l, profile).rent_ban!.slice(0, 4)} (classe {l.dpe!.energy})</Row>}
+              {t !== "land" && <Row label="Construction">{b?.construction_year ?? l.construction_year ?? (b?.copro ? RISK_KEYS[b.copro.period] ?? "—" : "—")}</Row>}
+              {(t === "house" || t === "land") && <Row label="Terrain">{l.land_area ? `${l.land_area} m²` : "—"}</Row>}
+              {t !== "house" && t !== "land" && <Row label="Copropriété">{b?.copro ? `${b.copro.lots} lots dont ${b.copro.dwellings} logements · syndic ${b.copro.syndic ?? "inconnu"}` : l.lots ? `${l.lots} lots (annonce)` : "—"}</Row>}
+              {b?.copro && <Row label="Registre">{b.copro.name} · n° {b.copro.number}</Row>}
+              {t !== "land" && <Row label="Équipements">{[l.features.elevator && "ascenseur", l.features.balcony && "balcon", l.features.terrace && "terrasse", l.features.garden && "jardin", l.features.cellar && "cave", l.features.parking && "parking", l.features.caretaker && "gardien", l.features.fiber && "fibre", l.features.elevator === false && "sans ascenseur"].filter(Boolean).join(", ") || "—"}</Row>}
+              <Row label="Charges, taxe foncière">{l.fees.condo_yearly ? `${eur(Math.round(l.fees.condo_yearly / 12))}/mois` : "—"} · {l.fees.property_tax ? `${eur(l.fees.property_tax)}/an` : "—"}</Row>
+              <Row label="Risques">{b?.risks ? [...b.risks.natural, ...b.risks.technological].map(r => r.label).join(", ") || "aucun signalé" : "—"}</Row>
+              {b?.sales.length ? (
+                <>
+                  <Separator />
+                  <span className="text-xs text-muted-foreground">Ventes à cette adresse (DVF)</span>
+                  {b.sales.slice(0, 5).map(s => <Row key={s.id} label={date(s.date)}>{eur(s.price)}{s.area ? ` · ${s.area} m²` : ""} · {perUnit(s.ppm2, t)}</Row>)}
+                </>
+              ) : null}
+            </Section>
+
+            <ParcelSection l={l} onView={onView} />
+
+            <Section title="Quartier et trajets">
+              {Object.keys(POI_LABEL).filter(k => near[k]).map(k => (
+                <Row key={k} label={POI_LABEL[k]}>{near[k].count} à moins de 500 m · le plus proche à {near[k].nearest} m{near[k].name ? ` (${near[k].name})` : ""}</Row>
+              ))}
+              {!Object.keys(near).length && <p className="text-sm text-muted-foreground">{l.location.point ? "Rien de recensé à moins de 500 m." : "Le bien n'a pas de position."}</p>}
+              {travel.length > 0 && <Separator />}
+              {[...new Set(travel.map(i => i.place))].map(p => (
+                <Row key={p} label={p}>{travel.filter(i => i.place === p).map(i => `≤ ${i.minutes} min ${i.profile === "car" ? "en voiture" : "à pied"}`).join(" · ")}</Row>
+              ))}
+              {!travel.length && (data.area.places?.length ?? 0) > 0 && <Row label="Lieux clés">au-delà de 30 min à pied et 20 min en voiture</Row>}
+            </Section>
           </div>
-        ) : <p className="text-sm text-muted-foreground">Pas de marge : le bien est sous offre, vendu ou retiré.</p>}
-      </Section>
+          <div className="flex min-w-0 flex-col gap-3">
+            <Conversation l={l} short={short} />
+            <Section title="Suivi">
+              <Field>
+                <FieldLabel htmlFor="notes">Mes notes</FieldLabel>
+                <Textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Visite, questions à poser, impressions…" />
+              </Field>
+              {[{ date: l.first_seen, text: "Ajoutée à la recherche" }, ...(l.changes ?? []).filter(c => c.kind !== "new").map(c => ({ date: c.date, text: c.kind === "expired" ? "Annonce expirée" : c.kind === "status" ? `Statut : ${SALE_STATUS[String(c.to)] ?? c.to}` : `Prix : ${eur(c.from as number)} → ${eur(c.to as number)}` }))].map((c, i) => (
+                <Row key={i} label={date(c.date)}>{c.text}</Row>
+              ))}
+            </Section>
+            <BudgetSection l={l} profileIncome={profile.net_income_monthly} />
+            {home && <RentSection l={l} />}
+          </div>
+        </div>
+      ) : (
+        <>
+          <Synthesis l={l} aids={aids} />
 
-      <Conversation l={l} short={short} />
+          <Section title="Prix et négociation">
+            <PriceChart l={l} sold={ref?.ppm2 ? (t === "parking" ? ref.ppm2 : l.area ? ref.ppm2 * l.area : null) : null} />
+            {refStats && <Ruler stats={refStats} ticks={[{ id: l.id, ppm2: l.price_per_m2 }]} />}
+            <Row label="Écart au prix vendu"><Gap ppm2={l.price_per_m2} refPpm2={ref?.ppm2} long /></Row>
+            <Row label={`Vendu, ${{ recent: "zone (2 ans)", zone: "zone (5 ans)", commune: "commune" }[ref?.scope ?? "recent"]}`} hint={ref ? `${ref.count} ventes` : undefined}>{perUnit(ref?.ppm2, t)}</Row>
+            {data.market.dvf?.[t]?.street?.count ? <Row label={`Vendu, ${data.search.street?.name ?? "rue"}`}>{perUnit(data.market.dvf[t]!.street!.median_ppm2, t)}</Row> : null}
+            {asking(data.market, t) ? <Row label="Affiché, zone (dernier mois)">{m2(asking(data.market, t))}</Row> : null}
+            <Row label="En ligne depuis">{days != null ? `${days} jours, depuis le ${date(l.published_at ?? l.first_seen)}` : "—"}{l.urgent ? " · urgent" : ""}{l.favorites ? ` · ${l.favorites} favoris` : ""}</Row>
+            {drop > 0 && <Row label="Baisses déjà faites">{pct(-drop, 1)}</Row>}
+            {/* the portals' changes and those the search saw: a change both saw, once */}
+            {[...new Map([...l.price_changes.map(c => ({ date: c.date, text: `${eur(c.from)} → ${eur(c.to)}` })), ...(l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, text: `${eur(c.from as number)} → ${eur(c.to as number)}` }))].map(c => [`${c.date.slice(0, 10)}|${c.text}`, c])).values()].map(c => (
+              <Row key={`${c.date}|${c.text}`} label={date(c.date)}>{c.text}</Row>
+            ))}
+            {nego ? (
+              <div className="flex flex-col gap-1 rounded-lg bg-muted p-3">
+                <span className="text-xs text-muted-foreground">Marge de négociation estimée</span>
+                <span className="text-2xl font-bold">{share(nego.low)} à {share(nego.high)}</span>
+                <span className="text-xs text-muted-foreground">soit {eur(Math.round((l.price ?? 0) * nego.low))} à {eur(Math.round((l.price ?? 0) * nego.high))} · {["3 % d'écart habituel entre affiché et vendu", ...nego.reasons.map((r: unknown[]) => REASON[r[0] as string]?.(r[1] as number | boolean))].join(", ")}</span>
+              </div>
+            ) : <p className="text-sm text-muted-foreground">Pas de marge : le bien est sous offre, vendu ou retiré.</p>}
+          </Section>
 
-      <Section title="Bâtiment et risques" action={
-        <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
-      }>
-        <Row label="Localisation">{l.location.address ?? "—"} ({l.location_source ? placedBy(l.location) : ACCURACY_LABEL[l.location.accuracy ?? "UNKNOWN"] ?? "inconnue"})</Row>
-        {home && <Row label="DPE de l'annonce"><Dpe value={l.dpe?.energy} />{l.dpe?.energy_value ? <span className="ml-2 text-muted-foreground">{l.dpe.energy_value} kWh/m²/an</span> : null}</Row>}
-        {home && <Row label="DPE au registre ADEME">{dpeReg ? <><Dpe value={dpeReg.energy} /><span className="ml-2 text-muted-foreground">{date(dpeReg.date)} · {dpeReg.area} m² · {eur(dpeReg.cost)}/an</span></> : b?.dpe.length ? `${b.dpe.length} DPE à l'adresse, aucun de cette surface` : "—"}</Row>}
-        {budget(l, profile).rent_ban && <Row label="Location interdite">dès {budget(l, profile).rent_ban!.slice(0, 4)} (classe {l.dpe!.energy})</Row>}
-        {t !== "land" && <Row label="Construction">{b?.construction_year ?? l.construction_year ?? (b?.copro ? RISK_KEYS[b.copro.period] ?? "—" : "—")}</Row>}
-        {(t === "house" || t === "land") && <Row label="Terrain">{l.land_area ? `${l.land_area} m²` : "—"}</Row>}
-        {t !== "house" && t !== "land" && <Row label="Copropriété">{b?.copro ? `${b.copro.lots} lots dont ${b.copro.dwellings} logements · syndic ${b.copro.syndic ?? "inconnu"}` : l.lots ? `${l.lots} lots (annonce)` : "—"}</Row>}
-        {b?.copro && <Row label="Registre">{b.copro.name} · n° {b.copro.number}</Row>}
-        {t !== "land" && <Row label="Équipements">{[l.features.elevator && "ascenseur", l.features.balcony && "balcon", l.features.terrace && "terrasse", l.features.garden && "jardin", l.features.cellar && "cave", l.features.parking && "parking", l.features.caretaker && "gardien", l.features.fiber && "fibre", l.features.elevator === false && "sans ascenseur"].filter(Boolean).join(", ") || "—"}</Row>}
-        <Row label="Charges, taxe foncière">{l.fees.condo_yearly ? `${eur(Math.round(l.fees.condo_yearly / 12))}/mois` : "—"} · {l.fees.property_tax ? `${eur(l.fees.property_tax)}/an` : "—"}</Row>
-        <Row label="Risques">{b?.risks ? [...b.risks.natural, ...b.risks.technological].map(r => r.label).join(", ") || "aucun signalé" : "—"}</Row>
-        {b?.sales.length ? (
-          <>
-            <Separator />
-            <span className="text-xs text-muted-foreground">Ventes à cette adresse (DVF)</span>
-            {b.sales.slice(0, 5).map(s => <Row key={s.id} label={date(s.date)}>{eur(s.price)}{s.area ? ` · ${s.area} m²` : ""} · {perUnit(s.ppm2, t)}</Row>)}
-          </>
-        ) : null}
-      </Section>
+          <Conversation l={l} short={short} />
 
-      <ParcelSection l={l} onView={onView} />
+          <Section title="Bâtiment et risques" action={
+            <Button size="xs" variant="outline" onClick={() => run({ cmd: "enrich", slug, args: { id: l.id }, label: "Analyse du bâtiment (gratuit)" })}><SearchCheckIcon data-icon="inline-start" />{b ? "Mettre à jour" : "Analyser"}</Button>
+          }>
+            <Row label="Localisation">{l.location.address ?? "—"} ({l.location_source ? placedBy(l.location) : ACCURACY_LABEL[l.location.accuracy ?? "UNKNOWN"] ?? "inconnue"})</Row>
+            {home && <Row label="DPE de l'annonce"><Dpe value={l.dpe?.energy} />{l.dpe?.energy_value ? <span className="ml-2 text-muted-foreground">{l.dpe.energy_value} kWh/m²/an</span> : null}</Row>}
+            {home && <Row label="DPE au registre ADEME">{dpeReg ? <><Dpe value={dpeReg.energy} /><span className="ml-2 text-muted-foreground">{date(dpeReg.date)} · {dpeReg.area} m² · {eur(dpeReg.cost)}/an</span></> : b?.dpe.length ? `${b.dpe.length} DPE à l'adresse, aucun de cette surface` : "—"}</Row>}
+            {budget(l, profile).rent_ban && <Row label="Location interdite">dès {budget(l, profile).rent_ban!.slice(0, 4)} (classe {l.dpe!.energy})</Row>}
+            {t !== "land" && <Row label="Construction">{b?.construction_year ?? l.construction_year ?? (b?.copro ? RISK_KEYS[b.copro.period] ?? "—" : "—")}</Row>}
+            {(t === "house" || t === "land") && <Row label="Terrain">{l.land_area ? `${l.land_area} m²` : "—"}</Row>}
+            {t !== "house" && t !== "land" && <Row label="Copropriété">{b?.copro ? `${b.copro.lots} lots dont ${b.copro.dwellings} logements · syndic ${b.copro.syndic ?? "inconnu"}` : l.lots ? `${l.lots} lots (annonce)` : "—"}</Row>}
+            {b?.copro && <Row label="Registre">{b.copro.name} · n° {b.copro.number}</Row>}
+            {t !== "land" && <Row label="Équipements">{[l.features.elevator && "ascenseur", l.features.balcony && "balcon", l.features.terrace && "terrasse", l.features.garden && "jardin", l.features.cellar && "cave", l.features.parking && "parking", l.features.caretaker && "gardien", l.features.fiber && "fibre", l.features.elevator === false && "sans ascenseur"].filter(Boolean).join(", ") || "—"}</Row>}
+            <Row label="Charges, taxe foncière">{l.fees.condo_yearly ? `${eur(Math.round(l.fees.condo_yearly / 12))}/mois` : "—"} · {l.fees.property_tax ? `${eur(l.fees.property_tax)}/an` : "—"}</Row>
+            <Row label="Risques">{b?.risks ? [...b.risks.natural, ...b.risks.technological].map(r => r.label).join(", ") || "aucun signalé" : "—"}</Row>
+            {b?.sales.length ? (
+              <>
+                <Separator />
+                <span className="text-xs text-muted-foreground">Ventes à cette adresse (DVF)</span>
+                {b.sales.slice(0, 5).map(s => <Row key={s.id} label={date(s.date)}>{eur(s.price)}{s.area ? ` · ${s.area} m²` : ""} · {perUnit(s.ppm2, t)}</Row>)}
+              </>
+            ) : null}
+          </Section>
 
-      <Section title="Quartier et trajets">
-        {Object.keys(POI_LABEL).filter(k => near[k]).map(k => (
-          <Row key={k} label={POI_LABEL[k]}>{near[k].count} à moins de 500 m · le plus proche à {near[k].nearest} m{near[k].name ? ` (${near[k].name})` : ""}</Row>
-        ))}
-        {!Object.keys(near).length && <p className="text-sm text-muted-foreground">{l.location.point ? "Rien de recensé à moins de 500 m." : "Le bien n'a pas de position."}</p>}
-        {travel.length > 0 && <Separator />}
-        {[...new Set(travel.map(i => i.place))].map(p => (
-          <Row key={p} label={p}>{travel.filter(i => i.place === p).map(i => `≤ ${i.minutes} min ${i.profile === "car" ? "en voiture" : "à pied"}`).join(" · ")}</Row>
-        ))}
-        {!travel.length && (data.area.places?.length ?? 0) > 0 && <Row label="Lieux clés">au-delà de 30 min à pied et 20 min en voiture</Row>}
-      </Section>
+          <ParcelSection l={l} onView={onView} />
 
-      <BudgetSection l={l} profileIncome={profile.net_income_monthly} />
-      {home && <RentSection l={l} />}
+          <Section title="Quartier et trajets">
+            {Object.keys(POI_LABEL).filter(k => near[k]).map(k => (
+              <Row key={k} label={POI_LABEL[k]}>{near[k].count} à moins de 500 m · le plus proche à {near[k].nearest} m{near[k].name ? ` (${near[k].name})` : ""}</Row>
+            ))}
+            {!Object.keys(near).length && <p className="text-sm text-muted-foreground">{l.location.point ? "Rien de recensé à moins de 500 m." : "Le bien n'a pas de position."}</p>}
+            {travel.length > 0 && <Separator />}
+            {[...new Set(travel.map(i => i.place))].map(p => (
+              <Row key={p} label={p}>{travel.filter(i => i.place === p).map(i => `≤ ${i.minutes} min ${i.profile === "car" ? "en voiture" : "à pied"}`).join(" · ")}</Row>
+            ))}
+            {!travel.length && (data.area.places?.length ?? 0) > 0 && <Row label="Lieux clés">au-delà de 30 min à pied et 20 min en voiture</Row>}
+          </Section>
 
-      <Section title="Suivi">
-        <Field>
-          <FieldLabel htmlFor="notes">Mes notes</FieldLabel>
-          <Textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Visite, questions à poser, impressions…" />
-        </Field>
-        {[{ date: l.first_seen, text: "Ajoutée à la recherche" }, ...(l.changes ?? []).filter(c => c.kind !== "new").map(c => ({ date: c.date, text: c.kind === "expired" ? "Annonce expirée" : c.kind === "status" ? `Statut : ${SALE_STATUS[String(c.to)] ?? c.to}` : `Prix : ${eur(c.from as number)} → ${eur(c.to as number)}` }))].map((c, i) => (
-          <Row key={i} label={date(c.date)}>{c.text}</Row>
-        ))}
-      </Section>
+          <BudgetSection l={l} profileIncome={profile.net_income_monthly} />
+          {home && <RentSection l={l} />}
+
+          <Section title="Suivi">
+            <Field>
+              <FieldLabel htmlFor="notes">Mes notes</FieldLabel>
+              <Textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Visite, questions à poser, impressions…" />
+            </Field>
+            {[{ date: l.first_seen, text: "Ajoutée à la recherche" }, ...(l.changes ?? []).filter(c => c.kind !== "new").map(c => ({ date: c.date, text: c.kind === "expired" ? "Annonce expirée" : c.kind === "status" ? `Statut : ${SALE_STATUS[String(c.to)] ?? c.to}` : `Prix : ${eur(c.from as number)} → ${eur(c.to as number)}` }))].map((c, i) => (
+              <Row key={i} label={date(c.date)}>{c.text}</Row>
+            ))}
+          </Section>
+        </>
+      )}
     </div>
   )
 }

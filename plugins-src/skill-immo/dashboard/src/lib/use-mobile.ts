@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react"
 
-const query = "(max-width: 767px)"
-const subscribe = (cb: () => void) => { const m = matchMedia(query); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb) }
+// whether a media query matches, following it
+export const useMedia = (query: string) => useSyncExternalStore(cb => { const m = matchMedia(query); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb) }, () => matchMedia(query).matches)
 
 // below the md breakpoint: the map and the list become tabs, the dossier a bottom drawer
-export const useIsMobile = () => useSyncExternalStore(subscribe, () => matchMedia(query).matches)
+export const useIsMobile = () => useMedia("(max-width: 767px)")

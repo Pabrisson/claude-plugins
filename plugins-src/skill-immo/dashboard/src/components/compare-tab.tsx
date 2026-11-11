@@ -4,6 +4,7 @@ import { daysOnline, negotiation, typeOf, unitPrice } from "@engine/market.js"
 import { BrushCleaningIcon, MessageSquarePlusIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { ListingLink } from "@/components/dossier"
 import { Dpe } from "@/components/dpe"
 import { nearby } from "@/components/map-view"
 import { Gap } from "@/components/ruler"
@@ -13,12 +14,12 @@ import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Listing, PropertyType } from "@/lib/api"
-import { eur, num, perUnit, share, titleOf, TYPE_LABEL } from "@/lib/format"
+import { eur, num, perUnit, share, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 
 // 2 to 4 listings side by side, on what decides between them
 export function CompareTab() {
-  const { data, compare, toggleCompare, clearCompare, marketFor, aidsFor, profile, select, addFeedback } = useSearch()
+  const { data, compare, toggleCompare, clearCompare, marketFor, aidsFor, profile, addFeedback } = useSearch()
   const ls = compare.map(id => data.listings.find(l => l.id === id)).filter(Boolean) as Listing[]
   if (ls.length < 2)
     return (
@@ -72,7 +73,7 @@ export function CompareTab() {
               {ls.map(l => (
                 <TableHead key={l.id} className="min-w-44">
                   <span className="flex items-center justify-between gap-2">
-                    <button type="button" className="truncate text-left font-semibold hover:underline" onClick={() => select(l.id)}>{titleOf(l)}</button>
+                    <ListingLink l={l} className="truncate font-semibold" />
                     <Button variant="ghost" size="icon-xs" aria-label="Retirer du comparateur" onClick={() => toggleCompare(l.id)}><XIcon /></Button>
                   </span>
                 </TableHead>

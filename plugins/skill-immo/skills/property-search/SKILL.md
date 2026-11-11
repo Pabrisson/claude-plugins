@@ -185,7 +185,8 @@ and ask nothing it gives.
      listings they rule out, and you pay for them too. Then offer `immo.mjs market -p <slug>` (the zone's asking price
      per m², month by month; unknown cost).
    - OpenData mode: the assisted mode.
-7. **Dashboard**: `immo.mjs dashboard -p <slug> --open`. Give the user its URL.
+7. **Dashboard**: `immo.mjs dashboard -p <slug> --open`. Give the user its URL. A listing has its own page there,
+   `<URL>annonce/<id>/`: link it when you speak of one listing.
 8. **Summary**: say in a few lines how many listings there are, the zone's sold €/m², the two or three listings
    that stand out and why (below the market, a recent drop, a long time online), and what is missing (no profile, no
    DVF in Alsace-Moselle…).

@@ -1419,8 +1419,8 @@ async function handle(req, res) {
     return reply(res, 404, { error: 'not found' })
   }
   if (p.startsWith('/api/')) return reply(res, 404, { error: 'not found' })
-  // the dashboard: its files, else its page for any search URL (/<slug>/)
-  const rel = p.replace(/^\/[a-z0-9-]+\/(?=assets\/)/, '/').slice(1), file = path.resolve(DASHBOARD, rel || 'index.html')
+  // the dashboard: its files, else its page for any search URL (/<slug>/, a listing's /<slug>/annonce/<id>)
+  const rel = p.replace(/^\/[a-z0-9-]+\/(?:annonce\/(?:[\w-]+\/)?)?(?=assets\/)/, '/').slice(1), file = path.resolve(DASHBOARD, rel || 'index.html')
   sendFile(res, file.startsWith(DASHBOARD + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile() ? file : path.join(DASHBOARD, 'index.html'))
 }
 

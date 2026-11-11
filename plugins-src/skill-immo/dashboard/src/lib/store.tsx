@@ -72,6 +72,7 @@ const AT = "immo:explorer:at"
 export const rememberAt = (p: Point) => { if (EXPLORE) save(AT, p) }
 export const startOf = (s: Search): Point => { const at = EXPLORE ? load(AT) : []; return at.length === 2 ? at : (s.zone.center ?? s.point) }
 
+const handoff = (key: string) => { try { const v = sessionStorage.getItem(key); sessionStorage.removeItem(key); return v } catch { return null } }
 // what this tab shows (its view, the dossier open) survives a reload of the page, in this tab only
 export function useTabState<T>(key: string, initial: T) {
   const [v, setV] = useState<T>(() => { try { const x = sessionStorage.getItem(key); return x == null ? initial : JSON.parse(x) } catch { return initial } })
@@ -100,8 +101,9 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
   const [unread, setUnread] = useState(initial.unread)
   const [newsFocus, focusNews] = useState<string | null>(null)
   const [mapFocus, focusMap] = useState<MapRow | null>(null)
-  const [parcelFocus, focusParcel] = useState<string | null>(null)
-  const [spot, spotListing] = useState<string | null>(null)
+  // what a listing's page hands to its search when it goes back (« Voir », « Voir au cadastre »), read once
+  const [parcelFocus, focusParcel] = useState<string | null>(() => handoff(`immo:${slug}:parcel`))
+  const [spot, spotListing] = useState<string | null>(() => handoff(`immo:${slug}:spot`))
 
   const reload = useCallback(async () => {
     const [d, s] = await Promise.all([api.search(slug), api.state()])

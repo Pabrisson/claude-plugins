@@ -4,6 +4,7 @@ import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, BadgeCheckIcon, BedDoubleI
 import { createElement, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react"
 import { toast } from "sonner"
 
+import { ListingLink } from "@/components/dossier"
 import { CreditBadge } from "@/components/credit-badge"
 import { Dpe } from "@/components/dpe"
 import { Star } from "@/components/favorite"
@@ -35,7 +36,7 @@ type Row = { l: Listing; score: number | null; gap: number | null; days: number 
 // each column: its header, what it sorts on, its cell; `wide` ones only show from a tablet up
 const COLUMNS: { key: string; label: string; sort: (r: Row) => number | string | null; cell: (r: Row) => React.ReactNode; right?: boolean; center?: boolean; wide?: boolean }[] = [
   { key: "type", label: "Type", center: true, sort: r => typeOf(r.l), cell: r => <TypeIcon type={r.l.property_type} className="mx-auto size-4 text-muted-foreground" /> },
-  { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="flex max-w-72 items-center gap-1 font-medium">{r.l.favorite && <Star on className="size-3.5 shrink-0" />}<span className="truncate">{titleOf(r.l)}</span>{unseen(r.l) && <NewBadge className="h-4 shrink-0 px-1.5 text-[10px]" />}</span><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Origin l={r.l} />{[...new Set(r.l.urls.map(u => u.source).filter(Boolean))].join(", ")}</span></span> },
+  { key: "title", label: "Bien", sort: r => titleOf(r.l), cell: r => <span className="flex flex-col"><span className="flex max-w-72 items-center gap-1 font-medium">{r.l.favorite && <Star on className="size-3.5 shrink-0" />}<ListingLink l={r.l} className="truncate" />{unseen(r.l) && <NewBadge className="h-4 shrink-0 px-1.5 text-[10px]" />}</span><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Origin l={r.l} />{[...new Set(r.l.urls.map(u => u.source).filter(Boolean))].join(", ")}</span></span> },
   { key: "price", label: "Prix", right: true, sort: r => r.l.price, cell: r => <PriceCell l={r.l} /> },
   { key: "area", label: "Surface", right: true, sort: r => r.l.area ?? r.l.land_area ?? null, cell: r => (r.l.area ? `${num(r.l.area)} m²` : r.l.land_area ? `${num(r.l.land_area)} m² de terrain` : "—") },
   { key: "ppm2", label: "Prix unitaire", right: true, wide: true, sort: r => unitPrice(r.l), cell: r => num(unitPrice(r.l)) },
@@ -197,15 +198,16 @@ export function ListTab() {
             {shown.map(r => {
               const on = picked.includes(r.l.id)
               return (
-                <TableRow key={r.l.id} id={`row-${r.l.id}`} data-state={on ? "selected" : undefined} onClick={() => select(r.l.id)} style={statusBand(r.l.my_status)} className={cn("cursor-pointer scroll-mt-16", spot === r.l.id && "spot bg-accent/60")}>
+                // the row opens the dossier on the right (Entrée too), the name its own page
+                <TableRow key={r.l.id} id={`row-${r.l.id}`} data-state={on ? "selected" : undefined} onClick={() => select(r.l.id)} tabIndex={0} aria-label={`Ouvrir le dossier de ${titleOf(r.l)}`}
+                  onKeyDown={e => { if (e.key === "Enter" && e.target === e.currentTarget) select(r.l.id) }} style={statusBand(r.l.my_status)}
+                  className={cn("cursor-pointer scroll-mt-16 focus-visible:bg-accent focus-visible:outline-none", spot === r.l.id && "spot bg-accent/60")}>
                   <TableCell className="pr-0" onClick={e => e.stopPropagation()}>
                     <Checkbox aria-label={`Sélectionner ${titleOf(r.l)}`} checked={on} onCheckedChange={v => setPicked(p => (v ? [...p, r.l.id] : p.filter(x => x !== r.l.id)))} />
                   </TableCell>
                   {COLUMNS.map(c => (
                     <TableCell key={c.key} className={cn(c.right && "text-right", c.center && "text-center", c.wide && "hidden md:table-cell")}>
-                      {c.key === "title" ? (
-                        <button type="button" onClick={e => { e.stopPropagation(); select(r.l.id) }} className="text-left focus-visible:underline focus-visible:outline-none">{c.cell(r)}</button>
-                      ) : c.cell(r)}
+                      {c.cell(r)}
                     </TableCell>
                   ))}
                 </TableRow>

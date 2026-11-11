@@ -3,6 +3,7 @@ import { BellRingIcon, CheckCheckIcon, CheckIcon, ChevronDownIcon, DownloadIcon,
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
+import { ListingLink } from "@/components/dossier"
 import { Scope, summary } from "@/components/alerts-tab"
 import { CreditBadge, lastCount } from "@/components/credit-badge"
 import { DPE_HEX } from "@/components/dpe"
@@ -235,7 +236,8 @@ function NewsRow({ n, fresh, lit, onOpen, onRead, onView }: { n: NewsItem; fresh
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold" style={{ color }}>{label}{n.alerts.map(a => <AlertPill key={a.id} a={a} />)}{fresh && <span className="sr-only">, non lue</span>}</p>
         {"l" in n
-          ? <button type="button" onClick={() => { onOpen(); select(n.l.id) }} className={cn(title, "after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring")}>{newsTitle(n)}</button>
+          // the card opens the dossier on the right, the name its own page
+          ? <p className={title}><button type="button" aria-label={`Ouvrir le dossier de ${newsTitle(n)}`} onClick={() => { onOpen(); select(n.l.id) }} className="absolute inset-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" /><ListingLink l={n.l} className="relative">{newsTitle(n)}</ListingLink></p>
           : <p className={title}>{newsTitle(n)}</p>}
         <p className="truncate text-xs text-muted-foreground">{detail}</p>
       </div>

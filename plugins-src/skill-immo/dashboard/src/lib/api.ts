@@ -294,6 +294,10 @@ export const api = {
 
 export const docUrl = (slug: string, d: Doc) => `/api/s/${slug}/${d.file.split("/").map(encodeURIComponent).join("/")}`
 
+// a listing's own page, /<slug>/annonce/<id>, and the listing a URL is about
+export const listingUrl = (slug: string, id: string) => `/${slug}/annonce/${encodeURIComponent(id)}/`
+export const listingOfUrl = () => { const [, page, id] = location.pathname.split("/").filter(Boolean); return page === "annonce" && id ? decodeURIComponent(id) : null }
+
 // the search a URL is about: /<slug>/
 export const slugOfUrl = () => location.pathname.split("/").filter(Boolean)[0] ?? null
 // the page without a search (« Explorer » on the home page): /explorer/, its
