@@ -56,7 +56,7 @@ export type Listing = {
   // the portal's gallery, and Stream Estate's copies when they were not shown (they stay after the portal's go)
   pictures: string[]
   se_pictures?: string[]
-  // the user's photos (« Ajouter des photos »), and the portal's downloaded once it expired: files of the search's folder
+  // the user's photos (dropped on the dossier's photos), and the portal's downloaded once it expired: files of the search's folder
   my_pictures?: Doc[]
   kept_pictures?: string[]
   published_at: string | null

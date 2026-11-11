@@ -1084,7 +1084,7 @@ const docPath = (dir, file) => { const root = path.join(dir, 'documents'), f = p
 const removeDocuments = (dir, m) => { for (const d of m.documents ?? []) { const f = docPath(dir, d.file); if (f) fs.rmSync(f, { force: true }) } }
 const writeDocument = (dir, d, write) => { const f = docPath(dir, d.file); fs.mkdirSync(path.dirname(f), { recursive: true }); write(f) }
 // The photos a listing keeps in its search, beside its documents (git keeps them): the user's own (`my_pictures`,
-// « Ajouter des photos », a document's checks, images only) and, once it expired, its portal's (`kept_pictures`)
+// images dropped on the dossier's photos, a document's checks, images only) and, once it expired, its portal's (`kept_pictures`)
 const PHOTO_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif']
 function newPhoto(l, name, size) {
   const { type, ...d } = newDocument(l, name, size)

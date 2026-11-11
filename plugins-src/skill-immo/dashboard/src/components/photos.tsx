@@ -1,4 +1,4 @@
-import { ChevronLeftIcon, ChevronRightIcon, ImagePlusIcon, ImagesIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon, ImagesIcon, ImageUpIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 
@@ -26,8 +26,9 @@ export function photosOf(slug: string, l: Listing, failed: string[] = []): Photo
 // the photos the engine takes (immo.mjs PHOTO_EXT): 25 MB at most each, 20 a call
 const PHOTO_EXT = ["jpg", "jpeg", "png", "webp", "gif", "avif"], PHOTO_MAX = 25e6, PER_CALL = 20
 
-// The strip of the dossier, each photo opening the viewer, and « Ajouter des photos » at its end (a click, or images
-// dropped on the strip): the user's own, kept in the search beside its documents
+// The strip of the dossier, each photo opening the viewer. Images dropped on it are the user's own, kept in the search
+// beside its documents: while they are dragged over it a veil covers it (« Déposez vos photos ici »), the same while
+// they upload; a listing without photos has a dashed zone in the strip's place, which a click opens on the files too.
 export function Photos({ l }: { l: Listing }) {
   const { slug, reload } = useSearch()
   const [failed, setFailed] = useState<string[]>([]), [at, setAt] = useState<number | null>(null), [busy, setBusy] = useState(false), [over, setOver] = useState(false)
@@ -52,9 +53,8 @@ export function Photos({ l }: { l: Listing }) {
     await reload()
     toast.success("Photo supprimée")
   }
-  const pick = () => input.current?.click()
   return (
-    <div className={cn("rounded-lg", over && "ring-2 ring-primary ring-offset-2 ring-offset-background")}
+    <div className="relative"
       onDragOver={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true) } }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false) }}
       onDrop={e => { e.preventDefault(); setOver(false); add(e.dataTransfer.files) }}>
@@ -71,15 +71,17 @@ export function Photos({ l }: { l: Listing }) {
               {p.mine && <span className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded-md bg-background/85 px-1.5 text-xs leading-5 font-medium backdrop-blur-sm"><UserRoundIcon className="size-3.5" />Ajoutée</span>}
             </button>
           ))}
-          <button type="button" onClick={pick} disabled={busy} title="Ou glissez des images sur les photos"
-            className="flex h-40 w-32 flex-none snap-start flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-2 text-center text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60">
-            {busy ? <Spinner className="size-6" /> : <ImagePlusIcon className="size-6" />}Ajouter des photos
-          </button>
         </div>
       ) : (
-        <Button variant="outline" size="sm" onClick={pick} disabled={busy} title="Ou glissez des images ici">
-          {busy ? <Spinner data-icon="inline-start" /> : <ImagePlusIcon data-icon="inline-start" />}Ajouter des photos
-        </Button>
+        <button type="button" onClick={() => input.current?.click()} disabled={busy}
+          className="flex h-28 w-full flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+          <ImageUpIcon className="size-6" /><span className="font-medium text-foreground">Glissez-déposez vos photos ici</span>ou cliquez pour les choisir
+        </button>
+      )}
+      {(over || busy) && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-background/85 text-sm font-medium backdrop-blur-sm">
+          {busy ? <><Spinner className="size-5" />Ajout des photos…</> : <><ImageUpIcon className="size-5 text-primary" />Déposez vos photos ici</>}
+        </div>
       )}
       <Viewer photos={photos} at={at} onAt={setAt} onFail={fail} onDelete={remove} />
     </div>
