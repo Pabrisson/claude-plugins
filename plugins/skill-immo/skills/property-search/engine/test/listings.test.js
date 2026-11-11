@@ -55,6 +55,13 @@ test('merge: new, deduplicated by URL, the user keeps status and notes, drops an
   assert.deepEqual(r.listings[0].changes.map(c => c.kind), ['new', 'price_drop', 'status', 'expired'])
 })
 
+test('a contact corrected by hand stays through a refresh, the source’s otherwise', () => {
+  const [l] = merge([], [se], '2026-10-27').listings
+  assert.deepEqual(merge([l], [{ ...se, publishers: [{ name: 'AUTRE' }] }], '2026-10-28').listings[0].publishers, [{ name: 'AUTRE' }])
+  l.publishers = [{ ...l.publishers[0], name: 'Claire Martin', by: 'hand' }]
+  assert.equal(merge([l], [se], '2026-10-28').listings[0].publishers[0].name, 'Claire Martin')
+})
+
 test('the same price again is no change', () => {
   const r1 = merge([], [se], '2026-10-27'), r2 = merge(r1.listings, [se], '2026-10-28')
   assert.deepEqual(r2.changes, [])

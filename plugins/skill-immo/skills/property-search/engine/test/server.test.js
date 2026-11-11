@@ -103,6 +103,14 @@ test("the user's status and notes, the last visit, the profile", async () => {
   assert.equal((await post(`/api/s/paul-bert/listings/${property.uuid}`, { labels: [1] })).status, 400)
   assert.deepEqual((await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { labels: ['rdc'] })).json()).labels, ['rdc'])
   assert.equal((await post('/api/s/paul-bert/listings/nope', { notes: 'x' })).status, 404)
+  // a contact corrected by hand: blanks cleared, kept by hand, the messages to its old name follow it
+  const f = path.join(dir, 'listings.json'), ls = JSON.parse(fs.readFileSync(f, 'utf8')), old = ls[0].publishers[0].name
+  ls[0].messages = [{ id: 'm-c', from: 'them', to: old, text: 'x' }, { id: 'm-d', from: 'me', to: 'Quelqu’un', text: 'y' }]
+  fs.writeFileSync(f, JSON.stringify(ls))
+  const fixed = await (await post(`/api/s/paul-bert/listings/${property.uuid}`, { contact: { index: 0, name: ' Claire Martin ', phone: '06 00 00 00 00', email: ' ' } })).json()
+  assert.deepEqual([fixed.publishers[0].name, fixed.publishers[0].phone, fixed.publishers[0].email, fixed.publishers[0].by], ['Claire Martin', '06 00 00 00 00', null, 'hand'])
+  assert.deepEqual(fixed.messages.map(m => m.to), ['Claire Martin', 'Quelqu’un'])
+  assert.equal((await post(`/api/s/paul-bert/listings/${property.uuid}`, { contact: { index: 5, name: 'x' } })).status, 404)
   assert.equal((await (await post('/api/s/paul-bert/visit', {})).json()).last_visit, null)
   assert.ok((await (await post('/api/s/paul-bert/visit', {})).json()).last_visit)
   const p = await (await post('/api/profile', { rate: 3.1, down_payment: '50000', places: 'nope', weights: { price: 9, energy: '1', nope: 2 } })).json()

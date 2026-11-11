@@ -174,8 +174,10 @@ export function merge(known, incoming, now, gone = []) {
     // a Stream Estate property found for an assisted listing takes its place, and its id
     if (n.source === 'stream-estate' && old.source !== 'stream-estate') byId.delete(old.id)
     // what the agent did not read stays as it was
-    // (a listing the user placed keeps their place: the source's new one waits in location_source, locate)
-    for (const [k, v] of Object.entries(n)) if (!KEPT.includes(k) && v != null && !(Array.isArray(v) && !v.length && old[k]?.length)) old[k === 'location' && old.location_source ? 'location_source' : k] = v
+    // (a listing the user placed keeps their place: the source's new one waits in location_source, locate; a contact
+    // they corrected, `by: 'hand'`, keeps the contacts as they are)
+    const kept = k => KEPT.includes(k) || (k === 'publishers' && old.publishers?.some(p => p.by === 'hand'))
+    for (const [k, v] of Object.entries(n)) if (!kept(k) && v != null && !(Array.isArray(v) && !v.length && old[k]?.length)) old[k === 'location' && old.location_source ? 'location_source' : k] = v
     const urls = new Map(before.urls.map(u => [normUrl(u.url) ?? u.source, u]))
     for (const u of n.urls) { const k = normUrl(u.url) ?? u.source; urls.set(k, { ...urls.get(k), ...u }) }
     old.urls = [...urls.values()]

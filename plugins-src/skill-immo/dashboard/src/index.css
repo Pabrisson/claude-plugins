@@ -25,6 +25,7 @@
     --color-below: var(--below);
     --color-at: var(--at);
     --color-above: var(--above);
+    --color-them: var(--them);
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
@@ -77,6 +78,8 @@
     --below: oklch(0.55 0.17 255);
     --at: oklch(0.62 0.012 286);
     --above: oklch(0.6 0.17 45);
+    /* the other side of a conversation (the agency, the seller): their messages on a light blue, the user's on the neutral muted */
+    --them: oklch(0.95 0.03 250);
     /* sold (DVF), asking (Stream Estate), then the categorical rest */
     --chart-1: oklch(0.21 0.006 285.885);
     --chart-2: oklch(0.58 0.19 300);
@@ -163,6 +166,7 @@
     --below: oklch(0.62 0.16 255);
     --at: oklch(0.56 0.012 286);
     --above: oklch(0.67 0.16 50);
+    --them: oklch(0.29 0.045 255);
     --chart-1: oklch(0.92 0.004 286.32);
     /* chart-2 to 4 checked with dataviz's validator against the card (#18181b), every pair */
     --chart-2: oklch(0.64 0.16 300);

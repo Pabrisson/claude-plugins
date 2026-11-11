@@ -149,7 +149,7 @@ function Checks<T>({ items, value, onChange, id, label, columns }: { items: T[];
   )
 }
 
-function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; short: string; onClose: () => void }) {
+export function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; short: string; onClose: () => void }) {
   const { addFeedback, marketFor, aidsFor } = useSearch()
   const a = ASKS[ask], t = typeOf(l) as PropertyType, docs = docsOf(l)
   const questions: string[] = ask === "question" ? review(l, aidsFor(l)).questions : []

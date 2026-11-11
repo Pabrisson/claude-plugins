@@ -1389,6 +1389,15 @@ async function handle(req, res) {
       }
       // opened: no longer « Nouveau »; seen: false puts it back
       if (typeof body.seen === 'boolean') l.seen_at = body.seen ? l.seen_at ?? now() : null
+      // a contact corrected by hand (« Modifier le contact »: name, phone, email; blank clears), `by: 'hand'` keeps it
+      // through refreshes (merge); the messages to its old name follow it
+      if (body.contact) {
+        const c = body.contact, p = l.publishers?.[c.index], str = v => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 120) : null)
+        if (!p || !Number.isInteger(c.index)) return reply(res, 404, { error: 'no such contact' })
+        const name = str(c.name)
+        for (const m of l.messages ?? []) if (p.name && m.to === p.name) m.to = name
+        Object.assign(p, { name, phone: str(c.phone), email: str(c.email), by: 'hand' })
+      }
       // the conversation: a message the user adds (a reply received, a call) with its documents ({ name, data: base64,
       // type? }), one marked sent or not, one deleted with its documents, one of its documents given another type
       if (body.message?.add) {

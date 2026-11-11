@@ -52,7 +52,7 @@ export type Listing = {
   location_source?: Location
   fees: { agency: { amount: number | null; percentage: number | null; included: boolean | null; paid_by: string | null } | null; condo_yearly: number | null; property_tax: number | null }
   status: string
-  publishers: { type: string | null; name: string | null; card: string | null; phone: string | null; email: string | null; website: string | null }[]
+  publishers: { type: string | null; name: string | null; card: string | null; phone: string | null; email: string | null; website: string | null; by?: "hand" }[]
   // the portal's gallery, and Stream Estate's copies when they were not shown (they stay after the portal's go)
   pictures: string[]
   se_pictures?: string[]
@@ -272,7 +272,7 @@ export const api = {
   cache: (clear = false) => json<{ files: number; bytes: number }>("/api/cache", clear ? { method: "DELETE" } : undefined),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; message?: { id: string; sent?: boolean; delete?: boolean; document?: { id: string; type: string } } | { add: NewMessage }; location?: NewLocation }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; contact?: { index: number; name: string; phone: string; email: string }; message?: { id: string; sent?: boolean; delete?: boolean; document?: { id: string; type: string } } | { add: NewMessage }; location?: NewLocation }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
   saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),

@@ -2,12 +2,12 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { CalendarClockIcon, CheckIcon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, Maximize2Icon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { BellRingIcon, CalendarClockIcon, PencilIcon, CheckIcon, ClockIcon, EllipsisIcon, MessagesSquareIcon, ReplyIcon, SendIcon, Undo2Icon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, Maximize2Icon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { Fragment, useEffect, useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
 
-import { AskMenu, DOC_LABEL, DocIcon, docTypesFor, typeOfDoc } from "@/components/ask-agent"
+import { AskDialog, AskMenu, DOC_LABEL, DocIcon, docTypesFor, typeOfDoc } from "@/components/ask-agent"
 import { Dpe } from "@/components/dpe"
 import { nearby } from "@/components/map-view"
 import { Gap, Ruler } from "@/components/ruler"
@@ -21,17 +21,24 @@ import { StatusDot } from "@/components/status"
 import { StaleBar } from "@/components/top-bar"
 import { TypeIcon } from "@/components/type-icon"
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Attachment, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentMedia, AttachmentTitle, AttachmentTrigger } from "@/components/ui/attachment"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
+import { Message as ChatMessage, MessageAvatar, MessageContent, MessageFooter, MessageHeader } from "@/components/ui/message"
+import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -150,7 +157,7 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
     )
   return (
     <Sheet open={!!l} onOpenChange={o => !o && select(null)}>
-      <SheetContent showCloseButton={false} className="gap-0 overflow-y-auto data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
+      <SheetContent showCloseButton={false} className="gap-0 data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
         {/* « Voir » and the close button side by side, both centered on the title */}
         <SheetHeader className="flex-row items-center justify-between gap-3 border-b">
           <span className="min-w-0"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)}`}</SheetDescription></span>
@@ -160,7 +167,8 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
           </span>
         </SheetHeader>
         <StaleBar />
-        <div className="p-4">{body}</div>
+        {/* only the body scrolls: its scrollbar starts below the header */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{body}</div>
       </SheetContent>
     </Sheet>
   )
@@ -338,9 +346,7 @@ export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (
                 <FieldLabel htmlFor="notes">Mes notes</FieldLabel>
                 <Textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Visite, questions à poser, impressions…" />
               </Field>
-              {[{ date: l.first_seen, text: "Ajoutée à la recherche" }, ...(l.changes ?? []).filter(c => c.kind !== "new").map(c => ({ date: c.date, text: c.kind === "expired" ? "Annonce expirée" : c.kind === "status" ? `Statut : ${SALE_STATUS[String(c.to)] ?? c.to}` : `Prix : ${eur(c.from as number)} → ${eur(c.to as number)}` }))].map((c, i) => (
-                <Row key={i} label={date(c.date)}>{c.text}</Row>
-              ))}
+              <FollowLog l={l} />
             </Section>
             <BudgetSection l={l} profileIncome={profile.net_income_monthly} />
             {home && <RentSection l={l} />}
@@ -419,12 +425,20 @@ export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (
               <FieldLabel htmlFor="notes">Mes notes</FieldLabel>
               <Textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Visite, questions à poser, impressions…" />
             </Field>
-            {[{ date: l.first_seen, text: "Ajoutée à la recherche" }, ...(l.changes ?? []).filter(c => c.kind !== "new").map(c => ({ date: c.date, text: c.kind === "expired" ? "Annonce expirée" : c.kind === "status" ? `Statut : ${SALE_STATUS[String(c.to)] ?? c.to}` : `Prix : ${eur(c.from as number)} → ${eur(c.to as number)}` }))].map((c, i) => (
-              <Row key={i} label={date(c.date)}>{c.text}</Row>
-            ))}
+            <FollowLog l={l} />
           </Section>
         </>
       )}
+    </div>
+  )
+}
+
+// what happened to the listing, newest first, in a box of its own height at most: a long history scrolls inside it
+function FollowLog({ l }: { l: Listing }) {
+  const log = [{ date: l.first_seen, text: "Ajoutée à la recherche" }, ...(l.changes ?? []).filter(c => c.kind !== "new").map(c => ({ date: c.date, text: c.kind === "expired" ? "Annonce expirée" : c.kind === "status" ? `Statut : ${SALE_STATUS[String(c.to)] ?? c.to}` : `Prix : ${eur(c.from as number)} → ${eur(c.to as number)}` }))].reverse()
+  return (
+    <div className="-mr-2 flex max-h-56 flex-col gap-2.5 overflow-y-auto pr-2" tabIndex={0} role="region" aria-label="Historique de l'annonce">
+      {log.map((c, i) => <Row key={i} label={date(c.date)}>{c.text}</Row>)}
     </div>
   )
 }
@@ -472,20 +486,65 @@ function Portals({ l }: { l: Listing }) {
   )
 }
 
-// who sells it: the agency (or the private seller) with a phone and an email to reach them, one line each
+// who sells it: the agency (or the private seller, « particulier » after their name) with a phone and an email to reach
+// them, one line each; the pencil corrects a contact badly read (name, phone, email)
 function Contacts({ l }: { l: Listing }) {
   if (!l.publishers.length) return null
   const link = "underline-offset-4 hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
   return (
     <div className="flex flex-col gap-1 text-sm">
       {l.publishers.map((p, i) => (
-        <p key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-          <span className="flex items-center gap-1.5 font-medium text-foreground"><ContactRoundIcon className="size-4 text-muted-foreground" />{p.type === "PRIVATE_INDIVIDUAL" ? "Particulier" : p.name ?? "Agence"}{p.card && <span className="font-normal text-muted-foreground">carte {p.card}</span>}</span>
+        <div key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+          <span className="flex items-center gap-1.5 font-medium text-foreground">
+            <ContactRoundIcon className="size-4 text-muted-foreground" />{p.name ?? (p.type === "PRIVATE_INDIVIDUAL" ? "Particulier" : "Agence")}
+            {p.name && p.type === "PRIVATE_INDIVIDUAL" && <span className="font-normal text-muted-foreground">particulier</span>}
+            {p.card && <span className="font-normal text-muted-foreground">carte {p.card}</span>}
+          </span>
           {p.phone && <a href={`tel:${p.phone.replace(/\s/g, "")}`} className={cn("flex items-center gap-1", link)}><PhoneIcon className="size-3.5" />{p.phone}</a>}
           {p.email && <a href={`mailto:${p.email}`} className={cn("flex items-center gap-1", link)}><MailIcon className="size-3.5" />{p.email}</a>}
-        </p>
+          <EditContact l={l} index={i} />
+        </div>
       ))}
     </div>
+  )
+}
+
+// « Modifier le contact »: its name, phone and email by hand (blank clears), kept when the listing is refreshed; the
+// conversation's messages to its old name take the new one
+function EditContact({ l, index }: { l: Listing; index: number }) {
+  const { slug, reload } = useSearch()
+  const p = l.publishers[index]
+  const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [v, setV] = useState({ name: "", phone: "", email: "" })
+  const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: e.target.value })
+  async function save(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await api.listing(slug, l.id, { contact: { index, ...v } })
+      await reload()
+      toast.success("Contact enregistré")
+      setOpen(false)
+    } catch (err) { toast.error("Le contact n'a pas été enregistré", { description: `Détail technique : ${(err as Error).message}` }) }
+    setBusy(false)
+  }
+  return (
+    <Dialog open={open} onOpenChange={o => { setOpen(o); if (o) setV({ name: p.name ?? "", phone: p.phone ?? "", email: p.email ?? "" }) }}>
+      <DialogTrigger asChild><Button variant="ghost" size="icon-xs" aria-label="Modifier le contact" title="Modifier le contact"><PencilIcon /></Button></DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={save} className="flex flex-col gap-6">
+          <DialogHeader>
+            <DialogTitle>Modifier le contact</DialogTitle>
+            <DialogDescription>L'agence ou le vendeur. Les messages de la conversation prennent le nouveau nom, et une mise à jour de l'annonce garde ce contact.</DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field><FieldLabel htmlFor={`c-name-${index}`}>Prénom et nom</FieldLabel><Input id={`c-name-${index}`} value={v.name} onChange={set("name")} autoComplete="off" placeholder="Ex. : Claire Martin, ou l'agence" /></Field>
+            <Field><FieldLabel htmlFor={`c-phone-${index}`}>Téléphone</FieldLabel><Input id={`c-phone-${index}`} type="tel" inputMode="tel" value={v.phone} onChange={set("phone")} autoComplete="off" placeholder="facultatif" /></Field>
+            <Field><FieldLabel htmlFor={`c-email-${index}`}>E-mail</FieldLabel><Input id={`c-email-${index}`} type="email" value={v.email} onChange={set("email")} autoComplete="off" placeholder="facultatif" /></Field>
+          </FieldGroup>
+          <DialogFooter><Button type="submit" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -520,92 +579,211 @@ function Synthesis({ l, aids }: { l: Listing; aids: Parameters<typeof review>[1]
 }
 
 const CHANNEL_ICON = { email: MailIcon, sms: MessageSquareTextIcon, phone: PhoneIcon, visit: HouseIcon } as const
-// The conversation with the agency or the seller, in order: the user's messages on the right (the agent's drafts, those
-// sent), the received ones on the left (pasted, or a call summed up). The agent reads it before writing the next one.
+const hhmm = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" })
+const weekday = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+const weekdayYear = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+const dayKey = (d: string) => new Date(d).toDateString()
+// a day of the conversation: « Aujourd'hui », « Hier », « Dimanche 9 novembre » (with its year when not this one)
+function dayLabel(d: string) {
+  const x = new Date(d), now = new Date(), yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (x.toDateString() === now.toDateString()) return "Aujourd'hui"
+  if (x.toDateString() === yesterday.toDateString()) return "Hier"
+  const s = (x.getFullYear() === now.getFullYear() ? weekday : weekdayYear).format(x)
+  return s[0].toUpperCase() + s.slice(1)
+}
+// whole days since a date, as lib/market.js daysOnline counts them
+const daysSince = (d: string) => Math.floor((Date.now() - Date.parse(d)) / 864e5)
+// a name's initials: its first and last words (« Fabienne Abouhab Denoncin » → « FD »)
+const initials = (name: string) => { const w = name.trim().split(/\s+/); return `${w[0][0]}${w.length > 1 ? w.at(-1)![0] : ""}`.toUpperCase() }
+const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`
+type Change = { sent?: boolean; delete?: boolean; document?: { id: string; type: string } }
+
+// The conversation with the agency or the seller, in order, a separator a day: the other side's messages on the left on
+// their light blue, the user's on the right (the agent's drafts dashed until sent). The thread keeps a height of its own
+// and opens on the start of the latest message (an added one comes into view the same way). Under it, adding a
+// message and writing one with the agent, the next step suggested:
+// answering the last message received, or following up one left 3 days without an answer. The agent reads it all
+// before writing the next one.
 function Conversation({ l, short }: { l: Listing; short: string }) {
   const { slug, reload } = useSearch()
-  const ms = (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date))
-  async function change(m: Message, body: { sent?: boolean; delete?: boolean; document?: { id: string; type: string } }) {
+  const [ask, setAsk] = useState<"reply" | "follow_up" | null>(null)
+  const ms = (l.messages ?? []).toSorted((a, b) => a.date.localeCompare(b.date)), t = typeOf(l) as PropertyType
+  const docs = ms.reduce((n, m) => n + (m.documents?.length ?? 0), 0), last = ms.at(-1)
+  const waiting = last && last.from !== "them" && last.sent_at ? daysSince(last.sent_at) : null
+  const next = last?.from === "them" ? { ask: "reply" as const, label: "Répondre", icon: ReplyIcon }
+    : waiting != null && waiting >= 3 ? { ask: "follow_up" as const, label: "Relancer", icon: BellRingIcon } : null
+  async function change(m: Message, body: Change) {
     await api.listing(slug, l.id, { message: { id: m.id, ...body } })
     await reload()
     if (body.document) toast.success(`Type du document : ${DOC_LABEL[body.document.type]}`)
     else if (body.delete) toast.success("Message supprimé de la conversation")
     else if (body.sent) toast.success(m.kind === "offer" ? "Offre envoyée : le bien passe dans « Offre faite »" : "Message marqué comme envoyé")
+    else if (body.sent === false) toast.success("Message remis en brouillon")
   }
+  const write = (
+    <span className="flex flex-wrap gap-2">
+      {next && <Button size="sm" onClick={() => setAsk(next.ask)}><next.icon data-icon="inline-start" />{next.label}</Button>}
+      <AskMenu l={l} short={short} />
+    </span>
+  )
   return (
-    <Section title="Conversation" action={<span className="flex flex-wrap justify-end gap-1.5"><AddMessage l={l} /><AskMenu size="xs" l={l} short={short} /></span>}>
-      {!ms.length && <p className="text-sm text-muted-foreground">Aucun message. « Ajouter » garde une réponse de l'agence, le résumé d'un appel ou des documents reçus ; « Rédiger avec l'agent » met la demande dans le prompt, et l'agent lit toute la conversation avant d'écrire.</p>}
-      <ol className="flex flex-col gap-2">{ms.map(m => <Bubble key={m.id} m={m} t={typeOf(l) as PropertyType} onChange={b => change(m, b)} />)}</ol>
+    <Section title="Conversation" action={ms.length > 0 && <span className="text-xs text-muted-foreground">{plural(ms.length, "message")}{docs ? ` · ${plural(docs, "document")}` : ""}</span>}>
+      {!ms.length ? (
+        <Empty className="border border-dashed p-6 md:p-6">
+          <EmptyHeader>
+            <EmptyMedia variant="icon"><MessagesSquareIcon /></EmptyMedia>
+            <EmptyTitle>Aucun message</EmptyTitle>
+            <EmptyDescription>Gardez ici les réponses de l'agence, le résumé d'un appel ou les documents reçus. L'agent lit toute la conversation avant d'écrire.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent className="flex-row flex-wrap justify-center"><AddMessage l={l} />{write}</EmptyContent>
+        </Empty>
+      ) : (
+        <>
+          <MessageScrollerProvider defaultScrollPosition="last-anchor">
+            {/* the scrollbar in the card's padding, kept off the bubbles */}
+            <MessageScroller className="-mr-3 max-h-[min(36rem,65dvh)]">
+              <MessageScrollerViewport aria-label="Messages de la conversation">
+                <MessageScrollerContent className="gap-4 py-1 pr-3">
+                  {ms.map((m, i) => (
+                    <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={i === ms.length - 1} className="flex flex-col gap-4">
+                      {(i === 0 || dayKey(ms[i - 1].date) !== dayKey(m.date)) && <Marker variant="separator"><MarkerContent>{dayLabel(m.date)}</MarkerContent></Marker>}
+                      <MessageRow m={m} t={t} onChange={b => change(m, b)} />
+                    </MessageScrollerItem>
+                  ))}
+                  {next?.ask === "follow_up" && (
+                    <MessageScrollerItem messageId="waiting">
+                      <Marker className="justify-center"><MarkerIcon><ClockIcon /></MarkerIcon><MarkerContent>Sans réponse depuis {waiting} jours</MarkerContent></Marker>
+                    </MessageScrollerItem>
+                  )}
+                </MessageScrollerContent>
+              </MessageScrollerViewport>
+              <MessageScrollerButton title="Aller à la fin" />
+            </MessageScroller>
+          </MessageScrollerProvider>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3"><AddMessage l={l} />{write}</div>
+        </>
+      )}
+      {ask && <AskDialog key={ask} ask={ask} l={l} short={short} onClose={() => setAsk(null)} />}
     </Section>
   )
 }
 
-function Bubble({ m, t, onChange }: { m: Message; t: PropertyType; onChange: (b: { sent?: boolean; delete?: boolean; document?: { id: string; type: string } }) => void }) {
-  const { slug } = useSearch()
-  const [full, setFull] = useState(false), docs = m.documents ?? []
-  const mine = m.from !== "them", Icon = m.channel ? CHANNEL_ICON[m.channel] : MailIcon
+// One message: who and what above it, its text (6 lines, then « Lire la suite »), the amount of an offer, its documents;
+// under it the channel, the time and, for the user's, sent or a draft to mark sent. Copying, back to a draft and
+// deleting sit in « ⋯ », shown on hover with a mouse and always on a touch screen (on the inner side: left of the
+// user's messages).
+function MessageRow({ m, t, onChange }: { m: Message; t: PropertyType; onChange: (b: Change) => void }) {
+  const [full, setFull] = useState(false), [confirm, setConfirm] = useState(false)
+  const mine = m.from !== "them", docs = m.documents ?? [], Icon = m.channel ? CHANNEL_ICON[m.channel] : MailIcon
+  const long = m.text.split("\n").length > 6 || m.text.length > 420, kind = m.kind !== "other" ? MESSAGE_LABEL[m.kind] : null
+  const who = (mine ? [kind, m.to && `à ${m.to}`] : [m.to ?? "L'agence ou le vendeur", kind]).filter(Boolean).join(" · ")
   return (
-    <li className={cn("flex flex-col gap-2 rounded-lg border p-3", mine ? "ml-8 bg-primary/5" : "mr-8 bg-muted/60")}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        <Icon className="size-4 text-muted-foreground" aria-label={m.channel ? CHANNEL_LABEL[m.channel] : "Message"} />
-        <b>{mine ? `Moi${m.to ? ` → ${m.to}` : ""}` : m.to ?? "L'agence ou le vendeur"}</b>
-        {m.kind !== "other" && <span className="text-muted-foreground">{MESSAGE_LABEL[m.kind]}</span>}
-        {m.amount && <span className="font-semibold">{eur(m.amount)}</span>}
-        <span className="text-xs text-muted-foreground">{dateTime(m.date)}</span>
-        {mine ? m.sent_at ? <Badge variant="secondary"><CheckIcon />Envoyé le {date(m.sent_at)}</Badge> : <Badge variant="outline">Brouillon</Badge> : <Badge variant="secondary">Reçu</Badge>}
-      </div>
-      {m.text && <p className={cn("text-sm whitespace-pre-line", !full && "line-clamp-3")}>{m.text}</p>}
-      {docs.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5" aria-label="Documents">
-          {/* a document: opened, or given its type (the one its name said, to begin with) */}
-          {docs.map(d => { const type = typeOfDoc(d); return (
-            <li key={d.id} className="max-w-full">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="xs" className="max-w-full" title={d.name}>
-                    <DocIcon name={d.name} data-icon="inline-start" />{type !== "other" && <span>{DOC_LABEL[type]}</span>}<span className={cn("truncate", type !== "other" && "text-muted-foreground")}>{d.name}</span><span className="text-muted-foreground">{bytes(d.size)}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64">
-                  <DropdownMenuItem asChild><a href={docUrl(slug, d)} target="_blank" rel="noreferrer"><ExternalLinkIcon />Ouvrir le document</a></DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger><TagIcon />Type : {DOC_LABEL[type]}</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] w-64 overflow-y-auto">
-                      <DropdownMenuRadioGroup value={type} onValueChange={v => v !== type && onChange({ document: { id: d.id, type: v } })}>
-                        {docTypesFor(t, type).map(g => (
-                          <Fragment key={g.label}>
-                            <DropdownMenuLabel className="text-xs text-muted-foreground">{g.label}</DropdownMenuLabel>
-                            {g.items.map(x => <DropdownMenuRadioItem key={x.key} value={x.key}>{x.label}</DropdownMenuRadioItem>)}
-                          </Fragment>
-                        ))}
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </li>
-          ) })}
-        </ul>
+    <ChatMessage align={mine ? "end" : "start"}>
+      {!mine && (
+        <MessageAvatar>
+          <Avatar><AvatarFallback className="bg-them font-medium text-foreground">{m.to?.trim() ? initials(m.to) : <ContactRoundIcon className="size-4" />}</AvatarFallback></Avatar>
+        </MessageAvatar>
       )}
-      <div className="flex flex-wrap gap-1.5">
-        {m.text.split("\n").length > 3 || m.text.length > 240 ? <Button variant="ghost" size="xs" onClick={() => setFull(!full)}>{full ? "Réduire" : "Lire tout"}</Button> : null}
-        {m.text && <Button variant="outline" size="xs" onClick={async () => { await navigator.clipboard.writeText(m.text); toast.success("Message copié") }}><CopyIcon data-icon="inline-start" />Copier</Button>}
-        {mine && <Button variant={m.sent_at ? "ghost" : "outline"} size="xs" onClick={() => onChange({ sent: !m.sent_at })}>{m.sent_at ? "Marquer non envoyé" : "Marquer envoyé"}</Button>}
-        <AlertDialog>
-          <AlertDialogTrigger asChild><Button variant="ghost" size="icon-xs" className="ml-auto" aria-label="Supprimer le message"><Trash2Icon /></Button></AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Supprimer ce message ?</AlertDialogTitle>
-              <AlertDialogDescription>Il sera retiré de la conversation{docs.length ? ` avec ${docs.length > 1 ? `ses ${docs.length} documents` : "son document"}, supprimé${docs.length > 1 ? "s" : ""} du dossier` : ""}, et l'agent ne le lira plus.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Annuler</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={() => onChange({ delete: true })}>Supprimer</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    </li>
+      <MessageContent>
+        {who && <MessageHeader>{who}</MessageHeader>}
+        {/* with documents, the whole width: room for their cards */}
+        <Bubble variant={mine ? (m.sent_at ? "muted" : "draft") : "them"} align={mine ? "end" : "start"} className={cn(docs.length > 0 && "max-w-full")}>
+          <BubbleContent className="flex flex-col gap-2">
+            {m.amount ? <p className="text-lg font-semibold tabular-nums">{eur(m.amount)}</p> : null}
+            {m.text && <p className={cn("whitespace-pre-line", long && !full && "line-clamp-6 mask-b-from-50%")}>{m.text}</p>}
+            {long && <Button variant="link" size="xs" className="h-auto self-start p-0" aria-expanded={full} onClick={() => setFull(!full)}>{full ? "Réduire" : "Lire la suite"}</Button>}
+            {docs.length > 0 && <Documents docs={docs} t={t} onChange={onChange} />}
+          </BubbleContent>
+        </Bubble>
+        <MessageFooter className="flex-wrap gap-x-2 gap-y-1">
+          <Icon className="size-3.5" aria-label={m.channel ? CHANNEL_LABEL[m.channel] : "Message"} />
+          <time dateTime={m.date} title={dateTime(m.date)}>{hhmm.format(new Date(m.date))}</time>
+          {mine && (m.sent_at
+            ? <span className="flex items-center gap-1"><CheckIcon className="size-3.5" />Envoyé{dayKey(m.sent_at) !== dayKey(m.date) ? ` le ${date(m.sent_at)}` : ""}</span>
+            : <><Badge variant="outline">Brouillon</Badge><Button size="xs" onClick={() => onChange({ sent: true })}><SendIcon data-icon="inline-start" />Marquer envoyé</Button></>)}
+          {/* not modal: the dialog it opens gets the focus */}
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-xs" aria-label="Actions du message" className={cn("pointer-fine:opacity-0 pointer-fine:group-hover/message:opacity-100 pointer-fine:group-focus-within/message:opacity-100 data-[state=open]:opacity-100", mine && "order-first")}><EllipsisIcon /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align={mine ? "end" : "start"}>
+              <DropdownMenuGroup>
+                {m.text && <DropdownMenuItem onSelect={async () => { await navigator.clipboard.writeText(m.text); toast.success("Message copié") }}><CopyIcon />Copier le texte</DropdownMenuItem>}
+                {mine && m.sent_at && <DropdownMenuItem onSelect={() => onChange({ sent: false })}><Undo2Icon />Remettre en brouillon</DropdownMenuItem>}
+              </DropdownMenuGroup>
+              {(m.text || (mine && m.sent_at)) && <DropdownMenuSeparator />}
+              <DropdownMenuGroup>
+                <DropdownMenuItem variant="destructive" onSelect={() => setConfirm(true)}><Trash2Icon />Supprimer</DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </MessageFooter>
+      </MessageContent>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce message ?</AlertDialogTitle>
+            <AlertDialogDescription>Il sera retiré de la conversation{docs.length ? ` avec ${docs.length > 1 ? `ses ${docs.length} documents` : "son document"}, supprimé${docs.length > 1 ? "s" : ""} du dossier` : ""}, et l'agent ne le lira plus.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => onChange({ delete: true })}>Supprimer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </ChatMessage>
+  )
+}
+
+// A message's documents, by type: a line counting each type, then a card each (a click opens it, the tag gives it its
+// type, the one its name said to begin with); past four, the others fold under « + n autres documents »
+const DOC_ORDER = Object.keys(DOC_LABEL)
+function Documents({ docs, t, onChange }: { docs: Doc[]; t: PropertyType; onChange: (b: Change) => void }) {
+  const { slug } = useSearch()
+  const [all, setAll] = useState(false)
+  const sorted = docs.map(d => ({ d, type: typeOfDoc(d) })).toSorted((a, b) => DOC_ORDER.indexOf(a.type) - DOC_ORDER.indexOf(b.type) || a.d.name.localeCompare(b.d.name))
+  const count = new Map<string, number>()
+  for (const x of sorted) count.set(x.type, (count.get(x.type) ?? 0) + 1)
+  const shown = all || sorted.length <= 4 ? sorted : sorted.slice(0, 4), rest = sorted.length - 4
+  return (
+    <div className="flex flex-col gap-1.5">
+      {docs.length > 1 && <p className="text-xs text-muted-foreground">{plural(docs.length, "document")} · {[...count].map(([k, n]) => `${DOC_LABEL[k]}${n > 1 ? ` ×${n}` : ""}`).join(" · ")}</p>}
+      <ul className="grid gap-1.5 sm:grid-cols-2" aria-label="Documents">
+        {shown.map(({ d, type }) => (
+          <li key={d.id} className="min-w-0">
+            <Attachment size="sm" className="w-full min-w-0">
+              <AttachmentMedia><DocIcon name={d.name} /></AttachmentMedia>
+              <AttachmentContent>
+                <AttachmentTitle>{type !== "other" ? DOC_LABEL[type] : d.name}</AttachmentTitle>
+                <AttachmentDescription>{type !== "other" ? `${d.name} · ` : ""}{bytes(d.size)}</AttachmentDescription>
+              </AttachmentContent>
+              <AttachmentTrigger asChild><a href={docUrl(slug, d)} target="_blank" rel="noreferrer" title={d.name}><span className="sr-only">Ouvrir {d.name}</span></a></AttachmentTrigger>
+              <AttachmentActions>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild><AttachmentAction aria-label={`Type de ${d.name} : ${DOC_LABEL[type]}`}><TagIcon /></AttachmentAction></DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] w-64 overflow-y-auto">
+                    <DropdownMenuRadioGroup value={type} onValueChange={v => v !== type && onChange({ document: { id: d.id, type: v } })}>
+                      {docTypesFor(t, type).map(g => (
+                        <Fragment key={g.label}>
+                          <DropdownMenuLabel className="text-xs text-muted-foreground">{g.label}</DropdownMenuLabel>
+                          {g.items.map(x => <DropdownMenuRadioItem key={x.key} value={x.key}>{x.label}</DropdownMenuRadioItem>)}
+                        </Fragment>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </AttachmentActions>
+            </Attachment>
+          </li>
+        ))}
+      </ul>
+      {sorted.length > 4 && (
+        <Button variant="ghost" size="xs" className="self-start" aria-expanded={all} onClick={() => setAll(!all)}>
+          <ChevronDownIcon data-icon="inline-start" className={cn(all && "rotate-180")} />{all ? "Réduire" : `${plural(rest, "autre")} document${rest > 1 ? "s" : ""}`}
+        </Button>
+      )}
+    </div>
   )
 }
 
@@ -644,7 +822,7 @@ function AddMessage({ l }: { l: Listing }) {
   }
   return (
     <Dialog open={open} onOpenChange={o => { setOpen(o); if (o) setWhen(localNow()) }}>
-      <DialogTrigger asChild><Button variant="outline" size="xs"><PlusIcon data-icon="inline-start" />Ajouter</Button></DialogTrigger>
+      <DialogTrigger asChild><Button variant="outline" size="sm"><PlusIcon data-icon="inline-start" />Ajouter un message</Button></DialogTrigger>
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Ajouter un message</DialogTitle>

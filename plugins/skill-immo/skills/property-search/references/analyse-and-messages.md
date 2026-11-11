@@ -41,7 +41,7 @@ visit: start from `review` (its points to watch and questions), the DPE against 
 ## Messages and the conversation
 
 Each listing keeps its conversation with the agency or the seller. The user adds what they receive in the dossier
-(« Ajouter »: a reply pasted, a call summed up), or pastes it to you.
+(« Ajouter un message »: a reply pasted, a call summed up), or pastes it to you.
 
 **A message the user received** (« l'agence m'a répondu… », a call): add it to the conversation as they give it,
 `immo.mjs message -p <slug> --id <id> --from them [--channel email|sms|phone|visit] [--amount <€ proposed>] [--date
@@ -87,12 +87,12 @@ whose type is wrong or `other` (« scan001.pdf » that is a PV d'AG), set it: `i
 4. Always ask, in one AskUserQuestion, whether to add it to the listing's conversation: « Oui, en brouillon » first,
    then « Oui, je l'ai déjà envoyé » and « Non ». On a yes, write it to a file in the scratchpad and run
    `immo.mjs message -p <slug> --id <id> --kind <kind> [--amount <€>] [--to "<who>"] [--sent] --file <file>` (`--sent`
-   for « déjà envoyé »). The dossier shows it in « Conversation », with « Copier » and « Marquer envoyé »; an offer
-   marked sent moves the listing to « Offre faite ».
+   for « déjà envoyé »). The dossier shows it in « Conversation », a draft with « Marquer envoyé » (« Copier le texte »
+   in its « ⋯ »); an offer marked sent moves the listing to « Offre faite ».
 
 ## The conversation's documents
 
-The user joins documents to the conversation (the dossier's « Ajouter », or you with `message --attach`): diagnostics,
+The user joins documents to the conversation (the dossier's « Ajouter un message », or you with `message --attach`): diagnostics,
 minutes of general meetings, a statement of charges, a tax notice, a pre-sale statement, plans. A `[documents]` item
 names some by their name, type and id:
 - `résumé pour <id> … : « <name> » (<doc id>), … ; points : … ; consigne : …`: summarise them;
