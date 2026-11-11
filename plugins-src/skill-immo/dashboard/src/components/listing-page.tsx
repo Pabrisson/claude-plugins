@@ -10,12 +10,12 @@ import { eur, titleOf, TYPE_LABEL } from "@/lib/format"
 import { useSearch } from "@/lib/store"
 
 // A listing's own page (/<slug>/annonce/<id>, its name in the dashboard): the dossier of the panel on the right, on a
-// whole page. Back to the search, its panel opens on it; « Voir » and « Voir au cadastre » go back to the tab asked,
+// whole page. Back to the search, its view shows with no dossier open; « Voir » and « Voir au cadastre » go back to the tab asked,
 // the listing or the parcel pointed at (handed over through this tab's sessionStorage, store handoff).
 export function ListingPage({ id }: { id: string }) {
   const { slug, data, select, spot, parcelFocus } = useSearch()
   const l = data.listings.find(x => x.id === id), back = `/${slug}/`
-  useEffect(() => { select(id) }, [id, select])
+  useEffect(() => { select(null) }, [id, select])
   useEffect(() => { document.title = l ? `${titleOf(l)} · ${data.search.label}` : "Annonce introuvable" }, [l, data.search.label])
   // written as soon as « Voir » sets them, before the page leaves
   useLayoutEffect(() => {

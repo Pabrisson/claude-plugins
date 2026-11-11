@@ -267,8 +267,8 @@ export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (
       </div>
       <LabelsEditor l={l} />
 
-      {/* the page (`wide`) on a wide screen: the blocks on two halves, on the right the conversation, the follow-up, the
-          budget and renting or buying; narrower, the panel's order */}
+      {/* the page (`wide`) on a wide screen: the blocks on two halves, renting or buying at the end of the left one, on the
+          right the conversation, the follow-up and the budget; narrower, the panel's order */}
       {halves ? (
         <div className="grid grid-cols-2 items-start gap-4">
           <div className="flex min-w-0 flex-col gap-3">
@@ -332,12 +332,12 @@ export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (
               ))}
               {!travel.length && (data.area.places?.length ?? 0) > 0 && <Row label="Lieux clés">au-delà de 30 min à pied et 20 min en voiture</Row>}
             </Section>
+            {home && <RentSection l={l} />}
           </div>
           <div className="flex min-w-0 flex-col gap-3">
             <Conversation l={l} short={short} />
             <FollowSection l={l} />
             <BudgetSection l={l} profileIncome={profile.net_income_monthly} />
-            {home && <RentSection l={l} />}
           </div>
         </div>
       ) : (

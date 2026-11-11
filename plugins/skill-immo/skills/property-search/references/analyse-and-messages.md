@@ -28,7 +28,8 @@ documents read, visits, calls, the agency's answers, decisions and their reasons
   - `- ` items, a detail two spaces deeper; an item's subject in bold before its colon (`- **Toiture du Clos 3** : …`);
     each fact's source in parentheses (« PV AG 2025, p. 3 », « appel du 15/11 »);
   - only when something is left to ask the seller or the agency: last, `### À demander`, one box each (`- [ ] …`),
-    none already open in the notes. No such part otherwise.
+    none already open in the notes. No such part otherwise. `note` gathers every « À demander » into one, `## À
+    demander`, at the very end of the notes: your entry lands before it, what is left to ask stays last.
 - A box answered (a message received, a document, what the user says): `immo.mjs note -p <slug> --id <id> --check
   "<start of the question>"` ticks it (refused when no open box, or several, start so: give more of it), and the
   answer goes in an entry of its own. The user ticks boxes in the dossier too, and can put back any earlier version of

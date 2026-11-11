@@ -72,10 +72,11 @@ const AT = "immo:explorer:at"
 export const rememberAt = (p: Point) => { if (EXPLORE) save(AT, p) }
 export const startOf = (s: Search): Point => { const at = EXPLORE ? load(AT) : []; return at.length === 2 ? at : (s.zone.center ?? s.point) }
 
+const CAME_BACK = (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "back_forward"
 const handoff = (key: string) => { try { const v = sessionStorage.getItem(key); sessionStorage.removeItem(key); return v } catch { return null } }
-// what this tab shows (its view, the dossier open) survives a reload of the page, in this tab only
-export function useTabState<T>(key: string, initial: T) {
-  const [v, setV] = useState<T>(() => { try { const x = sessionStorage.getItem(key); return x == null ? initial : JSON.parse(x) } catch { return initial } })
+// what this tab shows (its view, the dossier open) survives a reload of the page, in this tab only (`fresh`: not this time)
+export function useTabState<T>(key: string, initial: T, fresh = false) {
+  const [v, setV] = useState<T>(() => { if (fresh) return initial; try { const x = sessionStorage.getItem(key); return x == null ? initial : JSON.parse(x) } catch { return initial } })
   useEffect(() => { try { sessionStorage.setItem(key, JSON.stringify(v)) } catch { /* private window */ } }, [key, v])
   return [v, setV] as const
 }
@@ -91,7 +92,14 @@ export function SearchProvider({ slug, initial, state: initialState, profile: in
   const [data, setData] = useState(initial)
   const [state, setState] = useState(initialState)
   const [profile, setProfile] = useState(initialProfile)
-  const [selected, select] = useTabState<string | null>(`immo:${slug}:selected`, null)
+  // back to the search through the history (the browser's back, from a listing's page or elsewhere): its view, no dossier
+  // open over it; a reload keeps it. A page the browser restores as it was closes it too.
+  const [selected, select] = useTabState<string | null>(`immo:${slug}:selected`, null, CAME_BACK)
+  useEffect(() => {
+    const restored = (e: PageTransitionEvent) => { if (e.persisted) select(null) }
+    addEventListener("pageshow", restored)
+    return () => removeEventListener("pageshow", restored)
+  }, [select])
   const [compare, setCompare] = useState<string[]>(() => load(`immo:${slug}:compare`))
   const [feedback, setFeedback] = useState<Feedback[]>(() => load(`immo:${slug}:feedback`))
   useEffect(() => save(`immo:${slug}:compare`, compare), [slug, compare])

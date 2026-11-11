@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import { addressQuery, allGone, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from '../lib/listings.js'
+import { addressQuery, allGone, asksLast, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from '../lib/listings.js'
 import { badge, daysOnline, dropped, matches, negotiation } from '../lib/market.js'
 
 // a v1 PropertyDocument with the shape of a recorded one (2026-10-28), its values made up, placed rue Paul Bert
@@ -178,4 +178,18 @@ test('the notes before a change are kept for « Restaurer », a tick and quick s
   assert.deepEqual(l.notes_history.map(v => [v.by, v.notes]), [['user', '## A\n- [x] Q'], ['agent', '## A\n- [x] Q\nBC'], ['restore', '## A\n- [x] Q\nBC\n\n## D']])
   for (let i = 0; i < 40; i++) setNotes(l, `## v${i}`, 'agent', at(10 + i))
   assert.equal(l.notes_history.length, 30)
+})
+
+test('what is left to ask stays last: every « À demander » gathered at the end of the notes', () => {
+  const notes = [
+    '## Résumé (11/11)', '- Charges : 500 €.', '', '### À demander', '- [ ] Le DPE ?', '- [x] La taxe ?', '',
+    '## Points restant à demander (11/11)', '', '### À demander', '- [ ] Le parking ?', '',
+    '## Réponse (12/11)', '- La taxe : 2 276 €.', '', '### à demander :', '- [ ] Le DPE ?', '- [ ] La facture ?',
+  ].join('\n')
+  assert.equal(asksLast(notes), [
+    '## Résumé (11/11)', '- Charges : 500 €.', '', '## Réponse (12/11)', '- La taxe : 2 276 €.', '',
+    '## À demander', '- [ ] Le DPE ?', '- [x] La taxe ?', '- [ ] Le parking ?', '- [ ] La facture ?',
+  ].join('\n'))
+  assert.equal(asksLast('## A\n- x'), '## A\n- x') // nothing to ask: as it was
+  assert.equal(asksLast(asksLast(notes)), asksLast(notes)) // already in order: unchanged
 })

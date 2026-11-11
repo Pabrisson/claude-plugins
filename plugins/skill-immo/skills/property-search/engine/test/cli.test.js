@@ -351,7 +351,8 @@ test('a message for a listing: kept with it, shown to the agent', async () => {
   const notes = (l = read(dir, 'listings.json')[0]) => l.notes
   await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', '## Résumé du PV (11/11/2026)\n- Ravalement voté.\n\n### À demander\n- [ ] Le montant du ravalement ?\n- [ ] La date de la prochaine AG ?'], { key: null })
   await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', '## Charges (12/11/2026)\n- 2 400 €/an.'], { key: null })
-  assert.match(notes(), /^## Résumé du PV[^]*\n\n## Charges \(12\/11\/2026\)\n- 2 400 €\/an\.$/)
+  // the entry added before what is left to ask, which stays last
+  assert.equal(notes(), '## Résumé du PV (11/11/2026)\n- Ravalement voté.\n\n## Charges (12/11/2026)\n- 2 400 €/an.\n\n## À demander\n- [ ] Le montant du ravalement ?\n- [ ] La date de la prochaine AG ?')
   // always Markdown under its heading
   assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', 'Charges : 2 400 €/an.'], { key: null })).status, 1)
   // an answered question ticked in place, the rest untouched; none or several matching: refused

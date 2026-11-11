@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
@@ -222,12 +222,13 @@ export function FollowSection({ l }: { l: Listing }) {
           {long && <Button variant="ghost" size="xs" className="self-center" onClick={() => setFull(true)}><Maximize2Icon data-icon="inline-start" />Tout afficher</Button>}
           <Dialog open={full} onOpenChange={setFull}>
             <DialogContent className="sm:max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>Mes notes</DialogTitle>
-                <DialogDescription>{titleOf(l)}</DialogDescription>
+              {/* the block's header, room left for the close button */}
+              <DialogHeader className="flex-row items-center justify-between gap-2 pr-8">
+                <DialogTitle className="text-sm font-semibold">Suivi</DialogTitle>
+                <DialogDescription className="sr-only">Les notes de {titleOf(l)}</DialogDescription>
+                <Button size="xs" variant="outline" onClick={edit}><PencilIcon data-icon="inline-start" />Modifier</Button>
               </DialogHeader>
               <Markdown text={notes} onTick={tick} />
-              <DialogFooter><Button variant="outline" onClick={edit}><PencilIcon data-icon="inline-start" />Modifier</Button></DialogFooter>
             </DialogContent>
           </Dialog>
         </div>

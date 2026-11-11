@@ -203,6 +203,27 @@ export function setNotes(l, text, by, now = new Date().toISOString()) {
   if (before.trim() && !again && !ticked(before, text)) l.notes_history = [...h, { date: now, notes: before, by }].slice(-30)
   l.notes = text
 }
+// The notes with what is left to ask last: every « À demander » part (a `##` or `###` heading so named, its lines up to the
+// next heading) gathered into one, `## À demander`, at the end, in their order and once each; an entry left empty by it
+// (its heading alone) goes. What the agent adds (`note`) thus lands before what is left to ask.
+const HEADING = /^(#{1,6})[ \t]/, ASK = /^#{2,3}[ \t]+à demander[ \t]*:?[ \t]*$/iu
+export function asksLast(text) {
+  const body = [], asks = []
+  let ask = false
+  for (const line of text.split('\n')) {
+    if (HEADING.test(line)) { ask = ASK.test(line.trim()); if (ask) continue }
+    if (!ask) body.push(line)
+    else if (line.trim() && !asks.includes(line)) asks.push(line)
+  }
+  const next = i => { let j = i + 1; while (j < body.length && !body[j].trim()) j++; return j }
+  const kept = body.filter((line, i) => {
+    const h = HEADING.exec(line), j = next(i), n = HEADING.exec(body[j] ?? '')
+    return !h || (j < body.length && !(n && n[1].length <= h[1].length))
+  })
+  const rest = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  return asks.length ? `${rest}\n\n## À demander\n${asks.join('\n')}` : rest
+}
+
 // the two texts differ by one box only, `[ ]` against `[x]`
 function ticked(a, b) {
   if (a.length !== b.length) return false

@@ -20,7 +20,7 @@ import { recentDpe } from './lib/dpe.js'
 import { DOC_TYPES, docTypeOf, isDocType } from './lib/documents.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, band, bbox, center, circle, corridor, distance, IDU, inGeometry, inZone, middleOf, thin } from './lib/geo.js'
-import { addressQuery, deadAd, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from './lib/listings.js'
+import { addressQuery, asksLast, deadAd, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from './lib/listings.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
 import { openData, pool } from './lib/opendata.js'
@@ -1117,7 +1117,7 @@ function documentCmd() {
 
 // note -p <slug> --id <id> --file <md> | --text "…": added at the end of the listing's « Mes notes », after a blank line:
 // what the agent learned of it (the dossier's memory), Markdown under a `## <subject> (<date>)` heading, as the dossier
-// renders it. --check "<start of a question>": ticks that box `- [ ]` of an « À demander », once it is answered.
+// renders it; every « À demander » then gathered last (lib/listings.js asksLast). --check "<start of a question>": ticks that box `- [ ]` of an « À demander », once it is answered.
 const unify = s => s.trim().toLowerCase().replace(/\s+/g, ' ')
 function note() {
   const dir = searchDir(), f = path.join(dir, 'listings.json'), ls = listingsOf(dir), l = ls.find(x => x.id === opt.id)
@@ -1133,7 +1133,7 @@ function note() {
   const text = String((opt.file ? fs.readFileSync(opt.file === '-' ? 0 : opt.file, 'utf8') : opt.text) ?? '').trim()
   if (!l || !text) die('usage: note -p <slug> --id <listing id> --file <markdown file> | --text "…" | --check "<start of a question>"')
   if (!/^## \S/.test(text)) die('a note is Markdown and starts with its heading, `## <subject> (<date>)`: see references/analyse-and-messages.md')
-  const notes = [l.notes?.trim(), text].filter(Boolean).join('\n\n')
+  const notes = asksLast([l.notes?.trim(), text].filter(Boolean).join('\n\n'))
   if (notes.length > NOTES_MAX) die(`the notes would hold ${notes.length} characters, ${NOTES_MAX} at most: shorten the text`)
   setNotes(l, notes, 'agent')
   writeJson(f, ls)
