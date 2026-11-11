@@ -45,7 +45,7 @@ import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api, docUrl, listingUrl, type Cadastre, type Channel, type Doc, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
+import { api, base64, docUrl, listingUrl, type Cadastre, type Channel, type Doc, type Listing, type Message, type PropertyType, type ScoreKey, type Status } from "@/lib/api"
 import { ACCURACY_LABEL, bytes, CHANNEL_LABEL, date, dateTime, eur, keur, m2, MESSAGE_LABEL, pct, perUnit, POI_LABEL, SALE_STATUS, SCORE_LABEL, share, STATUS_LABEL, titleOf, TYPE_LABEL } from "@/lib/format"
 import { shelved } from "@/lib/rank"
 import { useSearch } from "@/lib/store"
@@ -782,7 +782,6 @@ function Documents({ docs, t, onChange }: { docs: Doc[]; t: PropertyType; onChan
 const localNow = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 // the documents a message may carry, as the engine takes them (immo.mjs DOC_MIME): 20 of 25 MB at most
 const DOC_EXT = ["pdf", "png", "jpg", "jpeg", "webp", "gif", "heic", "txt", "csv", "doc", "docx", "odt", "xls", "xlsx", "ods", "rtf", "eml"], DOC_MAX = 25e6, DOCS_MAX = 20
-const base64 = (f: File) => new Promise<string>((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] ?? ""); r.onerror = () => ko(r.error); r.readAsDataURL(f) })
 // a message the user adds to the conversation: the agency's reply, a call summed up, or one they sent themselves, with
 // its documents (the text is then optional)
 function AddMessage({ l }: { l: Listing }) {

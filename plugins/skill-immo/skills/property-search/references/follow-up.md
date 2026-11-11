@@ -19,6 +19,8 @@ dashboard server's daily link check finds its pages gone (free; Leboncoin and Se
 at once, or to get their full photo galleries (listings fetched before 1.20 have 1 to 5 photos),
 `immo.mjs reread -p <slug> [--id <id,…>]`: each listing read again, 1 credit each (the credits rule), those still online
 and not dropped without `--id`; the ones gone expire. The dashboard's list offers it on the rows ticked (« Relire sur l'API »).
+After each watch (and at its start), the dashboard server downloads an expired listing's photos into the search
+(`kept_pictures`, `documents/<id>/portail-01.jpg`…, free): git keeps them once the user commits, the dossier shows them.
 
 Its DPE line counts the zone's DPE of the last 12 months, those no listing matches and the new ones since the last
 refresh: `recent DPE (12 months): 178, 177 without a listing, 3 new since the last refresh`. A DPE comes before a sale or

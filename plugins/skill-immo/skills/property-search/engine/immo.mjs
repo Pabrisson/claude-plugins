@@ -20,7 +20,7 @@ import { recentDpe } from './lib/dpe.js'
 import { DOC_TYPES, docTypeOf, isDocType } from './lib/documents.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, band, bbox, center, circle, corridor, distance, IDU, inGeometry, inZone, middleOf, thin } from './lib/geo.js'
-import { addressQuery, asksLast, deadAd, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from './lib/listings.js'
+import { addressQuery, asksLast, deadAd, downloadPhoto, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from './lib/listings.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
 import { openData, pool } from './lib/opendata.js'
@@ -62,7 +62,7 @@ const MESSAGE_KINDS = ['offer', 'question', 'visit', 'reply', 'follow_up', 'docu
 const CHANNELS = ['email', 'sms', 'phone', 'visit']
 // the documents a message carries (diagnostics, minutes, a tax notice, a photo of a page): kept in
 // <search>/documents/<listing>/, served by the dashboard (shown in the browser when it can: no HTML nor SVG)
-const DOC_MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', txt: 'text/plain; charset=utf-8', csv: 'text/plain; charset=utf-8', doc: null, docx: null, odt: null, xls: null, xlsx: null, ods: null, rtf: null, eml: null }
+const DOC_MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', avif: 'image/avif', txt: 'text/plain; charset=utf-8', csv: 'text/plain; charset=utf-8', doc: null, docx: null, odt: null, xls: null, xlsx: null, ods: null, rtf: null, eml: null }
 const DOC_MAX = 25e6, DOCS_PER_MESSAGE = 20, NOTES_MAX = 20000
 const LETTERS = 'ABCDEFG'
 // the profile's numbers, the only fields the dashboard may write
@@ -1083,6 +1083,33 @@ function newDocument(l, name, size, type) {
 const docPath = (dir, file) => { const root = path.join(dir, 'documents'), f = path.resolve(dir, String(file)); return f.startsWith(root + path.sep) ? f : null }
 const removeDocuments = (dir, m) => { for (const d of m.documents ?? []) { const f = docPath(dir, d.file); if (f) fs.rmSync(f, { force: true }) } }
 const writeDocument = (dir, d, write) => { const f = docPath(dir, d.file); fs.mkdirSync(path.dirname(f), { recursive: true }); write(f) }
+// The photos a listing keeps in its search, beside its documents (git keeps them): the user's own (`my_pictures`,
+// « Ajouter des photos », a document's checks, images only) and, once it expired, its portal's (`kept_pictures`)
+const PHOTO_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif']
+function newPhoto(l, name, size) {
+  const { type, ...d } = newDocument(l, name, size)
+  if (!PHOTO_EXT.includes(path.extname(d.name).slice(1).toLowerCase())) throw new Error(`a photo is a ${PHOTO_EXT.join(', ')} file: ${d.name}`)
+  return d
+}
+// The photos of the expired listings downloaded into the search before the portals delete them (on 2026-11-11 they
+// still loaded 9 days after): the gallery shown, else Stream Estate's copies, 4 at a time, as
+// documents/<listing>/portail-01.jpg… listed in `kept_pictures` (done: a listing is never downloaded twice). One none of
+// whose photos could be reached (offline) is tried again at the next watch.
+async function keepPhotos(dir) {
+  for (const l of listingsOf(dir).filter(x => x.status === 'EXPIRED' && !x.kept_pictures)) {
+    const urls = l.pictures?.length ? l.pictures : l.se_pictures ?? []
+    const got = await pool(urls, 4, u => downloadPhoto(u).catch(() => 'offline'))
+    if (urls.length && got.every(x => x === 'offline')) continue
+    const files = got.flatMap((x, i) => (x && x !== 'offline' ? [{ x, file: `documents/${l.id}/portail-${String(i + 1).padStart(2, '0')}.${x.ext}` }] : []))
+    for (const { x, file } of files) writeDocument(dir, { file }, to => fs.writeFileSync(to, x.data))
+    // listings.json read again: the user may have changed it while the photos came
+    const f = path.join(dir, 'listings.json'), ls = listingsOf(dir), now_l = ls.find(x => x.id === l.id)
+    if (!now_l) continue
+    now_l.kept_pictures = files.map(x => x.file)
+    writeJson(f, ls)
+    console.log(`photos ${path.basename(dir)}: ${files.length} of ${urls.length} kept for ${l.id} (expired)`)
+  }
+}
 
 // message -p <slug> --id <id> [--from me|them] [--kind …] [--channel …] [--amount €] [--to <who>] [--date <iso>]
 // [--sent] [--attach <document>]… --file <text> | --text "…": a message added to the listing's conversation, shown in
@@ -1411,6 +1438,23 @@ async function handle(req, res) {
         for (const m of l.messages ?? []) if (p.name && m.to === p.name) m.to = name
         Object.assign(p, { name, phone: str(c.phone), email: str(c.email), by: 'hand' })
       }
+      // the user's photos: added ({ add: [{ name, data: base64 }] }, 20 at most), one deleted with its file
+      if (body.photos?.add) {
+        const files = Array.isArray(body.photos.add) ? body.photos.add : []
+        let ps, bufs
+        try {
+          if (!files.length || files.length > DOCS_PER_MESSAGE) throw new Error(`1 to ${DOCS_PER_MESSAGE} photos at once`)
+          bufs = files.map(d => Buffer.from(typeof d?.data === 'string' ? d.data : '', 'base64'))
+          ps = files.map((d, i) => newPhoto(l, d?.name, bufs[i].length))
+        } catch (e) { return reply(res, 400, { error: e.message }) }
+        ps.forEach((d, i) => writeDocument(dir, d, to => fs.writeFileSync(to, bufs[i])))
+        l.my_pictures = [...(l.my_pictures ?? []), ...ps]
+      } else if (body.photos?.delete) {
+        const d = l.my_pictures?.find(x => x.id === body.photos.delete)
+        if (!d) return reply(res, 404, { error: 'no such photo' })
+        l.my_pictures = l.my_pictures.filter(x => x !== d)
+        removeDocuments(dir, { documents: [d] })
+      }
       // the conversation: a message the user adds (a reply received, a call) with its documents ({ name, data: base64,
       // type? }), one marked sent or not, one deleted with its documents, one of its documents given another type
       if (body.message?.add) {
@@ -1451,7 +1495,7 @@ function serve() {
     .listen(PORT, '127.0.0.1', () => {
       console.log(`dashboard server on http://127.0.0.1:${PORT}/ for ${HOME}`)
       if (settings().watch_minutes > 0 && !settings().watch_paused) watchAll()
-      else schedule()
+      else { schedule(); keepAllPhotos() }
     })
 }
 
@@ -1535,9 +1579,12 @@ function watchAll() {
         notify(`Immo · ${s.label}`, text, `http://127.0.0.1:${PORT}/${x}/`)
       } catch (e) { console.log(`watch ${x}: ${e.message}`) }
     }
+    await keepAllPhotos()
   })().finally(() => { watching = null; lastWatch = now(); schedule() })
   return watching
 }
+// every search's expired listings' photos (keepPhotos), after the watch (its link check expires some)
+const keepAllPhotos = async () => { for (const x of searches()) await keepPhotos(path.join(HOME, x)).catch(e => console.log(`photos ${x}: ${e.message}`)) }
 // the next watch, from the last one (or now) and the settings' period; none when it is off or paused (resumed late,
 // it runs at once)
 function schedule() {

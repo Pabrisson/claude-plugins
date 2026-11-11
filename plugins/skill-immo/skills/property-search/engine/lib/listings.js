@@ -75,6 +75,18 @@ export async function linkGone(url, { timeout = 12000 } = {}) {
   } catch { return null }
 }
 
+// A photo downloaded to be kept (immo.mjs keepPhotos): its bytes and extension; null when the server answers with no
+// image of 25 MB at most (gone, a page); a network failure throws (tried again later)
+const PHOTO_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' }
+export async function downloadPhoto(url, { timeout = 30000, max = 25e6 } = {}) {
+  if (!/^https?:\/\//i.test(url)) return null
+  const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(timeout), headers: { 'User-Agent': UA, Accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8' } })
+  const ext = PHOTO_TYPES[res.headers.get('content-type')?.split(';')[0].trim().toLowerCase()]
+  if (!res.ok || !ext || +(res.headers.get('content-length') ?? 0) > max) { await res.body?.cancel(); return null }
+  const data = Buffer.from(await res.arrayBuffer())
+  return data.length && data.length <= max ? { data, ext } : null
+}
+
 // `at`: when Stream Estate gave the document (the dead adverts are read against it)
 export function fromStreamEstate(d, at = new Date().toISOString()) {
   // the adverts still online first: what a field says now

@@ -56,6 +56,9 @@ export type Listing = {
   // the portal's gallery, and Stream Estate's copies when they were not shown (they stay after the portal's go)
   pictures: string[]
   se_pictures?: string[]
+  // the user's photos (« Ajouter des photos »), and the portal's downloaded once it expired: files of the search's folder
+  my_pictures?: Doc[]
+  kept_pictures?: string[]
   published_at: string | null
   urgent: boolean
   favorites: number | null
@@ -274,7 +277,7 @@ export const api = {
   cache: (clear = false) => json<{ files: number; bytes: number }>("/api/cache", clear ? { method: "DELETE" } : undefined),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; restore?: boolean; contact?: { index: number; name: string; phone: string; email: string }; message?: { id: string; sent?: boolean; delete?: boolean; document?: { id: string; type: string } } | { add: NewMessage }; location?: NewLocation }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; restore?: boolean; contact?: { index: number; name: string; phone: string; email: string }; message?: { id: string; sent?: boolean; delete?: boolean; document?: { id: string; type: string } } | { add: NewMessage }; location?: NewLocation; photos?: { add: { name: string; data: string }[] } | { delete: string } }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
   saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),
@@ -294,7 +297,11 @@ export const api = {
   run: (body: { cmd: string; slug?: string; args?: Record<string, string | number | boolean>; estimate?: boolean; accept_unknown?: boolean }) => post<RunResult>("/api/run", body),
 }
 
-export const docUrl = (slug: string, d: Doc) => `/api/s/${slug}/${d.file.split("/").map(encodeURIComponent).join("/")}`
+// a file of the search's folder (a document, a photo kept), as the engine serves it
+export const fileUrl = (slug: string, file: string) => `/api/s/${slug}/${file.split("/").map(encodeURIComponent).join("/")}`
+export const docUrl = (slug: string, d: Doc) => fileUrl(slug, d.file)
+// a file the engine takes in a JSON body
+export const base64 = (f: File) => new Promise<string>((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] ?? ""); r.onerror = () => ko(r.error); r.readAsDataURL(f) })
 
 // a listing's own page, /<slug>/annonce/<id>, and the listing a URL is about
 export const listingUrl = (slug: string, id: string) => `/${slug}/annonce/${encodeURIComponent(id)}/`

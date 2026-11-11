@@ -6,6 +6,7 @@ import { Dpe } from "@/components/dpe"
 import { FavoriteButton } from "@/components/favorite"
 import { LabelChip, useLabels } from "@/components/labels"
 import { Origin } from "@/components/origin"
+import { photosOf } from "@/components/photos"
 import { Gap, Ruler } from "@/components/ruler"
 import { NewBadge, StatusBadge, statusTint, tint } from "@/components/status"
 import { TypeIcon } from "@/components/type-icon"
@@ -123,8 +124,8 @@ export function ListingList({ className, shownTypes, floor }: { className?: stri
 // is, its price against the sold market, the chips (my status, the sale's, my labels); a quiet footer says where it comes
 // from, its messages and how long it has been online
 function ListingCard({ l, score, active, fresh, onOpen }: { l: Listing; score: number | null; active: boolean; fresh: boolean; onOpen: () => void }) {
-  const { marketFor } = useSearch()
-  const { ref, stats } = marketFor(l), t = typeOf(l) as PropertyType
+  const { slug, marketFor } = useSearch()
+  const { ref, stats } = marketFor(l), t = typeOf(l) as PropertyType, photo = photosOf(slug, l)[0]?.src
   // the last price change, the portal's or one this search saw itself (the only ones in Classic mode)
   const seen = (l.changes ?? []).filter(c => c.kind === "price_drop" || c.kind === "price_rise").map(c => ({ date: c.date, from: c.from as number, to: c.to as number }))
   const days = daysOnline(l), drop = [...l.price_changes, ...seen].toSorted((a, b) => a.date.localeCompare(b.date)).at(-1), messages = l.messages?.length ?? 0
@@ -133,7 +134,7 @@ function ListingCard({ l, score, active, fresh, onOpen }: { l: Listing; score: n
     <div id={`listing-${l.id}`} className="group relative scroll-mt-4">
     <button type="button" onClick={onOpen} style={statusTint(l.my_status)} className={cn("grid w-full grid-cols-[104px_1fr] gap-x-3 rounded-xl border p-2.5 text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none", tint(l.my_status), active && "spot border-ring ring-1 ring-ring")}>
       <div className="relative grid size-[104px] place-items-center overflow-hidden rounded-lg bg-muted">
-        {l.pictures[0] ? <img src={l.pictures[0]} alt="" loading="lazy" className="size-full object-cover" onError={e => e.currentTarget.remove()} /> : <TypeIcon type={t} className="size-6 text-muted-foreground" />}
+        {photo ? <img key={photo} src={photo} alt="" loading="lazy" className="size-full object-cover" onError={e => e.currentTarget.remove()} /> : <TypeIcon type={t} className="size-6 text-muted-foreground" />}
         {fresh && <NewBadge className="absolute top-1 right-1 h-4 px-1.5 text-[10px]" />}
         {/* the last drop on the photo, as the portals tag it */}
         {drop && drop.to < drop.from && (
