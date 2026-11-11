@@ -20,7 +20,7 @@ import { recentDpe } from './lib/dpe.js'
 import { DOC_TYPES, docTypeOf, isDocType } from './lib/documents.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, band, bbox, center, circle, corridor, distance, IDU, inGeometry, inZone, middleOf, thin } from './lib/geo.js'
-import { addressQuery, deadAd, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl } from './lib/listings.js'
+import { addressQuery, deadAd, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from './lib/listings.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
 import { openData, pool } from './lib/opendata.js'
@@ -83,7 +83,7 @@ const { values: opt, positionals: [cmd, ...args] } = parseArgs({
     estimate: { type: 'boolean' }, spend: { type: 'string' }, force: { type: 'boolean' }, 'accept-unknown': { type: 'boolean' },
     mode: { type: 'string' }, zone: { type: 'string' }, radius: { type: 'string' }, type: { type: 'string' }, types: { type: 'string' }, criteria: { type: 'string' }, max: { type: 'string' },
     kind: { type: 'string' }, amount: { type: 'string' }, to: { type: 'string' }, text: { type: 'string' }, from: { type: 'string' }, channel: { type: 'string' }, date: { type: 'string' }, sent: { type: 'boolean' }, attach: { type: 'string', multiple: true },
-    url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' },
+    url: { type: 'string' }, file: { type: 'string' }, source: { type: 'string' }, id: { type: 'string' }, all: { type: 'boolean' }, check: { type: 'string' },
     open: { type: 'boolean' }, preview: { type: 'boolean' },
     at: { type: 'string' }, address: { type: 'string' }, osint: { type: 'string' }, confidence: { type: 'string' }, reset: { type: 'boolean' },
   },
@@ -1115,15 +1115,27 @@ function documentCmd() {
   console.log(`${d.name} is now « ${DOC_TYPES.find(x => x.key === type).label} »: the dossier shows it`)
 }
 
-// note -p <slug> --id <id> --file <text> | --text "…": added at the end of the listing's « Mes notes » (a summary of
-// its documents the user wanted kept), after a blank line
+// note -p <slug> --id <id> --file <md> | --text "…": added at the end of the listing's « Mes notes », after a blank line:
+// what the agent learned of it (the dossier's memory), Markdown under a `## <subject> (<date>)` heading, as the dossier
+// renders it. --check "<start of a question>": ticks that box `- [ ]` of an « À demander », once it is answered.
+const unify = s => s.trim().toLowerCase().replace(/\s+/g, ' ')
 function note() {
   const dir = searchDir(), f = path.join(dir, 'listings.json'), ls = listingsOf(dir), l = ls.find(x => x.id === opt.id)
+  if (l && opt.check != null) {
+    const want = unify(opt.check)
+    const boxes = want ? [...(l.notes ?? '').matchAll(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[ \][ \t]+(.*)$/gm)].filter(m => unify(m[1]).startsWith(want)) : []
+    if (boxes.length !== 1) die(boxes.length ? `${boxes.length} unticked boxes start with « ${opt.check} » in the notes of ${l.id}: give more of the question` : `no unticked box starts with « ${opt.check} » in the notes of ${l.id}`)
+    const at = boxes[0].index + boxes[0][0].indexOf('[ ]') + 1
+    setNotes(l, `${l.notes.slice(0, at)}x${l.notes.slice(at + 1)}`, 'agent')
+    writeJson(f, ls)
+    return console.log(`ticked « ${boxes[0][1]} » in the notes of ${l.id}: the dossier shows it done`)
+  }
   const text = String((opt.file ? fs.readFileSync(opt.file === '-' ? 0 : opt.file, 'utf8') : opt.text) ?? '').trim()
-  if (!l || !text) die('usage: note -p <slug> --id <listing id> --file <text file> | --text "…"')
+  if (!l || !text) die('usage: note -p <slug> --id <listing id> --file <markdown file> | --text "…" | --check "<start of a question>"')
+  if (!/^## \S/.test(text)) die('a note is Markdown and starts with its heading, `## <subject> (<date>)`: see references/analyse-and-messages.md')
   const notes = [l.notes?.trim(), text].filter(Boolean).join('\n\n')
   if (notes.length > NOTES_MAX) die(`the notes would hold ${notes.length} characters, ${NOTES_MAX} at most: shorten the text`)
-  l.notes = notes
+  setNotes(l, notes, 'agent')
   writeJson(f, ls)
   console.log(`added to the notes of ${l.id} (${notes.length} characters): the dossier shows it in « Mes notes »`)
 }
@@ -1380,7 +1392,8 @@ async function handle(req, res) {
       const f = path.join(dir, 'listings.json'), ls = readJson(f, []), l = ls.find(x => x.id === lm[1])
       if (!l) return reply(res, 404, { error: 'no such listing' })
       if ('my_status' in body) { if (![null, 'to_visit', 'visited', 'offer', 'dropped'].includes(body.my_status)) return reply(res, 400, { error: 'bad status' }); l.my_status = body.my_status }
-      if (typeof body.notes === 'string') l.notes = body.notes.slice(0, NOTES_MAX)
+      // `restore`: a version of the history put back, the notes it replaces kept as one too
+      if (typeof body.notes === 'string') setNotes(l, body.notes.slice(0, NOTES_MAX), body.restore === true ? 'restore' : 'user')
       if (typeof body.favorite === 'boolean') l.favorite = body.favorite
       // the user's free labels: trimmed, without doubles, 20 of 40 characters at most
       if ('labels' in body) {

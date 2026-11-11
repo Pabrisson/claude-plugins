@@ -71,7 +71,7 @@ const ASKS: Record<Ask, { title: string; description: string; icon: LucideIcon; 
   summary: { title: "Résumer des documents", description: "L'agent lit les documents choisis et les résume, en citant le document et la page. Vous pourrez garder le résumé dans « Mes notes ».", icon: FileSearchIcon, text: "Instruction en plus", placeholder: "Ex. : concentre-toi sur les travaux du toit et ce qu'ils coûteront au lot" },
   doc_question: { title: "Question sur les documents", description: "L'agent cherche la réponse dans les documents choisis, et dit où il l'a trouvée.", icon: FileQuestionMarkIcon, text: "Votre question", placeholder: "Ex. : le ravalement est-il déjà voté, et pour combien ?" },
   offer: { title: "Rédiger une offre d'achat", description: "L'agent l'écrit d'après la marge de négociation et la conversation.", icon: HandCoinsIcon, text: "Instruction en plus", placeholder: "Ex. : insiste sur les travaux de la toiture" },
-  question: { title: "Rédiger les questions à l'agence", description: "Les questions de la synthèse que l'agent posera, et les vôtres. Il laisse de côté celles déjà répondues dans la conversation.", icon: MessageCircleQuestionMarkIcon, text: "Vos questions en plus", placeholder: "Une question par ligne" },
+  question: { title: "Rédiger les questions à l'agence", description: "Les questions de la synthèse et celles à demander de vos notes que l'agent posera, et les vôtres. Il laisse de côté celles déjà répondues dans la conversation.", icon: MessageCircleQuestionMarkIcon, text: "Vos questions en plus", placeholder: "Une question par ligne" },
   visit: { title: "Rédiger une demande de visite", description: "L'agent propose vos disponibilités.", icon: CalendarCheckIcon, text: "Précisions", placeholder: "Ex. : jeudi 14 après 18 h, ou samedi matin" },
   documents: { title: "Rédiger une demande de documents", description: "Cochez les documents à demander. Ceux déjà reçus dans la conversation sont décochés.", icon: FileStackIcon, text: "Instruction en plus", placeholder: "Ex. : demande-les avant la visite" },
   reply: { title: "Répondre au dernier message", description: "L'agent répond au dernier message reçu, d'après toute la conversation.", icon: ReplyIcon, text: "Ce que vous voulez répondre", placeholder: "Ex. : accepter la visite mais refuser la contre-offre" },
@@ -149,10 +149,14 @@ function Checks<T>({ items, value, onChange, id, label, columns }: { items: T[];
   )
 }
 
+// the boxes of « Mes notes » not ticked yet (an « À demander »): still to ask, their Markdown marks left out
+const openAsks = (notes: string) => [...notes.matchAll(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[ \][ \t]+(.+)$/gm)].map(m => m[1].replace(/\*\*|`/g, "").trim())
+
 export function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; short: string; onClose: () => void }) {
   const { addFeedback, marketFor, aidsFor } = useSearch()
   const a = ASKS[ask], t = typeOf(l) as PropertyType, docs = docsOf(l)
   const questions: string[] = ask === "question" ? review(l, aidsFor(l)).questions : []
+  const noted = ask === "question" ? openAsks(l.notes ?? "").filter(q => !questions.includes(q)) : []
   const nego = ask === "offer" && l.price ? negotiation(l, marketFor(l).ref?.ppm2) : null
   // what can be asked for this type of property, and when each type came (the newest; a DDT holds every diagnostic)
   const toAsk = docTypesFor(t).map(g => ({ ...g, items: g.items.filter((x: DocType) => x.request !== false) })).filter(g => g.items.length)
@@ -160,7 +164,7 @@ export function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; sh
   for (const d of docs) if (!got.has(typeOfDoc(d))) got.set(typeOfDoc(d), d.date)
   const received = (x: DocType) => got.get(x.key) ?? (x.group === "diagnostics" ? got.get("ddt") : undefined)
   const [chips, setChips] = useState<string[]>([]), [funding, setFunding] = useState<string[]>([])
-  const [picked, setPicked] = useState(() => docs.map(d => d.id)), [qs, setQs] = useState(questions)
+  const [picked, setPicked] = useState(() => docs.map(d => d.id)), [qs, setQs] = useState(() => [...questions, ...noted])
   const [asked, setAsked] = useState(() => toAsk.flatMap(g => g.items.filter((x: DocType) => x.on && !received(x)).map((x: DocType) => x.key)))
   const [amount, setAmount] = useState(""), [days, setDays] = useState("10"), [text, setText] = useState("")
   const isDocs = ask === "summary" || ask === "doc_question"
@@ -217,7 +221,13 @@ export function AskDialog({ ask, l, short, onClose }: { ask: Ask; l: Listing; sh
           {ask === "question" && (
             <Field>
               <FieldLabel>Questions de la synthèse</FieldLabel>
-              {questions.length ? <Checks items={questions} value={qs} onChange={setQs} id={q => q} label={q => q} /> : <FieldDescription>La synthèse n'en propose aucune : écrivez les vôtres.</FieldDescription>}
+              {questions.length ? <Checks items={questions} value={qs} onChange={setQs} id={q => q} label={q => q} /> : <FieldDescription>La synthèse n'en propose aucune{noted.length ? "" : " : écrivez les vôtres"}.</FieldDescription>}
+            </Field>
+          )}
+          {noted.length > 0 && (
+            <Field>
+              <FieldLabel>À demander, de vos notes</FieldLabel>
+              <Checks items={noted} value={qs} onChange={setQs} id={q => q} label={q => q} />
             </Field>
           )}
           {ask === "visit" && <Field><FieldLabel>Disponibilités</FieldLabel><Chips opts={SLOTS} value={chips} onChange={setChips} label="Disponibilités" /></Field>}

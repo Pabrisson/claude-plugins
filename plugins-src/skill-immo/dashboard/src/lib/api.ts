@@ -71,6 +71,8 @@ export type Listing = {
   // when the user first opened it (« Nouveau » until then)
   seen_at?: string | null
   notes: string
+  // the notes before each change, for « Restaurer » (engine lib/listings.js setNotes): the last 30, oldest first
+  notes_history?: { date: string; notes: string; by: "user" | "agent" | "restore" }[]
   messages?: Message[]
   building?: {
     ban: string | null
@@ -272,7 +274,7 @@ export const api = {
   cache: (clear = false) => json<{ files: number; bytes: number }>("/api/cache", clear ? { method: "DELETE" } : undefined),
   deleteSearch: (slug: string) => json<object>(`/api/s/${slug}`, { method: "DELETE" }),
   visit: (slug: string) => post<{ last_visit: string | null }>(`/api/s/${slug}/visit`, {}),
-  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; contact?: { index: number; name: string; phone: string; email: string }; message?: { id: string; sent?: boolean; delete?: boolean; document?: { id: string; type: string } } | { add: NewMessage }; location?: NewLocation }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
+  listing: (slug: string, id: string, body: { my_status?: Status; favorite?: boolean; labels?: string[]; seen?: boolean; notes?: string; restore?: boolean; contact?: { index: number; name: string; phone: string; email: string }; message?: { id: string; sent?: boolean; delete?: boolean; document?: { id: string; type: string } } | { add: NewMessage }; location?: NewLocation }) => post<Listing>(`/api/s/${slug}/listings/${id}`, body),
   profile: () => json<Profile>("/api/profile"),
   // `account_set`: money added (€), or the console's figures (€ deposited, items returned: dated now by the server)
   saveProfile: (p: Partial<Profile> & { account_set?: { topup?: number; deposited?: number; items?: number } }) => post<Profile>("/api/profile", p),

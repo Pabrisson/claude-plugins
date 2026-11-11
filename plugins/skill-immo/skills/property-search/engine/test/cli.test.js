@@ -349,11 +349,22 @@ test('a message for a listing: kept with it, shown to the agent', async () => {
   assert.equal((await run(home, ['message', '-p', 'paul-bert', '--id', id, '--attach', path.join(dir, 'nope.pdf')], { key: null })).status, 1)
   // a summary kept in « Mes notes », after what the user wrote
   const notes = (l = read(dir, 'listings.json')[0]) => l.notes
-  await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', 'Résumé du PV : ravalement voté.'], { key: null })
-  await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', 'Charges : 2 400 €/an.'], { key: null })
-  assert.equal(notes(), 'Résumé du PV : ravalement voté.\n\nCharges : 2 400 €/an.')
+  await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', '## Résumé du PV (11/11/2026)\n- Ravalement voté.\n\n### À demander\n- [ ] Le montant du ravalement ?\n- [ ] La date de la prochaine AG ?'], { key: null })
+  await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', '## Charges (12/11/2026)\n- 2 400 €/an.'], { key: null })
+  assert.match(notes(), /^## Résumé du PV[^]*\n\n## Charges \(12\/11\/2026\)\n- 2 400 €\/an\.$/)
+  // always Markdown under its heading
+  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', 'Charges : 2 400 €/an.'], { key: null })).status, 1)
+  // an answered question ticked in place, the rest untouched; none or several matching: refused
+  const before = notes()
+  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--check', 'le montant  du RAVALEMENT'], { key: null })).status, 0)
+  assert.equal(notes(), before.replace('- [ ] Le montant', '- [x] Le montant'))
+  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--check', 'Le montant'], { key: null })).status, 1)
+  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--check', 'La'], { key: null })).status, 0)
+  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--check', ''], { key: null })).status, 1)
   assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', ' '], { key: null })).status, 1)
-  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', 'x'.repeat(20001)], { key: null })).status, 1)
+  assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', `## x\n${'x'.repeat(20001)}`], { key: null })).status, 1)
+  // the agent's additions kept for « Restaurer », its ticks not
+  assert.deepEqual(read(dir, 'listings.json')[0].notes_history.map(v => [v.by, v.notes.slice(0, 20)]), [['agent', '## Résumé du PV (11/']])
 })
 
 // the open data a new zone asks, kept in the cache beforehand: its box's places, DPE and audits, its center's risks and

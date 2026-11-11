@@ -15,6 +15,7 @@ import { FavoriteButton } from "@/components/favorite"
 import { LabelsEditor } from "@/components/labels"
 import { LocationLine, placedBy } from "@/components/locate-dialog"
 import { Origin } from "@/components/origin"
+import { FollowSection } from "@/components/notes"
 import { Photos } from "@/components/photos"
 import { useRun } from "@/components/run-dialog"
 import { StatusDot } from "@/components/status"
@@ -148,7 +149,7 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
   if (mobile)
     return (
       <Drawer open={!!l} onOpenChange={o => !o && select(null)}>
-        <DrawerContent className="max-h-[92vh]">
+        <DrawerContent className="max-h-[92vh]" onEscapeKeyDown={e => (e.target as HTMLElement | null)?.closest?.("[data-notes-editor]") && e.preventDefault()}>
           <DrawerHeader className="flex-row items-center justify-between gap-3 text-left"><span className="min-w-0"><DrawerTitle>{title}</DrawerTitle><DrawerDescription>{l && eur(l.price)}</DrawerDescription></span>{l && <ShowIn l={l} onView={onView} />}</DrawerHeader>
           <StaleBar />
           <div className="overflow-y-auto px-4 pb-6">{body}</div>
@@ -157,7 +158,7 @@ export function Dossier({ onView }: { onView: (v: string) => void }) {
     )
   return (
     <Sheet open={!!l} onOpenChange={o => !o && select(null)}>
-      <SheetContent showCloseButton={false} className="gap-0 data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none">
+      <SheetContent showCloseButton={false} className="gap-0 data-[side=right]:w-[min(720px,100vw)] data-[side=right]:sm:max-w-none" onEscapeKeyDown={e => (e.target as HTMLElement | null)?.closest?.("[data-notes-editor]") && e.preventDefault()}>
         {/* « Voir » and the close button side by side, both centered on the title */}
         <SheetHeader className="flex-row items-center justify-between gap-3 border-b">
           <span className="min-w-0"><SheetTitle>{title}</SheetTitle><SheetDescription>{l && `${TYPE_LABEL[l.property_type ?? "flat"]} · ${eur(l.price)}`}</SheetDescription></span>
@@ -216,7 +217,6 @@ export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (
   const halves = useMedia("(min-width: 1024px)") && wide
   const { slug, data, profile, marketFor, aidsFor, reload, compare, toggleCompare } = useSearch()
   const run = useRun()
-  const [notes, setNotes] = useState(l.notes)
   const t = typeOf(l) as PropertyType, home = isHome(t), { ref, stats: refStats } = marketFor(l), aids = aidsFor(l)
   const nego = negotiation(l, ref?.ppm2), days = daysOnline(l), drop = dropped(l)
   const b = l.building, dpeReg = b?.dpe.find(d => d.number === b.dpe_match)
@@ -229,12 +229,6 @@ export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (
   async function setStatus(s: string) {
     await api.listing(slug, l.id, { my_status: (s || null) as Status })
     await reload()
-  }
-  async function saveNotes() {
-    if (notes === l.notes) return
-    await api.listing(slug, l.id, { notes })
-    await reload()
-    toast.success("Notes enregistrées")
   }
 
   return (
@@ -341,13 +335,7 @@ export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (
           </div>
           <div className="flex min-w-0 flex-col gap-3">
             <Conversation l={l} short={short} />
-            <Section title="Suivi">
-              <Field>
-                <FieldLabel htmlFor="notes">Mes notes</FieldLabel>
-                <Textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Visite, questions à poser, impressions…" />
-              </Field>
-              <FollowLog l={l} />
-            </Section>
+            <FollowSection l={l} />
             <BudgetSection l={l} profileIncome={profile.net_income_monthly} />
             {home && <RentSection l={l} />}
           </div>
@@ -420,25 +408,9 @@ export function DossierBody({ l, onView, wide = false }: { l: Listing; onView: (
           <BudgetSection l={l} profileIncome={profile.net_income_monthly} />
           {home && <RentSection l={l} />}
 
-          <Section title="Suivi">
-            <Field>
-              <FieldLabel htmlFor="notes">Mes notes</FieldLabel>
-              <Textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Visite, questions à poser, impressions…" />
-            </Field>
-            <FollowLog l={l} />
-          </Section>
+          <FollowSection l={l} />
         </>
       )}
-    </div>
-  )
-}
-
-// what happened to the listing, newest first, in a box of its own height at most: a long history scrolls inside it
-function FollowLog({ l }: { l: Listing }) {
-  const log = [{ date: l.first_seen, text: "Ajoutée à la recherche" }, ...(l.changes ?? []).filter(c => c.kind !== "new").map(c => ({ date: c.date, text: c.kind === "expired" ? "Annonce expirée" : c.kind === "status" ? `Statut : ${SALE_STATUS[String(c.to)] ?? c.to}` : `Prix : ${eur(c.from as number)} → ${eur(c.to as number)}` }))].reverse()
-  return (
-    <div className="-mr-2 flex max-h-56 flex-col gap-2.5 overflow-y-auto pr-2" tabIndex={0} role="region" aria-label="Historique de l'annonce">
-      {log.map((c, i) => <Row key={i} label={date(c.date)}>{c.text}</Row>)}
     </div>
   )
 }

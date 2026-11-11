@@ -150,7 +150,7 @@ export function fromInput(x, source) {
 
 // what the user keeps on a listing (their star, their labels, when they first opened it, the messages the agent wrote for it
 // included), and what the engine adds, through every refresh
-const KEPT = ['first_seen', 'price_history', 'my_status', 'favorite', 'labels', 'seen_at', 'notes', 'messages', 'building', 'changes']
+const KEPT = ['first_seen', 'price_history', 'my_status', 'favorite', 'labels', 'seen_at', 'notes', 'notes_history', 'messages', 'building', 'changes']
 
 // Merges listings into the known ones (by id, else by URL) on day `now`. A listing seen again keeps the user's status,
 // notes and history, and what the link check found of its adverts; a new price, status or expiry is logged in its
@@ -191,6 +191,24 @@ export function merge(known, incoming, now, gone = []) {
   }
   for (const l of new Set(byId.values())) if (l.status !== 'EXPIRED' && (gone.includes(l.id) || allGone(l))) { log(l, 'expired', l.status, 'EXPIRED'); l.status = 'EXPIRED' }
   return { listings: [...new Set(byId.values())], changes }
+}
+
+// The listing's notes become `text`, the ones before kept in `notes_history` for the dossier's « Restaurer » ({ date,
+// notes, by: user|agent|restore }, the last 30). None for a box ticked or unticked (a click undoes it), nor for the
+// user's saves less than 5 minutes after their last one: the notes before their first save stay the ones kept.
+export function setNotes(l, text, by, now = new Date().toISOString()) {
+  const before = l.notes ?? '', h = l.notes_history ?? [], last = h.at(-1)
+  if (text === before) return
+  const again = by === 'user' && last?.by === 'user' && Date.parse(now) - Date.parse(last.date) < 5 * 60e3
+  if (before.trim() && !again && !ticked(before, text)) l.notes_history = [...h, { date: now, notes: before, by }].slice(-30)
+  l.notes = text
+}
+// the two texts differ by one box only, `[ ]` against `[x]`
+function ticked(a, b) {
+  if (a.length !== b.length) return false
+  let i = 0
+  while (a[i] === b[i]) i++
+  return a[i - 1] === '[' && a[i + 1] === ']' && /[ xX]/.test(a[i]) && /[ xX]/.test(b[i]) && a.slice(i + 1) === b.slice(i + 1)
 }
 
 // The user's own place for a listing (the dashboard's « Préciser l'adresse »: by hand on the map, or found by an OSINT

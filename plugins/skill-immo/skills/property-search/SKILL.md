@@ -223,6 +223,9 @@ a message received, a message to write (an offer, questions, a visit, a reply, a
 conversation (a summary, a question on them), a parcel (its
 cadastre, urban plan and sales: `cadastre`).
 
+A listing's « Mes notes » are its memory, the user's and yours: read them (`show`) before any answer or work on that
+listing, and keep there, without asking, what you learned of it, in Markdown (« The notes » in that reference).
+
 ## Other public data: the data.gouv.fr MCP
 
 The engine covers the open data it needs. When a data.gouv.fr MCP server is connected (its tools search the datasets

@@ -4,7 +4,35 @@ Read it before analysing or comparing listings, a question on a listing or on th
 to write (an offer, questions, a visit, a reply, a reminder, documents). `immo.mjs` means `node "${CLAUDE_SKILL_DIR}/engine/immo.mjs"`, as in SKILL.md; the credits rule and the
 assisted mode are SKILL.md's.
 
-Contents: analyse and compare (`show`, `market.json`, the verdict) · messages and the conversation (one received, one to write) · the conversation's documents (a summary, a question) · a parcel (`cadastre`) · `market.json`
+Contents: the notes (the dossier's memory) · analyse and compare (`show`, `market.json`, the verdict) · messages and the conversation (one received, one to write) · the conversation's documents (a summary, a question) · a parcel (`cadastre`) · `market.json`
+
+## The notes: the dossier's memory
+
+A listing's `notes` (in `show`, the dossier's « Mes notes ») hold what the user and earlier sessions learned of it:
+documents read, visits, calls, the agency's answers, decisions and their reasons, what is left to ask.
+
+- Before any answer or work on a listing (a question, an analysis, a comparison, an offer, a message, a visit, its
+  documents), read its notes first; for a comparison, each one's. Build on them (« d'après vos notes »), never ask the
+  user again what they answer, and say so when something new contradicts them.
+- After an answer that brings something lasting, keep it there without asking, and end the answer with « Ajouté à vos
+  notes ». Lasting: a summary of documents or an answer found in them, what the user tells of a visit or a call, an
+  answer of the agency or the seller, a decision and why, an offer made or refused, a figure checked (the real charges,
+  the surface). Not what the dashboard computes (`review`, the score, the negotiation range), nor what the notes already
+  hold. Write it to a file in the scratchpad and run `immo.mjs note -p <slug> --id <id> --file <file>`: it is added
+  after the notes, never over them.
+- Its form, always Markdown (the dossier renders it; `note` refuses a text that does not start with its heading):
+  - `## <Subject> (<date>)` (`## Résumé des documents (11/11/2026)`, `## Visite (14/11/2026)`, `## Réponse de
+    l'agence (15/11/2026)`), then, for documents, `*Sources : <names>*`;
+  - a `### ` heading per part when there are several, in sentence case (`### Travaux votés ou à venir`, never in
+    capitals);
+  - `- ` items, a detail two spaces deeper; an item's subject in bold before its colon (`- **Toiture du Clos 3** : …`);
+    each fact's source in parentheses (« PV AG 2025, p. 3 », « appel du 15/11 »);
+  - only when something is left to ask the seller or the agency: last, `### À demander`, one box each (`- [ ] …`),
+    none already open in the notes. No such part otherwise.
+- A box answered (a message received, a document, what the user says): `immo.mjs note -p <slug> --id <id> --check
+  "<start of the question>"` ticks it (refused when no open box, or several, start so: give more of it), and the
+  answer goes in an entry of its own. The user ticks boxes in the dossier too, and can put back any earlier version of
+  the notes (« Restaurer » in its history).
 
 ## Analyse and compare
 
@@ -47,6 +75,7 @@ Each listing keeps its conversation with the agency or the seller. The user adds
 `immo.mjs message -p <slug> --id <id> --from them [--channel email|sms|phone|visit] [--amount <€ proposed>] [--date
 <iso>] [--attach <document>]… --file <file>`, and say so in one line. `--attach` (once per file: PDF, image, Word, Excel,
 text, 25 MB at most) copies a document the user gave you into the search; with documents, the text is optional.
+What it answers or brings that lasts goes in the notes too (« The notes » above): a box answered is ticked.
 
 Each document has a `type`, the one the user chose or the one its name says (`other` when it says none): `ddt` (the
 whole diagnostics file), `dpe`, `asbestos`, `lead`, `electricity`, `gas`, `termites`, `risks`, `carrez`, `sanitation`,
@@ -74,8 +103,8 @@ whose type is wrong or `other` (« scan001.pdf » that is a PV d'AG), set it: `i
      the line to use (« cadastré section DN n° 68, pour une contenance de 9 a 90 ca »; a flat's is its building's,
      with « lot n° … » left for the seller to fill), « sous réserve de vérification sur le titre de propriété »;
    - a reply to a counter-offer: where it stands against the range and what the seller said;
-   - questions or documents: those of `review.questions` that still matter, minus what the conversation already
-     answered and the documents it already holds (their `type`; a `ddt` holds every diagnostic). The dashboard's item
+   - questions or documents: those of `review.questions` that still matter and the open boxes of the notes (« À
+     demander »), minus what the conversation already answered and the documents it already holds (their `type`; a `ddt` holds every diagnostic). The dashboard's item
      may list them (« : 1) … 2) … », « des documents suivants : … »): ask those, minus what is already there.
 
    What the item adds after « ; » is the user's and comes first: `montant` (the offer's amount, or a counter-offer in a
@@ -105,9 +134,9 @@ names some by their name, type and id:
    share of this lot, the charges and the arrears, the procedures (unpaid charges, disputes with the syndic or a
    neighbour), what differs from the listing (surface, DPE, charges against `show`). The `points` and the `consigne`
    come first. A question: the answer, then where it is written; « les documents n'en disent rien » when they do not.
-3. Ask in one AskUserQuestion whether to keep it in the listing's « Mes notes »: « Oui » first, then « Non ». On a yes,
-   write it to a file in the scratchpad, with a first line « Résumé des documents (<date>) : <names> » (or « Question
-   sur les documents »), and run `immo.mjs note -p <slug> --id <id> --file <file>`: it is added after the user's notes.
+3. Keep it in the notes, without asking (« The notes » above): `## Résumé des documents (<date>)` or `## Question sur
+   les documents (<date>)`, then `*Sources : <names>*`, the parts as `###`; an « À demander » only when the documents
+   leave something to ask. A box they answer is ticked.
 
 ## A parcel
 
