@@ -41,8 +41,9 @@ function MessageScrollerViewport({
   return (
     <MessageScrollerPrimitive.Viewport
       data-slot="message-scroller-viewport"
+      // skill-immo: no overscroll-contain, the thread's scroll goes on into the dossier once at its top or its end
       className={cn(
-        "size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin scrollbar-gutter-stable overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent data-pending-scroll:invisible",
+        "size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin scrollbar-gutter-stable overflow-y-auto contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent data-pending-scroll:invisible",
         className
       )}
       {...props}
