@@ -2,7 +2,7 @@ import { budget, rentOf, rentVsBuy } from "@engine/budget.js"
 import { review, score } from "@engine/decide.js"
 import { inGeometry } from "@engine/geo.js"
 import { asking, daysOnline, dropped, isHome, negotiation, priceSteps, typeOf, unitPrice } from "@engine/market.js"
-import { BellRingIcon, CalendarClockIcon, PencilIcon, CheckIcon, ClockIcon, EllipsisIcon, MessagesSquareIcon, ReplyIcon, SendIcon, Undo2Icon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, Maximize2Icon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
+import { AtSignIcon, BellRingIcon, TextQuoteIcon, CalendarClockIcon, PencilIcon, CheckIcon, ClockIcon, EllipsisIcon, MessagesSquareIcon, ReplyIcon, SendIcon, Undo2Icon, ChevronDownIcon, XIcon, CircleQuestionMarkIcon, LandPlotIcon, ListIcon, LocateFixedIcon, MapIcon, SquareKanbanIcon, ContactRoundIcon, CopyIcon, ExternalLinkIcon, HistoryIcon, HouseIcon, MailIcon, Maximize2Icon, MessageSquareTextIcon, PaperclipIcon, PhoneIcon, PlusIcon, TagIcon, ScaleIcon, SearchCheckIcon, ThumbsUpIcon, Trash2Icon, TriangleAlertIcon, UserRoundIcon } from "lucide-react"
 import { Fragment, useEffect, useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
@@ -620,7 +620,7 @@ function Conversation({ l, short }: { l: Listing; short: string }) {
                   {ms.map((m, i) => (
                     <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={i === ms.length - 1} className="flex flex-col gap-4">
                       {(i === 0 || dayKey(ms[i - 1].date) !== dayKey(m.date)) && <Marker variant="separator"><MarkerContent>{dayLabel(m.date)}</MarkerContent></Marker>}
-                      <MessageRow m={m} t={t} onChange={b => change(m, b)} />
+                      <MessageRow m={m} t={t} email={m.from !== "them" ? emailOf(m, l) : null} onChange={b => change(m, b)} />
                     </MessageScrollerItem>
                   ))}
                   {next?.ask === "follow_up" && (
@@ -641,14 +641,29 @@ function Conversation({ l, short }: { l: Listing; short: string }) {
   )
 }
 
-// One message: who and what above it, its text (6 lines, then « Lire la suite »), the amount of an offer, its documents;
-// under it the channel, the time and, for the user's, sent or a draft to mark sent. Copying, back to a draft and
-// deleting sit in « ⋯ », shown on hover with a mouse and always on a touch screen (on the inner side: left of the
-// user's messages).
-function MessageRow({ m, t, onChange }: { m: Message; t: PropertyType; onChange: (b: Change) => void }) {
+// the address a message of mine goes to: `to` when it is one, else the email of the contact so named (« Modifier le
+// contact »), else, sent to no one named, the email of the listing's only contact having one
+function emailOf(m: Message, l: Listing) {
+  const to = m.to?.trim(), mails = l.publishers.filter(p => p.email)
+  if (to && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return to
+  if (to) return mails.find(p => p.name?.trim().toLowerCase() === to.toLowerCase())?.email ?? null
+  return mails.length === 1 ? mails[0].email : null
+}
+// an email's subject, its first line « Objet : … » (as the agent writes it), apart from its body
+function subjectOf(text: string): { subject: string | null; body: string } {
+  const m = /^[ \t]*(?:objet|subject)[ \t]*:[ \t]*(.+)\n?/i.exec(text)
+  return m ? { subject: m[1].trim(), body: text.slice(m[0].length).replace(/^\s*\n/, "").trimEnd() } : { subject: null, body: text }
+}
+
+// One message: who and what above it, its subject apart, its text (6 lines, then « Lire la suite »), the amount of an
+// offer, its documents; under it the channel, the time and, for the user's, sent or a draft to mark sent. Copying (the
+// message, its subject, the address), back to a draft and deleting sit in « ⋯ », shown on hover with a mouse and always
+// on a touch screen (on the inner side: left of the user's messages).
+function MessageRow({ m, t, email, onChange }: { m: Message; t: PropertyType; email: string | null; onChange: (b: Change) => void }) {
   const [full, setFull] = useState(false), [confirm, setConfirm] = useState(false)
   const mine = m.from !== "them", docs = m.documents ?? [], Icon = m.channel ? CHANNEL_ICON[m.channel] : MailIcon
-  const long = m.text.split("\n").length > 6 || m.text.length > 420, kind = m.kind !== "other" ? MESSAGE_LABEL[m.kind] : null
+  const { subject, body } = subjectOf(m.text)
+  const long = body.split("\n").length > 6 || body.length > 420, kind = m.kind !== "other" ? MESSAGE_LABEL[m.kind] : null
   const who = (mine ? [kind, m.to && `à ${m.to}`] : [m.to ?? "L'agence ou le vendeur", kind]).filter(Boolean).join(" · ")
   return (
     <ChatMessage align={mine ? "end" : "start"}>
@@ -663,7 +678,8 @@ function MessageRow({ m, t, onChange }: { m: Message; t: PropertyType; onChange:
         <Bubble variant={mine ? (m.sent_at ? "muted" : "draft") : "them"} align={mine ? "end" : "start"} className={cn(docs.length > 0 && "max-w-full")}>
           <BubbleContent className="flex flex-col gap-2">
             {m.amount ? <p className="text-lg font-semibold tabular-nums">{eur(m.amount)}</p> : null}
-            {m.text && <p className={cn("whitespace-pre-line", long && !full && "line-clamp-6 mask-b-from-50%")}>{m.text}</p>}
+            {subject && <p className="border-b border-current/10 pb-2"><span className="text-xs opacity-70">Objet</span><span className="block font-medium">{subject}</span></p>}
+            {body && <p className={cn("whitespace-pre-line", long && !full && "line-clamp-6 mask-b-from-50%")}>{body}</p>}
             {long && <Button variant="link" size="xs" className="h-auto self-start p-0" aria-expanded={full} onClick={() => setFull(!full)}>{full ? "Réduire" : "Lire la suite"}</Button>}
             {docs.length > 0 && <Documents docs={docs} t={t} onChange={onChange} />}
           </BubbleContent>
@@ -679,12 +695,15 @@ function MessageRow({ m, t, onChange }: { m: Message; t: PropertyType; onChange:
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-xs" aria-label="Actions du message" className={cn("pointer-fine:opacity-0 pointer-fine:group-hover/message:opacity-100 pointer-fine:group-focus-within/message:opacity-100 data-[state=open]:opacity-100", mine && "order-first")}><EllipsisIcon /></Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align={mine ? "end" : "start"}>
+            {/* as wide as its items, on one line each (not the « ⋯ » button's width) */}
+            <DropdownMenuContent align={mine ? "end" : "start"} className="w-max max-w-[calc(100vw-2rem)]">
               <DropdownMenuGroup>
-                {m.text && <DropdownMenuItem onSelect={async () => { await navigator.clipboard.writeText(m.text); toast.success("Message copié") }}><CopyIcon />Copier le texte</DropdownMenuItem>}
+                {body && <DropdownMenuItem onSelect={async () => { await navigator.clipboard.writeText(body); toast.success("Message copié") }}><CopyIcon />Copier le message</DropdownMenuItem>}
+                {subject && <DropdownMenuItem onSelect={async () => { await navigator.clipboard.writeText(subject); toast.success("Objet copié") }}><TextQuoteIcon />Copier l'objet</DropdownMenuItem>}
+                {email && <DropdownMenuItem onSelect={async () => { await navigator.clipboard.writeText(email); toast.success("Email copié") }}><AtSignIcon />Copier l'email</DropdownMenuItem>}
                 {mine && m.sent_at && <DropdownMenuItem onSelect={() => onChange({ sent: false })}><Undo2Icon />Remettre en brouillon</DropdownMenuItem>}
               </DropdownMenuGroup>
-              {(m.text || (mine && m.sent_at)) && <DropdownMenuSeparator />}
+              {(body || subject || email || (mine && m.sent_at)) && <DropdownMenuSeparator />}
               <DropdownMenuGroup>
                 <DropdownMenuItem variant="destructive" onSelect={() => setConfirm(true)}><Trash2Icon />Supprimer</DropdownMenuItem>
               </DropdownMenuGroup>

@@ -112,7 +112,9 @@ whose type is wrong or `other` (« scan001.pdf » that is a PV d'AG), set it: `i
    reply), `validité` (days), `financement`, `disponibilités` and `précisions` (a visit), `questions en plus`,
    `consigne` (how to write it).
 
-   Never sign with a name the user did not give.
+   An email starts with its subject, alone on the first line, `Objet : <subject>`, then a blank line and the body:
+   the dossier shows the subject apart and copies each on its own (« Copier l'objet », « Copier le message »). Never
+   sign with a name the user did not give.
 3. Give the text in your answer, ready to copy. You never send anything: the user does.
 4. Always ask, in one AskUserQuestion, whether to add it to the listing's conversation: « Oui, en brouillon » first,
    then « Oui, je l'ai déjà envoyé » and « Non ». On a yes, write it to a file in the scratchpad and run
