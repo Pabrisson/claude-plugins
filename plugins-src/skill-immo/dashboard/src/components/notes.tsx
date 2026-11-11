@@ -1,5 +1,6 @@
-import { CheckIcon, EyeIcon, HistoryIcon, Maximize2Icon, PencilIcon, RotateCcwIcon } from "lucide-react"
-import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import { diffLines, diffWordsWithSpace } from "diff"
+import { CheckIcon, DiffIcon, EyeIcon, FileTextIcon, HistoryIcon, Maximize2Icon, PencilIcon, RotateCcwIcon } from "lucide-react"
+import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
@@ -10,8 +11,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -91,11 +91,149 @@ function Editor({ value, onChange, area, scroller }: { value: string; onChange: 
   )
 }
 
-// What happened to the listing, newest first, quiet below the notes; each change of the notes can be undone: its
-// icon opens the notes as they were before it, and « Restaurer cette version » (`open`: the version shown)
+// a version of the notes: the notes before a change, rebuilt by the engine from the change's .diff (lib/notes.js;
+// null when the notes no longer hold it), and who made the change
 type Version = NonNullable<Listing["notes_history"]>[number]
 const BY = { user: "Notes modifiées", agent: "Notes complétées par l'agent", restore: "Version restaurée" }
-function FollowLog({ l, open, onOpen, onRestore }: { l: Listing; open: Version | null; onOpen: (v: Version | null) => void; onRestore?: () => void }) {
+
+// What restoring a version does to the note, side by side as git shows it: on the left the current note, the lines that
+// go in red; on the right the note once restored, the lines that come back in green. In a change, removed and added lines
+// face each other as they come; a line facing the one it became (in order, the first sharing at least half its text)
+// has the words that differ marked.
+type Word = { text: string; hit: boolean }
+type Cell = { n: number; text: string; words?: Word[] } | null
+type Row = { change: boolean; left: Cell; right: Cell }
+const linesOf = (value: string) => value.slice(0, -1).split("\n")
+function words(a: string, b: string) {
+  const parts = diffWordsWithSpace(a, b), same = parts.reduce((n, p) => n + (p.added || p.removed ? 0 : p.value.length), 0)
+  if (same < Math.max(a.length, b.length) / 2) return null
+  return { del: parts.filter(p => !p.added).map(p => ({ text: p.value, hit: !!p.removed })), add: parts.filter(p => !p.removed).map(p => ({ text: p.value, hit: !!p.added })) }
+}
+function sideBySide(from: string, to: string): Row[] {
+  // every line ends with its break, the last one too: a note without a final break still matches line for line
+  const parts = diffLines(from && from + "\n", to && to + "\n"), rows: Row[] = []
+  let l = 1, r = 1
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i]
+    if (!p.added && !p.removed) { for (const text of linesOf(p.value)) rows.push({ change: false, left: { n: l++, text }, right: { n: r++, text } }); continue }
+    const del = p.removed ? linesOf(p.value) : [], add = p.added ? linesOf(p.value) : parts[i + 1]?.added ? linesOf(parts[++i].value) : []
+    const pairs: [number, number, ReturnType<typeof words>][] = []
+    for (let k = 0, q = 0; k < add.length; k++)
+      for (let j = q; j < del.length; j++) { const w = words(del[j], add[k]); if (w) { pairs.push([j, k, w]); q = j + 1; break } }
+    let q = 0, k = 0
+    for (const [pq, pk, w] of [...pairs, [del.length, add.length, null] as [number, number, null]]) {
+      for (let j = 0; j < Math.max(pq - q, pk - k); j++) rows.push({ change: true, left: q + j < pq ? { n: l++, text: del[q + j] } : null, right: k + j < pk ? { n: r++, text: add[k + j] } : null })
+      if (w) rows.push({ change: true, left: { n: l++, text: del[pq], words: w.del }, right: { n: r++, text: add[pk], words: w.add } })
+      q = pq + 1; k = pk + 1
+    }
+  }
+  return rows
+}
+
+// one side of a row: its line number, its sign and its text; an empty side (the line is on the other side only) grey.
+// On a phone the two sides stack, as one column: a line unchanged once, a change red then green.
+const SIDE = {
+  left: { tint: "bg-[var(--diff-del)]", word: "bg-[var(--diff-del-word)]", fg: "text-[var(--diff-del-fg)]", sign: "−", said: "Enlevé : " },
+  right: { tint: "bg-[var(--diff-add)]", word: "bg-[var(--diff-add-word)]", fg: "text-[var(--diff-add-fg)]", sign: "+", said: "Remis : " },
+}
+function Side({ cell, side, change }: { cell: Cell; side: "left" | "right"; change: boolean }) {
+  const s = SIDE[side], edge = side === "right" && "sm:border-l"
+  if (!cell) return <div aria-hidden className={cn("hidden bg-muted/50 sm:block", edge)} />
+  return (
+    <div className={cn("grid min-w-0 grid-cols-[2.75rem_1.25rem_1fr]", edge, change && s.tint, !change && side === "right" && "hidden sm:grid")}>
+      <span aria-hidden className="pr-2 text-right text-muted-foreground/70 tabular-nums select-none">{cell.n}</span>
+      <span aria-hidden className={cn("text-center select-none", s.fg)}>{change && s.sign}</span>
+      <span className="pr-3 break-words whitespace-pre-wrap">
+        {change && <span className="sr-only">{s.said}</span>}
+        {cell.words ? cell.words.map((w, k) => (w.hit ? <mark key={k} className={cn("rounded-sm text-inherit", s.word)}>{w.text}</mark> : w.text)) : cell.text}
+      </span>
+    </div>
+  )
+}
+
+// 3 unchanged lines around each change; a longer run folds into « ⋯ N lignes identiques », unfolded by a click
+const CONTEXT = 3
+function DiffView({ rows }: { rows: Row[] }) {
+  const [open, setOpen] = useState<number[]>([])
+  const near = rows.map(() => Infinity)
+  for (let i = 0, last = -Infinity; i < rows.length; i++) { if (rows[i].change) last = i; near[i] = i - last }
+  for (let i = rows.length - 1, last = Infinity; i >= 0; i--) { if (rows[i].change) last = i; near[i] = Math.min(near[i], last - i) }
+  const line = (k: number) => <div key={k} className="grid min-h-5 sm:grid-cols-2"><Side cell={rows[k].left} side="left" change={rows[k].change} /><Side cell={rows[k].right} side="right" change={rows[k].change} /></div>
+  const out: ReactNode[] = []
+  for (let i = 0; i < rows.length; ) {
+    let j = i
+    while (j < rows.length && near[j] > CONTEXT) j++
+    if (j === i) { out.push(line(i)); i++; continue }
+    const at = i
+    // one or two lines are shown rather than folded into a button nearly as tall
+    if (j - i < 3 || open.includes(at)) for (let k = i; k < j; k++) out.push(line(k))
+    else out.push(
+      <button key={`fold-${at}`} type="button" onClick={() => setOpen(o => [...o, at])} className="w-full bg-muted/60 py-0.5 text-center text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+        ⋯ {(j - i).toLocaleString("fr-FR")} lignes identiques
+      </button>,
+    )
+    i = j
+  }
+  return (
+    <div className="h-full overflow-auto rounded-md border font-mono text-xs leading-5">
+      <div className="sticky top-0 z-10 hidden border-b bg-muted font-sans font-medium text-muted-foreground sm:grid sm:grid-cols-2">
+        <div className="px-3 py-1.5">Note actuelle</div>
+        <div className="border-l px-3 py-1.5">Après restauration</div>
+      </div>
+      {out}
+    </div>
+  )
+}
+
+// « Restaurer » from the history, in a modal nearly as large as the window: what the version takes away and puts back
+// (DiffView), the version itself, and the button. Kept shown while the modal closes (`v`: the last version opened).
+function RestoreDialog({ current, version, onClose, onRestore }: { current: string; version: Version | null; onClose: () => void; onRestore: () => Promise<void> }) {
+  const [v, setV] = useState(version), [busy, setBusy] = useState(false)
+  if (version && version !== v) setV(version)
+  const rows = useMemo(() => (v ? sideBySide(current, v.notes ?? "") : []), [current, v])
+  const del = rows.filter(x => x.change && x.left).length, add = rows.filter(x => x.change && x.right).length
+  async function restore() {
+    setBusy(true)
+    try { await onRestore() } finally { setBusy(false) }
+  }
+  return (
+    <Dialog open={!!version} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="flex h-[90dvh] w-[95vw] max-w-[95vw] flex-col gap-4 overflow-hidden sm:max-w-[95vw]">
+        {v && (
+          <>
+            <DialogHeader className="pr-8">
+              <DialogTitle>Restaurer la note d'avant cette modification</DialogTitle>
+              <DialogDescription>
+                Avant « {BY[v.by]} » du {dateTime(v.date)} ·{" "}
+                <span className="font-medium text-[var(--diff-add-fg)] tabular-nums">+{add}</span> <span className="font-medium text-[var(--diff-del-fg)] tabular-nums">−{del}</span> lignes. La note actuelle restera dans l'historique.
+              </DialogDescription>
+            </DialogHeader>
+            <Tabs defaultValue="diff" key={v.date} className="min-h-0 flex-1">
+              <TabsList>
+                <TabsTrigger value="diff"><DiffIcon />Changements</TabsTrigger>
+                <TabsTrigger value="full"><FileTextIcon />Version complète</TabsTrigger>
+              </TabsList>
+              <TabsContent value="diff" className="min-h-0">
+                {add + del ? <DiffView rows={rows} /> : <p className="rounded-md border px-3 py-2 text-muted-foreground">Cette version est identique à la note actuelle : rien à restaurer.</p>}
+              </TabsContent>
+              <TabsContent value="full" className="min-h-0">
+                <Markdown text={v.notes ?? ""} className="h-full overflow-y-auto rounded-md border px-3 py-2" />
+              </TabsContent>
+            </Tabs>
+            <DialogFooter>
+              <DialogClose asChild><Button variant="ghost" size="sm" disabled={busy}>Annuler</Button></DialogClose>
+              <Button size="sm" onClick={restore} disabled={busy || !(add + del)}>{busy ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon data-icon="inline-start" />}Restaurer cette version</Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// What happened to the listing, newest first, quiet below the notes; each change of the notes can be undone: its
+// icon opens RestoreDialog on the notes as they were before it
+function FollowLog({ l, onRestore }: { l: Listing; onRestore?: (v: Version) => void }) {
   const log: { date: string; text: string; version?: Version }[] = [
     { date: l.first_seen, text: "Ajoutée à la recherche" },
     ...(l.changes ?? []).filter(c => c.kind !== "new").map(c => ({ date: c.date, text: c.kind === "expired" ? "Annonce expirée" : c.kind === "status" ? `Statut : ${SALE_STATUS[String(c.to)] ?? c.to}` : `Prix : ${eur(c.from as number)} → ${eur(c.to as number)}` })),
@@ -108,18 +246,8 @@ function FollowLog({ l, open, onOpen, onRestore }: { l: Listing; open: Version |
           <time dateTime={c.date}>{c.version ? dateTime(c.date) : date(c.date)}</time>
           <span className="flex items-center gap-1 text-right">
             {c.text}
-            {c.version && onRestore && (
-              <Popover open={open === c.version} onOpenChange={o => onOpen(o ? c.version! : null)}>
-                <PopoverTrigger asChild><Button variant="ghost" size="icon-xs" className="text-muted-foreground" aria-label="Restaurer la note d'avant" title="Restaurer la note d'avant"><RotateCcwIcon /></Button></PopoverTrigger>
-                <PopoverContent align="end" className="w-[min(30rem,calc(100vw-2rem))]">
-                  <PopoverHeader>
-                    <PopoverTitle>La note avant cette modification</PopoverTitle>
-                    <PopoverDescription>{dateTime(c.version.date)} · {BY[c.version.by].toLowerCase()}. La note actuelle restera dans l'historique.</PopoverDescription>
-                  </PopoverHeader>
-                  <Markdown text={c.version.notes} className="max-h-72 overflow-y-auto rounded-md border px-3 py-2" />
-                  <Button size="sm" className="self-end" onClick={onRestore}><RotateCcwIcon data-icon="inline-start" />Restaurer cette version</Button>
-                </PopoverContent>
-              </Popover>
+            {c.version?.notes != null && onRestore && (
+              <Button variant="ghost" size="icon-xs" className="text-muted-foreground" aria-haspopup="dialog" aria-label="Restaurer la note d'avant" title="Restaurer la note d'avant" onClick={() => onRestore(c.version!)}><RotateCcwIcon /></Button>
             )}
           </span>
         </div>
@@ -173,7 +301,7 @@ export function FollowSection({ l }: { l: Listing }) {
   const tick = (text: string) => api.listing(slug, l.id, { notes: text }).then(reload, () => toast.error("La case n'a pas pu être enregistrée"))
   const edit = () => { setFull(false); setDraft(notes); setTab("write") }
   async function restore() {
-    if (!back) return
+    if (back?.notes == null) return
     try {
       await api.listing(slug, l.id, { notes: back.notes, restore: true })
       await reload()
@@ -240,7 +368,8 @@ export function FollowSection({ l }: { l: Listing }) {
 
       <Separator />
       <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><HistoryIcon className="size-3.5" />Historique</h4>
-      <FollowLog l={l} open={back} onOpen={setBack} onRestore={editing ? undefined : restore} />
+      <FollowLog l={l} onRestore={editing ? undefined : setBack} />
+      <RestoreDialog current={notes} version={back} onClose={() => setBack(null)} onRestore={restore} />
 
       <AlertDialog open={discard} onOpenChange={setDiscard}>
         <AlertDialogContent>

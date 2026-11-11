@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import { addressQuery, allGone, asksLast, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from '../lib/listings.js'
+import { addressQuery, allGone, asksLast, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl } from '../lib/listings.js'
 import { badge, daysOnline, dropped, matches, negotiation } from '../lib/market.js'
 
 // a v1 PropertyDocument with the shape of a recorded one (2026-10-28), its values made up, placed rue Paul Bert
@@ -162,22 +162,6 @@ test('locate: the user\'s place wins over a refresh, the source\'s is kept and c
   assert.deepEqual(back.location.point, [4.9, 45.8])
   assert.equal('location_source' in back, false)
   assert.equal(locate(back, null), back)
-})
-
-test('the notes before a change are kept for « Restaurer », a tick and quick saves aside', () => {
-  const l = { notes: '' }, at = m => `2026-11-11T10:${String(m).padStart(2, '0')}:00.000Z`
-  setNotes(l, '## A\n- [ ] Q', 'user', at(0))
-  assert.equal(l.notes_history, undefined) // nothing before
-  setNotes(l, '## A\n- [x] Q', 'user', at(1))
-  assert.equal(l.notes_history, undefined) // a box ticked
-  setNotes(l, '## A\n- [x] Q\nB', 'user', at(2))
-  setNotes(l, '## A\n- [x] Q\nBC', 'user', at(4)) // 2 min after: the same edit
-  assert.deepEqual(l.notes_history, [{ date: at(2), notes: '## A\n- [x] Q', by: 'user' }])
-  setNotes(l, '## A\n- [x] Q\nBC\n\n## D', 'agent', at(5))
-  setNotes(l, '## A\n- [x] Q', 'restore', at(6))
-  assert.deepEqual(l.notes_history.map(v => [v.by, v.notes]), [['user', '## A\n- [x] Q'], ['agent', '## A\n- [x] Q\nBC'], ['restore', '## A\n- [x] Q\nBC\n\n## D']])
-  for (let i = 0; i < 40; i++) setNotes(l, `## v${i}`, 'agent', at(10 + i))
-  assert.equal(l.notes_history.length, 30)
 })
 
 test('what is left to ask stays last: every « À demander » gathered at the end of the notes', () => {

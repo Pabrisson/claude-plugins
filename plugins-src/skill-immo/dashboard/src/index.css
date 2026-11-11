@@ -272,6 +272,10 @@
 :root { --md-heading: oklch(0.5 0.2 300); --md-mark: oklch(0.55 0.14 55); --md-code: oklch(0.5 0.1 185); --md-link: oklch(0.5 0.15 250); --md-strong: oklch(0.45 0.12 25); }
 .dark { --md-heading: oklch(0.78 0.14 300); --md-mark: oklch(0.8 0.13 75); --md-code: oklch(0.78 0.1 185); --md-link: oklch(0.75 0.12 250); --md-strong: oklch(0.8 0.1 30); }
 
+/* the notes' diff before « Restaurer » (components/notes DiffView): lines removed and put back, their changed words darker */
+:root { --diff-del: oklch(0.96 0.03 25); --diff-del-word: oklch(0.87 0.09 25); --diff-del-fg: oklch(0.52 0.18 25); --diff-add: oklch(0.96 0.04 150); --diff-add-word: oklch(0.86 0.1 150); --diff-add-fg: oklch(0.5 0.13 150); }
+.dark { --diff-del: oklch(0.4 0.09 25 / 0.35); --diff-del-word: oklch(0.5 0.14 25 / 0.6); --diff-del-fg: oklch(0.75 0.15 25); --diff-add: oklch(0.4 0.08 150 / 0.35); --diff-add-word: oklch(0.5 0.12 150 / 0.6); --diff-add-fg: oklch(0.78 0.14 150); }
+
 /* « Mes notes » in Markdown (components/notes): no typography plugin, these few rules sized for a card */
 @layer components {
   .md { @apply text-sm leading-relaxed break-words; }

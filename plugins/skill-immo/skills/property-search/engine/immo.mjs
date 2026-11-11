@@ -20,7 +20,8 @@ import { recentDpe } from './lib/dpe.js'
 import { DOC_TYPES, docTypeOf, isDocType } from './lib/documents.js'
 import { building, median, summary } from './lib/dvf.js'
 import { around, band, bbox, center, circle, corridor, distance, IDU, inGeometry, inZone, middleOf, thin } from './lib/geo.js'
-import { addressQuery, asksLast, deadAd, downloadPhoto, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl, setNotes } from './lib/listings.js'
+import { addressQuery, asksLast, deadAd, downloadPhoto, fromInput, fromStreamEstate, linkGone, locate, merge, normUrl } from './lib/listings.js'
+import { setNotes, upgradeNotes, versions } from './lib/notes.js'
 import { asking, badge, daysOnline, dropped, isHome, matches, negotiation, reference, takes, TYPES, typeOf, unitPrice } from './lib/market.js'
 import { irisOdds } from './lib/odds.js'
 import { openData, pool } from './lib/opendata.js'
@@ -56,7 +57,7 @@ const GITIGNORE = `# skill-immo: what the engine makes again, and the buyer's pr
 .DS_Store
 `
 // what git must keep, to check against the .gitignore
-const KEPT = ['s/search.json', 's/listings.json', 's/alerts.json', '.costs.json', '.cache/api-usage.json']
+const KEPT = ['s/search.json', 's/listings.json', 's/alerts.json', 's/notes/l/v.diff', '.costs.json', '.cache/api-usage.json']
 const CRITERIA = ['budget_min', 'budget_max', 'area_min', 'area_max', 'rooms_min', 'rooms_max', 'floor_min', 'land_min', 'dpe_max', 'elevator', 'outdoor']
 const MESSAGE_KINDS = ['contact', 'offer', 'question', 'visit', 'reply', 'follow_up', 'documents', 'other']
 const CHANNELS = ['email', 'sms', 'phone', 'visit']
@@ -119,7 +120,7 @@ function searchDir(required = true) {
 }
 const version = dir => Math.max(...['search.json', 'listings.json', 'market.json', 'area.json', 'feed.json', 'alerts.json'].map(f => fs.statSync(path.join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0))
 const load = dir => ({
-  search: readJson(path.join(dir, 'search.json')), listings: readJson(path.join(dir, 'listings.json'), []),
+  search: readJson(path.join(dir, 'search.json')), listings: listingsOf(dir),
   market: readJson(path.join(dir, 'market.json'), {}), area: readJson(path.join(dir, 'area.json'), {}),
 })
 
@@ -674,7 +675,14 @@ async function search(query) {
   } else console.log(`${s.mode === 'classic' ? 'OpenData search' : hasKey() ? "Stream Estate: turned off in the dashboard's Réglages" : 'Stream Estate: off (no key)'}: assisted listings (WebSearch, WebFetch, pasted text, then add)`)
   console.log(`then: dashboard -p ${s.slug} --open`)
 }
-const listingsOf = dir => readJson(path.join(dir, 'listings.json'), [])
+// the listings, a notes history of copies (before 1.39.0) turned into .diff files once (lib/notes.js)
+function listingsOf(dir) {
+  const ls = readJson(path.join(dir, 'listings.json'), [])
+  if (upgradeNotes(dir, ls)) writeJson(path.join(dir, 'listings.json'), ls)
+  return ls
+}
+// a listing as the dashboard shows it: each version of its notes rebuilt from the .diff
+const shown = (dir, l) => (l.notes_history ? { ...l, notes_history: versions(dir, l) } : l)
 
 // the searches folder's .gitignore: written when there is none, the skill's lines added once to one that lacks them
 function writeGitignore() {
@@ -1153,7 +1161,7 @@ function note() {
     const boxes = want ? [...(l.notes ?? '').matchAll(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[ \][ \t]+(.*)$/gm)].filter(m => unify(m[1]).startsWith(want)) : []
     if (boxes.length !== 1) die(boxes.length ? `${boxes.length} unticked boxes start with « ${opt.check} » in the notes of ${l.id}: give more of the question` : `no unticked box starts with « ${opt.check} » in the notes of ${l.id}`)
     const at = boxes[0].index + boxes[0][0].indexOf('[ ]') + 1
-    setNotes(l, `${l.notes.slice(0, at)}x${l.notes.slice(at + 1)}`, 'agent')
+    setNotes(dir, l, `${l.notes.slice(0, at)}x${l.notes.slice(at + 1)}`, 'agent')
     writeJson(f, ls)
     return console.log(`ticked « ${boxes[0][1]} » in the notes of ${l.id}: the dossier shows it done`)
   }
@@ -1162,7 +1170,7 @@ function note() {
   if (!/^## \S/.test(text)) die('a note is Markdown and starts with its heading, `## <subject> (<date>)`: see references/analyse-and-messages.md')
   const notes = asksLast([l.notes?.trim(), text].filter(Boolean).join('\n\n'))
   if (notes.length > NOTES_MAX) die(`the notes would hold ${notes.length} characters, ${NOTES_MAX} at most: shorten the text`)
-  setNotes(l, notes, 'agent')
+  setNotes(dir, l, notes, 'agent')
   writeJson(f, ls)
   console.log(`added to the notes of ${l.id} (${notes.length} characters): the dossier shows it in « Mes notes »`)
 }
@@ -1347,7 +1355,7 @@ async function handle(req, res) {
       fs.rmSync(dir, { recursive: true, force: true })
       return reply(res, 200, {})
     }
-    if (!sub) { const v = version(dir); return reply(res, 200, { ...load(dir), alerts: readJson(path.join(dir, 'alerts.json'), {}), feed: feedOf(dir), unread: unread(dir), version: v }) }
+    if (!sub) { const v = version(dir), d = load(dir); return reply(res, 200, { ...d, listings: d.listings.map(l => shown(dir, l)), alerts: readJson(path.join(dir, 'alerts.json'), {}), feed: feedOf(dir), unread: unread(dir), version: v }) }
     // the search's alerts: the default ones turned off, the user's own (lib/alerts.js)
     if (sub === '/alerts' && post) {
       let a
@@ -1414,13 +1422,13 @@ async function handle(req, res) {
       if ('location' in body) {
         const at = body.location, str = v => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null)
         if (at !== null && !(Array.isArray(at?.point) && at.point.length === 2 && Math.abs(at.point[0]) <= 180 && Math.abs(at.point[1]) <= 90)) return reply(res, 400, { error: 'bad location' })
-        try { return reply(res, 200, await placeListing(dir, lm[1], at && { point: at.point.map(Number), address: str(at.address), postcode: str(at.postcode), city: str(at.city), by: 'hand' })) } catch (e) { return reply(res, 404, { error: e.message }) }
+        try { return reply(res, 200, shown(dir, await placeListing(dir, lm[1], at && { point: at.point.map(Number), address: str(at.address), postcode: str(at.postcode), city: str(at.city), by: 'hand' }))) } catch (e) { return reply(res, 404, { error: e.message }) }
       }
-      const f = path.join(dir, 'listings.json'), ls = readJson(f, []), l = ls.find(x => x.id === lm[1])
+      const f = path.join(dir, 'listings.json'), ls = listingsOf(dir), l = ls.find(x => x.id === lm[1])
       if (!l) return reply(res, 404, { error: 'no such listing' })
       if ('my_status' in body) { if (![null, 'to_visit', 'visited', 'offer', 'dropped'].includes(body.my_status)) return reply(res, 400, { error: 'bad status' }); l.my_status = body.my_status }
       // `restore`: a version of the history put back, the notes it replaces kept as one too
-      if (typeof body.notes === 'string') setNotes(l, body.notes.slice(0, NOTES_MAX), body.restore === true ? 'restore' : 'user')
+      if (typeof body.notes === 'string') setNotes(dir, l, body.notes.slice(0, NOTES_MAX), body.restore === true ? 'restore' : 'user')
       if (typeof body.favorite === 'boolean') l.favorite = body.favorite
       // the user's free labels: trimmed, without doubles, 20 of 40 characters at most
       if ('labels' in body) {
@@ -1480,7 +1488,7 @@ async function handle(req, res) {
         else if (msg.from !== 'them') { msg.sent_at = body.message.sent ? now() : null; afterSent(l, msg) }
       }
       writeJson(f, ls)
-      return reply(res, 200, l)
+      return reply(res, 200, shown(dir, l))
     }
     return reply(res, 404, { error: 'not found' })
   }

@@ -369,7 +369,10 @@ test('a message for a listing: kept with it, shown to the agent', async () => {
   assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', ' '], { key: null })).status, 1)
   assert.equal((await run(home, ['note', '-p', 'paul-bert', '--id', id, '--text', `## x\n${'x'.repeat(20001)}`], { key: null })).status, 1)
   // the agent's additions kept for « Restaurer », its ticks not
-  assert.deepEqual(read(dir, 'listings.json')[0].notes_history.map(v => [v.by, v.notes.slice(0, 20)]), [['agent', '## Résumé du PV (11/']])
+  const [v, ...more] = read(dir, 'listings.json')[0].notes_history
+  assert.equal(more.length, 0)
+  assert.equal(v.by, 'agent')
+  assert.match(fs.readFileSync(path.join(dir, v.diff), 'utf8'), /^\+## Charges \(12\/11\/2026\)$/m)
 })
 
 // the open data a new zone asks, kept in the cache beforehand: its box's places, DPE and audits, its center's risks and

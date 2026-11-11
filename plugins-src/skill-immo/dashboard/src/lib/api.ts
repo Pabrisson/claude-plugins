@@ -74,8 +74,9 @@ export type Listing = {
   // when the user first opened it (« Nouveau » until then)
   seen_at?: string | null
   notes: string
-  // the notes before each change, for « Restaurer » (engine lib/listings.js setNotes): the last 30, oldest first
-  notes_history?: { date: string; notes: string; by: "user" | "agent" | "restore" }[]
+  // the notes before each change, for « Restaurer »: the last 30, oldest first, each change a .diff in the search's
+  // folder (`diff`, engine lib/notes.js); `notes` rebuilt from it by the server, null when the notes no longer hold it
+  notes_history?: { date: string; by: "user" | "agent" | "restore"; diff: string; notes: string | null }[]
   messages?: Message[]
   building?: {
     ban: string | null

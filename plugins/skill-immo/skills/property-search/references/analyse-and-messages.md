@@ -33,7 +33,8 @@ documents read, visits, calls, the agency's answers, decisions and their reasons
 - A box answered (a message received, a document, what the user says): `immo.mjs note -p <slug> --id <id> --check
   "<start of the question>"` ticks it (refused when no open box, or several, start so: give more of it), and the
   answer goes in an entry of its own. The user ticks boxes in the dossier too, and can put back any earlier version of
-  the notes (« Restaurer » in its history).
+  the notes (« Restaurer » in its history, a side-by-side diff of what goes and what comes back; each change is a
+  .diff in `notes/<listing id>/`, see search-files.md).
 
 ## Analyse and compare
 

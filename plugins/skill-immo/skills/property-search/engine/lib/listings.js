@@ -205,16 +205,6 @@ export function merge(known, incoming, now, gone = []) {
   return { listings: [...new Set(byId.values())], changes }
 }
 
-// The listing's notes become `text`, the ones before kept in `notes_history` for the dossier's « Restaurer » ({ date,
-// notes, by: user|agent|restore }, the last 30). None for a box ticked or unticked (a click undoes it), nor for the
-// user's saves less than 5 minutes after their last one: the notes before their first save stay the ones kept.
-export function setNotes(l, text, by, now = new Date().toISOString()) {
-  const before = l.notes ?? '', h = l.notes_history ?? [], last = h.at(-1)
-  if (text === before) return
-  const again = by === 'user' && last?.by === 'user' && Date.parse(now) - Date.parse(last.date) < 5 * 60e3
-  if (before.trim() && !again && !ticked(before, text)) l.notes_history = [...h, { date: now, notes: before, by }].slice(-30)
-  l.notes = text
-}
 // The notes with what is left to ask last: every « À demander » part (a `##` or `###` heading so named, its lines up to the
 // next heading) gathered into one, `## À demander`, at the end, in their order and once each; an entry left empty by it
 // (its heading alone) goes. What the agent adds (`note`) thus lands before what is left to ask.
@@ -234,14 +224,6 @@ export function asksLast(text) {
   })
   const rest = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
   return asks.length ? `${rest}\n\n## À demander\n${asks.join('\n')}` : rest
-}
-
-// the two texts differ by one box only, `[ ]` against `[x]`
-function ticked(a, b) {
-  if (a.length !== b.length) return false
-  let i = 0
-  while (a[i] === b[i]) i++
-  return a[i - 1] === '[' && a[i + 1] === ']' && /[ xX]/.test(a[i]) && /[ xX]/.test(b[i]) && a.slice(i + 1) === b.slice(i + 1)
 }
 
 // The user's own place for a listing (the dashboard's « Préciser l'adresse »: by hand on the map, or found by an OSINT
